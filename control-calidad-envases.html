@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control Calidad - Vessena</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header {
+            background: white; padding: 25px; border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 25px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .header h1 { color: #2d3748; font-size: 28px; font-weight: 700; }
+        .logo { color: #667eea; font-weight: 800; font-size: 24px; }
+        .main-content { background: white; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; }
+        .tabs { display: flex; border-bottom: 2px solid #e2e8f0; background: #f7fafc; flex-wrap: wrap; }
+        .tab {
+            padding: 18px 30px; cursor: pointer; border: none; background: none;
+            font-size: 15px; font-weight: 600; color: #718096; transition: all 0.3s;
+            border-bottom: 3px solid transparent;
+        }
+        .tab:hover { background: #edf2f7; color: #4a5568; }
+        .tab.active { color: #667eea; border-bottom-color: #667eea; background: white; }
+        .content { padding: 30px; }
+        .form-section { margin-bottom: 30px; }
+        .section-title {
+            font-size: 20px; font-weight: 700; color: #2d3748;
+            margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #e2e8f0;
+        }
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 25px; }
+        .form-group { display: flex; flex-direction: column; }
+        label { font-weight: 600; color: #4a5568; margin-bottom: 8px; font-size: 14px; }
+        select, input, textarea {
+            padding: 12px; border: 2px solid #e2e8f0; border-radius: 8px;
+            font-size: 15px; transition: all 0.3s; font-family: inherit;
+        }
+        select:focus, input:focus, textarea:focus {
+            outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        .btn {
+            padding: 12px 24px; border: none; border-radius: 8px; font-weight: 600;
+            font-size: 15px; cursor: pointer; transition: all 0.3s;
+            display: inline-flex; align-items: center; gap: 8px;
+        }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-primary:hover { background: #5a67d8; transform: translateY(-2px); }
+        .btn-secondary { background: #edf2f7; color: #4a5568; }
+        .btn-secondary:hover { background: #e2e8f0; }
+        .btn-success { background: #38a169; color: white; }
+        .btn-success:hover { background: #2f855a; }
+        .btn-danger { background: #e53e3e; color: white; }
+        .btn-danger:hover { background: #c53030; }
+        .button-group { display: flex; gap: 15px; margin-top: 30px; padding-top: 20px; border-top: 2px solid #e2e8f0; flex-wrap: wrap; }
+        .alert { padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; font-weight: 500; }
+        .alert-success { background: #c6f6d5; color: #22543d; border-left: 4px solid #38a169; }
+        .alert-warning { background: #fed7d7; color: #742a2a; border-left: 4px solid #e53e3e; }
+        .alert-info { background: #bee3f8; color: #2c5282; border-left: 4px solid #3182ce; }
+        .tipo-control-selector {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px; margin-top: 15px;
+        }
+        .tipo-control-card {
+            background: white; border: 2px solid #e2e8f0; border-radius: 8px;
+            padding: 20px; cursor: pointer; transition: all 0.3s; text-align: center;
+        }
+        .tipo-control-card:hover { border-color: #667eea; box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2); }
+        .tipo-control-card.selected { border-color: #667eea; background: #eef2ff; }
+        .tipo-control-icon { font-size: 32px; margin-bottom: 10px; }
+        .tipo-control-title { font-weight: 700; color: #2d3748; margin-bottom: 5px; font-size: 16px; }
+        .tipo-control-desc { font-size: 12px; color: #718096; }
+        .measurement-table { width: 100%; overflow-x: auto; margin-top: 15px; }
+        .measurement-table table { width: 100%; min-width: 800px; border-collapse: collapse; }
+        .measurement-table th {
+            background: #667eea; color: white; padding: 10px;
+            text-align: left; font-weight: 600; font-size: 12px;
+        }
+        .measurement-table td { padding: 8px; border: 1px solid #e2e8f0; }
+        .measurement-table tr:nth-child(even) { background: #f7fafc; }
+        .measurement-table input { width: 100%; padding: 6px; border: 1px solid #cbd5e0; border-radius: 4px; }
+        .spec-info { font-size: 11px; color: #718096; margin-top: 2px; }
+        .empty-state { text-align: center; padding: 60px 20px; color: #718096; }
+        .empty-state-icon { font-size: 64px; margin-bottom: 20px; opacity: 0.3; }
+        .orden-card, .control-card {
+            background: #f7fafc; border: 2px solid #e2e8f0; border-radius: 12px;
+            padding: 20px; margin-bottom: 20px;
+        }
+        .orden-header, .control-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 15px; padding-bottom: 15px; border-bottom: 2px solid #e2e8f0;
+        }
+        .orden-title, .control-title { font-weight: 700; color: #2d3748; font-size: 18px; }
+        .status-badge {
+            display: inline-block; padding: 4px 12px; border-radius: 20px;
+            font-size: 12px; font-weight: 600;
+        }
+        .status-active { background: #bee3f8; color: #2c5282; }
+        .status-ok { background: #c6f6d5; color: #22543d; }
+        .orden-info, .control-info-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px; margin-bottom: 15px;
+        }
+        .orden-detail { font-size: 14px; color: #4a5568; }
+        .orden-detail strong { color: #2d3748; }
+        .controles-list { margin-top: 15px; padding-top: 15px; border-top: 2px solid #e2e8f0; }
+        .control-item {
+            background: white; padding: 12px 15px; border-radius: 6px; margin-bottom: 10px;
+            border-left: 4px solid #cbd5e0; display: flex; justify-content: space-between;
+            align-items: center; cursor: pointer;
+        }
+        .control-item.arranque { border-left-color: #667eea; background: #eef2ff; }
+        .control-item.validacion { border-left-color: #9f7aea; background: #faf5ff; }
+        .control-item.quincenal { border-left-color: #ed8936; background: #fffaf0; }
+        .control-item.semanal { border-left-color: #38b2ac; background: #e6fffa; }
+        .control-item.proceso { border-left-color: #38a169; }
+        .control-info { flex: 1; }
+        .control-hora { font-weight: 700; color: #2d3748; margin-right: 15px; }
+        .control-tipo { font-size: 13px; color: #718096; }
+        .stats-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px; margin-bottom: 30px;
+        }
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .stat-label { font-size: 14px; opacity: 0.9; margin-bottom: 8px; }
+        .stat-value { font-size: 32px; font-weight: 700; }
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.7); display: flex; align-items: center;
+            justify-content: center; z-index: 1000; padding: 20px;
+        }
+        .modal-content {
+            background: white; border-radius: 12px; max-width: 900px; width: 100%;
+            max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+        .modal-header {
+            padding: 20px 25px; border-bottom: 2px solid #e2e8f0;
+            display: flex; justify-content: space-between; align-items: center;
+            position: sticky; top: 0; background: white; z-index: 10;
+        }
+        .modal-title { font-size: 20px; font-weight: 700; color: #2d3748; }
+        .modal-close {
+            background: #edf2f7; border: none; width: 32px; height: 32px;
+            border-radius: 50%; cursor: pointer; font-size: 20px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .modal-body { padding: 25px; }
+        .detalle-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px; margin-bottom: 20px;
+        }
+        .detalle-item { padding: 12px; background: #f7fafc; border-radius: 6px; border-left: 3px solid #667eea; }
+        .detalle-label { font-size: 12px; color: #718096; margin-bottom: 4px; }
+        .detalle-value { font-size: 16px; font-weight: 600; color: #2d3748; }
+        .search-box { position: relative; }
+        .search-icon {
+            position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+            color: #718096; font-size: 16px; pointer-events: none;
+        }
+        .search-box input { padding-left: 40px; }
+        .filtros-section { background: #f7fafc; padding: 20px; border-radius: 8px; margin-bottom: 25px; }
+        .filtros-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;
+        }
+        .alerta-oos {
+            background: #fff5f5; border: 2px solid #fc8181; border-radius: 8px;
+            padding: 15px; margin-bottom: 15px; animation: pulse 2s infinite;
+        }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.8; } }
+        .alerta-oos-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+        .alerta-oos-icon { font-size: 24px; }
+        .alerta-oos-titulo { font-weight: 700; color: #742a2a; }
+        .alerta-oos-detalle { font-size: 14px; color: #4a5568; margin-left: 34px; }
+        .export-multiple { background: #805ad5; color: white; }
+        .export-multiple:hover { background: #6b46c1; }
+        .btn-export { background: #38a169; color: white; }
+        .btn-export:hover { background: #2f855a; }
+        .btn-print { background: #3182ce; color: white; }
+        .btn-print:hover { background: #2c5282; }
+        .dias-activa {
+            display: inline-block; padding: 4px 8px; background: #fef5e7;
+            color: #744210; border-radius: 4px; font-size: 12px; font-weight: 600; margin-left: 10px;
+        }
+        .dias-activa.warning { background: #fed7d7; color: #742a2a; }
+        .separator {
+            height: 2px; background: linear-gradient(to right, transparent, #e2e8f0, transparent);
+            margin: 30px 0;
+        }
+        @media (max-width: 768px) {
+            .tipo-control-selector { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const ESPECIFICACIONES = {
+            'FAB-2L': {
+                nombre: 'Fabuloso 2L', tipo: 'PEAD', codigo: 'ESP-COM-033',
+                parametros: {
+                    'brimful': { min: 2029.00, max: 2069.00, unidad: 'mL', nombre: 'Brimful' },
+                    'altura_h': { min: 299.40, max: 305.40, unidad: 'mm', nombre: 'Altura H' },
+                    'ancho_pie_hw': { min: 112.90, max: 115.10, unidad: 'mm', nombre: 'Ancho HW' },
+                    'profundidad_pie_hd': { min: 93.80, max: 97.30, unidad: 'mm', nombre: 'Prof. HD' },
+                    'ancho_hombro_sw': { min: 111.60, max: 113.80, unidad: 'mm', nombre: 'Ancho SW' },
+                    'profundidad_hombro_sd': { min: 82.30, max: 85.80, unidad: 'mm', nombre: 'Prof. SD' }
+                },
+                espesorHombroMin: 0.200
+            },
+            'FAB-1L': {
+                nombre: 'Fabuloso 1L', tipo: 'PEAD', codigo: 'ESP-COM-060',
+                parametros: {
+                    'brimful': { min: 1018, max: 1042, unidad: 'mL', nombre: 'Brimful' },
+                    'altura_h': { min: 267.2, max: 269.9, unidad: 'mm', nombre: 'Altura H' },
+                    'ancho_pie_hw': { min: 100.8, max: 102.8, unidad: 'mm', nombre: 'Ancho HW' },
+                    'profundidad_pie_hd': { min: 61.2, max: 62.8, unidad: 'mm', nombre: 'Prof. HD' },
+                    'ancho_hombro_sw': { min: 96.1, max: 98.1, unidad: 'mm', nombre: 'Ancho SW' },
+                    'profundidad_hombro_sd': { min: 51.4, max: 53.0, unidad: 'mm', nombre: 'Prof. SD' }
+                },
+                espesorHombroMin: 0.200
+            },
+            'PET-1800': {
+                nombre: 'PET 1800 ML', tipo: 'PET', codigo: 'ESP-COM-056',
+                parametros: {
+                    'altura_h': { min: 312.20, max: 312.55, unidad: 'mm', nombre: 'Altura H' },
+                    'ancho_pie_hw': { min: 98.00, max: 98.12, unidad: 'mm', nombre: 'Ancho HW' },
+                    'brimful': { min: 1840, max: 1845, unidad: 'mL', nombre: 'Brimful' },
+                    'peso': { min: 48.00, max: 48.05, unidad: 'g', nombre: 'Peso del envase' }
+                }
+            },
+            'PET-900': {
+                nombre: 'PET 900 ML', tipo: 'PET', codigo: 'ESP-COM-057',
+                parametros: {
+                    'altura_h': { min: 237.50, max: 238.50, unidad: 'mm', nombre: 'Altura H' },
+                    'ancho_pie_hw': { min: 65.00, max: 66.00, unidad: 'mm', nombre: 'Ancho HW' },
+                    'brimful': { min: 915, max: 920, unidad: 'mL', nombre: 'Brimful' }
+                }
+            },
+            'DET-1.25L': {
+                nombre: 'Detergente Lavavajilla 1.25L', tipo: 'PET', codigo: 'ESP-COM-044',
+                parametros: {
+                    'altura_h': { min: 294.5, max: 295.5, unidad: 'mm', nombre: 'Altura H' },
+                    'ancho_hombro_sw': { min: 89.00, max: 89.90, unidad: 'mm', nombre: 'Ancho SW' },
+                    'profundidad_hombro_sd': { min: 70.00, max: 71.00, unidad: 'mm', nombre: 'Prof. SD' },
+                    'ancho_pie_hw': { min: 99.50, max: 101.50, unidad: 'mm', nombre: 'Ancho HW' },
+                    'profundidad_pie_hd': { min: 78.40, max: 79.60, unidad: 'mm', nombre: 'Prof. HD' },
+                    'brimful': { min: 1286, max: 1292, unidad: 'mL', nombre: 'Brimful' }
+                }
+            },
+            'HIPO-750': {
+                nombre: 'Hipoclorito 750-800 ML', tipo: 'PEAD', codigo: 'ESP-COM-225',
+                parametros: {
+                    'altura_h': { min: 203.50, max: 205.50, unidad: 'mm', nombre: 'Altura H' },
+                    'ancho_hombro_sw': { min: 68.00, max: 69.00, unidad: 'mm', nombre: 'Ancho SW' },
+                    'profundidad_hombro_sd': { min: 68.00, max: 69.00, unidad: 'mm', nombre: 'Prof. SD' },
+                    'ancho_pie_hw': { min: 76.50, max: 77.50, unidad: 'mm', nombre: 'Ancho HW' },
+                    'profundidad_pie_hd': { min: 76.50, max: 77.50, unidad: 'mm', nombre: 'Prof. HD' },
+                    'brimful': { min: 783, max: 805, unidad: 'mL', nombre: 'Brimful' }
+                }
+            },
+            'HIPO-1000': {
+                nombre: 'Hipoclorito 1000 ML', tipo: 'PEAD', codigo: 'ESP-COM-226',
+                parametros: {
+                    'altura_h': { min: 234.50, max: 236.50, unidad: 'mm', nombre: 'Altura H' },
+                    'ancho_hombro_sw': { min: 68.00, max: 69.00, unidad: 'mm', nombre: 'Ancho SW' },
+                    'profundidad_hombro_sd': { min: 68.00, max: 69.00, unidad: 'mm', nombre: 'Prof. SD' },
+                    'ancho_pie_hw': { min: 76.50, max: 77.50, unidad: 'mm', nombre: 'Ancho HW' },
+                    'profundidad_pie_hd': { min: 76.50, max: 77.50, unidad: 'mm', nombre: 'Prof. HD' },
+                    'brimful': { min: 1017, max: 1043, unidad: 'mL', nombre: 'Brimful' }
+                }
+            },
+            'HIPO-2000': {
+                nombre: 'Hipoclorito 2000 ML', tipo: 'PEAD', codigo: 'ESP-COM-227',
+                parametros: {
+                    'altura_h': { min: 298.00, max: 300.00, unidad: 'mm', nombre: 'Altura H' },
+                    'ancho_hombro_sw': { min: 91.50, max: 92.50, unidad: 'mm', nombre: 'Ancho SW' },
+                    'profundidad_hombro_sd': { min: 68.00, max: 69.00, unidad: 'mm', nombre: 'Prof. SD' },
+                    'ancho_pie_hw': { min: 99.50, max: 100.50, unidad: 'mm', nombre: 'Ancho HW' },
+                    'profundidad_pie_hd': { min: 76.50, max: 77.50, unidad: 'mm', nombre: 'Prof. HD' },
+                    'brimful': { min: 2045, max: 2095, unidad: 'mL', nombre: 'Brimful' }
+                }
+            },
+            'HIPO-4L': {
+                nombre: 'Hipoclorito 4L', tipo: 'PEAD', codigo: 'ESP-COM-254',
+                parametros: {
+                    'altura_h': { min: 307.50, max: 309.50, unidad: 'mm', nombre: 'Altura H' },
+                    'ancho_hombro_sw': { min: 135.00, max: 136.00, unidad: 'mm', nombre: 'Ancho SW' },
+                    'profundidad_hombro_sd': { min: 91.50, max: 92.50, unidad: 'mm', nombre: 'Prof. SD' },
+                    'ancho_pie_hw': { min: 143.00, max: 144.00, unidad: 'mm', nombre: 'Ancho HW' },
+                    'profundidad_pie_hd': { min: 99.50, max: 100.50, unidad: 'mm', nombre: 'Prof. HD' },
+                    'brimful': { min: 4080, max: 4180, unidad: 'mL', nombre: 'Brimful' }
+                }
+            },
+            'BIDON-10L': {
+                nombre: 'Bidón PEAD 10L', tipo: 'PEAD', codigo: 'ESP-COM-262',
+                parametros: {
+                    'altura_h': { min: 360.00, max: 363.00, unidad: 'mm', nombre: 'Altura H' },
+                    'ancho_hombro_sw': { min: 181.00, max: 183.00, unidad: 'mm', nombre: 'Ancho SW' },
+                    'profundidad_hombro_sd': { min: 135.00, max: 137.00, unidad: 'mm', nombre: 'Prof. SD' },
+                    'ancho_pie_hw': { min: 189.00, max: 191.00, unidad: 'mm', nombre: 'Ancho HW' },
+                    'profundidad_pie_hd': { min: 143.00, max: 145.00, unidad: 'mm', nombre: 'Prof. HD' },
+                    'brimful': { min: 10200, max: 10400, unidad: 'mL', nombre: 'Brimful' }
+                }
+            }
+        };
+
+        function App() {
+            const [activeTab, setActiveTab] = useState('soplado');
+            const [ordenesSoplado, setOrdenesSoplado] = useState([]);
+            const [controlesLCC, setControlesLCC] = useState([]);
+            const [mensaje, setMensaje] = useState(null);
+            
+            // Estados Órdenes Soplado
+            const [mostrarNuevaOrden, setMostrarNuevaOrden] = useState(false);
+            const [nuevaOrdenData, setNuevaOrdenData] = useState({
+                numeroOrden: '', envase: '', fecha: new Date().toISOString().split('T')[0],
+                operador: '', turno: ''
+            });
+            const [tipoControlSoplado, setTipoControlSoplado] = useState('');
+            const [ordenSeleccionada, setOrdenSeleccionada] = useState(null);
+            const [mostrarSeleccionOrden, setMostrarSeleccionOrden] = useState(false);
+            
+            // Estados Controles LCC
+            const [mostrarNuevoLCC, setMostrarNuevoLCC] = useState(false);
+            const [tipoControlLCC, setTipoControlLCC] = useState('');
+            const [nuevoControlLCC, setNuevoControlLCC] = useState({
+                envase: '', fecha: new Date().toISOString().split('T')[0],
+                operador: '', turno: ''
+            });
+            
+            // Estados comunes
+            const [hora, setHora] = useState('');
+            const [mediciones, setMediciones] = useState({});
+            const [observaciones, setObservaciones] = useState('');
+            const [controlDetalle, setControlDetalle] = useState(null);
+            const [filtroEnvase, setFiltroEnvase] = useState('');
+            const [filtroEstado, setFiltroEstado] = useState('todas');
+            const [busqueda, setBusqueda] = useState('');
+            const [mostrarAlertasOOS, setMostrarAlertasOOS] = useState(false);
+
+            useEffect(() => {
+                const storedOrdenes = localStorage.getItem('ordenes_soplado');
+                const storedLCC = localStorage.getItem('controles_lcc');
+                if (storedOrdenes) setOrdenesSoplado(JSON.parse(storedOrdenes));
+                if (storedLCC) setControlesLCC(JSON.parse(storedLCC));
+            }, []);
+
+            const guardarOrdenes = (nuevasOrdenes) => {
+                localStorage.setItem('ordenes_soplado', JSON.stringify(nuevasOrdenes));
+                setOrdenesSoplado(nuevasOrdenes);
+            };
+
+            const guardarControlesLCC = (nuevosControles) => {
+                localStorage.setItem('controles_lcc', JSON.stringify(nuevosControles));
+                setControlesLCC(nuevosControles);
+            };
+
+            const crearNuevaOrden = () => {
+                if (!nuevaOrdenData.numeroOrden || !nuevaOrdenData.envase || !nuevaOrdenData.operador) {
+                    setMensaje({ tipo: 'warning', texto: 'Complete todos los campos obligatorios' });
+                    return;
+                }
+                const nuevaOrden = {
+                    id: Date.now(), ...nuevaOrdenData, estado: 'activa', controles: [],
+                    createdAt: new Date().toISOString()
+                };
+                guardarOrdenes([nuevaOrden, ...ordenesSoplado]);
+                setMensaje({ tipo: 'success', texto: `✓ Orden ${nuevaOrdenData.numeroOrden} creada` });
+                setMostrarNuevaOrden(false);
+                setNuevaOrdenData({
+                    numeroOrden: '', envase: '', fecha: new Date().toISOString().split('T')[0],
+                    operador: '', turno: ''
+                });
+            };
+
+            const registrarControlSoplado = () => {
+                if (!ordenSeleccionada) {
+                    setMensaje({ tipo: 'warning', texto: 'Seleccione una orden' });
+                    return;
+                }
+                if (tipoControlSoplado === 'proceso' && !hora) {
+                    setMensaje({ tipo: 'warning', texto: 'Ingrese la hora' });
+                    return;
+                }
+                const nuevoControl = {
+                    id: Date.now(), tipo: tipoControlSoplado,
+                    fecha: new Date().toISOString().split('T')[0],
+                    hora: tipoControlSoplado === 'proceso' ? hora : new Date().toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' }),
+                    mediciones: { ...mediciones }, observaciones, timestamp: new Date().toISOString()
+                };
+                const ordenesActualizadas = ordenesSoplado.map(orden => {
+                    if (orden.id === ordenSeleccionada.id) {
+                        return { ...orden, controles: [...orden.controles, nuevoControl] };
+                    }
+                    return orden;
+                });
+                guardarOrdenes(ordenesActualizadas);
+                setMensaje({ tipo: 'success', texto: `✓ Control de ${tipoControlSoplado} registrado` });
+                resetFormularios();
+            };
+
+            const registrarControlLCC = () => {
+                if (!nuevoControlLCC.envase || !nuevoControlLCC.operador || !tipoControlLCC) {
+                    setMensaje({ tipo: 'warning', texto: 'Complete todos los campos obligatorios' });
+                    return;
+                }
+                const nuevoControl = {
+                    id: Date.now(), tipo: tipoControlLCC, ...nuevoControlLCC,
+                    hora: new Date().toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' }),
+                    mediciones: { ...mediciones }, observaciones, timestamp: new Date().toISOString()
+                };
+                guardarControlesLCC([nuevoControl, ...controlesLCC]);
+                setMensaje({ tipo: 'success', texto: `✓ Control ${tipoControlLCC} registrado` });
+                resetFormularios();
+                setMostrarNuevoLCC(false);
+            };
+
+            const resetFormularios = () => {
+                setMediciones({});
+                setObservaciones('');
+                setHora('');
+                setTipoControlSoplado('');
+                setTipoControlLCC('');
+                setOrdenSeleccionada(null);
+                setMostrarSeleccionOrden(false);
+                setNuevoControlLCC({
+                    envase: '', fecha: new Date().toISOString().split('T')[0],
+                    operador: '', turno: ''
+                });
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            };
+
+            const esFabuloso = (envase) => envase === 'FAB-1L' || envase === 'FAB-2L';
+
+            const finalizarOrden = (ordenId) => {
+                const ordenesActualizadas = ordenesSoplado.map(orden => {
+                    if (orden.id === ordenId) return { ...orden, estado: 'finalizada' };
+                    return orden;
+                });
+                guardarOrdenes(ordenesActualizadas);
+                setMensaje({ tipo: 'success', texto: 'Orden finalizada' });
+            };
+
+            const eliminarOrden = (ordenId) => {
+                if (confirm('¿Eliminar esta orden?')) {
+                    guardarOrdenes(ordenesSoplado.filter(orden => orden.id !== ordenId));
+                    setMensaje({ tipo: 'success', texto: 'Orden eliminada' });
+                }
+            };
+
+            const eliminarControlLCC = (controlId) => {
+                if (confirm('¿Eliminar este control LCC?')) {
+                    guardarControlesLCC(controlesLCC.filter(c => c.id !== controlId));
+                    setMensaje({ tipo: 'success', texto: 'Control eliminado' });
+                }
+            };
+
+            const exportarOrdenExcel = (orden) => {
+                const spec = ESPECIFICACIONES[orden.envase];
+                let csv = `Orden,${orden.numeroOrden}\nEnvase,${spec.nombre}\nOperador,${orden.operador}\nFecha,${orden.fecha}\n\n`;
+                csv += 'CONTROLES\n';
+                orden.controles.forEach((c, i) => {
+                    csv += `${i+1},${c.tipo},${c.fecha},${c.hora}\n`;
+                });
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = `${orden.numeroOrden}_${orden.fecha}.csv`;
+                link.click();
+            };
+
+            const calcularDiasActiva = (fechaInicio) => {
+                const inicio = new Date(fechaInicio);
+                const hoy = new Date();
+                return Math.floor((hoy - inicio) / (1000 * 60 * 60 * 24));
+            };
+
+            return (
+                <div className="container">
+                    <div className="header">
+                        <div>
+                            <div className="logo">VESSENA</div>
+                            <h1>Control de Calidad - Envases</h1>
+                        </div>
+                        <div style={{textAlign: 'right', color: '#718096'}}>
+                            <div style={{fontSize: '14px'}}>SOP-PR-138</div>
+                        </div>
+                    </div>
+
+                    <div className="main-content">
+                        <div className="tabs">
+                            <button className={`tab ${activeTab === 'soplado' ? 'active' : ''}`}
+                                onClick={() => setActiveTab('soplado')}>
+                                🏭 Órdenes de Soplado
+                            </button>
+                            <button className={`tab ${activeTab === 'lcc' ? 'active' : ''}`}
+                                onClick={() => setActiveTab('lcc')}>
+                                🔬 Controles LCC
+                            </button>
+                            <button className={`tab ${activeTab === 'historico' ? 'active' : ''}`}
+                                onClick={() => setActiveTab('historico')}>
+                                📊 Histórico
+                            </button>
+                        </div>
+
+                        <div className="content">
+                            {mensaje && <div className={`alert alert-${mensaje.tipo}`}>{mensaje.texto}</div>}
+
+                            {/* TAB: ÓRDENES DE SOPLADO */}
+                            {activeTab === 'soplado' && (
+                                <>
+                                    {!mostrarNuevaOrden && !mostrarSeleccionOrden && (
+                                        <div className="form-section">
+                                            <h3 style={{marginBottom: '15px'}}>Órdenes de Soplado (REG-B / REG-G)</h3>
+                                            <p style={{color: '#718096', marginBottom: '20px'}}>
+                                                Registre controles de arranque y proceso cada 2 horas durante la producción
+                                            </p>
+                                            <div className="button-group" style={{borderTop: 'none', paddingTop: 0, marginTop: 0}}>
+                                                <button className="btn btn-primary" onClick={() => setMostrarNuevaOrden(true)}>
+                                                    ➕ Crear Nueva Orden de Soplado
+                                                </button>
+                                                <button className="btn btn-success" onClick={() => {
+                                                    const activas = ordenesSoplado.filter(o => o.estado === 'activa');
+                                                    if (activas.length === 0) {
+                                                        setMensaje({ tipo: 'warning', texto: 'No hay órdenes activas' });
+                                                    } else {
+                                                        setMostrarSeleccionOrden(true);
+                                                    }
+                                                }}>
+                                                    📋 Registrar Control en Orden Existente
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {mostrarNuevaOrden && (
+                                        <div className="form-section">
+                                            <h2 className="section-title">Nueva Orden de Soplado</h2>
+                                            <div className="form-grid">
+                                                <div className="form-group">
+                                                    <label>Número de Orden *</label>
+                                                    <input type="text" value={nuevaOrdenData.numeroOrden}
+                                                        onChange={(e) => setNuevaOrdenData({...nuevaOrdenData, numeroOrden: e.target.value})}
+                                                        placeholder="FAB-2L-2024-045" />
+                                                </div>
+                                                <div className="form-group">
+                                                    <label>Envase *</label>
+                                                    <select value={nuevaOrdenData.envase}
+                                                        onChange={(e) => setNuevaOrdenData({...nuevaOrdenData, envase: e.target.value})}>
+                                                        <option value="">Seleccione...</option>
+                                                        {Object.entries(ESPECIFICACIONES).map(([key, val]) => (
+                                                            <option key={key} value={key}>{val.nombre}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div className="form-group">
+                                                    <label>Fecha Inicio</label>
+                                                    <input type="date" value={nuevaOrdenData.fecha}
+                                                        onChange={(e) => setNuevaOrdenData({...nuevaOrdenData, fecha: e.target.value})} />
+                                                </div>
+                                                <div className="form-group">
+                                                    <label>Operador *</label>
+                                                    <input type="text" value={nuevaOrdenData.operador}
+                                                        onChange={(e) => setNuevaOrdenData({...nuevaOrdenData, operador: e.target.value})} />
+                                                </div>
+                                                <div className="form-group">
+                                                    <label>Turno</label>
+                                                    <select value={nuevaOrdenData.turno}
+                                                        onChange={(e) => setNuevaOrdenData({...nuevaOrdenData, turno: e.target.value})}>
+                                                        <option value="">Seleccione...</option>
+                                                        <option value="mañana">Mañana</option>
+                                                        <option value="tarde">Tarde</option>
+                                                        <option value="noche">Noche</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div className="button-group">
+                                                <button className="btn btn-primary" onClick={crearNuevaOrden}>✓ Crear Orden</button>
+                                                <button className="btn btn-secondary" onClick={() => setMostrarNuevaOrden(false)}>Cancelar</button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {mostrarSeleccionOrden && !tipoControlSoplado && (
+                                        <div className="form-section">
+                                            <h2 className="section-title">Seleccionar Orden y Tipo de Control</h2>
+                                            <div className="form-group">
+                                                <label>Orden de Soplado Activa</label>
+                                                <select value={ordenSeleccionada?.id || ''}
+                                                    onChange={(e) => {
+                                                        const orden = ordenesSoplado.find(o => o.id === parseInt(e.target.value));
+                                                        setOrdenSeleccionada(orden);
+                                                    }}>
+                                                    <option value="">Seleccione...</option>
+                                                    {ordenesSoplado.filter(o => o.estado === 'activa').map(orden => {
+                                                        const spec = ESPECIFICACIONES[orden.envase];
+                                                        return (
+                                                            <option key={orden.id} value={orden.id}>
+                                                                {orden.numeroOrden} - {spec?.nombre}
+                                                            </option>
+                                                        );
+                                                    })}
+                                                </select>
+                                            </div>
+
+                                            {ordenSeleccionada && (
+                                                <div className="tipo-control-selector">
+                                                    <div className={`tipo-control-card ${tipoControlSoplado === 'arranque' ? 'selected' : ''}`}
+                                                        onClick={() => setTipoControlSoplado('arranque')}>
+                                                        <div className="tipo-control-icon">🚀</div>
+                                                        <div className="tipo-control-title">Control de Arranque</div>
+                                                        <div className="tipo-control-desc">
+                                                            {esFabuloso(ordenSeleccionada.envase) ? 'REG-G' : 'REG-B'}
+                                                        </div>
+                                                        <div className="tipo-control-desc" style={{marginTop: '5px', fontWeight: '600'}}>
+                                                            Inicio del SKU
+                                                        </div>
+                                                    </div>
+
+                                                    <div className={`tipo-control-card ${tipoControlSoplado === 'proceso' ? 'selected' : ''}`}
+                                                        onClick={() => setTipoControlSoplado('proceso')}>
+                                                        <div className="tipo-control-icon">⏱️</div>
+                                                        <div className="tipo-control-title">Control cada 2 Horas</div>
+                                                        <div className="tipo-control-desc">
+                                                            {esFabuloso(ordenSeleccionada.envase) ? 'REG-G' : 'REG-B'}
+                                                        </div>
+                                                        <div className="tipo-control-desc" style={{marginTop: '5px', fontWeight: '600'}}>
+                                                            {esFabuloso(ordenSeleccionada.envase) ? 'Visual + Espesores' : 'Solo visual'}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            <div className="button-group">
+                                                <button className="btn btn-secondary" onClick={() => {
+                                                    setMostrarSeleccionOrden(false);
+                                                    setOrdenSeleccionada(null);
+                                                }}>
+                                                    ← Volver
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {tipoControlSoplado && ordenSeleccionada && (() => {
+                                        const spec = ESPECIFICACIONES[ordenSeleccionada.envase];
+                                        const esFab = esFabuloso(ordenSeleccionada.envase);
+                                        
+                                        return (
+                                            <div className="form-section">
+                                                <h2 className="section-title">
+                                                    {tipoControlSoplado === 'arranque' ? '🚀 Control de Arranque de SKU' : '⏱️ Control en Proceso (cada 2hs)'}
+                                                </h2>
+                                                <div className="alert alert-info">
+                                                    <strong>Orden:</strong> {ordenSeleccionada.numeroOrden} | 
+                                                    <strong> Envase:</strong> {spec.nombre} | 
+                                                    <strong> Registro:</strong> {esFab ? 'REG-SOP-PR-138-G' : 'REG-SOP-PR-138-B'}
+                                                </div>
+
+                                                {tipoControlSoplado === 'proceso' && (
+                                                    <div className="form-group">
+                                                        <label>Hora del Control *</label>
+                                                        <input type="time" value={hora}
+                                                            onChange={(e) => setHora(e.target.value)} />
+                                                    </div>
+                                                )}
+
+                                                {/* CONTROL DE ARRANQUE */}
+                                                {tipoControlSoplado === 'arranque' && (
+                                                    <>
+                                                        <div style={{background: '#f7fafc', padding: '20px', borderRadius: '8px', marginBottom: '20px'}}>
+                                                            <h3 style={{marginBottom: '15px', color: '#2d3748'}}>Control de Arranque por Cavidad</h3>
+                                                            
+                                                            <div className="form-group" style={{marginBottom: '20px'}}>
+                                                                <label>Peso de Preforma Correcto</label>
+                                                                <select value={mediciones['peso_preforma'] || ''}
+                                                                    onChange={(e) => setMediciones({...mediciones, peso_preforma: e.target.value})}>
+                                                                    <option value="">Seleccione...</option>
+                                                                    <option value="ok">✓ OK</option>
+                                                                    <option value="no">✗ NO</option>
+                                                                </select>
+                                                            </div>
+
+                                                            <div className="measurement-table">
+                                                                <table>
+                                                                    <thead>
+                                                                        <tr>
+                                                                            <th style={{width: '80px'}}>Cavidad</th>
+                                                                            <th style={{width: '180px'}}>Evaluación Estética</th>
+                                                                            {esFab && <th style={{width: '120px'}}>Espesor Hombro (mm)</th>}
+                                                                            <th>Brimful (mL)</th>
+                                                                            <th>Altura H (mm)</th>
+                                                                            <th>HW (mm)</th>
+                                                                            <th>HD (mm)</th>
+                                                                            <th>SW (mm)</th>
+                                                                            <th>SD (mm)</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody>
+                                                                        {[1, 2].map(cav => (
+                                                                            <tr key={cav}>
+                                                                                <td><strong>Cav {cav}</strong></td>
+                                                                                <td>
+                                                                                    <div style={{display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '11px'}}>
+                                                                                        {['Quemado', 'Def.Pico', 'Def.Base', 'Perforación'].map(item => (
+                                                                                            <label key={item} style={{display: 'flex', alignItems: 'center', gap: '5px'}}>
+                                                                                                <input type="checkbox"
+                                                                                                    checked={mediciones[`arr_estetica_cav${cav}_${item}`] || false}
+                                                                                                    onChange={(e) => setMediciones({
+                                                                                                        ...mediciones,
+                                                                                                        [`arr_estetica_cav${cav}_${item}`]: e.target.checked
+                                                                                                    })} />
+                                                                                                {item}
+                                                                                            </label>
+                                                                                        ))}
+                                                                                    </div>
+                                                                                </td>
+                                                                                {esFab && (
+                                                                                    <td>
+                                                                                        <input type="number" step="0.01"
+                                                                                            value={mediciones[`arr_espesor_cav${cav}`] || ''}
+                                                                                            onChange={(e) => setMediciones({
+                                                                                                ...mediciones,
+                                                                                                [`arr_espesor_cav${cav}`]: e.target.value
+                                                                                            })}
+                                                                                            placeholder="mm" />
+                                                                                        <div className="spec-info">Mín: {spec.espesorHombroMin}</div>
+                                                                                    </td>
+                                                                                )}
+                                                                                {['brimful', 'altura_h', 'ancho_pie_hw', 'profundidad_pie_hd', 'ancho_hombro_sw', 'profundidad_hombro_sd'].map(param => {
+                                                                                    if (!spec.parametros[param]) return null;
+                                                                                    return (
+                                                                                        <td key={param}>
+                                                                                            <input type="number" step="0.1"
+                                                                                                value={mediciones[`arr_${param}_cav${cav}`] || ''}
+                                                                                                onChange={(e) => setMediciones({
+                                                                                                    ...mediciones,
+                                                                                                    [`arr_${param}_cav${cav}`]: e.target.value
+                                                                                                })} />
+                                                                                            <div className="spec-info">
+                                                                                                {spec.parametros[param].min}-{spec.parametros[param].max}
+                                                                                            </div>
+                                                                                        </td>
+                                                                                    );
+                                                                                })}
+                                                                            </tr>
+                                                                        ))}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        </div>
+                                                    </>
+                                                )}
+
+                                                {/* CONTROL CADA 2 HORAS */}
+                                                {tipoControlSoplado === 'proceso' && (
+                                                    <div style={{background: '#f7fafc', padding: '20px', borderRadius: '8px', marginBottom: '20px'}}>
+                                                        <h3 style={{marginBottom: '15px', color: '#2d3748'}}>Verificación Visual</h3>
+                                                        
+                                                        <div className="form-group" style={{marginBottom: '15px'}}>
+                                                            <label>N° Cavidad Controlada</label>
+                                                            <input type="text"
+                                                                value={mediciones['num_cavidad'] || ''}
+                                                                onChange={(e) => setMediciones({...mediciones, num_cavidad: e.target.value})}
+                                                                placeholder="Ej: 1, 2, 1-2..." />
+                                                        </div>
+
+                                                        <div className="measurement-table">
+                                                            <table>
+                                                                <thead>
+                                                                    <tr>
+                                                                        <th>Parámetro</th>
+                                                                        <th style={{width: '120px'}}>Estado</th>
+                                                                        <th>Observaciones</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {[
+                                                                        'Coloración correcta',
+                                                                        'Ausencia de quemaduras',
+                                                                        'Pico sin deformación',
+                                                                        'Base sin deformación',
+                                                                        'Envase sin fisuras/perforaciones',
+                                                                        ...(!esFab ? ['Distribución visual material OK'] : [])
+                                                                    ].map(param => (
+                                                                        <tr key={param}>
+                                                                            <td><strong>{param}</strong></td>
+                                                                            <td>
+                                                                                <select value={mediciones[`proc_${param}`] || ''}
+                                                                                    onChange={(e) => setMediciones({
+                                                                                        ...mediciones,
+                                                                                        [`proc_${param}`]: e.target.value
+                                                                                    })}>
+                                                                                    <option value="">--</option>
+                                                                                    <option value="ok">✓ OK</option>
+                                                                                    <option value="no">✗ NO</option>
+                                                                                </select>
+                                                                            </td>
+                                                                            <td>
+                                                                                <input type="text"
+                                                                                    value={mediciones[`obs_${param}`] || ''}
+                                                                                    onChange={(e) => setMediciones({
+                                                                                        ...mediciones,
+                                                                                        [`obs_${param}`]: e.target.value
+                                                                                    })}
+                                                                                    placeholder="Si NO, indicar detalle" />
+                                                                            </td>
+                                                                        </tr>
+                                                                    ))}
+                                                                    
+                                                                    {esFab && (
+                                                                        <>
+                                                                            <tr style={{background: '#eef2ff'}}>
+                                                                                <td><strong>Espesor Hombro - Cavidad 1</strong></td>
+                                                                                <td>
+                                                                                    <input type="number" step="0.01"
+                                                                                        value={mediciones['proc_espesor_cav1'] || ''}
+                                                                                        onChange={(e) => setMediciones({
+                                                                                            ...mediciones,
+                                                                                            proc_espesor_cav1: e.target.value
+                                                                                        })}
+                                                                                        placeholder="mm" />
+                                                                                </td>
+                                                                                <td>
+                                                                                    <span className="spec-info">Mínimo: {spec.espesorHombroMin} mm</span>
+                                                                                </td>
+                                                                            </tr>
+                                                                            <tr style={{background: '#eef2ff'}}>
+                                                                                <td><strong>Espesor Hombro - Cavidad 2</strong></td>
+                                                                                <td>
+                                                                                    <input type="number" step="0.01"
+                                                                                        value={mediciones['proc_espesor_cav2'] || ''}
+                                                                                        onChange={(e) => setMediciones({
+                                                                                            ...mediciones,
+                                                                                            proc_espesor_cav2: e.target.value
+                                                                                        })}
+                                                                                        placeholder="mm" />
+                                                                                </td>
+                                                                                <td>
+                                                                                    <span className="spec-info">Mínimo: {spec.espesorHombroMin} mm</span>
+                                                                                </td>
+                                                                            </tr>
+                                                                        </>
+                                                                    )}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                <div className="form-group">
+                                                    <label>Observaciones / Remediación</label>
+                                                    <textarea value={observaciones}
+                                                        onChange={(e) => setObservaciones(e.target.value)}
+                                                        rows="3" placeholder="Detallar inconvenientes y acciones correctivas..." />
+                                                </div>
+
+                                                <div className="button-group">
+                                                    <button className="btn btn-primary" onClick={registrarControlSoplado}>
+                                                        💾 Guardar Control
+                                                    </button>
+                                                    <button className="btn btn-secondary" onClick={resetFormularios}>
+                                                        Cancelar
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+                                </>
+                            )}
+
+                            {/* TAB: CONTROLES LCC */}
+                            {activeTab === 'lcc' && (
+                                <>
+                                    {!mostrarNuevoLCC && (
+                                        <div className="form-section">
+                                            <h3 style={{marginBottom: '15px'}}>Controles de Liberación de Cambio de Calidad (LCC)</h3>
+                                            <p style={{color: '#718096', marginBottom: '20px'}}>
+                                                Validación de envases nuevos y controles periódicos (quincenal/semanal)
+                                            </p>
+                                            <div className="button-group" style={{borderTop: 'none', paddingTop: 0, marginTop: 0}}>
+                                                <button className="btn btn-primary" onClick={() => setMostrarNuevoLCC(true)}>
+                                                    ➕ Registrar Nuevo Control LCC
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {mostrarNuevoLCC && !tipoControlLCC && (
+                                        <div className="form-section">
+                                            <h2 className="section-title">Seleccionar Tipo de Control LCC</h2>
+                                            
+                                            <div className="tipo-control-selector">
+                                                <div className={`tipo-control-card ${tipoControlLCC === 'validacion' ? 'selected' : ''}`}
+                                                    onClick={() => setTipoControlLCC('validacion')}>
+                                                    <div className="tipo-control-icon">🔬</div>
+                                                    <div className="tipo-control-title">Validación</div>
+                                                    <div className="tipo-control-desc">REG-A</div>
+                                                    <div className="tipo-control-desc" style={{marginTop: '5px', fontWeight: '600'}}>
+                                                        Envases nuevos - 10 muestras/cavidad
+                                                    </div>
+                                                </div>
+
+                                                <div className={`tipo-control-card ${tipoControlLCC === 'quincenal' ? 'selected' : ''}`}
+                                                    onClick={() => setTipoControlLCC('quincenal')}>
+                                                    <div className="tipo-control-icon">📅</div>
+                                                    <div className="tipo-control-title">Control Quincenal</div>
+                                                    <div className="tipo-control-desc">REG-C</div>
+                                                    <div className="tipo-control-desc" style={{marginTop: '5px', fontWeight: '600'}}>
+                                                        Cada 15 días - 10 muestras/cavidad
+                                                    </div>
+                                                </div>
+
+                                                <div className={`tipo-control-card ${tipoControlLCC === 'semanal' ? 'selected' : ''}`}
+                                                    onClick={() => setTipoControlLCC('semanal')}>
+                                                    <div className="tipo-control-icon">📆</div>
+                                                    <div className="tipo-control-title">Control Semanal</div>
+                                                    <div className="tipo-control-desc">REG-H</div>
+                                                    <div className="tipo-control-desc" style={{marginTop: '5px', fontWeight: '600'}}>
+                                                        Semanal - 3 muestras/cavidad
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="button-group">
+                                                <button className="btn btn-secondary" onClick={() => {
+                                                    setMostrarNuevoLCC(false);
+                                                    setTipoControlLCC('');
+                                                }}>
+                                                    ← Volver
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {tipoControlLCC && (() => {
+                                        const numMuestras = tipoControlLCC === 'semanal' ? 3 : 10;
+                                        const spec = nuevoControlLCC.envase ? ESPECIFICACIONES[nuevoControlLCC.envase] : null;
+                                        
+                                        return (
+                                            <div className="form-section">
+                                                <h2 className="section-title">
+                                                    {tipoControlLCC === 'validacion' ? '🔬 Validación de Envases (REG-A)' :
+                                                     tipoControlLCC === 'quincenal' ? '📅 Control Quincenal LCC (REG-C)' :
+                                                     '📆 Control Semanal LCC (REG-H)'}
+                                                </h2>
+
+                                                <div className="form-grid">
+                                                    <div className="form-group">
+                                                        <label>Envase *</label>
+                                                        <select value={nuevoControlLCC.envase}
+                                                            onChange={(e) => setNuevoControlLCC({...nuevoControlLCC, envase: e.target.value})}>
+                                                            <option value="">Seleccione...</option>
+                                                            {Object.entries(ESPECIFICACIONES).map(([key, val]) => (
+                                                                <option key={key} value={key}>{val.nombre}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label>Fecha</label>
+                                                        <input type="date" value={nuevoControlLCC.fecha}
+                                                            onChange={(e) => setNuevoControlLCC({...nuevoControlLCC, fecha: e.target.value})} />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label>Operador *</label>
+                                                        <input type="text" value={nuevoControlLCC.operador}
+                                                            onChange={(e) => setNuevoControlLCC({...nuevoControlLCC, operador: e.target.value})} />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label>Turno</label>
+                                                        <select value={nuevoControlLCC.turno}
+                                                            onChange={(e) => setNuevoControlLCC({...nuevoControlLCC, turno: e.target.value})}>
+                                                            <option value="">Seleccione...</option>
+                                                            <option value="mañana">Mañana</option>
+                                                            <option value="tarde">Tarde</option>
+                                                            <option value="noche">Noche</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+
+                                                <div className="alert alert-info">
+                                                    <strong>Muestras requeridas:</strong> {numMuestras} por cavidad | 
+                                                    <strong> Parámetros:</strong> Dimensionales completos
+                                                </div>
+
+                                                {/* Tabla de Mediciones Dimensionales */}
+                                                {spec && (
+                                                    <div className="measurement-table">
+                                                        <h3 style={{marginBottom: '15px', color: '#2d3748'}}>
+                                                            Mediciones Dimensionales - {numMuestras} muestras por cavidad
+                                                        </h3>
+                                                        <table>
+                                                            <thead>
+                                                                <tr>
+                                                                    <th style={{width: '150px'}}>Parámetro</th>
+                                                                    <th style={{width: '80px'}}>Cavidad</th>
+                                                                    <th style={{width: '100px'}}>Especificación</th>
+                                                                    {[...Array(numMuestras)].map((_, i) => (
+                                                                        <th key={i} style={{width: '70px'}}>M{i+1}</th>
+                                                                    ))}
+                                                                    <th style={{width: '70px'}}>Promedio</th>
+                                                                    <th style={{width: '70px'}}>Mín</th>
+                                                                    <th style={{width: '70px'}}>Máx</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {/* Iterar sobre cada parámetro dimensional */}
+                                                                {['brimful', 'altura_h', 'ancho_pie_hw', 'profundidad_pie_hd', 'ancho_hombro_sw', 'profundidad_hombro_sd'].map(param => {
+                                                                    if (!spec.parametros[param]) return null;
+                                                                    
+                                                                    return [1, 2].map(cav => {
+                                                                        const key = `${tipoControlLCC}_${param}_cav${cav}`;
+                                                                        const valores = mediciones[key] || Array(numMuestras).fill('');
+                                                                        
+                                                                        // Cálculos automáticos
+                                                                        const nums = valores.filter(v => v && !isNaN(parseFloat(v))).map(v => parseFloat(v));
+                                                                        const promedio = nums.length > 0 ? (nums.reduce((a,b) => a+b, 0) / nums.length).toFixed(2) : '-';
+                                                                        const minVal = nums.length > 0 ? Math.min(...nums).toFixed(2) : '-';
+                                                                        const maxVal = nums.length > 0 ? Math.max(...nums).toFixed(2) : '-';
+                                                                        
+                                                                        // Validación OOS
+                                                                        const esOOS = nums.some(v => v < spec.parametros[param].min || v > spec.parametros[param].max);
+                                                                        
+                                                                        return (
+                                                                            <tr key={`${param}_cav${cav}`}>
+                                                                                {cav === 1 && (
+                                                                                    <td rowSpan="2" style={{fontWeight: 'bold', background: '#f7fafc'}}>
+                                                                                        {spec.parametros[param].nombre}
+                                                                                    </td>
+                                                                                )}
+                                                                                <td style={{fontWeight: 'bold'}}>Cav {cav}</td>
+                                                                                <td style={{fontSize: '11px', color: '#718096'}}>
+                                                                                    {spec.parametros[param].min} - {spec.parametros[param].max} {spec.parametros[param].unidad}
+                                                                                </td>
+                                                                                {[...Array(numMuestras)].map((_, i) => (
+                                                                                    <td key={i}>
+                                                                                        <input 
+                                                                                            type="number"
+                                                                                            step="0.1"
+                                                                                            value={valores[i] || ''}
+                                                                                            onChange={(e) => {
+                                                                                                const newValores = [...valores];
+                                                                                                newValores[i] = e.target.value;
+                                                                                                setMediciones({
+                                                                                                    ...mediciones,
+                                                                                                    [key]: newValores
+                                                                                                });
+                                                                                            }}
+                                                                                            style={{
+                                                                                                borderColor: valores[i] && !isNaN(parseFloat(valores[i])) && 
+                                                                                                    (parseFloat(valores[i]) < spec.parametros[param].min || 
+                                                                                                     parseFloat(valores[i]) > spec.parametros[param].max) 
+                                                                                                    ? '#e53e3e' : '#cbd5e0'
+                                                                                            }}
+                                                                                        />
+                                                                                    </td>
+                                                                                ))}
+                                                                                <td style={{fontWeight: 'bold', background: esOOS ? '#fff5f5' : '#f0fff4'}}>
+                                                                                    {promedio}
+                                                                                </td>
+                                                                                <td>{minVal}</td>
+                                                                                <td>{maxVal}</td>
+                                                                            </tr>
+                                                                        );
+                                                                    });
+                                                                })}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                )}
+
+                                                {!spec && (
+                                                    <div className="alert alert-warning">
+                                                        Seleccione un envase para mostrar los parámetros de medición
+                                                    </div>
+                                                )}
+
+                                                <div className="form-group" style={{marginTop: '25px'}}>
+                                                    <label>Observaciones</label>
+                                                    <textarea value={observaciones}
+                                                        onChange={(e) => setObservaciones(e.target.value)}
+                                                        rows="3" 
+                                                        placeholder="Detallar cualquier inconformidad o acción correctiva..." />
+                                                </div>
+
+                                                <div className="button-group">
+                                                    <button className="btn btn-primary" onClick={registrarControlLCC}>
+                                                        💾 Guardar Control LCC
+                                                    </button>
+                                                    <button className="btn btn-secondary" onClick={resetFormularios}>
+                                                        Cancelar
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+                                </>
+                            )}
+
+                            {/* TAB: HISTÓRICO */}
+                            {activeTab === 'historico' && (
+                                <>
+                                    <div className="stats-grid">
+                                        <div className="stat-card">
+                                            <div className="stat-label">Órdenes Soplado</div>
+                                            <div className="stat-value">{ordenesSoplado.length}</div>
+                                        </div>
+                                        <div className="stat-card">
+                                            <div className="stat-label">Órdenes Activas</div>
+                                            <div className="stat-value">{ordenesSoplado.filter(o => o.estado === 'activa').length}</div>
+                                        </div>
+                                        <div className="stat-card">
+                                            <div className="stat-label">Controles LCC</div>
+                                            <div className="stat-value">{controlesLCC.length}</div>
+                                        </div>
+                                        <div className="stat-card">
+                                            <div className="stat-label">Total Controles</div>
+                                            <div className="stat-value">
+                                                {ordenesSoplado.reduce((sum, o) => sum + o.controles.length, 0) + controlesLCC.length}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* ÓRDENES DE SOPLADO */}
+                                    <div className="form-section">
+                                        <h2 className="section-title">🏭 Órdenes de Soplado</h2>
+                                        {ordenesSoplado.length === 0 ? (
+                                            <div className="empty-state">
+                                                <div className="empty-state-icon">📦</div>
+                                                <p>No hay órdenes de soplado</p>
+                                            </div>
+                                        ) : (
+                                            ordenesSoplado.map(orden => {
+                                                const spec = ESPECIFICACIONES[orden.envase];
+                                                const dias = calcularDiasActiva(orden.fecha);
+                                                const controlesArranque = orden.controles.filter(c => c.tipo === 'arranque');
+                                                const controlesProceso = orden.controles.filter(c => c.tipo === 'proceso');
+
+                                                return (
+                                                    <div key={orden.id} className="orden-card">
+                                                        <div className="orden-header">
+                                                            <div className="orden-title">
+                                                                📦 {orden.numeroOrden}
+                                                                <span className={`status-badge ${orden.estado === 'activa' ? 'status-active' : 'status-ok'}`}
+                                                                    style={{marginLeft: '10px'}}>
+                                                                    {orden.estado === 'activa' ? '🟢 Activa' : '✓ Finalizada'}
+                                                                </span>
+                                                                {orden.estado === 'activa' && (
+                                                                    <span className={`dias-activa ${dias > 3 ? 'warning' : ''}`}>
+                                                                        📅 {dias} día{dias !== 1 ? 's' : ''}{dias > 3 && ' ⚠️'}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="orden-info">
+                                                            <div className="orden-detail"><strong>Envase:</strong> {spec?.nombre}</div>
+                                                            <div className="orden-detail"><strong>Fecha:</strong> {orden.fecha}</div>
+                                                            <div className="orden-detail"><strong>Operador:</strong> {orden.operador}</div>
+                                                            <div className="orden-detail"><strong>Controles:</strong> {orden.controles.length}</div>
+                                                        </div>
+
+                                                        {orden.controles.length > 0 && (
+                                                            <div className="controles-list">
+                                                                <h4 style={{marginBottom: '10px', color: '#4a5568'}}>Controles:</h4>
+                                                                
+                                                                {controlesArranque.map(c => (
+                                                                    <div key={c.id} className="control-item arranque"
+                                                                        onClick={() => setControlDetalle({control: c, orden, tipo: 'soplado'})}>
+                                                                        <div className="control-info">
+                                                                            <span className="control-hora">🚀 Arranque</span>
+                                                                            <span className="control-tipo">{c.fecha} - {c.hora}</span>
+                                                                        </div>
+                                                                        <div style={{color: '#667eea', fontSize: '12px'}}>Ver →</div>
+                                                                    </div>
+                                                                ))}
+
+                                                                {controlesProceso.map(c => (
+                                                                    <div key={c.id} className="control-item proceso"
+                                                                        onClick={() => setControlDetalle({control: c, orden, tipo: 'soplado'})}>
+                                                                        <div className="control-info">
+                                                                            <span className="control-hora">⏱️ {c.hora}</span>
+                                                                            <span className="control-tipo">{c.fecha}</span>
+                                                                        </div>
+                                                                        <div style={{color: '#38a169', fontSize: '12px'}}>Ver →</div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+
+                                                        <div style={{marginTop: '15px', display: 'flex', gap: '10px', flexWrap: 'wrap'}}>
+                                                            <button className="btn btn-export"
+                                                                onClick={() => exportarOrdenExcel(orden)}
+                                                                style={{fontSize: '13px', padding: '8px 16px'}}>
+                                                                📊 Excel
+                                                            </button>
+                                                            {orden.estado === 'activa' && (
+                                                                <button className="btn btn-success"
+                                                                    onClick={() => finalizarOrden(orden.id)}
+                                                                    style={{fontSize: '13px', padding: '8px 16px'}}>
+                                                                    ✓ Finalizar
+                                                                </button>
+                                                            )}
+                                                            <button className="btn btn-danger"
+                                                                onClick={() => eliminarOrden(orden.id)}
+                                                                style={{fontSize: '13px', padding: '8px 16px'}}>
+                                                                🗑️ Eliminar
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })
+                                        )}
+                                    </div>
+
+                                    <div className="separator"></div>
+
+                                    {/* CONTROLES LCC */}
+                                    <div className="form-section">
+                                        <h2 className="section-title">🔬 Controles LCC (Liberación de Cambio de Calidad)</h2>
+                                        {controlesLCC.length === 0 ? (
+                                            <div className="empty-state">
+                                                <div className="empty-state-icon">🔬</div>
+                                                <p>No hay controles LCC registrados</p>
+                                            </div>
+                                        ) : (
+                                            controlesLCC.map(control => {
+                                                const spec = ESPECIFICACIONES[control.envase];
+                                                const tipoLabel = 
+                                                    control.tipo === 'validacion' ? '🔬 Validación' :
+                                                    control.tipo === 'quincenal' ? '📅 Quincenal' :
+                                                    '📆 Semanal';
+                                                const tipoClass = control.tipo;
+
+                                                return (
+                                                    <div key={control.id} className="control-card">
+                                                        <div className="control-header">
+                                                            <div className="control-title">
+                                                                {tipoLabel} - {spec?.nombre}
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="control-info-grid">
+                                                            <div className="orden-detail"><strong>Envase:</strong> {spec?.nombre}</div>
+                                                            <div className="orden-detail"><strong>Fecha:</strong> {control.fecha}</div>
+                                                            <div className="orden-detail"><strong>Hora:</strong> {control.hora}</div>
+                                                            <div className="orden-detail"><strong>Operador:</strong> {control.operador}</div>
+                                                            {control.turno && (
+                                                                <div className="orden-detail"><strong>Turno:</strong> {control.turno}</div>
+                                                            )}
+                                                        </div>
+
+                                                        {control.observaciones && (
+                                                            <div style={{marginTop: '15px', padding: '10px', background: '#f7fafc', borderRadius: '6px'}}>
+                                                                <strong>Observaciones:</strong> {control.observaciones}
+                                                            </div>
+                                                        )}
+
+                                                        <div style={{marginTop: '15px', display: 'flex', gap: '10px'}}>
+                                                            <button className="btn btn-danger"
+                                                                onClick={() => eliminarControlLCC(control.id)}
+                                                                style={{fontSize: '13px', padding: '8px 16px'}}>
+                                                                🗑️ Eliminar
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })
+                                        )}
+                                    </div>
+                                </>
+                            )}
+
+                            {/* MODAL DE DETALLES */}
+                            {controlDetalle && (
+                                <div className="modal-overlay" onClick={() => setControlDetalle(null)}>
+                                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                                        <div className="modal-header">
+                                            <div className="modal-title">Detalle del Control</div>
+                                            <button className="modal-close" onClick={() => setControlDetalle(null)}>✕</button>
+                                        </div>
+                                        <div className="modal-body">
+                                            <div className="detalle-grid">
+                                                {controlDetalle.tipo === 'soplado' && (
+                                                    <div className="detalle-item">
+                                                        <div className="detalle-label">Orden</div>
+                                                        <div className="detalle-value">{controlDetalle.orden.numeroOrden}</div>
+                                                    </div>
+                                                )}
+                                                <div className="detalle-item">
+                                                    <div className="detalle-label">Tipo</div>
+                                                    <div className="detalle-value">{controlDetalle.control.tipo}</div>
+                                                </div>
+                                                <div className="detalle-item">
+                                                    <div className="detalle-label">Fecha</div>
+                                                    <div className="detalle-value">{controlDetalle.control.fecha}</div>
+                                                </div>
+                                                <div className="detalle-item">
+                                                    <div className="detalle-label">Hora</div>
+                                                    <div className="detalle-value">{controlDetalle.control.hora}</div>
+                                                </div>
+                                            </div>
+                                            {controlDetalle.control.observaciones && (
+                                                <div style={{marginTop: '20px', padding: '15px', background: '#fff5f5',
+                                                    borderRadius: '8px', borderLeft: '4px solid #e53e3e'}}>
+                                                    <strong>Observaciones:</strong>
+                                                    <p style={{marginTop: '8px'}}>{controlDetalle.control.observaciones}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
