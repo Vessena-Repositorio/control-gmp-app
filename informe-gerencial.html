@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Informe Gerencial — Control en Proceso GMP</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root{--bg:#f8fafc;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--text3:#94a3b8;--mint:#10b981;--mint-l:#d1fae5;--mint-d:#047857;--blue:#3b82f6;--blue-l:#dbeafe;--blue-d:#1e40af;--red:#ef4444;--red-l:#fee2e2;--red-d:#991b1b;--amber:#f59e0b;--amber-l:#fef3c7;--amber-d:#92400e;--purple:#8b5cf6;--purple-l:#ede9fe;--purple-d:#5b21b6;--r:14px;--rs:10px;--f:'Inter',sans-serif;--m:'IBM Plex Mono',monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--f);background:var(--bg);color:var(--text);line-height:1.5;-webkit-font-smoothing:antialiased}
+
+/* HEADER */
+.hdr{background:linear-gradient(135deg,#065f46,#047857);color:#fff;padding:20px 28px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px}
+.hdr-info h1{font-size:20px;font-weight:800;margin-bottom:2px}
+.hdr-info p{font-size:11px;opacity:.85;font-weight:500}
+.hdr-actions{display:flex;gap:8px;flex-wrap:wrap}
+.btn{padding:8px 14px;border-radius:8px;font-family:var(--f);font-size:11px;font-weight:700;cursor:pointer;border:none;display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.18);color:#fff;border:1px solid rgba(255,255,255,.25)}
+.btn:hover{background:rgba(255,255,255,.28)}
+.btn.solid{background:#fff;color:var(--mint-d)}
+
+/* WRAP */
+.wrap{max-width:1240px;margin:0 auto;padding:20px}
+
+/* LOGIN */
+.login-box{max-width:380px;margin:60px auto;background:#fff;border-radius:14px;padding:28px;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,.06)}
+.login-box h2{font-size:18px;margin-bottom:4px}
+.login-box p{font-size:11px;color:var(--text2);margin-bottom:14px}
+.login-box input{width:100%;padding:11px;border-radius:9px;border:1.5px solid var(--border);font-size:13px;font-family:var(--f);font-weight:600;text-align:center;outline:none;margin-bottom:8px}
+.login-box input:focus{border-color:var(--mint)}
+.login-box .btn{width:100%;justify-content:center;background:linear-gradient(140deg,var(--mint),var(--mint-d));color:#fff;padding:11px;font-size:12px}
+
+/* FILTERS */
+.filters{background:#fff;border-radius:var(--r);padding:14px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.04);display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+.fl-grp label{font-size:9px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;display:block}
+.fl-grp select,.fl-grp input{width:100%;padding:7px 9px;border-radius:7px;border:1.5px solid var(--border);font-family:var(--f);font-size:11px;font-weight:500;outline:none;background:#fff}
+.fl-grp select:focus,.fl-grp input:focus{border-color:var(--mint)}
+
+/* KPI CARDS */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+.kpi{background:#fff;border-radius:var(--r);padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.kpi-lbl{font-size:9px;text-transform:uppercase;letter-spacing:.6px;color:var(--text2);font-weight:700;margin-bottom:4px}
+.kpi-val{font-size:24px;font-weight:800;font-family:var(--m);line-height:1.2}
+.kpi-sub{font-size:10px;color:var(--text3);margin-top:2px}
+.kpi.grn .kpi-val{color:var(--mint-d)}
+.kpi.rd .kpi-val{color:var(--red-d)}
+.kpi.amb .kpi-val{color:var(--amber-d)}
+.kpi.blu .kpi-val{color:var(--blue-d)}
+.kpi.pur .kpi-val{color:var(--purple-d)}
+
+/* SECTION */
+.section{background:#fff;border-radius:var(--r);padding:18px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.section h2{font-size:14px;font-weight:800;margin-bottom:10px;display:flex;align-items:center;gap:6px;color:var(--text)}
+.section h2 .badge{font-size:9px;background:var(--blue-l);color:var(--blue-d);padding:2px 7px;border-radius:50px;font-weight:700;margin-left:4px}
+
+/* TABLE */
+.tbl{width:100%;border-collapse:collapse;font-size:11px}
+.tbl th{background:#f1f5f9;color:var(--text2);padding:8px 6px;text-align:left;font-weight:700;font-size:9px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid var(--border)}
+.tbl td{padding:7px 6px;border-bottom:1px solid var(--border);font-family:var(--m);font-size:11px}
+.tbl tr:hover{background:#f8fafc}
+.t-ok{color:var(--mint-d);font-weight:700}
+.t-bd{color:var(--red-d);font-weight:700}
+.t-wn{color:var(--amber-d);font-weight:700}
+.pill{padding:2px 8px;border-radius:50px;font-size:9px;font-weight:700;display:inline-block}
+.pill.ok{background:var(--mint-l);color:var(--mint-d)}
+.pill.bad{background:var(--red-l);color:var(--red-d)}
+.pill.warn{background:var(--amber-l);color:var(--amber-d)}
+
+/* CHART CONTAINER */
+.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}
+.chart-card{background:#fff;border:1px solid var(--border);border-radius:var(--rs);padding:12px}
+.chart-card h3{font-size:11px;font-weight:700;margin-bottom:8px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px}
+.chart-card canvas{max-height:240px}
+
+/* PRODUCT REPORT */
+.product-section{background:#fff;border-radius:var(--r);padding:18px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.04);page-break-inside:avoid;break-inside:avoid}
+.product-hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid var(--border);padding-bottom:10px;margin-bottom:14px}
+.product-title{font-size:16px;font-weight:800}
+.product-sub{font-size:11px;color:var(--text2);margin-top:2px}
+.product-spec{background:var(--blue-l);color:var(--blue-d);padding:6px 12px;border-radius:8px;font-size:11px;font-weight:600;font-family:var(--m)}
+.product-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:14px}
+.stat{background:#f8fafc;padding:10px;border-radius:8px;border:1px solid var(--border)}
+.stat-lbl{font-size:8px;font-weight:700;text-transform:uppercase;color:var(--text2);letter-spacing:.5px}
+.stat-val{font-size:18px;font-weight:800;font-family:var(--m);margin-top:2px}
+.stat-val.ok{color:var(--mint-d)}.stat-val.bad{color:var(--red-d)}.stat-val.warn{color:var(--amber-d)}
+
+/* MSG */
+.msg{padding:16px;background:var(--amber-l);color:var(--amber-d);border-radius:var(--rs);font-size:12px;text-align:center}
+
+/* PRINT */
+@media print{
+  body{background:#fff;font-size:10px}
+  .hdr-actions,.filters{display:none}
+  .section,.product-section{box-shadow:none;border:1px solid #ddd;page-break-inside:avoid;break-inside:avoid}
+  .kpi{break-inside:avoid;page-break-inside:avoid}
+}
+
+/* RESPONSIVE */
+@media(max-width:720px){
+  .chart-grid{grid-template-columns:1fr}
+  .hdr{padding:14px 16px}
+  .hdr-info h1{font-size:16px}
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginView">
+  <div class="hdr">
+    <div class="hdr-info"><h1>📊 Informe Gerencial</h1><p>Control en Proceso GMP — Envasado</p></div>
+  </div>
+  <div class="login-box">
+    <div style="font-size:38px;margin-bottom:8px">📈</div>
+    <h2>Acceso al Informe</h2>
+    <p>Ingresá tu nombre para acceder al informe gerencial</p>
+    <input id="loginName" placeholder="Tu nombre..." />
+    <button class="btn" onclick="doLogin()">Acceder</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div id="mainView" style="display:none">
+  <div class="hdr">
+    <div class="hdr-info"><h1>📊 Informe Gerencial — Control en Proceso</h1><p id="hdrSub">Cargando...</p></div>
+    <div class="hdr-actions">
+      <button class="btn" onclick="loadData()">🔄 Actualizar</button>
+      <button class="btn" onclick="window.print()">🖨️ Imprimir / PDF</button>
+      <button class="btn" onclick="exportExcel()">📥 Excel</button>
+      <button class="btn solid" onclick="exportPPT()">📊 PowerPoint</button>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <!-- FILTERS -->
+    <div class="filters">
+      <div class="fl-grp">
+        <label>Período</label>
+        <select id="fPer" onchange="render()">
+          <option value="7">Última semana</option>
+          <option value="30">Último mes</option>
+          <option value="60">Últimos 2 meses</option>
+          <option value="90" selected>Últimos 3 meses</option>
+          <option value="180">Últimos 6 meses</option>
+          <option value="365">Último año</option>
+          <option value="0">Todo</option>
+          <option value="custom">Personalizado...</option>
+        </select>
+      </div>
+      <div class="fl-grp" id="fDesdeWrap" style="display:none">
+        <label>Desde</label>
+        <input type="date" id="fDesde" onchange="render()" />
+      </div>
+      <div class="fl-grp" id="fHastaWrap" style="display:none">
+        <label>Hasta</label>
+        <input type="date" id="fHasta" onchange="render()" />
+      </div>
+      <div class="fl-grp">
+        <label>Máquina</label>
+        <select id="fMaq" onchange="render()"><option value="">Todas</option></select>
+      </div>
+      <div class="fl-grp">
+        <label>Presentación</label>
+        <select id="fPres" onchange="render()"><option value="">Todas</option></select>
+      </div>
+      <div class="fl-grp">
+        <label>Analista</label>
+        <select id="fAna" onchange="render()"><option value="">Todos</option></select>
+      </div>
+    </div>
+
+    <!-- KPIS -->
+    <div class="kpis" id="kpis"></div>
+
+    <!-- GENERAL OVERVIEW -->
+    <div class="section">
+      <h2>📈 Resumen General</h2>
+      <div class="chart-grid">
+        <div class="chart-card"><h3>Conformidad por máquina</h3><canvas id="chMaq"></canvas></div>
+        <div class="chart-card"><h3>Controles por día</h3><canvas id="chDia"></canvas></div>
+      </div>
+    </div>
+
+    <!-- DEVIATIONS -->
+    <div class="section">
+      <h2>⚠️ Análisis de Desvíos</h2>
+      <div id="devsContent"></div>
+    </div>
+
+    <!-- ANALYSTS -->
+    <div class="section">
+      <h2>👥 Performance por Analista</h2>
+      <table class="tbl" id="anaTable"><thead><tr><th>Analista</th><th>Controles</th><th>Sin Desvío</th><th>Con Desvío</th><th>% Conformidad</th></tr></thead><tbody id="anaBody"></tbody></table>
+    </div>
+
+    <!-- DETAIL BY PRODUCT -->
+    <h2 style="font-size:16px;font-weight:800;margin:24px 0 12px;padding:0 4px">📦 Detalle por Producto</h2>
+    <div id="productsContent"></div>
+  </div>
+</div>
+
+<script>
+const SURL='https://script.google.com/macros/s/AKfycbxmayMAPlLCrozmZRM3gLSf5MgcWO9lC5y_ayR0DkRdi_hHYaoLRI43OgIJ9d7nTPDGug/exec';
+let USER='', allR=[], filtered=[];
+let charts={};
+
+// Calcula T según Decreto 129/009
+function calcT(qn){
+  if(qn<50)return qn*0.09;
+  if(qn<=100)return 4.5;
+  if(qn<200)return qn*0.045;
+  if(qn<=300)return 9;
+  if(qn<500)return qn*0.03;
+  if(qn<=1000)return 15;
+  if(qn<10000)return qn*0.015;
+  if(qn<=15000)return 150;
+  return qn*0.01;
+}
+
+// LOGIN
+function doLogin(){
+  const n=document.getElementById('loginName').value.trim();
+  if(!n){alert('Ingresá tu nombre');return}
+  USER=n;localStorage.setItem('gmp_inf_user',n);
+  document.getElementById('loginView').style.display='none';
+  document.getElementById('mainView').style.display='block';
+  document.getElementById('hdrSub').textContent='👤 '+USER+' · '+new Date().toLocaleDateString('es-ES');
+  loadData();
+}
+(function(){const u=localStorage.getItem('gmp_inf_user');if(u){document.getElementById('loginName').value=u;doLogin()}})();
+
+// Custom period
+document.getElementById('fPer').addEventListener('change',e=>{
+  const c=e.target.value==='custom';
+  document.getElementById('fDesdeWrap').style.display=c?'block':'none';
+  document.getElementById('fHastaWrap').style.display=c?'block':'none';
+});
+
+// LOAD DATA
+function loadData(){
+  document.getElementById('hdrSub').textContent='🔄 Cargando datos...';
+  fetch(SURL).then(r=>r.json()).then(d=>{
+    if(d.status==='ok'&&d.records){
+      allR=d.records;
+      allR.forEach(r=>{
+        r.promedio=r.promedio!=null?parseFloat(r.promedio)||0:0;
+        r.ph=r.ph!=null?String(r.ph):'';
+        r.maquina=r.maquina?String(r.maquina).trim():'';
+        r.presentacion=r.presentacion?String(r.presentacion).trim():'';
+        r.lote=r.lote?String(r.lote).trim():'';
+        r.analista=r.analista?String(r.analista).trim():'';
+        if(r.pesos)r.pesos=r.pesos.map(p=>parseFloat(p)||0).filter(p=>p>0);
+        r.hasDev=r.hasDev===true||r.hasDev==='SÍ';
+      });
+      buildFilters();
+      render();
+      document.getElementById('hdrSub').textContent='👤 '+USER+' · '+new Date().toLocaleDateString('es-ES')+' · '+allR.length+' registros';
+    }
+  }).catch(()=>{
+    document.getElementById('hdrSub').textContent='⚠️ Error cargando datos';
+  });
+}
+
+function buildFilters(){
+  const maqs=[...new Set(allR.map(r=>r.maquina).filter(Boolean))].sort();
+  const mSel=document.getElementById('fMaq');mSel.innerHTML='<option value="">Todas</option>';
+  maqs.forEach(m=>{const o=document.createElement('option');o.value=m;o.textContent=m;mSel.appendChild(o)});
+  
+  const anas=[...new Set(allR.map(r=>r.analista).filter(Boolean))].sort();
+  const aSel=document.getElementById('fAna');aSel.innerHTML='<option value="">Todos</option>';
+  anas.forEach(a=>{const o=document.createElement('option');o.value=a;o.textContent=a;aSel.appendChild(o)});
+}
+
+function updatePresFilter(){
+  const mq=document.getElementById('fMaq').value;const cur=document.getElementById('fPres').value;
+  const pSel=document.getElementById('fPres');pSel.innerHTML='<option value="">Todas</option>';
+  const filt=mq?allR.filter(r=>r.maquina===mq):allR;
+  const press=[...new Set(filt.map(r=>r.presentacion).filter(Boolean))].sort();
+  press.forEach(p=>{const o=document.createElement('option');o.value=p;o.textContent=p;pSel.appendChild(o)});
+  if(cur)pSel.value=cur;
+}
+
+document.getElementById('fMaq').addEventListener('change',()=>{updatePresFilter();render()});
+
+// FILTER
+function getFiltered(){
+  let r=allR;
+  const per=document.getElementById('fPer').value;
+  if(per==='custom'){
+    const d1=document.getElementById('fDesde').value;
+    const d2=document.getElementById('fHasta').value;
+    if(d1||d2){r=r.filter(x=>{const d=parseDate(x.fecha);if(!d)return false;if(d1&&d<new Date(d1))return false;if(d2&&d>new Date(d2+'T23:59:59'))return false;return true})}
+  } else {
+    const days=parseInt(per)||0;
+    if(days>0){const cut=new Date();cut.setDate(cut.getDate()-days);r=r.filter(x=>{const d=parseDate(x.fecha);return d&&d>=cut})}
+  }
+  const mq=document.getElementById('fMaq').value;
+  const pr=document.getElementById('fPres').value;
+  const an=document.getElementById('fAna').value;
+  if(mq)r=r.filter(x=>x.maquina===mq);
+  if(pr)r=r.filter(x=>x.presentacion===pr);
+  if(an)r=r.filter(x=>x.analista===an);
+  return r;
+}
+
+function parseDate(f){
+  if(!f)return null;
+  if(f instanceof Date)return f;
+  if(typeof f==='string'){
+    const iso=f.match(/(\d{4})-(\d{2})-(\d{2})/);
+    if(iso)return new Date(iso[1],iso[2]-1,iso[3]);
+    const dmy=f.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/);
+    if(dmy)return new Date(dmy[3],dmy[2]-1,dmy[1]);
+    const dt=new Date(f);if(!isNaN(dt))return dt;
+  }
+  return null;
+}
+
+// RENDER
+function render(){
+  updatePresFilter();
+  filtered=getFiltered();
+  renderKPIs();
+  renderCharts();
+  renderDevs();
+  renderAnalysts();
+  renderProducts();
+}
+
+function renderKPIs(){
+  const tot=filtered.length;
+  const sinD=filtered.filter(r=>!r.hasDev).length;
+  const conD=filtered.filter(r=>r.hasDev).length;
+  const lots=new Set(filtered.map(r=>r.lote)).size;
+  const maqs=new Set(filtered.map(r=>r.maquina)).size;
+  const conf=tot?Math.round(sinD/tot*100):0;
+  document.getElementById('kpis').innerHTML=`
+    <div class="kpi blu"><div class="kpi-lbl">Controles totales</div><div class="kpi-val">${tot}</div><div class="kpi-sub">Período filtrado</div></div>
+    <div class="kpi grn"><div class="kpi-lbl">Conformidad</div><div class="kpi-val">${conf}%</div><div class="kpi-sub">${sinD} sin desvío</div></div>
+    <div class="kpi rd"><div class="kpi-lbl">Desvíos</div><div class="kpi-val">${conD}</div><div class="kpi-sub">${tot?Math.round(conD/tot*100):0}% del total</div></div>
+    <div class="kpi amb"><div class="kpi-lbl">Lotes únicos</div><div class="kpi-val">${lots}</div><div class="kpi-sub">${maqs} máquinas activas</div></div>
+    <div class="kpi pur"><div class="kpi-lbl">Productos</div><div class="kpi-val">${new Set(filtered.map(r=>r.maquina+' · '+r.presentacion)).size}</div><div class="kpi-sub">Presentaciones controladas</div></div>
+  `;
+}
+
+function destroyChart(id){if(charts[id])charts[id].destroy()}
+
+function renderCharts(){
+  // Conformidad por máquina
+  const byMaq={};
+  filtered.forEach(r=>{const m=r.maquina||'?';if(!byMaq[m])byMaq[m]={t:0,d:0};byMaq[m].t++;if(r.hasDev)byMaq[m].d++});
+  const maqs=Object.keys(byMaq).sort();
+  destroyChart('chMaq');
+  charts.chMaq=new Chart(document.getElementById('chMaq'),{
+    type:'bar',
+    data:{
+      labels:maqs,
+      datasets:[
+        {label:'Conformes',data:maqs.map(m=>byMaq[m].t-byMaq[m].d),backgroundColor:'#10b981'},
+        {label:'Con desvío',data:maqs.map(m=>byMaq[m].d),backgroundColor:'#ef4444'}
+      ]
+    },
+    options:{responsive:true,maintainAspectRatio:false,scales:{x:{stacked:true,ticks:{font:{size:9}}},y:{stacked:true,beginAtZero:true,ticks:{font:{size:9}}}},plugins:{legend:{position:'bottom',labels:{font:{size:10}}}}}
+  });
+  
+  // Controles por día
+  const byDia={};
+  filtered.forEach(r=>{const d=parseDate(r.fecha);if(!d)return;const k=d.toISOString().slice(0,10);if(!byDia[k])byDia[k]=0;byDia[k]++});
+  const dias=Object.keys(byDia).sort();
+  destroyChart('chDia');
+  charts.chDia=new Chart(document.getElementById('chDia'),{
+    type:'line',
+    data:{
+      labels:dias.map(d=>d.slice(5)),
+      datasets:[{label:'Controles',data:dias.map(d=>byDia[d]),borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.15)',fill:true,tension:0.3,pointRadius:2}]
+    },
+    options:{responsive:true,maintainAspectRatio:false,scales:{x:{ticks:{font:{size:8},maxRotation:60,minRotation:45}},y:{beginAtZero:true,ticks:{font:{size:9},stepSize:1}}},plugins:{legend:{display:false}}}
+  });
+}
+
+function renderDevs(){
+  const devs=filtered.filter(r=>r.hasDev);
+  if(devs.length===0){document.getElementById('devsContent').innerHTML='<div class="msg" style="background:var(--mint-l);color:var(--mint-d)">✅ Sin desvíos en el período seleccionado</div>';return}
+  const byMaq={};devs.forEach(d=>{const k=d.maquina+' · '+d.presentacion;if(!byMaq[k])byMaq[k]=[];byMaq[k].push(d)});
+  const top=Object.entries(byMaq).sort((a,b)=>b[1].length-a[1].length).slice(0,10);
+  let html='<table class="tbl"><thead><tr><th>Producto</th><th>Cantidad</th><th>Descripciones más frecuentes</th><th>Unidades</th></tr></thead><tbody>';
+  top.forEach(([k,arr])=>{
+    const descs={};arr.forEach(d=>{const desc=(d.devDesc||'Sin descripción').slice(0,50);descs[desc]=(descs[desc]||0)+1});
+    const topDescs=Object.entries(descs).sort((a,b)=>b[1]-a[1]).slice(0,2).map(([d,c])=>`${d}(${c})`).join(' · ');
+    const uds=arr.reduce((s,d)=>s+(parseInt(d.devQty)||0),0);
+    html+=`<tr><td>${k}</td><td><span class="pill bad">${arr.length}</span></td><td style="font-family:var(--f);font-size:10px">${topDescs||'—'}</td><td>${uds}</td></tr>`;
+  });
+  html+='</tbody></table>';
+  document.getElementById('devsContent').innerHTML=html;
+}
+
+function renderAnalysts(){
+  const byA={};filtered.forEach(r=>{const a=r.analista||'?';if(!byA[a])byA[a]={t:0,d:0};byA[a].t++;if(r.hasDev)byA[a].d++});
+  const sorted=Object.entries(byA).sort((a,b)=>b[1].t-a[1].t);
+  document.getElementById('anaBody').innerHTML=sorted.map(([n,d])=>{
+    const pct=d.t?Math.round((d.t-d.d)/d.t*100):0;
+    const cls=pct>=95?'ok':(pct>=85?'warn':'bad');
+    return `<tr><td><b style="font-family:var(--f)">${n}</b></td><td>${d.t}</td><td class="t-ok">${d.t-d.d}</td><td class="t-bd">${d.d}</td><td><span class="pill ${cls}">${pct}%</span></td></tr>`;
+  }).join('');
+}
+
+function calcStats(values){
+  if(!values.length)return null;
+  const n=values.length;
+  const mean=values.reduce((a,b)=>a+b,0)/n;
+  const sd=Math.sqrt(values.reduce((a,b)=>a+Math.pow(b-mean,2),0)/n);
+  return{n,mean,sd,min:Math.min(...values),max:Math.max(...values)};
+}
+
+function renderProducts(){
+  const byProd={};
+  filtered.forEach(r=>{
+    if(!r.maquina||!r.presentacion)return;
+    const k=r.maquina+' ||| '+r.presentacion;
+    if(!byProd[k])byProd[k]={maquina:r.maquina,presentacion:r.presentacion,records:[]};
+    byProd[k].records.push(r);
+  });
+  
+  const sorted=Object.values(byProd).sort((a,b)=>(a.maquina+a.presentacion).localeCompare(b.maquina+b.presentacion));
+  
+  if(sorted.length===0){document.getElementById('productsContent').innerHTML='<div class="msg">Sin datos para los filtros seleccionados</div>';return}
+  
+  let html='';
+  sorted.forEach((prod,idx)=>{
+    const recs=prod.records;const promValues=recs.map(r=>r.promedio).filter(v=>v>0);
+    const allPesos=[];recs.forEach(r=>(r.pesos||[]).forEach(p=>{if(p>0)allPesos.push(p)}));
+    const stats=calcStats(promValues);
+    const indivStats=calcStats(allPesos);
+    const devs=recs.filter(r=>r.hasDev).length;
+    const conf=recs.length?Math.round((recs.length-devs)/recs.length*100):0;
+    
+    // Extract spec from first record
+    const firstSpec=recs.find(r=>r.spec)?.spec||'';
+    let qn=0;const qnMatch=firstSpec.match(/Qn:(\d+\.?\d*)/);if(qnMatch)qn=parseFloat(qnMatch[1]);
+    const t=qn?calcT(qn):0;const qnT=qn-t;
+    
+    // Status
+    const meanOk=stats&&qn?stats.mean>=qn:true;
+    const statCls=conf>=95&&meanOk?'ok':(conf>=85?'warn':'bad');
+    
+    html+=`<div class="product-section" id="prod-${idx}">
+      <div class="product-hdr">
+        <div>
+          <div class="product-title">${prod.maquina} <span style="color:var(--text3);font-weight:500">·</span> ${prod.presentacion}</div>
+          <div class="product-sub">${recs.length} controles · ${new Set(recs.map(r=>r.lote)).size} lotes · ${new Set(recs.map(r=>r.analista)).size} analistas</div>
+        </div>
+        ${firstSpec?`<div class="product-spec">${firstSpec}</div>`:''}
+      </div>
+      
+      <div class="product-stats">
+        <div class="stat"><div class="stat-lbl">Conformidad</div><div class="stat-val ${statCls==='ok'?'ok':(statCls==='warn'?'warn':'bad')}">${conf}%</div></div>
+        <div class="stat"><div class="stat-lbl">Promedio Pesos</div><div class="stat-val">${indivStats?indivStats.mean.toFixed(1)+'g':'—'}</div></div>
+        <div class="stat"><div class="stat-lbl">Desv. Estándar (σ)</div><div class="stat-val">${indivStats?indivStats.sd.toFixed(2)+'g':'—'}</div></div>
+        <div class="stat"><div class="stat-lbl">Mínimo / Máximo</div><div class="stat-val" style="font-size:13px">${indivStats?indivStats.min.toFixed(0)+' / '+indivStats.max.toFixed(0):'—'}</div></div>
+        <div class="stat"><div class="stat-lbl">Cpk estimado</div><div class="stat-val">${(qn&&indivStats&&indivStats.sd>0)?((indivStats.mean-qnT)/(3*indivStats.sd)).toFixed(2):'—'}</div></div>
+        <div class="stat"><div class="stat-lbl">Desvíos</div><div class="stat-val ${devs===0?'ok':'bad'}">${devs}</div></div>
+      </div>
+      
+      <div class="chart-grid">
+        <div class="chart-card"><h3>Tendencia de pesos</h3><canvas id="ch-trend-${idx}"></canvas></div>
+        <div class="chart-card"><h3>Distribución (histograma)</h3><canvas id="ch-hist-${idx}"></canvas></div>
+      </div>
+    </div>`;
+  });
+  document.getElementById('productsContent').innerHTML=html;
+  
+  // Now render charts
+  sorted.forEach((prod,idx)=>{
+    const recs=prod.records.sort((a,b)=>{const da=parseDate(a.fecha)||new Date(0);const db=parseDate(b.fecha)||new Date(0);return da-db});
+    const promValues=recs.map(r=>r.promedio).filter(v=>v>0);
+    const labels=recs.filter(r=>r.promedio>0).map((r,i)=>{const d=parseDate(r.fecha);return d?d.toISOString().slice(5,10):'#'+i});
+    const allPesos=[];recs.forEach(r=>(r.pesos||[]).forEach(p=>{if(p>0)allPesos.push(p)}));
+    
+    const firstSpec=recs.find(r=>r.spec)?.spec||'';
+    let qn=0;const qnMatch=firstSpec.match(/Qn:(\d+\.?\d*)/);if(qnMatch)qn=parseFloat(qnMatch[1]);
+    const t=qn?calcT(qn):0;
+    
+    // Trend
+    destroyChart('ch-trend-'+idx);
+    charts['ch-trend-'+idx]=new Chart(document.getElementById('ch-trend-'+idx),{
+      type:'line',
+      data:{
+        labels:labels,
+        datasets:[
+          {label:'Promedio',data:promValues,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.1)',fill:true,tension:0.2,pointRadius:3},
+          ...(qn?[
+            {label:'Nominal Qn',data:promValues.map(()=>qn),borderColor:'#10b981',borderWidth:1.5,borderDash:[],pointRadius:0,fill:false},
+            {label:'Qn-T',data:promValues.map(()=>qn-t),borderColor:'#f59e0b',borderWidth:1,borderDash:[4,3],pointRadius:0,fill:false},
+            {label:'Qn-2T',data:promValues.map(()=>qn-2*t),borderColor:'#ef4444',borderWidth:1,borderDash:[2,3],pointRadius:0,fill:false}
+          ]:[])
+        ]
+      },
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},scales:{x:{ticks:{font:{size:8},maxRotation:60}},y:{ticks:{font:{size:9}}}}}
+    });
+    
+    // Histogram
+    if(allPesos.length>1){
+      const min=Math.min(...allPesos);const max=Math.max(...allPesos);const range=max-min;
+      const bins=Math.min(10,Math.max(5,Math.ceil(Math.sqrt(allPesos.length))));
+      const step=range/bins||1;
+      const counts=new Array(bins).fill(0);const lbls=[];
+      for(let i=0;i<bins;i++){const lo=min+i*step;lbls.push(lo.toFixed(0))}
+      allPesos.forEach(v=>{let bi=Math.floor((v-min)/step);if(bi>=bins)bi=bins-1;if(bi<0)bi=0;counts[bi]++});
+      destroyChart('ch-hist-'+idx);
+      charts['ch-hist-'+idx]=new Chart(document.getElementById('ch-hist-'+idx),{
+        type:'bar',
+        data:{labels:lbls,datasets:[{label:'Frecuencia',data:counts,backgroundColor:'rgba(139,92,246,0.7)'}]},
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:8}}},y:{beginAtZero:true,ticks:{font:{size:9},stepSize:1}}}}
+      });
+    }
+  });
+}
+
+// EXPORT EXCEL
+function exportExcel(){
+  if(!filtered.length){alert('No hay datos para exportar');return}
+  const wb=XLSX.utils.book_new();
+  
+  // Sheet 1: KPIs
+  const kpis=[
+    ['INFORME GERENCIAL - CONTROL EN PROCESO GMP'],
+    ['Generado por:',USER],
+    ['Fecha:',new Date().toLocaleString('es-ES')],
+    ['Período:',document.getElementById('fPer').selectedOptions[0].text],
+    [],
+    ['INDICADORES'],
+    ['Controles totales',filtered.length],
+    ['Sin desvío',filtered.filter(r=>!r.hasDev).length],
+    ['Con desvío',filtered.filter(r=>r.hasDev).length],
+    ['% Conformidad',filtered.length?Math.round(filtered.filter(r=>!r.hasDev).length/filtered.length*100)+'%':'—'],
+    ['Lotes únicos',new Set(filtered.map(r=>r.lote)).size],
+    ['Máquinas activas',new Set(filtered.map(r=>r.maquina)).size]
+  ];
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(kpis),'Resumen');
+  
+  // Sheet 2: Stats by product
+  const byProd={};
+  filtered.forEach(r=>{const k=r.maquina+'|||'+r.presentacion;if(!byProd[k])byProd[k]={m:r.maquina,p:r.presentacion,recs:[]};byProd[k].recs.push(r)});
+  const stats=[['Máquina','Presentación','N controles','Promedio (g)','σ (g)','Mín','Máx','Cpk','% Conformidad','Desvíos']];
+  Object.values(byProd).sort((a,b)=>a.m.localeCompare(b.m)).forEach(prod=>{
+    const allP=[];prod.recs.forEach(r=>(r.pesos||[]).forEach(p=>{if(p>0)allP.push(p)}));
+    const s=calcStats(allP);
+    const firstSpec=prod.recs.find(r=>r.spec)?.spec||'';
+    let qn=0;const qnM=firstSpec.match(/Qn:(\d+\.?\d*)/);if(qnM)qn=parseFloat(qnM[1]);
+    const t=qn?calcT(qn):0;const qnT=qn-t;
+    const cpk=(qn&&s&&s.sd>0)?((s.mean-qnT)/(3*s.sd)):null;
+    const devs=prod.recs.filter(r=>r.hasDev).length;
+    const conf=prod.recs.length?Math.round((prod.recs.length-devs)/prod.recs.length*100):0;
+    stats.push([prod.m,prod.p,prod.recs.length,s?s.mean.toFixed(2):'—',s?s.sd.toFixed(2):'—',s?s.min:'—',s?s.max:'—',cpk!==null?cpk.toFixed(2):'—',conf+'%',devs]);
+  });
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(stats),'Por Producto');
+  
+  // Sheet 3: All records
+  const recs=[['Fecha','Analista','Máquina','Presentación','Lote','Hora','P1','P2','P3','P4','P5','Promedio','pH','Desvío','Desc','Uds','Spec']];
+  filtered.forEach(r=>recs.push([r.fecha,r.analista,r.maquina,r.presentacion,r.lote,r.hora,...((r.pesos||['','','','','']).slice(0,5).concat(['','','','',''])).slice(0,5),r.promedio,r.ph,r.hasDev?'SÍ':'NO',r.devDesc||'',r.devQty||'',r.spec||'']));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(recs),'Registros');
+  
+  XLSX.writeFile(wb,'Informe_GMP_'+new Date().toISOString().slice(0,10)+'.xlsx');
+}
+
+// EXPORT PPT
+function exportPPT(){
+  if(!filtered.length){alert('No hay datos');return}
+  if(typeof PptxGenJS==='undefined'){alert('Cargando librería... probá de nuevo en 5 segundos');return}
+  const pres=new PptxGenJS();
+  pres.layout='LAYOUT_WIDE';
+  
+  // Slide 1: Title
+  const s1=pres.addSlide();
+  s1.background={color:'047857'};
+  s1.addText('Informe Gerencial',{x:0.5,y:2,w:12,h:1,fontSize:44,bold:true,color:'FFFFFF',fontFace:'Calibri'});
+  s1.addText('Control en Proceso GMP — Envasado',{x:0.5,y:3.2,w:12,h:0.5,fontSize:20,color:'D1FAE5',fontFace:'Calibri'});
+  s1.addText('Generado por '+USER+' · '+new Date().toLocaleDateString('es-ES'),{x:0.5,y:6,w:12,h:0.4,fontSize:12,color:'A7F3D0',fontFace:'Calibri'});
+  
+  // Slide 2: KPIs
+  const s2=pres.addSlide();
+  s2.addText('Indicadores Generales',{x:0.5,y:0.3,w:12,h:0.6,fontSize:26,bold:true,color:'065F46'});
+  const sinD=filtered.filter(r=>!r.hasDev).length;const conD=filtered.filter(r=>r.hasDev).length;
+  const conf=filtered.length?Math.round(sinD/filtered.length*100):0;
+  const kpiD=[
+    {l:'Controles',v:filtered.length,c:'3B82F6'},
+    {l:'% Conformidad',v:conf+'%',c:'10B981'},
+    {l:'Desvíos',v:conD,c:'EF4444'},
+    {l:'Lotes',v:new Set(filtered.map(r=>r.lote)).size,c:'F59E0B'}
+  ];
+  kpiD.forEach((k,i)=>{
+    const x=0.5+i*3.2;
+    s2.addShape('roundRect',{x,y:2,w:3,h:2.2,fill:{color:k.c},line:{color:k.c}});
+    s2.addText(k.v.toString(),{x,y:2.3,w:3,h:1,fontSize:40,bold:true,color:'FFFFFF',align:'center',fontFace:'Calibri'});
+    s2.addText(k.l,{x,y:3.5,w:3,h:0.5,fontSize:14,color:'FFFFFF',align:'center',fontFace:'Calibri'});
+  });
+  s2.addText('Período: '+document.getElementById('fPer').selectedOptions[0].text,{x:0.5,y:5,w:12,h:0.4,fontSize:12,color:'475569'});
+  
+  // Slide per product
+  const byProd={};
+  filtered.forEach(r=>{const k=r.maquina+'|||'+r.presentacion;if(!byProd[k])byProd[k]={m:r.maquina,p:r.presentacion,recs:[]};byProd[k].recs.push(r)});
+  Object.values(byProd).slice(0,15).forEach(prod=>{
+    const sp=pres.addSlide();
+    sp.addText(prod.m+' · '+prod.p,{x:0.5,y:0.3,w:12,h:0.6,fontSize:22,bold:true,color:'065F46'});
+    const allP=[];prod.recs.forEach(r=>(r.pesos||[]).forEach(p=>{if(p>0)allP.push(p)}));
+    const s=calcStats(allP);
+    const devs=prod.recs.filter(r=>r.hasDev).length;
+    const conf=prod.recs.length?Math.round((prod.recs.length-devs)/prod.recs.length*100):0;
+    const firstSpec=prod.recs.find(r=>r.spec)?.spec||'';
+    
+    sp.addText(firstSpec,{x:0.5,y:1.0,w:12,h:0.4,fontSize:10,color:'1E40AF',fontFace:'Calibri'});
+    
+    const data=[
+      ['Indicador','Valor'],
+      ['Controles',prod.recs.length],
+      ['Conformidad',conf+'%'],
+      ['Desvíos',devs],
+      ['Promedio pesos',s?s.mean.toFixed(2)+' g':'—'],
+      ['Desv. estándar (σ)',s?s.sd.toFixed(2)+' g':'—'],
+      ['Mínimo',s?s.min+' g':'—'],
+      ['Máximo',s?s.max+' g':'—'],
+      ['Lotes',new Set(prod.recs.map(r=>r.lote)).size]
+    ];
+    sp.addTable(data,{x:0.5,y:1.6,w:6,colW:[3,3],fontSize:12,fontFace:'Calibri',border:{type:'solid',pt:0.5,color:'CBD5E1'}});
+    
+    // Add quality status box
+    const statusColor=conf>=95?'10B981':(conf>=85?'F59E0B':'EF4444');
+    sp.addShape('roundRect',{x:7,y:1.6,w:5.5,h:3,fill:{color:statusColor+'15'},line:{color:statusColor,width:2}});
+    sp.addText('Estado de Calidad',{x:7,y:1.8,w:5.5,h:0.4,fontSize:14,bold:true,color:statusColor,align:'center'});
+    sp.addText(conf+'%',{x:7,y:2.4,w:5.5,h:1.2,fontSize:64,bold:true,color:statusColor,align:'center',fontFace:'Calibri'});
+    sp.addText(conf>=95?'EXCELENTE':(conf>=85?'ACEPTABLE':'REQUIERE ATENCIÓN'),{x:7,y:3.8,w:5.5,h:0.5,fontSize:16,bold:true,color:statusColor,align:'center'});
+  });
+  
+  // Last slide: Analysts
+  const sA=pres.addSlide();
+  sA.addText('Performance por Analista',{x:0.5,y:0.3,w:12,h:0.6,fontSize:26,bold:true,color:'065F46'});
+  const byA={};filtered.forEach(r=>{const a=r.analista||'?';if(!byA[a])byA[a]={t:0,d:0};byA[a].t++;if(r.hasDev)byA[a].d++});
+  const sortedA=Object.entries(byA).sort((a,b)=>b[1].t-a[1].t).slice(0,12);
+  const aData=[['Analista','Controles','Sin Desvío','Desvíos','% Conformidad']];
+  sortedA.forEach(([n,d])=>aData.push([n,d.t,d.t-d.d,d.d,(d.t?Math.round((d.t-d.d)/d.t*100):0)+'%']));
+  sA.addTable(aData,{x:0.5,y:1.2,w:12,fontSize:12,fontFace:'Calibri',border:{type:'solid',pt:0.5,color:'CBD5E1'}});
+  
+  pres.writeFile({fileName:'Informe_GMP_'+new Date().toISOString().slice(0,10)+'.pptx'});
+}
+</script>
+</body>
+</html>
