@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control de Calidad - Gestión de Materias Primas</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+    --primary: #0066FF; --primary-dark: #0052CC; --success: #00B894;
+    --warning: #FDCB6E; --danger: #FF6B6B; --purple: #6C5CE7;
+    --bg: #F8F9FA; --surface: #FFFFFF; --text: #2D3436;
+    --text-light: #636E72; --border: #DFE6E9;
+    --shadow: rgba(45, 52, 54, 0.06); --shadow-lg: rgba(45, 52, 54, 0.12);
+}
+body { font-family: 'DM Sans', sans-serif; background: linear-gradient(135deg, #F8F9FA 0%, #E8EEF2 100%); color: var(--text); min-height: 100vh; padding: 2rem; }
+.container { max-width: 1400px; margin: 0 auto; animation: fadeIn 0.5s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+header { background: var(--surface); padding: 2rem; border-radius: 16px; box-shadow: 0 4px 20px var(--shadow-lg); margin-bottom: 2rem; border-left: 4px solid var(--primary); }
+h1 { font-size: 2rem; font-weight: 700; color: var(--text); margin-bottom: 0.5rem; }
+.subtitle { color: var(--text-light); font-size: 0.95rem; }
+.email-status { margin-top: 1rem; padding: 0.75rem; border-radius: 8px; font-size: 0.9rem; display: flex; align-items: center; gap: 0.5rem; }
+.email-status.connected { background: rgba(0, 184, 148, 0.1); color: var(--success); border: 1px solid rgba(0, 184, 148, 0.3); }
+.email-status.disconnected { background: rgba(253, 203, 110, 0.1); color: #D68000; border: 1px solid rgba(253, 203, 110, 0.3); }
+.email-status.loading { background: rgba(0, 102, 255, 0.1); color: var(--primary); border: 1px solid rgba(0, 102, 255, 0.3); }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+.stat-card { background: var(--surface); padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 8px var(--shadow); transition: transform 0.2s, box-shadow 0.2s; }
+.stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px var(--shadow-lg); }
+.stat-value { font-size: 2rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; margin-bottom: 0.25rem; }
+.stat-label { color: var(--text-light); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; }
+.stat-card.pending .stat-value { color: var(--primary); }
+.stat-card.urgent .stat-value { color: var(--danger); }
+.stat-card.upcoming .stat-value { color: var(--warning); }
+.stat-card.completed .stat-value { color: var(--success); }
+.main-content { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+@media (max-width: 1024px) { .main-content { grid-template-columns: 1fr; } }
+.panel { background: var(--surface); border-radius: 16px; box-shadow: 0 4px 20px var(--shadow-lg); overflow: hidden; }
+.panel-header { background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; padding: 1.5rem; display: flex; justify-content: space-between; align-items: center; }
+.panel-title { font-size: 1.25rem; font-weight: 700; }
+.panel-body { padding: 1.5rem; }
+.form-group { margin-bottom: 1rem; }
+label { display: block; margin-bottom: 0.5rem; font-weight: 500; color: var(--text); font-size: 0.9rem; }
+input, select, textarea { width: 100%; padding: 0.75rem; border: 2px solid var(--border); border-radius: 8px; font-family: 'DM Sans', sans-serif; font-size: 0.95rem; transition: border-color 0.2s, box-shadow 0.2s; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(0, 102, 255, 0.1); }
+textarea { resize: vertical; min-height: 80px; }
+.btn { padding: 0.75rem 1.5rem; border: none; border-radius: 8px; font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 0.95rem; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: var(--primary); color: white; }
+.btn-primary:hover:not(:disabled) { background: var(--primary-dark); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0, 102, 255, 0.3); }
+.btn-success { background: var(--success); color: white; padding: 0.5rem 1rem; font-size: 0.85rem; }
+.btn-success:hover:not(:disabled) { background: #00A383; }
+.btn-danger { background: var(--danger); color: white; padding: 0.5rem 1rem; font-size: 0.85rem; }
+.btn-danger:hover:not(:disabled) { background: #FF5252; }
+.btn-secondary { background: var(--text-light); color: white; }
+.btn-secondary:hover:not(:disabled) { background: var(--text); }
+.btn-warning { background: var(--warning); color: var(--text); padding: 0.5rem 1rem; font-size: 0.85rem; }
+.btn-warning:hover:not(:disabled) { background: #F7B731; }
+.item-list { max-height: 600px; overflow-y: auto; }
+.item-card { background: var(--bg); border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem; border-left: 4px solid var(--primary); transition: all 0.2s; animation: slideIn 0.3s ease; }
+@keyframes slideIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+.item-card:hover { box-shadow: 0 4px 12px var(--shadow-lg); transform: translateX(4px); }
+.item-card.urgent { border-left-color: var(--danger); background: linear-gradient(90deg, rgba(255, 107, 107, 0.08) 0%, var(--bg) 20%); }
+.item-card.warning { border-left-color: var(--warning); background: linear-gradient(90deg, rgba(253, 203, 110, 0.08) 0%, var(--bg) 20%); }
+.item-card.completed { border-left-color: var(--success); background: linear-gradient(90deg, rgba(0, 184, 148, 0.08) 0%, var(--bg) 20%); opacity: 0.85; }
+.item-card.declined { border-left-color: var(--text-light); background: linear-gradient(90deg, rgba(99, 110, 114, 0.08) 0%, var(--bg) 20%); opacity: 0.6; }
+.item-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.75rem; }
+.item-title { font-weight: 600; font-size: 1.05rem; color: var(--text); }
+.item-meta { display: flex; gap: 1rem; font-size: 0.85rem; color: var(--text-light); margin-bottom: 0.5rem; flex-wrap: wrap; }
+.item-meta span { display: flex; align-items: center; gap: 0.25rem; }
+.badge { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.badge.pending { background: rgba(0, 102, 255, 0.1); color: var(--primary); }
+.badge.in-progress { background: rgba(253, 203, 110, 0.2); color: #D68000; }
+.badge.completed { background: rgba(0, 184, 148, 0.2); color: var(--success); }
+.badge.declined { background: rgba(99, 110, 114, 0.2); color: var(--text-light); }
+.badge.mesada { background: rgba(108, 92, 231, 0.1); color: var(--purple); }
+.badge.stability { background: rgba(0, 102, 255, 0.1); color: var(--primary); }
+.badge.sensorial { background: rgba(253, 203, 110, 0.15); color: #D68000; }
+.badge.approved { background: rgba(0, 184, 148, 0.2); color: var(--success); }
+.badge.rejected { background: rgba(255, 107, 107, 0.2); color: var(--danger); }
+.item-actions { display: flex; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap; }
+.alert { padding: 1rem; border-radius: 8px; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.75rem; font-size: 0.9rem; animation: slideDown 0.3s ease; }
+@keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+.alert-danger { background: rgba(255, 107, 107, 0.1); color: var(--danger); border-left: 4px solid var(--danger); }
+.alert-warning { background: rgba(253, 203, 110, 0.15); color: #D68000; border-left: 4px solid var(--warning); }
+.alert-success { background: rgba(0, 184, 148, 0.1); color: var(--success); border-left: 4px solid var(--success); }
+.alert-info { background: rgba(0, 102, 255, 0.1); color: var(--primary); border-left: 4px solid var(--primary); }
+.empty-state { text-align: center; padding: 3rem 1rem; color: var(--text-light); }
+.empty-state svg { width: 80px; height: 80px; margin-bottom: 1rem; opacity: 0.3; }
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #B2BEC3; }
+.date-display { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+.filter-tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.filter-tab { padding: 0.5rem 1rem; border: 2px solid var(--border); background: var(--surface); border-radius: 20px; cursor: pointer; font-size: 0.85rem; font-weight: 500; transition: all 0.2s; }
+.filter-tab:hover { border-color: var(--primary); }
+.filter-tab.active { background: var(--primary); color: white; border-color: var(--primary); }
+.email-actions { display: flex; gap: 1rem; margin-top: 1rem; flex-wrap: wrap; }
+.toast { position: fixed; bottom: 2rem; right: 2rem; background: var(--surface); padding: 1rem 1.5rem; border-radius: 8px; box-shadow: 0 4px 20px var(--shadow-lg); display: flex; align-items: center; gap: 0.75rem; animation: slideUp 0.3s ease; z-index: 1000; border-left: 4px solid var(--success); }
+.toast.error { border-left-color: var(--danger); }
+@keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+.responsible-tag { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.25rem 0.5rem; background: rgba(0, 102, 255, 0.1); border-radius: 12px; font-size: 0.8rem; color: var(--primary); font-weight: 500; }
+.workflow-info { background: rgba(108, 92, 231, 0.05); border-left: 3px solid var(--purple); padding: 0.75rem; border-radius: 8px; margin-top: 0.5rem; font-size: 0.85rem; }
+.parent-task { background: rgba(108, 92, 231, 0.05); padding: 0.5rem; border-radius: 6px; margin-top: 0.5rem; font-size: 0.85rem; }
+.loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.9); display: flex; justify-content: center; align-items: center; z-index: 9999; flex-direction: column; gap: 1rem; }
+.spinner { width: 50px; height: 50px; border: 4px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.refresh-btn { padding: 0.5rem 1rem; background: var(--success); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.85rem; }
+.refresh-btn:hover { background: #00A383; }
+
+/* Modal styles */
+.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); display: none; justify-content: center; align-items: center; z-index: 10000; padding: 1rem; }
+.modal-overlay.active { display: flex; animation: fadeIn 0.2s ease; }
+.modal { background: var(--surface); border-radius: 16px; width: 100%; max-width: 600px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); animation: slideUp 0.3s ease; }
+.modal-header { background: linear-gradient(135deg, var(--success) 0%, #00A383 100%); color: white; padding: 1.5rem; display: flex; justify-content: space-between; align-items: center; border-radius: 16px 16px 0 0; }
+.modal-title { font-size: 1.25rem; font-weight: 700; }
+.modal-close { background: none; border: none; color: white; font-size: 1.5rem; cursor: pointer; padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: background 0.2s; }
+.modal-close:hover { background: rgba(255, 255, 255, 0.2); }
+.modal-body { padding: 1.5rem; }
+.modal-footer { padding: 1rem 1.5rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 0.75rem; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+@media (max-width: 600px) { .form-row { grid-template-columns: 1fr; } }
+.result-display { background: var(--bg); border-radius: 8px; padding: 0.75rem; margin-top: 0.5rem; font-size: 0.85rem; border-left: 3px solid var(--success); }
+.result-display.rejected { border-left-color: var(--danger); }
+.result-display strong { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="loading-overlay" id="loading-overlay">
+    <div class="spinner"></div>
+    <p>Cargando datos...</p>
+</div>
+
+<!-- Modal de Inicio de Estabilidad -->
+<div class="modal-overlay" id="start-stability-modal">
+    <div class="modal">
+        <div class="modal-header" style="background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);">
+            <h2 class="modal-title" id="start-modal-title">Iniciar Estabilidad</h2>
+            <button class="modal-close" onclick="closeStartModal()">×</button>
+        </div>
+        <div class="modal-body" id="start-modal-body"></div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeStartModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="saveStartStability()">▶️ Iniciar Estudio</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Resultados -->
+<div class="modal-overlay" id="result-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2 class="modal-title" id="modal-title">Completar Tarea</h2>
+            <button class="modal-close" onclick="closeResultModal()">×</button>
+        </div>
+        <div class="modal-body" id="modal-body"></div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeResultModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="saveResult()">✅ Guardar y Completar</button>
+        </div>
+    </div>
+</div>
+
+<div class="container">
+    <header>
+        <h1>🔬 Control de Calidad</h1>
+        <p class="subtitle">Sistema de Gestión de Materias Primas y Estabilidades</p>
+        <div class="email-status loading" id="email-status">
+            <span>📧</span>
+            <span id="email-status-text">Conectando con Google Sheets...</span>
+        </div>
+    </header>
+
+    <div class="stats">
+        <div class="stat-card pending"><div class="stat-value" id="stat-pending">0</div><div class="stat-label">Pendientes</div></div>
+        <div class="stat-card urgent"><div class="stat-value" id="stat-urgent">0</div><div class="stat-label">Urgentes (< 3 días)</div></div>
+        <div class="stat-card upcoming"><div class="stat-value" id="stat-upcoming">0</div><div class="stat-label">Próximos (3-7 días)</div></div>
+        <div class="stat-card completed"><div class="stat-value" id="stat-completed">0</div><div class="stat-label">Completados</div></div>
+    </div>
+
+    <div class="main-content">
+        <div class="panel">
+            <div class="panel-header"><h2 class="panel-title">Nueva Materia Prima</h2><span>📦</span></div>
+            <div class="panel-body">
+                <div class="alert alert-info">
+                    <span>ℹ️</span>
+                    <div><strong>Flujo automático:</strong> Al completar prueba de mesada, se crean automáticamente tareas de Estabilidad (Antonella) y Evaluación Sensorial (Gloria).</div>
+                </div>
+                
+                <form id="material-form">
+                    <div class="form-group">
+                        <label for="material-name">Nombre de la Materia Prima *</label>
+                        <input type="text" id="material-name" required placeholder="Ej: Polvo de Celulosa XYZ">
+                    </div>
+                    <div class="form-group">
+                        <label for="supplier">Proveedor *</label>
+                        <input type="text" id="supplier" required placeholder="Ej: QuimLab S.A.">
+                    </div>
+                    <div class="form-group">
+                        <label for="batch">Lote / Batch</label>
+                        <input type="text" id="batch" placeholder="Ej: 2024-A-001">
+                    </div>
+                    <div class="form-group">
+                        <label for="notes">Notas Adicionales</label>
+                        <textarea id="notes" placeholder="Observaciones, requisitos especiales, etc."></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">➕ Agregar Materia Prima (Inicia Prueba de Mesada)</button>
+                </form>
+                
+                <div class="email-actions">
+                    <button class="btn btn-secondary" id="send-report-btn">📧 Enviar Reporte Ahora</button>
+                    <button class="btn btn-warning" id="test-email-btn">🧪 Probar Email</button>
+                    <button class="refresh-btn" id="refresh-btn">🔄 Actualizar Datos</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-header"><h2 class="panel-title">Tareas y Evaluaciones</h2><span>📋</span></div>
+            <div class="panel-body">
+                <div class="filter-tabs">
+                    <div class="filter-tab active" data-filter="all">Todos</div>
+                    <div class="filter-tab" data-filter="pending">Pendientes</div>
+                    <div class="filter-tab" data-filter="in-progress">En Progreso</div>
+                    <div class="filter-tab" data-filter="completed">Completados</div>
+                    <div class="filter-tab" data-filter="mesada">Mesada</div>
+                    <div class="filter-tab" data-filter="stability">Estabilidad</div>
+                    <div class="filter-tab" data-filter="sensorial">Sensorial</div>
+                </div>
+                <div id="alerts-container"></div>
+                <div class="item-list" id="items-list"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const CONFIG = {
+    scriptUrl: 'https://script.google.com/macros/s/AKfycbz9sq6bNTlvxSk7L1JiTiAzjxDi-FUKRTLfHwE7J1XS28GCN1FxbO5Gea-olTR-is6xNg/exec',
+    teamEmails: ['antonella.nunez@vessena.com.uy','claudia.barlocco@vessena.com.uy','laboratorio@vessena.com.uy','analista.minilab@vessena.com.uy','gloria.nunez@vessena.com.uy'],
+    dailySummaryTime: '09:00',
+    fromEmail: 'control.lcc.calidad@gmail.com',
+    responsibles: { stability: 'antonella.nunez@vessena.com.uy', sensorial: 'gloria.nunez@vessena.com.uy' },
+    mesadaMaxDays: 15, stabilityDays: 30, sensorialDays: 7,
+    autoRefreshInterval: 60000
+};
+
+const ApiService = {
+    async call(action, data = {}) {
+        try {
+            await fetch(CONFIG.scriptUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action, ...data }) });
+            return { success: true };
+        } catch (error) { return { success: false, error: error.message }; }
+    },
+    async getItems() {
+        try {
+            const response = await fetch(CONFIG.scriptUrl + '?action=getItems');
+            return await response.json();
+        } catch (error) { return { success: false, items: [] }; }
+    },
+    async saveItem(item) { return await this.call('saveItem', { item }); },
+    async deleteItem(id) { return await this.call('deleteItem', { id }); },
+    async sendEmail(to, subject, body) { return await this.call('sendEmail', { to, subject, body }); },
+    async sendToTeam(subject, body) { return await this.sendEmail(CONFIG.teamEmails.join(','), subject, body); },
+    async sendTaskAssignment(responsible, taskType, materialName, deadline, supplier) {
+        const subject = `📋 Nueva Tarea Asignada: ${taskType} - ${materialName}`;
+        const body = `Hola,\n\nSe te ha asignado automáticamente una nueva tarea de ${taskType}.\n\n📦 Materia Prima: ${materialName}\n🏢 Proveedor: ${supplier}\n🧪 Tipo de Evaluación: ${taskType}\n📅 Fecha Límite: ${formatDate(deadline)}\n\nPor favor revisa el sistema de Control de Calidad.\n\nSistema: https://claudiabarlocco-ctrl.github.io/control-gmp-app/control-calidad-workflow.html\n\n---\nSistema de Control de Calidad\n${CONFIG.fromEmail}`;
+        return await this.sendEmail(responsible, subject, body);
+    },
+    async sendCompletionNotification(item) {
+        const subject = `✅ Evaluación Completada: ${item.name}`;
+        let resultDetails = `\n📊 RESULTADO: ${item.result === 'approved' ? '✅ APROBADO' : '❌ RECHAZADO'}\n`;
+        
+        if (item.testType === 'mesada') {
+            if (item.incorporationPct) resultDetails += `📈 % Incorporación de Activo: ${item.incorporationPct}\n`;
+            if (item.ph) resultDetails += `🧪 pH: ${item.ph}\n`;
+            if (item.viscosity) resultDetails += `💧 Viscosidad: ${item.viscosity}\n`;
+            if (item.appearance) resultDetails += `👁️ Aspecto: ${item.appearance}\n`;
+        }
+        if (item.testType === 'stability') {
+            if (item.initialTemperature) resultDetails += `🌡️ Temperatura Inicial: ${item.initialTemperature}\n`;
+            if (item.programmedTime) resultDetails += `📅 Tiempo Programado: ${item.programmedTime}\n`;
+            if (item.temperature) resultDetails += `🌡️ Temperatura Final: ${item.temperature}\n`;
+            if (item.studyTime) resultDetails += `⏱️ Tiempo de Estudio Real: ${item.studyTime}\n`;
+            if (item.parameters) resultDetails += `📋 Parámetros: ${item.parameters}\n`;
+        }
+        if (item.resultObservations) resultDetails += `\n📝 Observaciones: ${item.resultObservations}\n`;
+        
+        const body = `Hola equipo,\n\nSe ha completado la siguiente evaluación:\n\n📦 Materia Prima: ${item.name}\n🏢 Proveedor: ${item.supplier}\n🧪 Tipo: ${getTestTypeLabel(item.testType)}\n👤 Responsable: ${getResponsibleName(item.responsible)}\n${resultDetails}\n\nSistema: https://claudiabarlocco-ctrl.github.io/control-gmp-app/control-calidad-workflow.html\n\n---\nSistema de Control de Calidad\n${CONFIG.fromEmail}`;
+        return await this.sendToTeam(subject, body);
+    }
+};
+
+let items = [];
+let currentFilter = 'all';
+let lastDailySummaryDate = localStorage.getItem('last-summary-date');
+let lastUrgentCheck = localStorage.getItem('last-urgent-check');
+let currentItemToComplete = null;
+
+async function init() {
+    showLoading(true);
+    await loadItems();
+    renderItems();
+    updateStats();
+    checkAlerts();
+    setupEventListeners();
+    showLoading(false);
+    setInterval(async () => {
+        await loadItems();
+        renderItems();
+        updateStats();
+        checkAlerts();
+        await checkDailySummary();
+        await checkStabilityReminders();
+    }, CONFIG.autoRefreshInterval);
+    await checkDailySummary();
+    await checkStabilityReminders();
+}
+
+function showLoading(show) {
+    document.getElementById('loading-overlay').style.display = show ? 'flex' : 'none';
+}
+
+function updateConnectionStatus(connected) {
+    const statusEl = document.getElementById('email-status');
+    const statusText = document.getElementById('email-status-text');
+    if (connected) {
+        statusEl.className = 'email-status connected';
+        statusText.textContent = `✅ Conectado a Google Sheets - Datos compartidos con el equipo - Resumen diario a las ${CONFIG.dailySummaryTime}`;
+    } else {
+        statusEl.className = 'email-status disconnected';
+        statusText.textContent = '⚠️ Error de conexión - Verifica tu conexión a internet';
+    }
+}
+
+async function loadItems() {
+    const result = await ApiService.getItems();
+    if (result.success) {
+        items = result.items || [];
+        updateConnectionStatus(true);
+    } else {
+        updateConnectionStatus(false);
+    }
+}
+
+async function checkDailySummary() {
+    const now = new Date();
+    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const today = now.toISOString().split('T')[0];
+
+    if (currentTime === CONFIG.dailySummaryTime && lastDailySummaryDate !== today) {
+        const subject = `📊 Resumen Diario - Control de Calidad ${new Date().toLocaleDateString('es-ES')}`;
+        await ApiService.sendToTeam(subject, generateSummaryEmail());
+        lastDailySummaryDate = today;
+        localStorage.setItem('last-summary-date', today);
+    }
+
+    const activeItems = items.filter(i => i.status !== 'completed' && i.status !== 'declined');
+    const overdueItems = activeItems.filter(i => daysUntil(i.deadline) < 0);
+    const todayItems = activeItems.filter(i => daysUntil(i.deadline) === 0);
+
+    if (lastUrgentCheck !== today && (overdueItems.length > 0 || todayItems.length > 0)) {
+        const subject = '🚨 URGENTE - Evaluaciones que requieren atención inmediata';
+        await ApiService.sendToTeam(subject, generateUrgentEmail(overdueItems, todayItems));
+        lastUrgentCheck = today;
+        localStorage.setItem('last-urgent-check', today);
+    }
+}
+
+function generateSummaryEmail() {
+    const activeItems = items.filter(i => i.status !== 'completed' && i.status !== 'declined');
+    const overdueItems = activeItems.filter(i => daysUntil(i.deadline) < 0);
+    const todayItems = activeItems.filter(i => daysUntil(i.deadline) === 0);
+    const urgentItems = activeItems.filter(i => { const d = daysUntil(i.deadline); return d > 0 && d <= 3; });
+    const upcomingItems = activeItems.filter(i => { const d = daysUntil(i.deadline); return d > 3 && d <= 7; });
+
+    let email = `Hola equipo,\n\nEste es el resumen diario del sistema de Control de Calidad.\n\n📊 ESTADO GENERAL:\n- Total pendientes: ${activeItems.length}\n- Completados: ${items.filter(i => i.status === 'completed').length}\n\n`;
+
+    if (overdueItems.length > 0) {
+        email += `⚠️ VENCIDAS (${overdueItems.length}):\n`;
+        overdueItems.forEach(item => {
+            const days = Math.abs(daysUntil(item.deadline));
+            email += `- ${item.name} (${item.supplier}) - ${getTestTypeLabel(item.testType)} - Vencido hace ${days} día${days !== 1 ? 's' : ''}\n`;
+            if (item.responsible) email += `  Responsable: ${getResponsibleName(item.responsible)}\n`;
+        });
+        email += '\n';
+    }
+    if (todayItems.length > 0) {
+        email += `🔥 VENCEN HOY (${todayItems.length}):\n`;
+        todayItems.forEach(item => {
+            email += `- ${item.name} (${item.supplier}) - ${getTestTypeLabel(item.testType)}\n`;
+            if (item.responsible) email += `  Responsable: ${getResponsibleName(item.responsible)}\n`;
+        });
+        email += '\n';
+    }
+    if (urgentItems.length > 0) {
+        email += `⏰ URGENTES - Vencen en 1-3 días (${urgentItems.length}):\n`;
+        urgentItems.forEach(item => {
+            const days = daysUntil(item.deadline);
+            email += `- ${item.name} (${item.supplier}) - ${getTestTypeLabel(item.testType)} - ${days} día${days !== 1 ? 's' : ''}\n`;
+            if (item.responsible) email += `  Responsable: ${getResponsibleName(item.responsible)}\n`;
+        });
+        email += '\n';
+    }
+    if (upcomingItems.length > 0) {
+        email += `📅 PRÓXIMAS - Vencen en 4-7 días (${upcomingItems.length}):\n`;
+        upcomingItems.forEach(item => {
+            const days = daysUntil(item.deadline);
+            email += `- ${item.name} (${item.supplier}) - ${getTestTypeLabel(item.testType)} - ${days} días\n`;
+            if (item.responsible) email += `  Responsable: ${getResponsibleName(item.responsible)}\n`;
+        });
+        email += '\n';
+    }
+    if (activeItems.length === 0) email += '✅ ¡Excelente! No hay evaluaciones pendientes.\n\n';
+    email += `\nAccede al sistema: https://claudiabarlocco-ctrl.github.io/control-gmp-app/control-calidad-workflow.html\n\n---\nSistema de Control de Calidad\n${CONFIG.fromEmail}`;
+    return email;
+}
+
+function generateUrgentEmail(overdueItems, todayItems) {
+    let email = `¡ATENCIÓN EQUIPO!\n\nSe requiere acción inmediata en las siguientes evaluaciones:\n\n`;
+    if (overdueItems.length > 0) {
+        email += `⚠️ VENCIDAS (${overdueItems.length}):\n`;
+        overdueItems.forEach(item => {
+            const days = Math.abs(daysUntil(item.deadline));
+            email += `- ${item.name}\n  Proveedor: ${item.supplier}\n  Tipo: ${getTestTypeLabel(item.testType)}\n`;
+            if (item.responsible) email += `  Responsable: ${getResponsibleName(item.responsible)}\n`;
+            email += `  Estado: Vencido hace ${days} día${days !== 1 ? 's' : ''}\n`;
+            if (item.notes) email += `  Notas: ${item.notes}\n`;
+            email += '\n';
+        });
+    }
+    if (todayItems.length > 0) {
+        email += `🔥 VENCEN HOY (${todayItems.length}):\n`;
+        todayItems.forEach(item => {
+            email += `- ${item.name}\n  Proveedor: ${item.supplier}\n  Tipo: ${getTestTypeLabel(item.testType)}\n`;
+            if (item.responsible) email += `  Responsable: ${getResponsibleName(item.responsible)}\n`;
+            if (item.notes) email += `  Notas: ${item.notes}\n`;
+            email += '\n';
+        });
+    }
+    email += `Por favor revisen y actualicen el estado de estas evaluaciones lo antes posible.\n\nAccede al sistema: https://claudiabarlocco-ctrl.github.io/control-gmp-app/control-calidad-workflow.html\n\n---\nSistema de Control de Calidad\n${CONFIG.fromEmail}`;
+    return email;
+}
+
+function getResponsibleName(email) {
+    const names = {
+        'antonella.nunez@vessena.com.uy': 'Antonella Núñez',
+        'gloria.nunez@vessena.com.uy': 'Gloria Núñez',
+        'claudia.barlocco@vessena.com.uy': 'Claudia Barlocco',
+        'laboratorio@vessena.com.uy': 'Laboratorio',
+        'analista.minilab@vessena.com.uy': 'Analista Minilab'
+    };
+    return names[email] || email;
+}
+
+async function sendManualReport() {
+    const btn = document.getElementById('send-report-btn');
+    btn.disabled = true; btn.textContent = '📧 Enviando...';
+    try {
+        const subject = `📋 Reporte Manual - Control de Calidad ${new Date().toLocaleDateString('es-ES')}`;
+        await ApiService.sendToTeam(subject, generateSummaryEmail());
+        showToast('✅ Reporte enviado al equipo');
+    } catch (error) { showToast('❌ Error al enviar el reporte', true); }
+    finally { btn.disabled = false; btn.textContent = '📧 Enviar Reporte Ahora'; }
+}
+
+async function testEmail() {
+    const btn = document.getElementById('test-email-btn');
+    btn.disabled = true; btn.textContent = '🧪 Enviando...';
+    try {
+        const subject = '🧪 Email de Prueba - Sistema Control de Calidad';
+        const body = `Hola equipo,\n\nEste es un email de prueba del Sistema de Control de Calidad.\n\nSi recibes este mensaje, las notificaciones automáticas están funcionando correctamente.\n\n📅 Fecha: ${new Date().toLocaleString('es-ES')}\n\n✅ Datos compartidos en Google Sheets\n✅ Resumen diario automático a las 09:00 AM\n✅ Alertas urgentes\n✅ Notificaciones de asignación\n✅ Resultados detallados al completar\n\nSistema: https://claudiabarlocco-ctrl.github.io/control-gmp-app/control-calidad-workflow.html\n\n---\nSistema de Control de Calidad\n${CONFIG.fromEmail}`;
+        await ApiService.sendToTeam(subject, body);
+        showToast('✅ Email de prueba enviado');
+    } catch (error) { showToast('❌ Error al enviar el email', true); }
+    finally { btn.disabled = false; btn.textContent = '🧪 Probar Email'; }
+}
+
+async function refreshData() {
+    const btn = document.getElementById('refresh-btn');
+    btn.disabled = true; btn.textContent = '🔄 Actualizando...';
+    await loadItems();
+    renderItems();
+    updateStats();
+    checkAlerts();
+    btn.disabled = false; btn.textContent = '🔄 Actualizar Datos';
+    showToast('✅ Datos actualizados');
+}
+
+function showToast(message, isError = false) {
+    const toast = document.createElement('div');
+    toast.className = isError ? 'toast error' : 'toast';
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
+
+function setupEventListeners() {
+    document.getElementById('material-form').addEventListener('submit', handleAddItem);
+    document.getElementById('send-report-btn').addEventListener('click', sendManualReport);
+    document.getElementById('test-email-btn').addEventListener('click', testEmail);
+    document.getElementById('refresh-btn').addEventListener('click', refreshData);
+    
+    document.querySelectorAll('.filter-tab').forEach(tab => {
+        tab.addEventListener('click', function() {
+            document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+            this.classList.add('active');
+            currentFilter = this.dataset.filter;
+            renderItems();
+        });
+    });
+}
+
+// ========================================
+// MODAL DE RESULTADOS
+// ========================================
+function openResultModal(id) {
+    const item = items.find(i => i.id === id);
+    if (!item) return;
+    
+    currentItemToComplete = item;
+    
+    const modalTitle = document.getElementById('modal-title');
+    const modalBody = document.getElementById('modal-body');
+    
+    modalTitle.textContent = `Completar: ${item.name}`;
+    
+    let formHtml = `
+        <div class="alert alert-info">
+            <span>📋</span>
+            <div><strong>${getTestTypeLabel(item.testType)}</strong> - ${item.name}<br>
+            <small>${item.supplier} ${item.batch ? '| Lote: ' + item.batch : ''}</small></div>
+        </div>
+        
+        <div class="form-group">
+            <label>Resultado *</label>
+            <select id="result-status" required>
+                <option value="">Seleccionar...</option>
+                <option value="approved">✅ Aprobado</option>
+                <option value="rejected">❌ Rechazado</option>
+            </select>
+        </div>
+    `;
+    
+    // Campos específicos según tipo de prueba
+    if (item.testType === 'mesada') {
+        formHtml += `
+            <div class="form-group">
+                <label>📈 % de Incorporación de Activo *</label>
+                <input type="text" id="result-incorporation" required placeholder="Ej: 5%, 10%, 0.5%">
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>🧪 pH</label>
+                    <input type="text" id="result-ph" placeholder="Ej: 5.5">
+                </div>
+                <div class="form-group">
+                    <label>💧 Viscosidad</label>
+                    <input type="text" id="result-viscosity" placeholder="Ej: 2500 cP">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>👁️ Aspecto General</label>
+                <textarea id="result-appearance" placeholder="Ej: Líquido homogéneo, color claro, sin separación de fases"></textarea>
+            </div>
+        `;
+    } else if (item.testType === 'stability') {
+        formHtml += `
+            <div class="form-group">
+                <label>🌡️ Temperatura Final</label>
+                <input type="text" id="result-temperature" placeholder="Ej: 40°C" value="${item.temperature || ''}">
+            </div>
+            <div class="form-group">
+                <label>⏱️ Tiempo de Estudio Real</label>
+                <input type="text" id="result-studyTime" placeholder="Ej: 30 días, 3 meses" value="${item.studyTime || ''}">
+            </div>
+            <div class="form-group">
+                <label>📋 Parámetros Medidos</label>
+                <textarea id="result-parameters" placeholder="Ej: pH 5.5, viscosidad 2500 cP, color estable, sin separación de fases">${item.parameters || ''}</textarea>
+            </div>
+        `;
+    }
+    
+    formHtml += `
+        <div class="form-group">
+            <label>📝 Observaciones / Conclusión</label>
+            <textarea id="result-observations" placeholder="Comentarios adicionales sobre el resultado..."></textarea>
+        </div>
+    `;
+    
+    modalBody.innerHTML = formHtml;
+    document.getElementById('result-modal').classList.add('active');
+}
+
+function closeResultModal() {
+    document.getElementById('result-modal').classList.remove('active');
+    currentItemToComplete = null;
+}
+
+async function saveResult() {
+    if (!currentItemToComplete) return;
+    
+    const status = document.getElementById('result-status').value;
+    if (!status) {
+        showToast('❌ Debes seleccionar Aprobado o Rechazado', true);
+        return;
+    }
+    
+    const item = currentItemToComplete;
+    item.status = 'completed';
+    item.result = status;
+    item.completedAt = new Date().toISOString();
+    item.resultObservations = document.getElementById('result-observations').value || '';
+    
+    if (item.testType === 'mesada') {
+        const incorp = document.getElementById('result-incorporation').value;
+        if (!incorp) {
+            showToast('❌ Debes ingresar el % de incorporación', true);
+            return;
+        }
+        item.incorporationPct = incorp;
+        item.ph = document.getElementById('result-ph').value || '';
+        item.viscosity = document.getElementById('result-viscosity').value || '';
+        item.appearance = document.getElementById('result-appearance').value || '';
+    } else if (item.testType === 'stability') {
+        item.temperature = document.getElementById('result-temperature').value || '';
+        item.studyTime = document.getElementById('result-studyTime').value || '';
+        item.parameters = document.getElementById('result-parameters').value || '';
+    }
+    
+    await ApiService.saveItem(item);
+    
+    // Si es mesada y aprobada, crear tareas automáticas
+    if (item.testType === 'mesada' && status === 'approved') {
+        await createFollowUpTasks(item);
+    }
+    
+    // Enviar notificación al equipo
+    await ApiService.sendCompletionNotification(item);
+    
+    closeResultModal();
+    renderItems();
+    updateStats();
+    showToast('✅ Tarea completada y notificación enviada');
+}
+
+async function createFollowUpTasks(parentItem) {
+    const deadline = new Date(parentItem.deadline);
+    
+    const stabilityDeadline = new Date(deadline);
+    stabilityDeadline.setDate(stabilityDeadline.getDate() + CONFIG.stabilityDays);
+    
+    const stabilityTask = {
+        id: Date.now().toString() + '-stability',
+        name: `${parentItem.name} - Estabilidad`,
+        supplier: parentItem.supplier,
+        batch: parentItem.batch || '',
+        testType: 'stability',
+        deadline: stabilityDeadline.toISOString().split('T')[0],
+        notes: `Tarea automática generada al completar prueba de mesada. ${parentItem.notes || ''}`,
+        status: 'pending',
+        responsible: CONFIG.responsibles.stability,
+        parentTaskId: parentItem.id,
+        canDecline: false,
+        createdAt: new Date().toISOString()
+    };
+    items.push(stabilityTask);
+    await ApiService.saveItem(stabilityTask);
+    await ApiService.sendTaskAssignment(CONFIG.responsibles.stability, 'Estabilidad', parentItem.name, stabilityTask.deadline, parentItem.supplier);
+
+    const sensorialDeadline = new Date(deadline);
+    sensorialDeadline.setDate(sensorialDeadline.getDate() + CONFIG.sensorialDays);
+    
+    const sensorialTask = {
+        id: Date.now().toString() + '-sensorial',
+        name: `${parentItem.name} - Evaluación Sensorial`,
+        supplier: parentItem.supplier,
+        batch: parentItem.batch || '',
+        testType: 'sensorial',
+        deadline: sensorialDeadline.toISOString().split('T')[0],
+        notes: `Tarea automática generada al completar prueba de mesada. ${parentItem.notes || ''}`,
+        status: 'pending',
+        responsible: CONFIG.responsibles.sensorial,
+        parentTaskId: parentItem.id,
+        canDecline: true,
+        createdAt: new Date().toISOString()
+    };
+    items.push(sensorialTask);
+    await ApiService.saveItem(sensorialTask);
+    await ApiService.sendTaskAssignment(CONFIG.responsibles.sensorial, 'Evaluación Sensorial', parentItem.name, sensorialTask.deadline, parentItem.supplier);
+
+    showToast('✅ Tareas creadas y emails enviados');
+}
+
+async function handleAddItem(e) {
+    e.preventDefault();
+    const deadline = new Date();
+    deadline.setDate(deadline.getDate() + CONFIG.mesadaMaxDays);
+    
+    const item = {
+        id: Date.now().toString(),
+        name: document.getElementById('material-name').value,
+        supplier: document.getElementById('supplier').value,
+        batch: document.getElementById('batch').value || '',
+        testType: 'mesada',
+        deadline: deadline.toISOString().split('T')[0],
+        notes: document.getElementById('notes').value || '',
+        status: 'pending',
+        responsible: 'laboratorio@vessena.com.uy',
+        parentTaskId: '',
+        canDecline: false,
+        createdAt: new Date().toISOString()
+    };
+
+    items.push(item);
+    await ApiService.saveItem(item);
+    e.target.reset();
+    renderItems();
+    updateStats();
+    checkAlerts();
+    showToast('✅ Materia prima agregada - Prueba de mesada iniciada (15 días)');
+}
+
+async function updateStatus(id, newStatus) {
+    const item = items.find(i => i.id === id);
+    if (!item) return;
+    
+    // Si es estabilidad y se va a iniciar, abrir modal de condiciones iniciales
+    if (item.testType === 'stability' && newStatus === 'in-progress') {
+        openStartStabilityModal(id);
+        return;
+    }
+    
+    // Si es para completar, abrir el modal de resultados
+    if (newStatus === 'completed') {
+        openResultModal(id);
+        return;
+    }
+    
+    item.status = newStatus;
+    await ApiService.saveItem(item);
+    renderItems();
+    updateStats();
+    showToast('✅ Estado actualizado');
+}
+
+// Modal de Inicio de Estabilidad
+let currentItemToStart = null;
+
+function openStartStabilityModal(id) {
+    const item = items.find(i => i.id === id);
+    if (!item) return;
+    
+    currentItemToStart = item;
+    
+    const modalTitle = document.getElementById('start-modal-title');
+    const modalBody = document.getElementById('start-modal-body');
+    
+    modalTitle.textContent = `Iniciar: ${item.name}`;
+    
+    modalBody.innerHTML = `
+        <div class="alert alert-info">
+            <span>🧪</span>
+            <div><strong>Estabilidad</strong> - ${item.name}<br>
+            <small>${item.supplier} ${item.batch ? '| Lote: ' + item.batch : ''}</small></div>
+        </div>
+        
+        <div class="form-group">
+            <label>🌡️ Temperatura Inicial *</label>
+            <input type="text" id="start-temperature" required placeholder="Ej: 40°C, 25°C, 4°C">
+        </div>
+        
+        <div class="form-group">
+            <label>📅 Tiempo Programado de Estudio *</label>
+            <input type="text" id="start-programmedTime" required placeholder="Ej: 30 días, 3 meses, 6 meses">
+        </div>
+        
+        <div class="alert alert-warning" style="margin-top: 1rem;">
+            <span>⏰</span>
+            <div>Recibirás un recordatorio por email cuando llegue la fecha de evaluación.</div>
+        </div>
+    `;
+    
+    document.getElementById('start-stability-modal').classList.add('active');
+}
+
+function closeStartModal() {
+    document.getElementById('start-stability-modal').classList.remove('active');
+    currentItemToStart = null;
+}
+
+async function saveStartStability() {
+    if (!currentItemToStart) return;
+    
+    const temperature = document.getElementById('start-temperature').value;
+    const programmedTime = document.getElementById('start-programmedTime').value;
+    
+    if (!temperature || !programmedTime) {
+        showToast('❌ Debes completar temperatura y tiempo programado', true);
+        return;
+    }
+    
+    const item = currentItemToStart;
+    item.status = 'in-progress';
+    item.initialTemperature = temperature;
+    item.programmedTime = programmedTime;
+    
+    await ApiService.saveItem(item);
+    
+    // Email al equipo confirmando inicio
+    const subject = `▶️ Estabilidad Iniciada: ${item.name}`;
+    const body = `Hola equipo,\n\nSe ha iniciado el estudio de estabilidad:\n\n📦 Materia Prima: ${item.name}\n🏢 Proveedor: ${item.supplier}\n👤 Responsable: ${getResponsibleName(item.responsible)}\n🌡️ Temperatura Inicial: ${temperature}\n📅 Tiempo Programado: ${programmedTime}\n📅 Fecha de Evaluación: ${formatDate(item.deadline)}\n\nSe enviará un recordatorio cuando sea momento de evaluar los resultados.\n\nSistema: https://claudiabarlocco-ctrl.github.io/control-gmp-app/control-calidad-workflow.html\n\n---\nSistema de Control de Calidad\n${CONFIG.fromEmail}`;
+    await ApiService.sendToTeam(subject, body);
+    
+    closeStartModal();
+    renderItems();
+    updateStats();
+    showToast('✅ Estabilidad iniciada - Equipo notificado');
+}
+
+// Recordatorios de estabilidades listas para evaluar
+async function checkStabilityReminders() {
+    const today = new Date().toISOString().split('T')[0];
+    const reminderKey = 'stability-reminders-' + today;
+    const sentReminders = JSON.parse(localStorage.getItem(reminderKey) || '[]');
+    
+    const stabilitiesToEvaluate = items.filter(i => 
+        i.testType === 'stability' && 
+        i.status === 'in-progress' && 
+        daysUntil(i.deadline) <= 0 &&
+        !sentReminders.includes(i.id)
+    );
+    
+    for (const item of stabilitiesToEvaluate) {
+        const subject = `⏰ Estabilidad Lista para Evaluar: ${item.name}`;
+        const body = `Hola Antonella,\n\nLa siguiente estabilidad está lista para ser evaluada:\n\n📦 Materia Prima: ${item.name}\n🏢 Proveedor: ${item.supplier}\n🌡️ Temperatura Inicial: ${item.initialTemperature || 'N/A'}\n📅 Tiempo Programado: ${item.programmedTime || 'N/A'}\n📅 Fecha de Evaluación: ${formatDate(item.deadline)}\n\nPor favor ingresa al sistema para cargar los resultados finales.\n\nSistema: https://claudiabarlocco-ctrl.github.io/control-gmp-app/control-calidad-workflow.html\n\n---\nSistema de Control de Calidad\n${CONFIG.fromEmail}`;
+        
+        await ApiService.sendToTeam(subject, body);
+        sentReminders.push(item.id);
+    }
+    
+    if (stabilitiesToEvaluate.length > 0) {
+        localStorage.setItem(reminderKey, JSON.stringify(sentReminders));
+    }
+}
+
+async function declineTask(id) {
+    if (confirm('¿Confirmas que este desarrollo NO requiere evaluación sensorial?')) {
+        const item = items.find(i => i.id === id);
+        if (item) {
+            item.status = 'declined';
+            item.notes = (item.notes || '') + '\n[DECLINADO] No requiere evaluación sensorial.';
+            await ApiService.saveItem(item);
+            renderItems();
+            updateStats();
+            showToast('✅ Evaluación sensorial declinada');
+        }
+    }
+}
+
+async function removeItem(id) {
+    if (confirm('¿Estás seguro de eliminar esta tarea?')) {
+        items = items.filter(i => i.id !== id);
+        await ApiService.deleteItem(id);
+        renderItems();
+        updateStats();
+        checkAlerts();
+        showToast('✅ Tarea eliminada');
+    }
+}
+
+function daysUntil(dateString) {
+    const deadline = new Date(dateString);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    deadline.setHours(0, 0, 0, 0);
+    return Math.ceil((deadline - today) / (1000 * 60 * 60 * 24));
+}
+
+function getUrgencyClass(item) {
+    if (item.status === 'completed') return 'completed';
+    if (item.status === 'declined') return 'declined';
+    const days = daysUntil(item.deadline);
+    if (days < 0) return 'urgent';
+    if (days <= 3) return 'urgent';
+    if (days <= 7) return 'warning';
+    return '';
+}
+
+function formatDate(dateString) {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('es-ES', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function getTestTypeLabel(type) {
+    const labels = { 'mesada': 'Prueba de Mesada', 'stability': 'Estabilidad', 'sensorial': 'Evaluación Sensorial' };
+    return labels[type] || type;
+}
+
+function renderResultDetails(item) {
+    if (item.status !== 'completed' || !item.result) return '';
+    
+    const isApproved = item.result === 'approved';
+    let html = `<div class="result-display ${isApproved ? '' : 'rejected'}">`;
+    html += `<strong>${isApproved ? '✅ APROBADO' : '❌ RECHAZADO'}</strong>`;
+    
+    if (item.testType === 'mesada') {
+        if (item.incorporationPct) html += `<br><strong>📈 % Incorporación:</strong> ${item.incorporationPct}`;
+        if (item.ph) html += `<br><strong>🧪 pH:</strong> ${item.ph}`;
+        if (item.viscosity) html += `<br><strong>💧 Viscosidad:</strong> ${item.viscosity}`;
+        if (item.appearance) html += `<br><strong>👁️ Aspecto:</strong> ${item.appearance}`;
+    }
+    if (item.testType === 'stability') {
+        if (item.initialTemperature) html += `<br><strong>🌡️ Temp. Inicial:</strong> ${item.initialTemperature}`;
+        if (item.programmedTime) html += `<br><strong>📅 Tiempo Programado:</strong> ${item.programmedTime}`;
+        if (item.temperature) html += `<br><strong>🌡️ Temp. Final:</strong> ${item.temperature}`;
+        if (item.studyTime) html += `<br><strong>⏱️ Tiempo Real:</strong> ${item.studyTime}`;
+        if (item.parameters) html += `<br><strong>📋 Parámetros:</strong> ${item.parameters}`;
+    }
+    if (item.resultObservations) html += `<br><strong>📝 Observaciones:</strong> ${item.resultObservations}`;
+    
+    html += `</div>`;
+    return html;
+}
+
+function renderItems() {
+    const container = document.getElementById('items-list');
+    let filteredItems = items;
+    
+    if (currentFilter !== 'all') {
+        if (['pending', 'in-progress', 'completed'].includes(currentFilter)) {
+            filteredItems = items.filter(item => item.status === currentFilter);
+        } else if (['mesada', 'stability', 'sensorial'].includes(currentFilter)) {
+            filteredItems = items.filter(item => item.testType === currentFilter);
+        }
+    }
+
+    filteredItems.sort((a, b) => {
+        if (a.status === 'completed' && b.status !== 'completed') return 1;
+        if (a.status !== 'completed' && b.status === 'completed') return -1;
+        if (a.status === 'declined' && b.status !== 'declined') return 1;
+        if (a.status !== 'declined' && b.status === 'declined') return -1;
+        return new Date(a.deadline) - new Date(b.deadline);
+    });
+
+    if (filteredItems.length === 0) {
+        container.innerHTML = `<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg><p>No hay elementos en esta categoría</p></div>`;
+        return;
+    }
+
+    container.innerHTML = filteredItems.map(item => {
+        const days = daysUntil(item.deadline);
+        const urgencyClass = getUrgencyClass(item);
+        let daysText = '';
+        
+        if (item.status !== 'completed' && item.status !== 'declined') {
+            if (days < 0) daysText = `⚠️ Vencido hace ${Math.abs(days)} día${Math.abs(days) !== 1 ? 's' : ''}`;
+            else if (days === 0) daysText = '🔥 Vence HOY';
+            else if (days === 1) daysText = '⏰ Vence MAÑANA';
+            else daysText = `📅 ${days} día${days !== 1 ? 's' : ''} restante${days !== 1 ? 's' : ''}`;
+        }
+
+        const parentTask = item.parentTaskId ? items.find(i => i.id === item.parentTaskId) : null;
+        const resultBadge = item.result ? `<span class="badge ${item.result === 'approved' ? 'approved' : 'rejected'}">${item.result === 'approved' ? '✅ Aprobado' : '❌ Rechazado'}</span>` : '';
+
+        return `
+            <div class="item-card ${urgencyClass}">
+                <div class="item-header">
+                    <div>
+                        <div class="item-title">${item.name}</div>
+                        <div class="item-meta">
+                            <span>🏢 ${item.supplier}</span>
+                            ${item.batch ? `<span>📦 ${item.batch}</span>` : ''}
+                        </div>
+                    </div>
+                    <span class="badge ${item.testType}">${getTestTypeLabel(item.testType)}</span>
+                </div>
+                <div class="item-meta">
+                    <span class="badge ${item.status}">${item.status === 'pending' ? 'Pendiente' : item.status === 'in-progress' ? 'En Progreso' : item.status === 'declined' ? 'Declinado' : 'Completado'}</span>
+                    ${resultBadge}
+                    ${item.responsible ? `<span class="responsible-tag">👤 ${getResponsibleName(item.responsible)}</span>` : ''}
+                    <span class="date-display">📆 ${formatDate(item.deadline)}</span>
+                </div>
+                ${daysText ? `<div class="item-meta"><strong>${daysText}</strong></div>` : ''}
+                ${parentTask ? `<div class="parent-task">🔗 Generado desde: <strong>${parentTask.name}</strong></div>` : ''}
+                ${item.testType === 'mesada' && item.status !== 'completed' ? `<div class="workflow-info">⚡ Al completar (Aprobado) se crearán: Estabilidad (Antonella) y Sensorial (Gloria)</div>` : ''}
+                ${item.testType === 'stability' && item.status === 'in-progress' && (item.initialTemperature || item.programmedTime) ? `<div class="workflow-info" style="background: rgba(0, 102, 255, 0.05); border-left-color: var(--primary);">🧪 <strong>Estudio en curso:</strong>${item.initialTemperature ? ` 🌡️ ${item.initialTemperature}` : ''}${item.programmedTime ? ` | 📅 ${item.programmedTime}` : ''}</div>` : ''}
+                ${item.notes ? `<div style="margin-top: 0.5rem; font-size: 0.9rem; color: var(--text-light);">${item.notes}</div>` : ''}
+                ${renderResultDetails(item)}
+                <div class="item-actions">
+                    ${item.status === 'pending' ? `<button class="btn btn-success" onclick="updateStatus('${item.id}', 'in-progress')">▶️ Iniciar</button>` : ''}
+                    ${item.status === 'in-progress' ? `<button class="btn btn-success" onclick="updateStatus('${item.id}', 'completed')">✅ Completar con Resultados</button>` : ''}
+                    ${item.status === 'completed' ? `<button class="btn btn-success" onclick="openResultModal('${item.id}')">✏️ Editar Resultados</button>` : ''}
+                    ${item.canDecline && (item.status === 'pending' || item.status === 'in-progress') ? `<button class="btn btn-warning" onclick="declineTask('${item.id}')">🚫 Declinar (No aplica)</button>` : ''}
+                    ${item.status === 'declined' ? `<button class="btn btn-success" onclick="updateStatus('${item.id}', 'pending')">↩️ Reactivar</button>` : ''}
+                    <button class="btn btn-danger" onclick="removeItem('${item.id}')">🗑️ Eliminar</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function updateStats() {
+    const pending = items.filter(i => i.status !== 'completed' && i.status !== 'declined').length;
+    const completed = items.filter(i => i.status === 'completed').length;
+    const urgent = items.filter(i => { if (i.status === 'completed' || i.status === 'declined') return false; return daysUntil(i.deadline) <= 3; }).length;
+    const upcoming = items.filter(i => { if (i.status === 'completed' || i.status === 'declined') return false; const d = daysUntil(i.deadline); return d > 3 && d <= 7; }).length;
+
+    document.getElementById('stat-pending').textContent = pending;
+    document.getElementById('stat-urgent').textContent = urgent;
+    document.getElementById('stat-upcoming').textContent = upcoming;
+    document.getElementById('stat-completed').textContent = completed;
+}
+
+function checkAlerts() {
+    const alertsContainer = document.getElementById('alerts-container');
+    const activeItems = items.filter(i => i.status !== 'completed' && i.status !== 'declined');
+    const overdueItems = activeItems.filter(i => daysUntil(i.deadline) < 0);
+    const todayItems = activeItems.filter(i => daysUntil(i.deadline) === 0);
+    const urgentItems = activeItems.filter(i => { const d = daysUntil(i.deadline); return d > 0 && d <= 3; });
+
+    let alerts = '';
+    if (overdueItems.length > 0) alerts += `<div class="alert alert-danger"><span style="font-size: 1.5rem;">⚠️</span><div><strong>¡ATENCIÓN!</strong> Tienes ${overdueItems.length} evaluación${overdueItems.length !== 1 ? 'es' : ''} vencida${overdueItems.length !== 1 ? 's' : ''}</div></div>`;
+    if (todayItems.length > 0) alerts += `<div class="alert alert-danger"><span style="font-size: 1.5rem;">🔥</span><div><strong>URGENTE:</strong> ${todayItems.length} evaluación${todayItems.length !== 1 ? 'es' : ''} vence${todayItems.length !== 1 ? 'n' : ''} HOY</div></div>`;
+    if (urgentItems.length > 0) alerts += `<div class="alert alert-warning"><span style="font-size: 1.5rem;">⏰</span><div>Tienes ${urgentItems.length} evaluación${urgentItems.length !== 1 ? 'es' : ''} próxima${urgentItems.length !== 1 ? 's' : ''} a vencer (≤ 3 días)</div></div>`;
+    
+    alertsContainer.innerHTML = alerts;
+}
+
+init();
+</script>
+</body>
+</html>

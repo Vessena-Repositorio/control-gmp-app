@@ -1,0 +1,2223 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Registro de No Conformidades · CAPA</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg: #f4f3ef;
+    --surface: #ffffff;
+    --surface2: #f9f8f5;
+    --border: #ddd9d0;
+    --border-strong: #b8b2a7;
+    --text: #1a1916;
+    --text-muted: #6b6560;
+    --accent: #c8410a;
+    --accent-light: #fdf0eb;
+    --accent2: #1a5c3a;
+    --accent2-light: #eaf4ee;
+    --yellow: #f0a500;
+    --yellow-light: #fef8e8;
+    --blue: #1a4a7a;
+    --blue-light: #e8f0f8;
+
+    --state-abierta: #c8410a;
+    --state-analisis: #f0a500;
+    --state-acciones: #1a4a7a;
+    --state-seguimiento: #6b3fa0;
+    --state-cerrada: #1a5c3a;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* HEADER */
+  header {
+    background: var(--text);
+    color: white;
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    border-bottom: 3px solid var(--accent);
+  }
+  header h1 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  header span {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: #888;
+    letter-spacing: 0.05em;
+  }
+
+  /* LAYOUT */
+  .app { display: flex; min-height: calc(100vh - 56px); }
+
+  /* SIDEBAR */
+  .sidebar {
+    width: 280px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+  .sidebar-section {
+    padding: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+  }
+  .btn-nueva {
+    width: 100%;
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 12px 16px;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.15s;
+  }
+  .btn-nueva:hover { background: #a83509; }
+  .btn-nueva svg { flex-shrink: 0; }
+
+  /* FILTERS */
+  .filter-group { margin-bottom: 12px; }
+  .filter-group label {
+    display: block;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+    font-weight: 500;
+  }
+  .filter-group select, .filter-group input {
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 12px;
+    color: var(--text);
+    outline: none;
+  }
+  .filter-group select:focus, .filter-group input:focus {
+    border-color: var(--accent);
+  }
+
+  /* NC LIST */
+  .nc-list { flex: 1; overflow-y: auto; padding: 8px 0; }
+  .nc-item {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.1s;
+    position: relative;
+  }
+  .nc-item:hover { background: var(--surface2); }
+  .nc-item.active { background: var(--accent-light); border-left: 3px solid var(--accent); }
+  .nc-item-num {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 3px;
+  }
+  .nc-item-title {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .nc-item-meta {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 7px;
+    font-size: 10px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    border-radius: 2px;
+    text-transform: uppercase;
+  }
+  .badge-abierta   { background: #fdecea; color: var(--state-abierta); }
+  .badge-analisis  { background: var(--yellow-light); color: #8a5e00; }
+  .badge-acciones  { background: var(--blue-light); color: var(--state-acciones); }
+  .badge-seguimiento { background: #f3eef9; color: var(--state-seguimiento); }
+  .badge-cerrada   { background: var(--accent2-light); color: var(--state-cerrada); }
+
+  .badge-critica   { background: #fdecea; color: var(--state-abierta); }
+  .badge-mayor     { background: var(--yellow-light); color: #8a5e00; }
+  .badge-menor     { background: var(--blue-light); color: var(--state-acciones); }
+
+  .nc-empty {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.8;
+  }
+
+  /* MAIN CONTENT */
+  .main {
+    flex: 1;
+    overflow-y: auto;
+    padding: 32px;
+    background: var(--bg);
+  }
+
+  .placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    min-height: 400px;
+    text-align: center;
+    color: var(--text-muted);
+  }
+  .placeholder-icon {
+    width: 64px;
+    height: 64px;
+    border: 2px solid var(--border);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16px;
+    color: var(--border-strong);
+  }
+  .placeholder h2 { font-size: 16px; font-weight: 500; margin-bottom: 6px; color: var(--text); }
+  .placeholder p { font-size: 13px; }
+
+  /* NC DETAIL */
+  .nc-detail { max-width: 860px; }
+
+  .nc-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 28px;
+    gap: 16px;
+  }
+  .nc-header-left h2 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+  .nc-header-left p {
+    font-size: 14px;
+    color: var(--text-muted);
+    max-width: 500px;
+  }
+  .nc-header-actions { display: flex; gap: 8px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+
+  /* PROGRESS BAR */
+  .progress-bar {
+    display: flex;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    margin-bottom: 28px;
+    overflow: hidden;
+  }
+  .progress-step {
+    flex: 1;
+    padding: 10px 8px;
+    text-align: center;
+    font-size: 10px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    border-right: 1px solid var(--border);
+    transition: all 0.2s;
+    position: relative;
+  }
+  .progress-step:last-child { border-right: none; }
+  .progress-step.done { background: var(--accent2-light); color: var(--accent2); }
+  .progress-step.current { background: var(--accent); color: white; }
+  .progress-step .step-num {
+    display: block;
+    font-size: 16px;
+    margin-bottom: 2px;
+  }
+
+  /* SECTIONS */
+  .section-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    margin-bottom: 20px;
+    overflow: hidden;
+  }
+  .section-header {
+    padding: 14px 20px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    user-select: none;
+  }
+  .section-header:hover { background: var(--bg); }
+  .section-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 0.02em;
+  }
+  .section-num {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    background: var(--text);
+    color: white;
+    padding: 2px 6px;
+    border-radius: 2px;
+  }
+  .section-body { padding: 20px; }
+  .section-body.hidden { display: none; }
+
+  /* FORM ELEMENTS */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .form-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .form-full { grid-column: 1 / -1; }
+
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  .form-group label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+  }
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 13px;
+    color: var(--text);
+    outline: none;
+    resize: vertical;
+    transition: border-color 0.15s;
+  }
+  .form-group input:focus,
+  .form-group select:focus,
+  .form-group textarea:focus { border-color: var(--accent); background: white; }
+  .form-group input[readonly],
+  .form-group textarea[readonly] {
+    background: var(--bg);
+    color: var(--text-muted);
+    cursor: default;
+  }
+
+  /* DETECCION CHECKBOXES */
+  .deteccion-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-top: 4px;
+  }
+  .check-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    cursor: pointer;
+    transition: all 0.1s;
+    font-size: 12px;
+  }
+  .check-item:hover { background: var(--accent-light); border-color: var(--accent); }
+  .check-item input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px; }
+  .check-item.checked { background: var(--accent-light); border-color: var(--accent); font-weight: 500; }
+
+  /* CRITICIDAD */
+  .criticidad-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+    margin-top: 4px;
+  }
+  .crit-option {
+    border: 2px solid var(--border);
+    padding: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: center;
+  }
+  .crit-option:hover { border-color: var(--border-strong); }
+  .crit-option.selected-baja { border-color: var(--state-acciones); background: var(--blue-light); }
+  .crit-option.selected-moderada { border-color: var(--yellow); background: var(--yellow-light); }
+  .crit-option.selected-alta { border-color: var(--accent); background: var(--accent-light); }
+  .crit-option-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+  }
+  .crit-option-desc { font-size: 10px; color: var(--text-muted); line-height: 1.4; }
+
+  /* ISHIKAWA TABLE */
+  .ishikawa-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .ishikawa-table th {
+    background: var(--text);
+    color: white;
+    padding: 8px 10px;
+    text-align: left;
+    font-size: 10px;
+    font-family: 'IBM Plex Mono', monospace;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .ishikawa-table td {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  .ishikawa-table tr:hover td { background: var(--surface2); }
+  .ishikawa-table .categoria {
+    font-weight: 600;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .radio-group { display: flex; gap: 8px; }
+  .radio-group label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 3px 6px;
+    border: 1px solid var(--border);
+    transition: all 0.1s;
+  }
+  .radio-group label:hover { border-color: var(--border-strong); }
+  .radio-group input[type="radio"] { accent-color: var(--accent); }
+
+  /* ACCIONES TABLE */
+  .acciones-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .acciones-table th {
+    background: var(--surface2);
+    padding: 8px 10px;
+    text-align: left;
+    font-size: 10px;
+    font-family: 'IBM Plex Mono', monospace;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    border-bottom: 2px solid var(--border);
+    text-transform: uppercase;
+  }
+  .acciones-table td {
+    padding: 6px 6px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .acciones-table input, .acciones-table select, .acciones-table textarea {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 11px;
+    color: var(--text);
+    outline: none;
+  }
+  .acciones-table input:focus, .acciones-table select:focus { border-color: var(--accent); }
+
+  .tipo-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    font-size: 10px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    border-radius: 2px;
+  }
+  .tipo-correctiva { background: var(--accent-light); color: var(--accent); }
+  .tipo-preventiva { background: var(--blue-light); color: var(--blue); }
+  .tipo-correccion { background: var(--yellow-light); color: #7a5000; }
+
+  /* SEGUIMIENTOS */
+  .seguimiento-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 14px;
+    margin-bottom: 10px;
+    position: relative;
+  }
+  .seguimiento-item .meta {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 8px;
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  /* BUTTONS */
+  .btn {
+    padding: 9px 16px;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    letter-spacing: 0.03em;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: #a83509; }
+  .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { background: var(--surface2); }
+  .btn-success { background: var(--accent2); color: white; }
+  .btn-success:hover { background: #134d2e; }
+  .btn-warning { background: var(--yellow); color: white; }
+  .btn-warning:hover { background: #c88a00; }
+  .btn-sm { padding: 6px 12px; font-size: 11px; }
+  .btn-danger { background: #dc3545; color: white; }
+  .btn-danger:hover { background: #b02a37; }
+
+  .form-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+
+  /* MODAL */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .modal {
+    background: white;
+    width: 100%;
+    max-width: 560px;
+    max-height: 90vh;
+    overflow-y: auto;
+    border-top: 4px solid var(--accent);
+  }
+  .modal-header {
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .modal-header h3 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 14px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .modal-body { padding: 24px; }
+  .modal-footer {
+    padding: 16px 24px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+  .btn-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 20px;
+    line-height: 1;
+    padding: 4px;
+  }
+  .btn-close:hover { color: var(--text); }
+
+  .hidden { display: none !important; }
+  .divider { height: 1px; background: var(--border); margin: 16px 0; }
+
+  /* TOAST */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--text);
+    color: white;
+    padding: 12px 20px;
+    font-size: 13px;
+    z-index: 999;
+    transform: translateY(100px);
+    opacity: 0;
+    transition: all 0.3s;
+    border-left: 4px solid var(--accent2);
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .stat-chip {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 10px 14px;
+    text-align: center;
+  }
+  .stat-chip .num {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 22px;
+    font-weight: 600;
+    display: block;
+  }
+  .stat-chip .lbl {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    display: block;
+    margin-top: 2px;
+  }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<header>
+  <h1>⬛ CAPA · Registro de No Conformidades</h1>
+  <span id="headerMeta">REG-SOP-AC-036-A · v1.0</span>
+</header>
+
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <button class="btn-nueva" onclick="abrirModalNueva()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Nueva No Conformidad
+      </button>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Filtros</div>
+      <div class="filter-group">
+        <label>Estado</label>
+        <select id="filtroEstado" onchange="renderLista()">
+          <option value="">Todos</option>
+          <option value="Abierta">Abierta</option>
+          <option value="En análisis">En análisis</option>
+          <option value="Con acciones">Con acciones</option>
+          <option value="En seguimiento">En seguimiento</option>
+          <option value="Cerrada">Cerrada</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Criticidad</label>
+        <select id="filtroCriticidad" onchange="renderLista()">
+          <option value="">Todas</option>
+          <option value="Crítica">Crítica</option>
+          <option value="Mayor">Mayor</option>
+          <option value="Menor">Menor</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Buscar</label>
+        <input type="text" id="filtroBuscar" placeholder="Sector, descripción..." oninput="renderLista()">
+      </div>
+    </div>
+
+    <div class="sidebar-section" style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-secondary btn-sm" style="flex:1" onclick="mostrarDashboard()">📊 Dashboard</button>
+      <button class="btn btn-secondary btn-sm" style="flex:1" onclick="exportarResumenPDF()">📄 Resumen PDF</button>
+    </div>
+    <div class="nc-list" id="ncList">
+      <div class="nc-empty">No hay registros aún.<br>Creá la primera NC.</div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main" id="mainContent">
+    <div class="placeholder" id="placeholder">
+      <div class="placeholder-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      </div>
+      <h2>Seleccioná una No Conformidad</h2>
+      <p>O creá una nueva con el botón de arriba</p>
+    </div>
+    <div id="ncDetail" class="nc-detail hidden"></div>
+  </main>
+</div>
+
+<!-- MODAL NUEVA NC -->
+<div class="modal-overlay hidden" id="modalNueva">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Nueva No Conformidad</h3>
+      <button class="btn-close" onclick="cerrarModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Fecha del incidente *</label>
+          <input type="date" id="nuevaFechaIncidente">
+        </div>
+        <div class="form-group">
+          <label>Fecha de apertura *</label>
+          <input type="date" id="nuevaFechaApertura">
+        </div>
+        <div class="form-group">
+          <label>Abierto por *</label>
+          <input type="text" id="nuevaAbiertoPor" placeholder="Nombre y apellido">
+        </div>
+        <div class="form-group">
+          <label>Sector *</label>
+          <input type="text" id="nuevaSector" placeholder="Área / Sector">
+        </div>
+        <div class="form-group form-full">
+          <label>Detalle del incidente *</label>
+          <textarea id="nuevaDetalle" rows="3" placeholder="¿Cuándo se detectó y qué se detectó?"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Producto / Instrumento / Doc.</label>
+          <input type="text" id="nuevaProducto" placeholder="Producto o documento asociado">
+        </div>
+        <div class="form-group">
+          <label>Lote (si corresponde)</label>
+          <input type="text" id="nuevaLote" placeholder="Nro. de lote">
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div class="form-group">
+        <label>Tipo de detección</label>
+        <div class="deteccion-grid" id="nuevaDeteccionGrid">
+          <label class="check-item"><input type="checkbox" value="Auditorías"> Auditorías</label>
+          <label class="check-item"><input type="checkbox" value="Validaciones y calificaciones"> Validaciones y calificaciones</label>
+          <label class="check-item"><input type="checkbox" value="Desvíos de procesos"> Desvíos de procesos</label>
+          <label class="check-item"><input type="checkbox" value="Revisión por la dirección"> Revisión por la dirección</label>
+          <label class="check-item"><input type="checkbox" value="Evaluación de proveedores"> Evaluación de proveedores</label>
+          <label class="check-item"><input type="checkbox" value="Control interno"> Control interno</label>
+          <label class="check-item"><input type="checkbox" value="Reclamo clientes"> Reclamo clientes</label>
+          <label class="check-item"><input type="checkbox" value="Otros"> Otros</label>
+        </div>
+        <input type="text" id="nuevaDeteccionOtros" placeholder="Especificar si marcó Otros..." style="margin-top:6px">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="crearNC()">Crear No Conformidad</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div id="loadingOverlay" style="position:fixed;inset:0;background:rgba(244,243,239,0.88);z-index:300;align-items:center;justify-content:center;flex-direction:column;gap:12px;display:none;">
+  <div style="width:36px;height:36px;border:3px solid #ddd9d0;border-top-color:#c8410a;border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+  <span style="font-family:monospace;font-size:12px;color:#6b6560;letter-spacing:0.06em;">CARGANDO DATOS...</span>
+</div>
+<style>@keyframes spin{to{transform:rotate(360deg);}}</style>
+
+<script>
+// ==================== STORAGE (Google Sheets) ====================
+const API_URL = 'https://script.google.com/macros/s/AKfycbwiIr60f7GWLPrRV0cVhLFp7Hm3Igc8qKEL1sWZiAd6vgDFD8XyP0Yu29fxof03ipdE/exec';
+
+let db = { ncs: [], counter: 0 };
+let ncActivaId = null;
+
+async function cargarDatos() {
+  mostrarCargando(true);
+  try {
+    const res = await fetch(`${API_URL}?action=getAll`);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    db.ncs = data.ncs || [];
+    db.counter = db.ncs.reduce((max, nc) => {
+      const match = nc.numero.match(/NC (\d+)\/(\d+)/);
+      const year = match ? parseInt(match[2]) : 0;
+      const num = (year === new Date().getFullYear() && match) ? parseInt(match[1]) : 0;
+      return Math.max(max, num);
+    }, 0);
+    console.log('Datos cargados:', db.ncs.length, 'NCs');
+  } catch(e) {
+    console.error('Error cargarDatos:', e);
+    showToast('Error al cargar: ' + e.message);
+  }
+  mostrarCargando(false);
+  renderLista();
+}
+
+async function guardarNC_remoto(nc, notificar=false) {
+  try {
+    console.log('Guardando NC:', nc.numero);
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'action=save&data=' + encodeURIComponent(JSON.stringify(nc))
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    console.log('Respuesta:', data);
+    if (data.ok && notificar) {
+      try {
+        await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'action=notifyNew&data=' + encodeURIComponent(JSON.stringify(nc))
+        });
+      } catch(e) { /* mail error no bloquea */ }
+    }
+    return data.ok;
+  } catch(e) {
+    console.error('Error guardando:', e);
+    showToast('Error al guardar. Verificá la conexión.');
+    return false;
+  }
+}
+
+async function eliminarNC_remoto(id) {
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'action=delete&id=' + encodeURIComponent(id)
+    });
+    const data = await res.json();
+    return data.ok;
+  } catch(e) {
+    showToast('Error al eliminar.');
+    return false;
+  }
+}
+
+function mostrarCargando(show) {
+  const el = document.getElementById('loadingOverlay');
+  if (el) el.style.display = show ? 'flex' : 'none';
+}
+
+// ==================== ESTADOS ====================
+const ESTADOS = ['Abierta','En análisis','Con acciones','En seguimiento','Cerrada'];
+const ESTADO_BADGE = {
+  'Abierta': 'badge-abierta',
+  'En análisis': 'badge-analisis',
+  'Con acciones': 'badge-acciones',
+  'En seguimiento': 'badge-seguimiento',
+  'Cerrada': 'badge-cerrada'
+};
+const CRIT_BADGE = {
+  'Crítica': 'badge-critica',
+  'Mayor': 'badge-mayor',
+  'Menor': 'badge-menor'
+};
+
+// ==================== MODAL NUEVA ====================
+function abrirModalNueva() {
+  document.getElementById('modalNueva').classList.remove('hidden');
+  const hoy = new Date().toISOString().split('T')[0];
+  document.getElementById('nuevaFechaApertura').value = hoy;
+  document.getElementById('nuevaFechaIncidente').value = hoy;
+}
+function cerrarModal() {
+  document.getElementById('modalNueva').classList.add('hidden');
+}
+
+// ==================== LISTA ====================
+function renderLista() {
+  const filtroEstado = document.getElementById('filtroEstado').value;
+  const filtroCrit   = document.getElementById('filtroCriticidad').value;
+  const filtroBuscar = document.getElementById('filtroBuscar').value.toLowerCase();
+
+  let ncs = db.ncs.filter(nc => {
+    if (filtroEstado && nc.estado !== filtroEstado) return false;
+    if (filtroCrit && nc.decisionCriticidad !== filtroCrit) return false;
+    if (filtroBuscar) {
+      const haystack = (nc.numero + ' ' + nc.sector + ' ' + nc.detalle + ' ' + nc.abiertoPor).toLowerCase();
+      if (!haystack.includes(filtroBuscar)) return false;
+    }
+    return true;
+  });
+
+  const list = document.getElementById('ncList');
+  if (ncs.length === 0) {
+    list.innerHTML = '<div class="nc-empty">Sin resultados.</div>';
+    return;
+  }
+
+  list.innerHTML = ncs.map(nc => `
+    <div class="nc-item${nc.id === ncActivaId ? ' active' : ''}" onclick="abrirNC(${nc.id})">
+      <div class="nc-item-num">${nc.numero}</div>
+      <div class="nc-item-title">${nc.detalle || '—'}</div>
+      <div class="nc-item-meta">
+        <span class="badge ${ESTADO_BADGE[nc.estado]}">${nc.estado}</span>
+        ${nc.decisionCriticidad ? `<span class="badge ${CRIT_BADGE[nc.decisionCriticidad]}">${nc.decisionCriticidad}</span>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+// ==================== ABRIR NC ====================
+function abrirNC(id) {
+  ocultarDashboard();
+  ncActivaId = id;
+  renderLista();
+  const nc = db.ncs.find(n => n.id === id);
+  if (!nc) return;
+
+  document.getElementById('placeholder').classList.add('hidden');
+  document.getElementById('ncDetail').classList.remove('hidden');
+  renderDetalle(nc);
+}
+
+function renderDetalle(nc) {
+  const stateIdx = ESTADOS.indexOf(nc.estado);
+  const steps = ESTADOS.map((e,i) => {
+    let cls = i < stateIdx ? 'done' : (i === stateIdx ? 'current' : '');
+    const icons = ['①','②','③','④','⑤'];
+    return `<div class="progress-step ${cls}"><span class="step-num">${icons[i]}</span>${e}</div>`;
+  }).join('');
+
+  const det = document.getElementById('ncDetail');
+
+  det.innerHTML = `
+    <div class="nc-header">
+      <div class="nc-header-left">
+        <h2>${nc.numero}</h2>
+        <p>${nc.sector} · ${nc.detalle}</p>
+      </div>
+      <div class="nc-header-actions">
+        <button class="btn btn-secondary btn-sm" onclick="exportarNC_PDF(${nc.id})">📄 PDF</button>
+        ${nc.estado !== 'Cerrada' ? `<button class="btn btn-secondary btn-sm" onclick="avanzarEstado(${nc.id})">Avanzar estado →</button>` : ''}
+        <button class="btn btn-danger btn-sm" onclick="eliminarNC(${nc.id})">Eliminar</button>
+      </div>
+    </div>
+
+    <div class="progress-bar">${steps}</div>
+
+    ${renderSeccion1(nc)}
+    ${renderSeccion2(nc)}
+    ${renderSeccion3(nc)}
+    ${renderSeccion4(nc)}
+    ${renderSeccion5(nc)}
+    ${renderSeccion6(nc)}
+
+    <div class="form-actions">
+      <button class="btn btn-primary" onclick="guardarNC(${nc.id})">💾 Guardar cambios</button>
+      ${nc.estado !== 'Cerrada' ? `<button class="btn btn-success" onclick="avanzarEstado(${nc.id})">Avanzar estado →</button>` : '<span class="badge badge-cerrada" style="padding:9px 16px;font-size:12px;">✔ NC Cerrada</span>'}
+    </div>
+  `;
+
+  // Init checboxes deteccion
+  nc.deteccion.forEach(d => {
+    const inp = det.querySelector(`input[data-det="${d}"]`);
+    if (inp) { inp.checked = true; inp.closest('.check-item').classList.add('checked'); }
+  });
+}
+
+function renderSeccion1(nc) {
+  const detTypes = ['Auditorías','Validaciones y calificaciones','Desvíos de procesos','Revisión por la dirección','Evaluación de proveedores','Control interno','Reclamo clientes','Otros'];
+  const detGrid = detTypes.map(d => {
+    const checked = nc.deteccion.includes(d);
+    return `<label class="check-item${checked?' checked':''}">
+      <input type="checkbox" data-det="${d}" ${checked?'checked':''} onchange="toggleDet(this,'${nc.id}')"> ${d}
+    </label>`;
+  }).join('');
+
+  return `
+  <div class="section-card">
+    <div class="section-header" onclick="toggleSection(this)">
+      <div class="section-title"><span class="section-num">01</span> Apertura de la No Conformidad</div>
+      <span>▾</span>
+    </div>
+    <div class="section-body">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>N° de No Conformidad</label>
+          <input type="text" value="${nc.numero}" readonly>
+        </div>
+        <div class="form-group">
+          <label>Estado actual</label>
+          <input type="text" value="${nc.estado}" readonly>
+        </div>
+        <div class="form-group">
+          <label>Fecha del incidente</label>
+          <input type="date" id="f_fechaIncidente" value="${nc.fechaIncidente}">
+        </div>
+        <div class="form-group">
+          <label>Fecha de apertura</label>
+          <input type="date" id="f_fechaApertura" value="${nc.fechaApertura}">
+        </div>
+        <div class="form-group">
+          <label>Abierto por</label>
+          <input type="text" id="f_abiertoPor" value="${nc.abiertoPor}">
+        </div>
+        <div class="form-group">
+          <label>Sector</label>
+          <input type="text" id="f_sector" value="${nc.sector}">
+        </div>
+        <div class="form-group form-full">
+          <label>Detalle del incidente</label>
+          <textarea id="f_detalle" rows="3">${nc.detalle}</textarea>
+        </div>
+        <div class="form-group">
+          <label>Producto / Instrumento / Documento</label>
+          <input type="text" id="f_producto" value="${nc.producto}">
+        </div>
+        <div class="form-group">
+          <label>Lote</label>
+          <input type="text" id="f_lote" value="${nc.lote}">
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div class="form-group">
+        <label>Tipo de detección</label>
+        <div class="deteccion-grid">${detGrid}</div>
+        <input type="text" id="f_deteccionOtros" placeholder="Especificar si marcó Otros..." value="${nc.deteccionOtros}" style="margin-top:6px">
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderSeccion2(nc) {
+  const cats = {
+    'MÉTODO — ¿Cómo se hizo?': [
+      '¿Existe procedimiento?',
+      '¿El procedimiento detalla claramente la tarea a realizar?',
+      '¿El procedimiento contempla todas las etapas del proceso?',
+      '¿Los procedimientos vinculados a este se mantuvieron igual?',
+      '¿Existen formularios que ayuden a realizar la tarea ordenadamente?'
+    ],
+    'MANO DE OBRA — ¿Quién lo hizo?': [
+      '¿El personal se encuentra capacitado en la tarea?',
+      '¿La persona puede cumplir con la tarea sin dificultad?',
+      '¿La cantidad de personas asignadas para la tarea es la adecuada?',
+      '¿Procedió como lo hace habitualmente?',
+      '¿Se mantuvo el personal en el transcurso de la tarea?'
+    ],
+    'MATERIALES — ¿Con qué se hizo?': [
+      '¿Los materiales utilizados fueron los adecuados?',
+      '¿Los materiales estaban aprobados por Control de Calidad?',
+      '¿Los materiales utilizados cumplían especificación?',
+      '¿El proveedor de los materiales es el habitual?',
+      '¿El material es el adecuado para la tarea?'
+    ],
+    'MEDIO AMBIENTE — ¿Dónde se hizo?': [
+      '¿La tarea se realizó en el lugar indicado?',
+      '¿El área se encuentra calificada?',
+      '¿La limpieza del área fue la correcta?',
+      '¿Las condiciones ambientales fueron las adecuadas?',
+      '¿El lugar destinado para la tarea es el adecuado?'
+    ],
+    'MÁQUINAS — ¿Qué equipamiento se usó?': [
+      '¿Los equipos utilizados fueron los adecuados?',
+      '¿Se encuentran calibrados?',
+      '¿Se les realiza mantenimiento preventivo?',
+      '¿Fue manipulado por personal entrenado?'
+    ]
+  };
+
+  let rows = '';
+  for (const [cat, pregs] of Object.entries(cats)) {
+    rows += `<tr><td colspan="4" class="categoria" style="background:var(--surface2);padding:8px 10px;">${cat}</td></tr>`;
+    pregs.forEach(p => {
+      const key = btoa(p).replace(/=/g,'');
+      const val = nc.analisis[key] || '';
+      rows += `<tr>
+        <td style="font-size:12px;padding-right:12px;">${p}</td>
+        <td><div class="radio-group">
+          <label><input type="radio" name="ish_${key}" value="NA" ${val==='NA'?'checked':''}> N/A</label>
+          <label><input type="radio" name="ish_${key}" value="SI" ${val==='SI'?'checked':''}> Sí</label>
+          <label><input type="radio" name="ish_${key}" value="NO" ${val==='NO'?'checked':''}> No</label>
+        </div></td>
+      </tr>`;
+    });
+  }
+
+  return `
+  <div class="section-card">
+    <div class="section-header" onclick="toggleSection(this)">
+      <div class="section-title"><span class="section-num">02</span> Análisis de Causa Raíz (6M)</div>
+      <span>▾</span>
+    </div>
+    <div class="section-body">
+      <table class="ishikawa-table">
+        <thead><tr><th style="width:60%">Pregunta</th><th>Respuesta</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="divider"></div>
+      <div class="form-grid">
+        <div class="form-group form-full">
+          <label>Causa raíz identificada</label>
+          <textarea id="f_causaRaiz" rows="3" placeholder="Describir la causa raíz real o potencial identificada">${nc.causaRaiz}</textarea>
+        </div>
+        <div class="form-group">
+          <label>Fecha de análisis</label>
+          <input type="date" id="f_fechaAnalisis" value="${nc.fechaAnalisis}">
+        </div>
+        <div class="form-group">
+          <label>Analizado por</label>
+          <input type="text" id="f_analizadoPor" value="${nc.analizadoPor}" placeholder="Nombre y apellido">
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderSeccion3(nc) {
+  const sevs = [
+    { val: 'Baja', desc: 'El evento muestra una desviación de las directivas regulatorias locales que no comprometen la salud del cliente ni ponen en riesgo la actividad comercial.' },
+    { val: 'Moderada', desc: 'El evento demuestra que el sistema de calidad es correcto, pero no se está siguiendo o no es efectivo. Puede comprometer la actividad comercial sin afectar la salud.' },
+    { val: 'Alta', desc: 'Afectan a otras áreas o procesos. Una deficiencia significativa puede resultar en la pérdida de la licencia para operar o derivar un riesgo inmediato para la salud.' }
+  ];
+  const sevGrid = sevs.map(s => `
+    <div class="crit-option${nc.severidad===s.val?' selected-'+s.val.toLowerCase():''}" onclick="setSeveridad(this,'${s.val}',${nc.id})">
+      <div class="crit-option-label">${s.val}</div>
+      <div class="crit-option-desc">${s.desc}</div>
+    </div>`).join('');
+
+  const probs = [
+    { val: 'Baja', desc: 'Improbable que ocurra, existen controles. Evento aislado. Se puede detectar y eliminar rápidamente.' },
+    { val: 'Moderada', desc: 'El evento puede no ser detectado por los controles existentes si no se toman acciones.' },
+    { val: 'Alta', desc: 'La situación puede ocurrir nuevamente. El evento ocurrió muchas veces o se detectó por accidente.' }
+  ];
+  const probGrid = probs.map(p => `
+    <div class="crit-option${nc.probabilidad===p.val?' selected-'+p.val.toLowerCase():''}" onclick="setProbabilidad(this,'${p.val}',${nc.id})">
+      <div class="crit-option-label">${p.val}</div>
+      <div class="crit-option-desc">${p.desc}</div>
+    </div>`).join('');
+
+  const decOpts = ['Crítica','Mayor','Menor'];
+  const decButtons = decOpts.map(d => `
+    <button class="btn ${nc.decisionCriticidad===d?'btn-primary':'btn-secondary'} btn-sm" data-dec="${d}" onclick="setDecision('${d}',${nc.id})">${d}</button>
+  `).join('');
+
+  const accionOpts = ['Correctiva','Preventiva','Corrección'];
+  const accionChecks = accionOpts.map(a => {
+    const checked = (nc.iniciaAccion||[]).includes(a);
+    return `<label class="check-item${checked?' checked':''}"><input type="checkbox" data-accion="${a}" ${checked?'checked':''} onchange="toggleAccion(this,${nc.id})"> Acción ${a}</label>`;
+  }).join('');
+
+  return `
+  <div class="section-card">
+    <div class="section-header" onclick="toggleSection(this)">
+      <div class="section-title"><span class="section-num">03</span> Criticidad y Decisión</div>
+      <span>▾</span>
+    </div>
+    <div class="section-body">
+      <div class="form-group" style="margin-bottom:16px">
+        <label>Severidad</label>
+        <div class="criticidad-grid" id="sevGrid_${nc.id}">${sevGrid}</div>
+      </div>
+      <div class="form-group" style="margin-bottom:16px">
+        <label>Probabilidad de ocurrencia</label>
+        <div class="criticidad-grid" id="probGrid_${nc.id}">${probGrid}</div>
+      </div>
+      <div class="form-group" style="margin-bottom:16px">
+        <label>Decisión de criticidad</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">${decButtons}</div>
+      </div>
+      <div class="divider"></div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>¿Impacta sobre otros productos / procesos?</label>
+          <select id="f_impactoOtros">
+            <option value="">—</option>
+            <option value="Si" ${nc.impactoOtros==='Si'?'selected':''}>Sí</option>
+            <option value="No" ${nc.impactoOtros==='No'?'selected':''}>No</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Se inicia acción</label>
+          <div class="deteccion-grid" style="grid-template-columns:1fr 1fr 1fr">${accionChecks}</div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderSeccion4(nc) {
+  const acciones = nc.acciones || [];
+  const tipos = ['Correctiva','Preventiva','Corrección'];
+
+  const rows = acciones.map((a,i) => `
+    <tr id="accion_row_${nc.id}_${i}">
+      <td>
+        <select onchange="updateAccion(${nc.id},${i},'tipo',this.value)" style="width:100%;padding:6px;border:1px solid var(--border);font-family:inherit;font-size:11px;">
+          ${tipos.map(t => `<option value="${t}" ${a.tipo===t?'selected':''}>${t}</option>`).join('')}
+        </select>
+      </td>
+      <td><textarea onchange="updateAccion(${nc.id},${i},'descripcion',this.value)" rows="2" style="width:100%;padding:6px;border:1px solid var(--border);font-family:inherit;font-size:11px;">${a.descripcion}</textarea></td>
+      <td><input type="date" value="${a.plazo}" onchange="updateAccion(${nc.id},${i},'plazo',this.value)"></td>
+      <td><input type="text" value="${a.responsable}" placeholder="mail@empresa.com" onchange="updateAccion(${nc.id},${i},'responsable',this.value)"></td>
+      <td>
+        <select onchange="updateAccion(${nc.id},${i},'cumplida',this.value)">
+          <option value="">—</option>
+          <option value="Si" ${a.cumplida==='Si'?'selected':''}>Sí</option>
+          <option value="No" ${a.cumplida==='No'?'selected':''}>No</option>
+          <option value="En curso" ${a.cumplida==='En curso'?'selected':''}>En curso</option>
+        </select>
+      </td>
+      <td>
+        <button onclick="eliminarAccion(${nc.id},${i})" style="background:none;border:none;cursor:pointer;color:var(--accent);font-size:18px;line-height:1;padding:4px;" title="Eliminar">×</button>
+      </td>
+    </tr>
+  `).join('');
+
+  return `
+  <div class="section-card">
+    <div class="section-header" onclick="toggleSection(this)">
+      <div class="section-title"><span class="section-num">04</span> Acciones (CAPA)</div>
+      <span>▾</span>
+    </div>
+    <div class="section-body">
+      <table class="acciones-table" id="accionesTable_${nc.id}">
+        <thead>
+          <tr>
+            <th style="width:110px">Tipo</th>
+            <th>Descripción</th>
+            <th style="width:110px">Plazo</th>
+            <th style="width:160px">Responsable (mail)</th>
+            <th style="width:90px">Cumplida</th>
+            <th style="width:36px"></th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <button class="btn btn-secondary btn-sm" style="margin-top:12px" onclick="agregarAccion(${nc.id})">+ Agregar acción</button>
+    </div>
+  </div>`;
+}
+function renderSeccion5(nc) {
+  const seguimientos = (nc.seguimientos || []).map((s,i) => `
+    <div class="seguimiento-item">
+      <div class="meta">
+        <span>📅 ${s.fecha}</span>
+        <span>👤 ${s.responsable}</span>
+        <button onclick="eliminarSeguimiento(${nc.id},${i})" style="background:none;border:none;cursor:pointer;color:var(--accent);font-size:11px;margin-left:auto;">Eliminar</button>
+      </div>
+      <div style="font-size:12px;line-height:1.5">${s.descripcion}</div>
+    </div>
+  `).join('') || '<p style="font-size:12px;color:var(--text-muted);">Sin seguimientos registrados aún.</p>';
+
+  return `
+  <div class="section-card">
+    <div class="section-header" onclick="toggleSection(this)">
+      <div class="section-title"><span class="section-num">05</span> Seguimientos</div>
+      <span>▾</span>
+    </div>
+    <div class="section-body">
+      <div id="seguimientosList">${seguimientos}</div>
+      <div class="divider"></div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Fecha de seguimiento</label>
+          <input type="date" id="f_segFecha" value="${new Date().toISOString().split('T')[0]}">
+        </div>
+        <div class="form-group">
+          <label>Responsable</label>
+          <input type="text" id="f_segResponsable" placeholder="Nombre">
+        </div>
+        <div class="form-group form-full">
+          <label>Observación / Avance</label>
+          <textarea id="f_segDescripcion" rows="2" placeholder="Describir el avance o novedad"></textarea>
+        </div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="agregarSeguimiento(${nc.id})">+ Agregar seguimiento</button>
+
+      <div class="divider"></div>
+      <div style="font-weight:600;font-size:13px;margin-bottom:12px;font-family:'IBM Plex Mono',monospace;letter-spacing:0.04em;">VERIFICACIÓN DE EFECTIVIDAD</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Fecha de evaluación</label>
+          <input type="date" id="f_fechaEvaluacion" value="${nc.fechaEvaluacion}">
+        </div>
+        <div class="form-group">
+          <label>Evaluador</label>
+          <input type="text" id="f_evaluador" value="${nc.evaluador}" placeholder="Nombre">
+        </div>
+        <div class="form-group">
+          <label>¿Las acciones fueron efectivas?</label>
+          <select id="f_efectividadOk">
+            <option value="">—</option>
+            <option value="Si" ${nc.efectividadOk==='Si'?'selected':''}>Sí</option>
+            <option value="No" ${nc.efectividadOk==='No'?'selected':''}>No</option>
+          </select>
+        </div>
+        <div class="form-group form-full">
+          <label>Comentarios de efectividad</label>
+          <textarea id="f_comentariosEfectividad" rows="2" placeholder="¿Las acciones eliminaron la causa raíz? ¿Hubo impacto negativo en el proceso?">${nc.comentariosEfectividad}</textarea>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div style="font-weight:600;font-size:13px;margin-bottom:12px;font-family:'IBM Plex Mono',monospace;letter-spacing:0.04em;">CIERRE</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Fecha de cierre</label>
+          <input type="date" id="f_fechaCierre" value="${nc.fechaCierre}">
+        </div>
+        <div class="form-group">
+          <label>Cerrado por</label>
+          <input type="text" id="f_cerradoPor" value="${nc.cerradoPor}" placeholder="Nombre">
+        </div>
+        <div class="form-group form-full">
+          <label>Detalle de cierre</label>
+          <textarea id="f_detalleCierre" rows="2" placeholder="Resumen del cierre de la NC">${nc.detalleCierre}</textarea>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+
+function renderSeccion6(nc) {
+  const fotos = (nc.evidencias || []).map((ev,i) => `
+    <div style="display:inline-block;margin:6px;position:relative;border:1px solid var(--border);background:var(--surface2);">
+      <a href="${ev.viewUrl}" target="_blank" title="Ver original">
+        <img src="${ev.thumbUrl}" style="width:140px;height:105px;object-fit:cover;display:block;" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22140%22 height=%22105%22><rect fill=%22%23eee%22 width=%22140%22 height=%22105%22/><text x=%2270%22 y=%2256%22 text-anchor=%22middle%22 font-size=%2212%22 fill=%22%23999%22>Foto</text></svg>'">
+      </a>
+      <div style="padding:4px 6px;font-size:10px;color:var(--text-muted);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${ev.nombre || 'Evidencia'}</div>
+      <button onclick="eliminarEvidencia(${nc.id},${i})" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.6);color:white;border:none;cursor:pointer;font-size:14px;width:20px;height:20px;line-height:20px;text-align:center;border-radius:2px;" title="Eliminar">&times;</button>
+    </div>
+  `).join('') || '<p style="font-size:12px;color:var(--text-muted);">Sin evidencias cargadas.</p>';
+
+  return `
+  <div class="section-card">
+    <div class="section-header" onclick="toggleSection(this)">
+      <div class="section-title"><span class="section-num">06</span> Evidencias Fotogr\u00e1ficas</div>
+      <span>\u25be</span>
+    </div>
+    <div class="section-body">
+      <div id="evidenciasGrid" style="margin-bottom:12px;">${fotos}</div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <label class="btn btn-secondary btn-sm" style="cursor:pointer;">
+          \ud83d\udcf7 Agregar foto
+          <input type="file" accept="image/*" multiple style="display:none;" onchange="subirEvidencias(${nc.id}, this.files)">
+        </label>
+        <span id="uploadStatus" style="font-size:11px;color:var(--text-muted);"></span>
+      </div>
+      <p style="font-size:10px;color:var(--text-muted);margin-top:8px;">Las fotos se comprimen autom\u00e1ticamente (~100KB c/u) y se guardan en Google Drive.</p>
+    </div>
+  </div>`;
+}
+
+// ==================== ACTIONS ====================
+function toggleSection(header) {
+  const body = header.nextElementSibling;
+  const arrow = header.querySelector('span:last-child');
+  body.classList.toggle('hidden');
+  arrow.textContent = body.classList.contains('hidden') ? '\u25b8' : '\u25be';
+}
+function toggleDet(cb) { cb.closest('.check-item').classList.toggle('checked', cb.checked); }
+function toggleAccion(cb) { cb.closest('.check-item').classList.toggle('checked', cb.checked); }
+
+function setSeveridad(el, val, ncId) {
+  const nc = db.ncs.find(n => n.id === ncId); if (!nc) return;
+  nc.severidad = val;
+  document.querySelectorAll(`#sevGrid_${ncId} .crit-option`).forEach(c => c.className = 'crit-option');
+  el.classList.add('selected-' + val.toLowerCase());
+  calcularDecision(ncId);
+}
+function setProbabilidad(el, val, ncId) {
+  const nc = db.ncs.find(n => n.id === ncId); if (!nc) return;
+  nc.probabilidad = val;
+  document.querySelectorAll(`#probGrid_${ncId} .crit-option`).forEach(c => c.className = 'crit-option');
+  el.classList.add('selected-' + val.toLowerCase());
+  calcularDecision(ncId);
+}
+function calcularDecision(ncId) {
+  const nc = db.ncs.find(n => n.id === ncId);
+  if (!nc || !nc.severidad || !nc.probabilidad) return;
+  const matrix = {
+    'Alta-Alta':'Critica','Alta-Moderada':'Mayor','Alta-Baja':'Mayor',
+    'Moderada-Alta':'Mayor','Moderada-Moderada':'Mayor','Moderada-Baja':'Menor',
+    'Baja-Alta':'Menor','Baja-Moderada':'Menor','Baja-Baja':'Menor'
+  };
+  const decision = matrix[nc.severidad+'-'+nc.probabilidad] || '';
+  if (decision) setDecision(decision, ncId);
+}
+function setDecision(val, ncId) {
+  const nc = db.ncs.find(n => n.id === ncId); if (!nc) return;
+  nc.decisionCriticidad = val;
+  document.querySelectorAll('[data-dec]').forEach(b => {
+    b.className = b.dataset.dec === val ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm';
+  });
+  renderLista();
+}
+function updateAccion(ncId, idx, field, value) {
+  const nc = db.ncs.find(n => n.id === ncId); if (!nc) return;
+  nc.acciones[idx][field] = value;
+}
+
+async function agregarSeguimiento(ncId) {
+  const nc = db.ncs.find(n => n.id === ncId); if (!nc) return;
+  const fecha = document.getElementById('f_segFecha').value;
+  const resp  = document.getElementById('f_segResponsable').value.trim();
+  const desc  = document.getElementById('f_segDescripcion').value.trim();
+  if (!fecha || !resp || !desc) { showToast('Completá fecha, responsable y observación'); return; }
+  if (!nc.seguimientos) nc.seguimientos = [];
+  nc.seguimientos.push({ fecha, responsable: resp, descripcion: desc });
+  showToast('Guardando...');
+  const ok = await guardarNC_remoto(nc);
+  if (ok) { document.getElementById('f_segDescripcion').value = ''; renderDetalle(nc); showToast('Seguimiento agregado'); }
+  else { nc.seguimientos.pop(); showToast('Error al guardar'); }
+}
+
+async function eliminarSeguimiento(ncId, idx) {
+  const nc = db.ncs.find(n => n.id === ncId); if (!nc) return;
+  nc.seguimientos.splice(idx, 1);
+  await guardarNC_remoto(nc);
+  renderDetalle(nc);
+}
+
+async function guardarNC(ncId) {
+  const nc = db.ncs.find(n => n.id === ncId); if (!nc) return;
+  nc.fechaIncidente = document.getElementById('f_fechaIncidente').value;
+  nc.fechaApertura  = document.getElementById('f_fechaApertura').value;
+  nc.abiertoPor     = document.getElementById('f_abiertoPor').value;
+  nc.sector         = document.getElementById('f_sector').value;
+  nc.detalle        = document.getElementById('f_detalle').value;
+  nc.producto       = document.getElementById('f_producto').value;
+  nc.lote           = document.getElementById('f_lote').value;
+  nc.deteccionOtros = document.getElementById('f_deteccionOtros').value;
+  nc.deteccion      = Array.from(document.querySelectorAll('[data-det]:checked')).map(c => c.value);
+  nc.iniciaAccion   = Array.from(document.querySelectorAll('[data-accion]:checked')).map(c => c.value);
+  nc.causaRaiz      = document.getElementById('f_causaRaiz').value;
+  nc.fechaAnalisis  = document.getElementById('f_fechaAnalisis').value;
+  nc.analizadoPor   = document.getElementById('f_analizadoPor').value;
+  nc.analisis = {};
+  document.querySelectorAll('[name^="ish_"]:checked').forEach(r => { nc.analisis[r.name.replace('ish_','')] = r.value; });
+  nc.impactoOtros           = document.getElementById('f_impactoOtros').value;
+  nc.fechaEvaluacion        = document.getElementById('f_fechaEvaluacion').value;
+  nc.evaluador              = document.getElementById('f_evaluador').value;
+  nc.efectividadOk          = document.getElementById('f_efectividadOk').value;
+  nc.comentariosEfectividad = document.getElementById('f_comentariosEfectividad').value;
+  nc.fechaCierre            = document.getElementById('f_fechaCierre').value;
+  nc.cerradoPor             = document.getElementById('f_cerradoPor').value;
+  nc.detalleCierre          = document.getElementById('f_detalleCierre').value;
+  // Read acciones from DOM table
+  const accionesTable = document.querySelector('#accionesTable_' + ncId + ' tbody');
+  if (accionesTable) {
+    const rows = accionesTable.querySelectorAll('tr');
+    rows.forEach((row, i) => {
+      if (!nc.acciones[i]) return;
+      const selects = row.querySelectorAll('select');
+      const inputs = row.querySelectorAll('input');
+      const textareas = row.querySelectorAll('textarea');
+      if (selects[0]) nc.acciones[i].tipo = selects[0].value;
+      if (textareas[0]) nc.acciones[i].descripcion = textareas[0].value;
+      if (inputs[0]) nc.acciones[i].plazo = inputs[0].value;
+      if (inputs[1]) nc.acciones[i].responsable = inputs[1].value;
+      if (selects[1]) nc.acciones[i].cumplida = selects[1].value;
+    });
+  }
+  
+  console.log('Acciones:', JSON.stringify(nc.acciones));
+  
+  // Check for new actions with responsable to notify
+  const accionesParaNotificar = (nc.acciones || []).filter(a => 
+    a.responsable && a.responsable.includes('@') && a.descripcion && a.plazo && !a._notificado
+  );
+  console.log('Para notificar:', accionesParaNotificar.length);
+  
+  showToast('Guardando...');
+  const ok = await guardarNC_remoto(nc);
+  if (ok) {
+    // Send notification for new actions
+    if (accionesParaNotificar.length > 0) {
+      try {
+        // Send only un-notified actions
+        const ncForNotify = Object.assign({}, nc, { 
+          acciones: accionesParaNotificar 
+        });
+        await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'action=notifyNew&data=' + encodeURIComponent(JSON.stringify(ncForNotify))
+        });
+        // Mark as notified
+        accionesParaNotificar.forEach(a => a._notificado = true);
+        await guardarNC_remoto(nc);
+        showToast(`${nc.numero} guardada \u2714 · ${accionesParaNotificar.length} mail(s) enviado(s)`);
+      } catch(e) {
+        showToast(`${nc.numero} guardada \u2714 (mail no enviado)`);
+      }
+    } else {
+      showToast(`${nc.numero} guardada \u2714`);
+    }
+    renderLista();
+  }
+  else showToast('Error al guardar. Intent\u00e1 de nuevo.');
+}
+
+async function avanzarEstado(ncId) {
+  const nc = db.ncs.find(n => n.id === ncId); if (!nc) return;
+  const idx = ESTADOS.indexOf(nc.estado);
+  if (idx < ESTADOS.length - 1) {
+    nc.estado = ESTADOS[idx+1];
+    showToast('Guardando...');
+    const ok = await guardarNC_remoto(nc);
+    if (ok) { renderLista(); renderDetalle(nc); showToast(`Estado: ${nc.estado} \u2714`); }
+  }
+}
+
+async function eliminarNC(ncId) {
+  if (!confirm('\u00bfEliminar esta No Conformidad? Esta acci\u00f3n no se puede deshacer.')) return;
+  showToast('Eliminando...');
+  const ok = await eliminarNC_remoto(ncId);
+  if (ok) {
+    db.ncs = db.ncs.filter(n => n.id !== ncId);
+    ncActivaId = null;
+    renderLista();
+    document.getElementById('ncDetail').classList.add('hidden');
+    document.getElementById('placeholder').classList.remove('hidden');
+    showToast('NC eliminada');
+  }
+}
+
+async function crearNC() {
+  const detalle    = document.getElementById('nuevaDetalle').value.trim();
+  const sector     = document.getElementById('nuevaSector').value.trim();
+  const abiertoPor = document.getElementById('nuevaAbiertoPor').value.trim();
+  const fechaInc   = document.getElementById('nuevaFechaIncidente').value;
+  const fechaAp    = document.getElementById('nuevaFechaApertura').value;
+  if (!detalle || !sector || !abiertoPor || !fechaInc || !fechaAp) { showToast('Complet\u00e1 los campos obligatorios (*)'); return; }
+  const deteccion = Array.from(document.querySelectorAll('#nuevaDeteccionGrid input:checked')).map(c => c.value);
+  db.counter++;
+  const nc = {
+    id: Date.now(),
+    numero: `NC ${String(db.counter).padStart(3,'0')}/${new Date().getFullYear()}`,
+    estado: 'Abierta', criticidad: null,
+    fechaIncidente: fechaInc, fechaApertura: fechaAp, abiertoPor, sector, detalle,
+    deteccion, deteccionOtros: document.getElementById('nuevaDeteccionOtros').value.trim(),
+    producto: document.getElementById('nuevaProducto').value.trim(),
+    lote: document.getElementById('nuevaLote').value.trim(),
+    analisis: {}, causaRaiz: '', fechaAnalisis: '', analizadoPor: '',
+    severidad: '', probabilidad: '', decisionCriticidad: '', impactoOtros: '', iniciaAccion: [],
+    acciones: [],
+    seguimientos: [],
+    evidencias: [],
+    fechaEvaluacion: '', efectividadOk: '', evaluador: '', comentariosEfectividad: '',
+    fechaCierre: '', cerradoPor: '', detalleCierre: '',
+  };
+  cerrarModal();
+  ['nuevaDetalle','nuevaSector','nuevaAbiertoPor','nuevaProducto','nuevaLote','nuevaDeteccionOtros'].forEach(id => document.getElementById(id).value='');
+  document.querySelectorAll('#nuevaDeteccionGrid input').forEach(c => c.checked=false);
+  showToast('Guardando...');
+  const ok = await guardarNC_remoto(nc, true);
+  if (ok) { db.ncs.unshift(nc); renderLista(); abrirNC(nc.id); showToast(`${nc.numero} creada \u2714`); }
+  else { db.counter--; showToast('Error al crear la NC.'); }
+}
+
+function agregarAccion(ncId) {
+  const nc = db.ncs.find(n => n.id === ncId); if (!nc) return;
+  if (!nc.acciones) nc.acciones = [];
+  nc.acciones.push({ tipo: 'Correctiva', descripcion: '', plazo: '', responsable: '', cumplida: '' });
+  // Re-render only the tbody
+  const tbody = document.querySelector(`#accionesTable_${ncId} tbody`);
+  if (tbody) {
+    const i = nc.acciones.length - 1;
+    const a = nc.acciones[i];
+    const tipos = ['Correctiva','Preventiva','Corrección'];
+    const tr = document.createElement('tr');
+    tr.id = `accion_row_${ncId}_${i}`;
+    tr.innerHTML = `
+      <td><select onchange="updateAccion(${ncId},${i},'tipo',this.value)" style="width:100%;padding:6px;border:1px solid var(--border);font-family:inherit;font-size:11px;">${tipos.map(t=>`<option value="${t}">${t}</option>`).join('')}</select></td>
+      <td><textarea onchange="updateAccion(${ncId},${i},'descripcion',this.value)" rows="2" style="width:100%;padding:6px;border:1px solid var(--border);font-family:inherit;font-size:11px;"></textarea></td>
+      <td><input type="date" onchange="updateAccion(${ncId},${i},'plazo',this.value)"></td>
+      <td><input type="text" placeholder="mail@empresa.com" onchange="updateAccion(${ncId},${i},'responsable',this.value)"></td>
+      <td><select onchange="updateAccion(${ncId},${i},'cumplida',this.value)"><option value="">—</option><option value="Si">Sí</option><option value="No">No</option><option value="En curso">En curso</option></select></td>
+      <td><button onclick="eliminarAccion(${ncId},${i})" style="background:none;border:none;cursor:pointer;color:var(--accent);font-size:18px;line-height:1;padding:4px;">×</button></td>
+    `;
+    tbody.appendChild(tr);
+  }
+}
+
+function eliminarAccion(ncId, idx) {
+  const nc = db.ncs.find(n => n.id === ncId); if (!nc) return;
+  if (!confirm('¿Eliminar esta acción?')) return;
+  nc.acciones.splice(idx, 1);
+  // Re-render the whole section
+  const det = document.getElementById('ncDetail');
+  const sec4 = det.querySelectorAll('.section-card')[3];
+  if (sec4) {
+    const newSec = document.createElement('div');
+    newSec.innerHTML = renderSeccion4(nc);
+    sec4.replaceWith(newSec.firstElementChild);
+  }
+}
+
+// ==================== DASHBOARD ====================
+function mostrarDashboard() {
+  document.getElementById('placeholder').classList.add('hidden');
+  document.getElementById('ncDetail').classList.add('hidden');
+  
+  let dashEl = document.getElementById('dashboardView');
+  if (!dashEl) {
+    dashEl = document.createElement('div');
+    dashEl.id = 'dashboardView';
+    dashEl.style.maxWidth = '900px';
+    document.getElementById('mainContent').appendChild(dashEl);
+  }
+  dashEl.classList.remove('hidden');
+  ncActivaId = null;
+  renderLista();
+  renderDashboard();
+}
+
+function renderDashboard() {
+  const el = document.getElementById('dashboardView');
+  const ncs = db.ncs;
+  const year = new Date().getFullYear();
+  
+  // Stats
+  const total = ncs.length;
+  const abiertas = ncs.filter(n => n.estado !== 'Cerrada').length;
+  const cerradas = ncs.filter(n => n.estado === 'Cerrada').length;
+  const criticas = ncs.filter(n => n.decisionCriticidad === 'Cr\u00edtica' && n.estado !== 'Cerrada').length;
+  const vencidas = ncs.filter(n => {
+    if (n.estado === 'Cerrada') return false;
+    return (n.acciones || []).some(a => a.plazo && !a.cumplida && new Date(a.plazo) < new Date());
+  }).length;
+
+  el.innerHTML = `
+    <div style="margin-bottom:24px;">
+      <h2 style="font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:600;margin-bottom:4px;">📊 Dashboard CAPA</h2>
+      <p style="font-size:13px;color:var(--text-muted);">Resumen de No Conformidades · ${year}</p>
+    </div>
+    
+    <div class="stats-row">
+      <div class="stat-chip"><span class="num" style="color:var(--text)">${total}</span><span class="lbl">Total</span></div>
+      <div class="stat-chip"><span class="num" style="color:var(--state-abierta)">${abiertas}</span><span class="lbl">Abiertas</span></div>
+      <div class="stat-chip"><span class="num" style="color:var(--state-cerrada)">${cerradas}</span><span class="lbl">Cerradas</span></div>
+      <div class="stat-chip"><span class="num" style="color:#c8410a">${criticas}</span><span class="lbl">Cr\u00edticas</span></div>
+      <div class="stat-chip"><span class="num" style="color:#dc3545">${vencidas}</span><span class="lbl">Vencidas</span></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+      <div class="section-card">
+        <div class="section-header" style="cursor:default">
+          <div class="section-title">NC por Mes</div>
+        </div>
+        <div class="section-body" style="padding:16px;">
+          <canvas id="chartNCporMes" height="220"></canvas>
+        </div>
+      </div>
+      <div class="section-card">
+        <div class="section-header" style="cursor:default">
+          <div class="section-title">NC por Estado</div>
+        </div>
+        <div class="section-body" style="padding:16px;">
+          <canvas id="chartNCporEstado" height="220"></canvas>
+        </div>
+      </div>
+      <div class="section-card">
+        <div class="section-header" style="cursor:default">
+          <div class="section-title">NC por \u00c1rea / Sector</div>
+        </div>
+        <div class="section-body" style="padding:16px;">
+          <canvas id="chartNCporSector" height="220"></canvas>
+        </div>
+      </div>
+      <div class="section-card">
+        <div class="section-header" style="cursor:default">
+          <div class="section-title">NC por Criticidad</div>
+        </div>
+        <div class="section-body" style="padding:16px;">
+          <canvas id="chartNCporCriticidad" height="220"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-card" style="margin-top:20px;">
+      <div class="section-header" style="cursor:default">
+        <div class="section-title">\u26a0\ufe0f Acciones Pendientes por Responsable</div>
+      </div>
+      <div class="section-body" style="padding:0;">
+        <table class="acciones-table" id="tablaPendientes">
+          <thead>
+            <tr>
+              <th>Responsable</th>
+              <th>NC</th>
+              <th>Tipo</th>
+              <th>Descripci\u00f3n</th>
+              <th>Plazo</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyPendientes"></tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  // NC por Mes (columnas)
+  const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const ncPorMes = new Array(12).fill(0);
+  const ncCerradasPorMes = new Array(12).fill(0);
+  ncs.forEach(nc => {
+    const fecha = nc.fechaApertura || nc.fechaIncidente;
+    if (fecha) {
+      const m = new Date(fecha).getMonth();
+      ncPorMes[m]++;
+      if (nc.estado === 'Cerrada') ncCerradasPorMes[m]++;
+    }
+  });
+  
+  new Chart(document.getElementById('chartNCporMes'), {
+    type: 'bar',
+    data: {
+      labels: meses,
+      datasets: [
+        { label: 'Abiertas', data: ncPorMes.map((v,i) => v - ncCerradasPorMes[i]), backgroundColor: '#c8410a', borderRadius: 3 },
+        { label: 'Cerradas', data: ncCerradasPorMes, backgroundColor: '#1a5c3a', borderRadius: 3 }
+      ]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } }, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } } } }
+  });
+
+  // NC por Estado
+  const estadoCounts = {};
+  ncs.forEach(nc => { estadoCounts[nc.estado] = (estadoCounts[nc.estado] || 0) + 1; });
+  const estadoColors = { 'Abierta':'#c8410a', 'En an\u00e1lisis':'#f0a500', 'Con acciones':'#1a4a7a', 'En seguimiento':'#6b3fa0', 'Cerrada':'#1a5c3a' };
+  
+  new Chart(document.getElementById('chartNCporEstado'), {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(estadoCounts),
+      datasets: [{ data: Object.values(estadoCounts), backgroundColor: Object.keys(estadoCounts).map(e => estadoColors[e] || '#999') }]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } } }
+  });
+
+  // NC por Sector
+  const sectorCounts = {};
+  ncs.forEach(nc => { if (nc.sector) sectorCounts[nc.sector] = (sectorCounts[nc.sector] || 0) + 1; });
+  const sectorLabels = Object.keys(sectorCounts);
+  const sectorColors = ['#c8410a','#1a4a7a','#f0a500','#1a5c3a','#6b3fa0','#d4770b','#2d8659','#8b1a1a'];
+  
+  new Chart(document.getElementById('chartNCporSector'), {
+    type: 'bar',
+    data: {
+      labels: sectorLabels,
+      datasets: [{ label: 'NCs', data: Object.values(sectorCounts), backgroundColor: sectorLabels.map((_,i) => sectorColors[i % sectorColors.length]), borderRadius: 3 }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+  });
+
+  // NC por Criticidad
+  const critCounts = { 'Cr\u00edtica': 0, 'Mayor': 0, 'Menor': 0, 'Sin definir': 0 };
+  ncs.forEach(nc => {
+    if (nc.decisionCriticidad && critCounts.hasOwnProperty(nc.decisionCriticidad)) critCounts[nc.decisionCriticidad]++;
+    else critCounts['Sin definir']++;
+  });
+  
+  new Chart(document.getElementById('chartNCporCriticidad'), {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(critCounts),
+      datasets: [{ data: Object.values(critCounts), backgroundColor: ['#c8410a','#f0a500','#1a4a7a','#ccc'] }]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } } }
+  });
+
+  // Tabla de acciones pendientes por responsable
+  const tbody = document.getElementById('tbodyPendientes');
+  const pendientes = [];
+  ncs.forEach(nc => {
+    if (nc.estado === 'Cerrada') return;
+    (nc.acciones || []).forEach(a => {
+      if (a.cumplida === 'Si' || !a.descripcion) return;
+      const hoy = new Date();
+      const plazoDate = a.plazo ? new Date(a.plazo) : null;
+      let estadoTag = '';
+      if (plazoDate && plazoDate < hoy) {
+        estadoTag = '<span style="color:#dc3545;font-weight:600;">VENCIDA</span>';
+      } else if (plazoDate) {
+        const dias = Math.round((plazoDate - hoy) / (1000*60*60*24));
+        if (dias <= 7) estadoTag = '<span style="color:#f0a500;font-weight:600;">' + dias + ' d\u00edas</span>';
+        else estadoTag = '<span style="color:var(--text-muted);">' + dias + ' d\u00edas</span>';
+      } else {
+        estadoTag = '<span style="color:var(--text-muted);">Sin plazo</span>';
+      }
+      pendientes.push({
+        responsable: a.responsable || 'Sin asignar',
+        nc: nc.numero,
+        tipo: a.tipo,
+        descripcion: a.descripcion,
+        plazo: a.plazo ? new Date(a.plazo).toLocaleDateString('es-AR') : '\u2014',
+        estadoTag,
+        plazoDate: plazoDate || new Date('2099-01-01')
+      });
+    });
+  });
+  
+  // Sort: vencidas first, then by plazo
+  pendientes.sort((a,b) => a.plazoDate - b.plazoDate);
+  
+  if (pendientes.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted);font-size:12px;">\ud83c\udf89 No hay acciones pendientes</td></tr>';
+  } else {
+    tbody.innerHTML = pendientes.map(p => {
+      const tipoCls = p.tipo === 'Correctiva' ? 'tipo-correctiva' : (p.tipo === 'Preventiva' ? 'tipo-preventiva' : 'tipo-correccion');
+      return '<tr>' +
+        '<td style="font-weight:500;font-size:12px;">' + p.responsable + '</td>' +
+        '<td style="font-family:\'IBM Plex Mono\',monospace;font-size:11px;color:var(--accent);">' + p.nc + '</td>' +
+        '<td><span class="tipo-badge ' + tipoCls + '">' + p.tipo + '</span></td>' +
+        '<td style="font-size:12px;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + p.descripcion + '</td>' +
+        '<td style="font-size:12px;">' + p.plazo + '</td>' +
+        '<td>' + p.estadoTag + '</td>' +
+      '</tr>';
+    }).join('');
+  }
+}
+
+// ==================== EXPORTAR PDF ====================
+function exportarResumenPDF() {
+  if (typeof window.jspdf === 'undefined') {
+    showToast('Cargando librería PDF... intentá de nuevo en unos segundos');
+    const s1 = document.createElement('script');
+    s1.src = 'https://unpkg.com/jspdf@2.5.2/dist/jspdf.umd.min.js';
+    s1.onload = function() {
+      const s2 = document.createElement('script');
+      s2.src = 'https://unpkg.com/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js';
+      document.head.appendChild(s2);
+    };
+    document.head.appendChild(s1);
+    return;
+  }
+  
+  // Quick summary PDF of all NCs
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('landscape', 'mm', 'a4');
+  const ncs = db.ncs;
+  const hoy = new Date().toLocaleDateString('es-AR');
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(16);
+  doc.text('Resumen de No Conformidades - CAPA', 14, 18);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(10);
+  doc.text('Fecha: ' + hoy + ' | Total: ' + ncs.length + ' NCs', 14, 25);
+  const headers = [['N°','Estado','Criticidad','Sector','Detalle','Abierto por','Fecha','Pendientes']];
+  const rows = ncs.map(nc => {
+    const pend = (nc.acciones||[]).filter(a=>a.cumplida!=='Si'&&a.descripcion).length;
+    return [nc.numero, nc.estado, nc.decisionCriticidad||'\u2014', nc.sector,
+      nc.detalle?(nc.detalle.length>60?nc.detalle.substring(0,60)+'...':nc.detalle):'\u2014',
+      nc.abiertoPor, nc.fechaApertura||'\u2014', pend>0?pend+' pend.':'Ninguna'];
+  });
+  doc.autoTable({ head:headers, body:rows, startY:32,
+    styles:{fontSize:8,cellPadding:3}, headStyles:{fillColor:[30,25,22],fontSize:8},
+    alternateRowStyles:{fillColor:[248,247,243]}
+  });
+  doc.save('Resumen_NC_CAPA_'+hoy.replace(/\//g,'-')+'.pdf');
+  showToast('Resumen PDF descargado');
+}
+
+function exportarNC_PDF(ncId) {
+  const nc = db.ncs.find(n => n.id === ncId);
+  if (!nc) return;
+
+  if (typeof window.jspdf === 'undefined') {
+    showToast('Cargando librería PDF... intentá de nuevo en unos segundos');
+    return;
+  }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('portrait', 'mm', 'a4');
+  const W = doc.internal.pageSize.width;
+  const margin = 14;
+  let y = 14;
+
+  function addTitle(text, size) {
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(size || 12);
+    doc.setTextColor(30,25,22);
+    doc.text(text, margin, y);
+    y += (size || 12) * 0.5 + 2;
+  }
+  function addLabel(label, value) {
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(9);
+    doc.setTextColor(100);
+    doc.text(label, margin, y);
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(10);
+    doc.setTextColor(30,25,22);
+    doc.text(String(value || '\u2014'), margin + 50, y);
+    y += 6;
+  }
+  function addSection(num, title) {
+    if (y > 255) { doc.addPage(); y = 14; }
+    y += 4;
+    doc.setFillColor(30,25,22);
+    doc.rect(margin, y - 4, W - margin*2, 8, 'F');
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(10);
+    doc.setTextColor(255);
+    doc.text(num + '  ' + title, margin + 3, y + 1);
+    y += 10;
+    doc.setTextColor(30,25,22);
+  }
+  function addParagraph(text) {
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(9);
+    doc.setTextColor(30,25,22);
+    const lines = doc.splitTextToSize(String(text || '\u2014'), W - margin*2);
+    if (y + lines.length * 4.5 > 275) { doc.addPage(); y = 14; }
+    doc.text(lines, margin, y);
+    y += lines.length * 4.5 + 2;
+  }
+  function checkPage(needed) {
+    if (y + needed > 275) { doc.addPage(); y = 14; }
+  }
+
+  // HEADER
+  doc.setFillColor(200,65,10);
+  doc.rect(0, 0, W, 3, 'F');
+  y = 14;
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(18);
+  doc.setTextColor(200,65,10);
+  doc.text(nc.numero, margin, y);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(10);
+  doc.setTextColor(100);
+  doc.text('REG-SOP-AC-036-A', W - margin, y, { align: 'right' });
+  y += 6;
+  doc.setFontSize(9);
+  doc.text('Estado: ' + nc.estado + (nc.decisionCriticidad ? '  |  Criticidad: ' + nc.decisionCriticidad : ''), margin, y);
+  y += 4;
+  doc.setDrawColor(200);
+  doc.line(margin, y, W - margin, y);
+  y += 6;
+
+  // SECCION 1: APERTURA
+  addSection('01', 'APERTURA DE LA NO CONFORMIDAD');
+  addLabel('Fecha incidente:', nc.fechaIncidente);
+  addLabel('Fecha apertura:', nc.fechaApertura);
+  addLabel('Abierto por:', nc.abiertoPor);
+  addLabel('Sector:', nc.sector);
+  addLabel('Producto/Doc:', nc.producto);
+  addLabel('Lote:', nc.lote);
+  addLabel('Detección:', (nc.deteccion || []).join(', '));
+  y += 2;
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(9);
+  doc.text('Detalle del incidente:', margin, y);
+  y += 5;
+  addParagraph(nc.detalle);
+
+  // SECCION 2: CAUSA RAIZ
+  addSection('02', 'ANALISIS DE CAUSA RAIZ');
+  const cats6m = {
+    'METODO': ['¿Existe procedimiento?','¿El procedimiento detalla claramente la tarea?','¿El procedimiento contempla todas las etapas?','¿Los procedimientos vinculados se mantuvieron igual?','¿Existen formularios de ayuda?'],
+    'MANO DE OBRA': ['¿Personal capacitado?','¿Puede cumplir sin dificultad?','¿Cantidad de personas adecuada?','¿Procedió como habitualmente?','¿Se mantuvo el personal?'],
+    'MATERIALES': ['¿Materiales adecuados?','¿Aprobados por CC?','¿Cumplen especificación?','¿Proveedor habitual?','¿Material adecuado para la tarea?'],
+    'MEDIO AMBIENTE': ['¿Lugar indicado?','¿Área calificada?','¿Limpieza correcta?','¿Condiciones ambientales adecuadas?','¿Lugar adecuado?'],
+    'MAQUINAS': ['¿Equipos adecuados?','¿Calibrados?','¿Mantenimiento preventivo?','¿Personal entrenado?']
+  };
+  if (nc.analisis && Object.keys(nc.analisis).length > 0) {
+    const analisisRows = [];
+    for (const [cat, pregs] of Object.entries(cats6m)) {
+      pregs.forEach(p => {
+        const key = btoa(p).replace(/=/g,'');
+        const val = nc.analisis[key];
+        if (val) analisisRows.push([cat, p, val]);
+      });
+    }
+    if (analisisRows.length > 0) {
+      checkPage(analisisRows.length * 6 + 10);
+      doc.autoTable({
+        head: [['Categoría','Pregunta','Resp.']],
+        body: analisisRows,
+        startY: y,
+        margin: { left: margin, right: margin },
+        styles: { fontSize: 7, cellPadding: 2 },
+        headStyles: { fillColor: [80,75,70], fontSize: 7 },
+        columnStyles: { 0: { cellWidth: 28, fontStyle: 'bold' }, 2: { cellWidth: 15, halign: 'center' } }
+      });
+      y = doc.lastAutoTable.finalY + 4;
+    }
+  }
+  y += 2;
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(9);
+  checkPage(20);
+  doc.text('Causa raíz identificada:', margin, y);
+  y += 5;
+  addParagraph(nc.causaRaiz);
+  addLabel('Fecha análisis:', nc.fechaAnalisis);
+  addLabel('Analizado por:', nc.analizadoPor);
+
+  // SECCION 3: CRITICIDAD
+  addSection('03', 'CRITICIDAD Y DECISION');
+  addLabel('Severidad:', nc.severidad);
+  addLabel('Probabilidad:', nc.probabilidad);
+  addLabel('Decisión:', nc.decisionCriticidad);
+  addLabel('Impacto otros:', nc.impactoOtros);
+  addLabel('Inicia acción:', (nc.iniciaAccion || []).join(', '));
+
+  // SECCION 4: ACCIONES
+  addSection('04', 'ACCIONES (CAPA)');
+  const acciones = nc.acciones || [];
+  if (acciones.length > 0) {
+    const accRows = acciones.map(a => [
+      a.tipo || '',
+      a.descripcion || '',
+      a.plazo ? new Date(a.plazo).toLocaleDateString('es-AR') : '\u2014',
+      a.responsable || '',
+      a.cumplida || '\u2014'
+    ]);
+    checkPage(accRows.length * 8 + 10);
+    doc.autoTable({
+      head: [['Tipo','Descripción','Plazo','Responsable','Cumplida']],
+      body: accRows,
+      startY: y,
+      margin: { left: margin, right: margin },
+      styles: { fontSize: 8, cellPadding: 2.5 },
+      headStyles: { fillColor: [80,75,70], fontSize: 8 },
+      columnStyles: { 0: { cellWidth: 24 }, 2: { cellWidth: 22 }, 4: { cellWidth: 20, halign: 'center' } }
+    });
+    y = doc.lastAutoTable.finalY + 4;
+  } else {
+    addParagraph('Sin acciones registradas.');
+  }
+
+  // SECCION 5: SEGUIMIENTOS
+  addSection('05', 'SEGUIMIENTOS');
+  const segs = nc.seguimientos || [];
+  if (segs.length > 0) {
+    const segRows = segs.map(s => [s.fecha, s.responsable, s.descripcion]);
+    checkPage(segRows.length * 8 + 10);
+    doc.autoTable({
+      head: [['Fecha','Responsable','Observación']],
+      body: segRows,
+      startY: y,
+      margin: { left: margin, right: margin },
+      styles: { fontSize: 8, cellPadding: 2.5 },
+      headStyles: { fillColor: [80,75,70], fontSize: 8 },
+      columnStyles: { 0: { cellWidth: 24 }, 1: { cellWidth: 35 } }
+    });
+    y = doc.lastAutoTable.finalY + 4;
+  } else {
+    addParagraph('Sin seguimientos registrados.');
+  }
+
+  // SECCION 6: EFECTIVIDAD Y CIERRE
+  addSection('06', 'VERIFICACION DE EFECTIVIDAD Y CIERRE');
+  addLabel('Fecha evaluación:', nc.fechaEvaluacion);
+  addLabel('Evaluador:', nc.evaluador);
+  addLabel('Efectiva:', nc.efectividadOk);
+  y += 2;
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(9);
+  checkPage(15);
+  doc.text('Comentarios efectividad:', margin, y);
+  y += 5;
+  addParagraph(nc.comentariosEfectividad);
+  addLabel('Fecha cierre:', nc.fechaCierre);
+  addLabel('Cerrado por:', nc.cerradoPor);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(9);
+  checkPage(15);
+  doc.text('Detalle cierre:', margin, y);
+  y += 5;
+  addParagraph(nc.detalleCierre);
+
+  // FOOTER
+  const pageCount = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(7);
+    doc.setTextColor(150);
+    doc.text('REG-SOP-AC-036-A | ' + nc.numero + ' | P\u00e1gina ' + i + ' de ' + pageCount, W - margin, doc.internal.pageSize.height - 8, { align: 'right' });
+  }
+
+  const filename = nc.numero.replace(/[\\s\\/]/g, '_') + '.pdf';
+  doc.save(filename);
+  showToast('PDF descargado: ' + filename);
+}
+
+// Hide dashboard when opening NC
+function ocultarDashboard() {
+  const d = document.getElementById('dashboardView');
+  if (d) d.classList.add('hidden');
+}
+
+// ==================== EVIDENCIAS ====================
+async function comprimirImagen(file, maxWidth=600, quality=0.35) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const img = new Image();
+      img.onload = function() {
+        const canvas = document.createElement('canvas');
+        let w = img.width;
+        let h = img.height;
+        if (w > maxWidth) {
+          h = Math.round(h * maxWidth / w);
+          w = maxWidth;
+        }
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        const base64 = dataUrl.split(',')[1];
+        const sizeKB = Math.round(base64.length * 3 / 4 / 1024);
+        resolve({ base64, sizeKB, nombre: file.name });
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function subirEvidencias(ncId, files) {
+  const nc = db.ncs.find(n => n.id === ncId);
+  if (!nc) return;
+  if (!nc.evidencias) nc.evidencias = [];
+  
+  const status = document.getElementById('uploadStatus');
+  const total = files.length;
+  let subidas = 0;
+  
+  for (let i = 0; i < total; i++) {
+    status.textContent = 'Comprimiendo ' + (i+1) + '/' + total + '...';
+    
+    try {
+      const compressed = await comprimirImagen(files[i]);
+      status.textContent = 'Subiendo ' + (i+1) + '/' + total + ' (' + compressed.sizeKB + 'KB)...';
+      
+      // Use Google Apps Script POST via form
+      const ncName = nc.numero.replace(/[\s\/]/g, '_');
+      const formBody = 'action=uploadImg' +
+        '&imgData=' + encodeURIComponent(compressed.base64) +
+        '&filename=' + encodeURIComponent(compressed.nombre) +
+        '&ncNumero=' + encodeURIComponent(ncName);
+      
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: formBody
+      });
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch(e) { 
+        console.error('Response not JSON:', text.substring(0, 200));
+        throw new Error('Respuesta inválida del servidor');
+      }
+      
+      if (data.ok) {
+        nc.evidencias.push({
+          fileId: data.fileId,
+          thumbUrl: data.url,
+          viewUrl: data.viewUrl,
+          nombre: compressed.nombre,
+          fecha: new Date().toISOString().split('T')[0],
+          sizeKB: compressed.sizeKB
+        });
+        subidas++;
+      } else {
+        console.error('Upload error:', data.error);
+        showToast('Error al subir ' + compressed.nombre);
+      }
+    } catch(e) {
+      console.error('Error subiendo:', e);
+      showToast('Error: ' + e.message);
+    }
+  }
+  
+  if (subidas > 0) {
+    status.textContent = 'Guardando...';
+    const ok = await guardarNC_remoto(nc);
+    if (ok) {
+      renderDetalle(nc);
+      showToast(subidas + ' foto(s) subida(s) \u2714');
+    } else {
+      showToast('Error al guardar evidencias');
+    }
+  }
+  status.textContent = '';
+}
+
+async function eliminarEvidencia(ncId, idx) {
+  const nc = db.ncs.find(n => n.id === ncId);
+  if (!nc) return;
+  if (!confirm('\u00bfEliminar esta evidencia?')) return;
+  nc.evidencias.splice(idx, 1);
+  const ok = await guardarNC_remoto(nc);
+  if (ok) renderDetalle(nc);
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// Init
+cargarDatos();
+
+</script>
+</body>
+</html>

@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0b1120">
+<title>Control en Proceso GMP</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚗️</text></svg>">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0b1120;--bg2:#0f1729;--s1:#131d33;--s2:#182340;--s3:#1e2d4d;--border:#253354;--text:#e4eaf6;--text2:#8494b7;--text3:#5c6f94;--mint:#2dd4a8;--mint-g:rgba(45,212,168,.12);--mint-d:#1fad88;--red:#f4587a;--red-g:rgba(244,88,122,.12);--amber:#f5a623;--amber-g:rgba(245,166,35,.1);--blue:#5b9cf6;--r:14px;--rs:9px;--f:'Outfit',sans-serif;--m:'IBM Plex Mono',monospace}
+*{margin:0;padding:0;box-sizing:border-box}body{font-family:var(--f);background:var(--bg);color:var(--text);min-height:100dvh;-webkit-font-smoothing:antialiased}
+.hdr{position:sticky;top:0;z-index:100;background:rgba(11,17,32,.88);backdrop-filter:blur(24px);border-bottom:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;gap:8px}
+.hdr-ico{width:30px;height:30px;background:linear-gradient(140deg,var(--mint),var(--mint-d));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.hdr h1{font-size:13px;font-weight:800}.hdr span{font-size:9px;color:var(--text2)}
+.hdr-r{margin-left:auto;display:flex;gap:6px;align-items:center}
+.hdr-u{font-size:9px;color:var(--mint);font-weight:600;max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tabs{display:flex;background:var(--s1);border-bottom:1px solid var(--border);position:sticky;top:46px;z-index:99}
+.tab{flex:1;padding:10px;text-align:center;font-size:10px;font-weight:700;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent}
+.tab.on{color:var(--mint);border-bottom-color:var(--mint);background:var(--mint-g)}
+.wrap{max-width:540px;margin:0 auto;padding:12px;padding-bottom:100px}
+.page{display:none}.page.on{display:block;animation:fi .3s ease}
+.st{font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text3);font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.st::before{content:'';width:3px;height:12px;border-radius:2px;background:var(--mint)}.st.red::before{background:var(--red)}
+.fs{margin-bottom:12px}
+.fg{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:10px}
+.fd{padding:9px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.fd:last-child{border-bottom:none}
+.fl{font-size:10px;color:var(--text2);min-width:85px;font-weight:500}
+.fi{flex:1;background:none;border:none;color:var(--text);font-family:var(--m);font-size:12px;font-weight:500;outline:none}
+.fi::placeholder{color:var(--s3)}.fi.ok{color:var(--mint)}.fi.bad{color:var(--red)}
+select.fi{background:var(--s2);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-family:var(--f);font-size:11px;appearance:auto}
+.w5{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;padding:8px 10px}
+.w5 input{background:var(--s2);border:1px solid var(--border);border-radius:var(--rs);padding:9px 2px;color:var(--text);font-family:var(--m);font-size:12px;text-align:center;outline:none;width:100%}
+.w5 input:focus{border-color:var(--mint)}.w5 input.ok{color:var(--mint);border-color:var(--mint)}.w5 input.bad{color:var(--red);border-color:var(--red)}
+.w5l{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;padding:0 10px 4px;font-size:8px;color:var(--text3);text-align:center;font-weight:600}
+.ri{padding:5px 10px;font-size:9px;color:var(--text3);border-top:1px solid var(--border);text-align:center;font-family:var(--m)}
+.ri b{color:var(--mint)}
+/* Login */
+.lw{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:70vh;padding:20px}
+.lb{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:24px 20px;width:100%;max-width:360px;text-align:center}
+.lb h2{font-size:18px;font-weight:800;margin-bottom:4px}
+.lb p{font-size:11px;color:var(--text2);margin-bottom:16px}
+.lf{width:100%;background:var(--s2);border:1px solid var(--border);border-radius:var(--rs);padding:11px;color:var(--text);font-family:var(--f);font-size:13px;font-weight:600;outline:none;text-align:center;margin-bottom:8px}
+.lb1{width:100%;padding:12px;border-radius:50px;background:linear-gradient(140deg,var(--mint),var(--mint-d));color:var(--bg);font-family:var(--f);font-size:13px;font-weight:800;border:none;cursor:pointer}
+/* Checks */
+.cg{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:10px}
+.ci{background:var(--s1);border:1px solid var(--border);border-radius:var(--rs);padding:9px;display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
+.ci.on{border-color:var(--mint);background:var(--mint-g)}
+.ck{width:16px;height:16px;border-radius:4px;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:9px;flex-shrink:0}
+.ci.on .ck{border-color:var(--mint);background:var(--mint);color:var(--bg)}
+.ct{font-size:10px;font-weight:500;color:var(--text2)}.ci.on .ct{color:var(--text)}
+/* Photos */
+.pr{display:flex;gap:6px;margin-bottom:8px}
+.pb{flex:1;aspect-ratio:4/3;border-radius:var(--rs);border:2px dashed var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;position:relative;overflow:hidden;background:var(--s1)}
+.pb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:calc(var(--rs) - 2px)}
+.pb .rx{position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,.75);color:#fff;border:none;font-size:9px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2}
+/* Deviation */
+.dtg{display:flex;gap:6px;margin-bottom:8px}
+.dt{padding:7px 14px;border-radius:50px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid var(--border);background:var(--s1);color:var(--text2)}
+.dt.ay{background:var(--red-g);border-color:var(--red);color:var(--red)}.dt.an{background:var(--mint-g);border-color:var(--mint);color:var(--mint)}
+.df{display:none}.df.vis{display:block}
+/* Timeline */
+.ti{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:10px;margin-bottom:6px;cursor:pointer}
+.ti:active{transform:scale(.98)}
+.ti-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px}
+.ti-t{font-family:var(--m);font-size:11px;font-weight:700;color:var(--mint)}
+.ti-m{font-size:10px;font-weight:700;color:var(--blue)}
+.ti-d{font-size:9px;color:var(--text2);font-family:var(--m);line-height:1.5}
+.ti-tags{display:flex;flex-wrap:wrap;gap:3px;margin-top:3px}
+.ti-tag{padding:2px 6px;border-radius:50px;font-size:8px;font-weight:600;background:var(--mint-g);color:var(--mint)}
+.ti-tag.red{background:var(--red-g);color:var(--red)}
+/* Shift banner */
+.sb{background:var(--s2);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+.sb-info{font-size:11px}.sb-info b{color:var(--mint)}
+.ab{width:100%;padding:12px;border-radius:var(--r);border:2px dashed var(--mint);background:var(--mint-g);color:var(--mint);font-family:var(--f);font-size:13px;font-weight:700;cursor:pointer;text-align:center;margin-bottom:10px}
+/* Buttons */
+.bar{position:fixed;bottom:0;left:0;right:0;background:rgba(11,17,32,.92);backdrop-filter:blur(20px);border-top:1px solid var(--border);padding:8px 14px;padding-bottom:max(8px,env(safe-area-inset-bottom));display:flex;gap:8px;z-index:100;justify-content:center}
+.btn{padding:11px 22px;border-radius:50px;font-family:var(--f);font-size:12px;font-weight:700;cursor:pointer;border:none;display:flex;align-items:center;gap:5px}
+.btn:active{transform:scale(.96)}
+.b1{background:linear-gradient(140deg,var(--mint),var(--mint-d));color:var(--bg);flex:1;justify-content:center;max-width:260px}
+.b2{background:var(--s2);color:var(--text2);border:1px solid var(--border)}
+.obs{width:100%;min-height:50px;background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:10px;color:var(--text);font-family:var(--f);font-size:11px;line-height:1.5;resize:vertical;outline:none}
+/* Dashboard */
+.sg{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px}
+.sc{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:10px;text-align:center}
+.sn{font-size:20px;font-weight:800;font-family:var(--m)}
+.sn.grn{color:var(--mint)}.sn.rd{color:var(--red)}.sn.amb{color:var(--amber)}.sn.blu{color:var(--blue)}
+.sl{font-size:8px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-top:2px;font-weight:600}
+.fr{display:flex;gap:5px;margin-bottom:10px;flex-wrap:wrap}
+.fr select{background:var(--s2);border:1px solid var(--border);border-radius:var(--rs);padding:7px 8px;color:var(--text);font-family:var(--f);font-size:10px;outline:none;flex:1;min-width:100px}
+.cw{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:10px;margin-bottom:10px;overflow-x:auto}
+.cw canvas{width:100%;height:200px}
+.stb{width:100%;border-collapse:collapse;font-size:9px;margin-bottom:10px}
+.stb th{background:var(--s2);color:var(--text2);padding:7px 5px;text-align:left;font-weight:600;border-bottom:1px solid var(--border)}
+.stb td{padding:6px 5px;border-bottom:1px solid var(--border);font-family:var(--m);font-size:10px}
+.stb tr:hover{background:var(--s2)}
+.tok{color:var(--mint)}.tbd{color:var(--red)}.twn{color:var(--amber)}
+/* Modal */
+.mo{position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(10px);z-index:400;display:none;justify-content:center;align-items:flex-start;overflow-y:auto;padding:12px}
+.mo.open{display:flex}
+.md{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);max-width:500px;width:100%;margin:12px 0 40px;animation:fi .25s ease}
+.mh{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--border)}
+.mh h2{font-size:13px;font-weight:800}
+.mx{width:28px;height:28px;border-radius:7px;border:1px solid var(--border);background:var(--s1);color:var(--text);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.mb{padding:12px 14px}
+.ms{margin-bottom:12px}.mt{font-size:8px;text-transform:uppercase;letter-spacing:1.5px;color:var(--mint);font-weight:700;margin-bottom:6px}.mt.red{color:var(--red)}
+.mr{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(37,51,84,.4);font-size:10px}.mr:last-child{border-bottom:none}
+.mf{padding:8px 14px;border-top:1px solid var(--border);display:flex;gap:6px;justify-content:center}
+.mb2{padding:7px 14px;border-radius:50px;font-family:var(--f);font-size:10px;font-weight:700;cursor:pointer;border:1px solid var(--border);background:var(--s1);color:var(--text2)}
+.mb2.pri{background:var(--mint);color:var(--bg);border-color:var(--mint)}
+.toast{position:fixed;top:54px;left:50%;transform:translateX(-50%) translateY(-20px);background:var(--mint);color:var(--bg);padding:8px 18px;border-radius:50px;font-size:11px;font-weight:700;opacity:0;pointer-events:none;transition:all .3s;z-index:500;max-width:92vw;text-align:center}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}.toast.err{background:var(--red);color:#fff}
+@keyframes fi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
+</style>
+</head>
+<body>
+
+<script>
+const SPECS={
+  'Elf':[
+    {pres:'280 ml Det LV',obj:300,min:290,max:310},
+    {pres:'300 ml Det LV',obj:318,min:305,max:330},
+    {pres:'500 ml Det LV',obj:525,min:510,max:540},
+    {pres:'600 ml Det LV',obj:625,min:610,max:640},
+    {pres:'640 ml Det LV',obj:670,min:655,max:685},
+    {pres:'900 ml Det LV/Manos',obj:920,min:910,max:930},
+    {pres:'1.1 L Det LV',obj:1130,min:1120,max:1140},
+    {pres:'1.25 L Det LV',obj:1285,min:1275,max:1295},
+    {pres:'1.35 L Det LV',obj:1385,min:1375,max:1395},
+    {pres:'500 ml Det Ropa Diluir',obj:610,min:600,max:620}
+  ],
+  'Strunk':[
+    {pres:'900 ml Limpiador',obj:900,min:890,max:910},
+    {pres:'1.8 L Limpiador',obj:1800,min:1790,max:1810}
+  ],
+  'Alfi':[
+    {pres:'3 L Suavizante',obj:2980,min:2910,max:3050},
+    {pres:'5 L Suavizante',obj:4950,min:4850,max:5050},
+    {pres:'3 L Det Ropa',obj:3080,min:3030,max:3130},
+    {pres:'5 L Det Ropa',obj:5100,min:5050,max:5150}
+  ],
+  'Bossar':[
+    {pres:'400 ml Det Pluma',obj:412,min:404,max:420},
+    {pres:'450 ml Det Pluma',obj:462,min:454,max:470},
+    {pres:'800 ml Det Pluma',obj:816,min:808,max:825},
+    {pres:'400 ml Det Conejo',obj:413,min:406,max:420},
+    {pres:'800 ml Det Conejo',obj:820,min:814,max:825},
+    {pres:'600 ml Suav Pluma',obj:599,min:588,max:610},
+    {pres:'700 ml Suav Pluma',obj:698,min:686,max:710},
+    {pres:'900 ml Suav Pluma',obj:896,min:882,max:910},
+    {pres:'450 ml Suav Conejo',obj:446,min:436,max:455},
+    {pres:'900 ml Suav Conejo',obj:892,min:873,max:910},
+    {pres:'400 ml Baños/Antigrasa',obj:410,min:400,max:420},
+    {pres:'500 ml Baños/Antigrasa',obj:510,min:500,max:520},
+    {pres:'400 ml Vidrios',obj:405,min:390,max:420},
+    {pres:'500 ml Vidrios',obj:505,min:490,max:520}
+  ],
+  'Hipo 1':[{pres:'1 L',obj:1056,min:1056,max:1087},{pres:'750 ml',obj:792,min:792,max:800}],
+  'Hipo 2':[{pres:'2 L',obj:2112,min:2112,max:2175}],
+  'Alcoholes':[{pres:'900 ml',obj:774,min:774,max:800},{pres:'600 ml',obj:530,min:520,max:535}],
+  'Bidonera':[{pres:'1 L',obj:970,min:970,max:1000}],
+  'Alwid':[{pres:'1.25 L',obj:1275,min:1275,max:1289}],
+  'Cleanway':[{pres:'5 L Detergente',obj:5105,min:5105,max:5156},{pres:'5 L Suavizante',obj:5000,min:5000,max:5100},{pres:'4 L',obj:4224,min:4224,max:4300},{pres:'5 L Limpiadores',obj:5000,min:5000,max:5100},{pres:'10 L Suav Conejo',obj:10170,min:10170,max:10679},{pres:'10 L Det Neutro',obj:9700,min:9700,max:10185},{pres:'5 L Det Cristal Limón',obj:5100,min:5100,max:5355},{pres:'5 L Limpiador Cristal',obj:4950,min:4950,max:5198},{pres:'4 L Hipoclorito 40g/L',obj:4240,min:4240,max:4452},{pres:'10 L Hipoclorito 100g/L',obj:10800,min:10800,max:11340},{pres:'10 L Alcohol 70',obj:8800,min:8800,max:9240},{pres:'10 L Alcohol Rectificado',obj:8060,min:8060,max:8463}],
+  'Limpiadores':[{pres:'1 L',obj:0,min:0,max:0},{pres:'2 L',obj:0,min:0,max:0}]
+};
+const MACHINES=Object.keys(SPECS);
+
+// Defects checklist for Limpiadores line
+const LIMP_DEFECTS=[
+  'Ausencia de Trazabilidad',
+  'Stickers con fecha incorrecta',
+  'Producto sin etiqueta',
+  'Etiqueta equivocada',
+  'Etiqueta rota',
+  'Etiqueta con defectos de impresión',
+  'Etiqueta descentrada',
+  'Etiqueta con arrugas/mal pegada/burbujas',
+  'Etiqueta despegada/abierta en costura',
+  'Etiquetas solapadas/superpuestas',
+  'Etiqueta sucia / envase sucio',
+  'Envase perforado',
+  'Envase con bajo nivel de llenado',
+  'Envase sucio (tapas)',
+  'Envase golpeado/hundido',
+  'Envase con rebabas',
+  'Envase deformado en panel',
+  'Color fuera de estándar',
+  'Botella sin tapa',
+  'Fuga de producto por tapa',
+  'Tapa rayada',
+  'Tapa rota',
+  'Tapa mal colocada (con gorro)',
+  'Tapa sucia',
+  'Tapa floja',
+  'Fuga por rotura de envases',
+  'Ausencia etiquetas código en fundas',
+  'Pallet con productos mezclados',
+  'Fundas mal armadas (desalineadas)',
+  'Paletizado incorrecto',
+  'Picos de pallets sin film stretch',
+  'Poco film stretch parte superior',
+  'Cajas mal cerradas',
+  'Cajas deformadas (tensión film)',
+  'Esquinas de pallet sin film stretch',
+  'Pallets defectuosos/tacos rotos',
+  'Estiba de pallets defectuosas',
+  'Incoherencias en vencimientos de packs',
+  'Producto turbio fuera de especificación',
+  'Producto con sedimentación'
+];
+</script>
+
+<!-- LOGIN -->
+<div id="loginScreen">
+<div class="hdr"><div class="hdr-ico">⚗️</div><div><h1>Control en Proceso GMP</h1><span>Envasado</span></div></div>
+<div class="lw"><div class="lb">
+  <div style="font-size:36px;margin-bottom:8px">👤</div>
+  <h2>Identificación</h2>
+  <p>Ingresa tu nombre para registrar controles</p>
+  <input class="lf" id="loginName" placeholder="Tu nombre..." maxlength="30" />
+  <button class="lb1" onclick="doLogin()">Entrar</button>
+</div></div>
+</div>
+
+<!-- MAIN -->
+<div id="mainApp" style="display:none">
+<div class="hdr"><div class="hdr-ico">⚗️</div><div><h1>Control GMP</h1><span id="hdrInfo">Envasado</span></div>
+  <div class="hdr-r"><span class="hdr-u" id="hdrU"></span><button onclick="logout()" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 7px;color:var(--text3);font-size:8px;cursor:pointer;font-family:var(--f)">Salir</button></div>
+</div>
+<div class="tabs"><div class="tab on" onclick="showTab(0)">📝 Control</div><div class="tab" onclick="showTab(1)">📊 Dashboard</div></div>
+<div class="toast" id="toast"></div>
+
+<!-- MODAL -->
+<div class="mo" id="mover" onclick="if(event.target===this)closeM()">
+<div class="md"><div class="mh"><h2 id="mTitle"></h2><button class="mx" onclick="closeM()">✕</button></div><div class="mb" id="mBody"></div>
+<div class="mf"><button class="mb2" onclick="dlCSV()">📥 CSV</button></div></div>
+</div>
+
+<!-- PAGE 0: CONTROL -->
+<div class="page on" id="page0"><div class="wrap">
+  <!-- Shift banner -->
+  <div class="sb" id="shiftBan">
+    <div class="sb-info">📅 <b id="shiftDate"></b> · 👤 <b id="shiftUser"></b> · <span id="shiftCount">0</span> controles</div>
+    <div style="display:flex;gap:5px">
+      <button class="btn b2" onclick="loadShiftFromSheet()" style="padding:5px 10px;font-size:9px" title="Sincronizar con otros analistas">🔄</button>
+      <button class="btn b2" onclick="endShift()" style="padding:5px 10px;font-size:9px">🏁</button>
+    </div>
+  </div>
+
+  <!-- Timeline -->
+  <div id="timeline"></div>
+
+  <!-- New control button -->
+  <button class="ab" id="newBtn" onclick="showForm()">＋ Nuevo control</button>
+
+  <!-- CONTROL FORM -->
+  <div id="cForm" style="display:none">
+    <div class="st">🕐 Control #<span id="cNum">1</span></div>
+
+    <!-- Voice -->
+    <div style="margin-bottom:8px">
+      <button id="vBtn" onclick="toggleV()" style="width:100%;padding:10px;border-radius:var(--r);border:2px dashed var(--border);background:var(--s1);color:var(--text);font-family:var(--f);font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">
+        <span id="vMic" style="width:34px;height:34px;border-radius:50%;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:16px">🎙️</span>
+        <div><div id="vLbl">Toca para dictar</div><div style="font-size:8px;color:var(--text2)">Pesos, pH, controles por voz</div></div>
+      </button>
+      <div style="font-size:8px;color:var(--text3);text-align:center;margin-top:3px">💡 "pH 6.5 peso 1 905 peso 2 908 peso 3 902 peso 4 910 peso 5 907 todo conforme"</div>
+    </div>
+    <div id="tBox" style="display:none;background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:8px;margin-bottom:8px">
+      <div style="font-size:8px;text-transform:uppercase;letter-spacing:1px;color:var(--mint);font-weight:700;margin-bottom:3px">🔊 Reconocido <span id="liveBadge" style="display:none;background:var(--red);color:white;font-size:7px;padding:1px 5px;border-radius:3px;font-weight:700;margin-left:4px;animation:blink 1s ease infinite">VIVO</span></div>
+      <div id="tTxt" style="font-size:10px;line-height:1.5;color:var(--text2);font-family:var(--m)"></div>
+      <div id="tLog" style="margin-top:4px;padding-top:4px;border-top:1px solid var(--border);font-size:9px;font-family:var(--m);line-height:1.7"></div>
+    </div>
+
+    <!-- Machine + Product -->
+    <div class="fg">
+      <div class="fd"><span class="fl">Hora</span><input class="fi" id="cHora" type="time"/></div>
+      <div class="fd"><span class="fl">Máquina</span><select class="fi" id="cMaq" onchange="onMaq()"><option value="">Seleccionar...</option></select></div>
+      <div class="fd"><span class="fl">Presentación</span><select class="fi" id="cPres" onchange="onPres()"><option value="">—</option></select></div>
+      <div class="fd"><span class="fl">N° Lote</span><input class="fi" id="cLote" placeholder="—"/></div>
+      <div class="fd"><span class="fl">N° Orden</span><input class="fi" id="cOrden" placeholder="—"/></div>
+      <div class="fd"><span class="fl">F. Vencimiento</span><input class="fi" id="cVence" placeholder="—"/></div>
+      <div class="fd"><span class="fl">Cód. Granel</span><input class="fi" id="cGranel" placeholder="—"/></div>
+      <div class="fd"><span class="fl">Cód. PT</span><input class="fi" id="cCodPT" placeholder="—"/></div>
+    </div>
+    <div id="specI" class="ri" style="display:none;background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:8px;margin-bottom:8px"></div>
+
+    <!-- STANDARD CONTROLS (hidden for Limpiadores) -->
+    <div id="stdControls">
+    <!-- pH -->
+    <div class="fs"><div class="st">pH (opcional)</div>
+      <div class="fg"><div class="fd"><span class="fl">Valor pH</span><input class="fi" id="cPH" placeholder="—" inputmode="decimal"/></div></div>
+    </div>
+
+    <!-- Weights -->
+    <div class="fs"><div class="st">Pesos (g)</div>
+      <div class="fg">
+        <div class="w5l"><span>P1</span><span>P2</span><span>P3</span><span>P4</span><span>P5</span></div>
+        <div class="w5"><input id="cP1" placeholder="—" inputmode="decimal" oninput="calcW()"/><input id="cP2" placeholder="—" inputmode="decimal" oninput="calcW()"/><input id="cP3" placeholder="—" inputmode="decimal" oninput="calcW()"/><input id="cP4" placeholder="—" inputmode="decimal" oninput="calcW()"/><input id="cP5" placeholder="—" inputmode="decimal" oninput="calcW()"/></div>
+        <div class="fd"><span class="fl">Promedio</span><span class="fi" id="cProm" style="font-weight:700">—</span></div>
+        <div class="ri" id="rangeB">—</div>
+      </div>
+    </div>
+
+    <!-- Checks -->
+    <div class="fs"><div class="st">Controles de Calidad</div>
+      <div class="cg" id="cChk">
+        <div class="ci" onclick="tgC(this)"><div class="ck">✓</div><span class="ct">Ctrl Lote</span></div>
+        <div class="ci" onclick="tgC(this)"><div class="ck">✓</div><span class="ct">Ctrl Vence</span></div>
+        <div class="ci" onclick="tgC(this)"><div class="ck">✓</div><span class="ct">Funda/Caja</span></div>
+        <div class="ci" onclick="tgC(this)"><div class="ck">✓</div><span class="ct">Tapado</span></div>
+        <div class="ci" onclick="tgC(this)"><div class="ck">✓</div><span class="ct">Etiqueta</span></div>
+        <div class="ci" onclick="tgC(this)"><div class="ck">✓</div><span class="ct">Apar. Granel</span></div>
+        <div class="ci" onclick="tgC(this)"><div class="ck">✓</div><span class="ct">Limp. Línea</span></div>
+      </div>
+    </div>
+    </div>
+
+    <!-- LIMPIADORES DEFECTS (hidden by default, shown only for Limpiadores) -->
+    <div id="limpControls" style="display:none">
+      <div class="fs"><div class="st red">🔍 Defectos Detectados — Limpiadores</div>
+        <div style="font-size:9px;color:var(--text3);margin-bottom:8px">Marcá los defectos encontrados. Si no hay defectos, tocá el botón verde.</div>
+        <button onclick="limpSinDef()" style="width:100%;padding:10px;border-radius:var(--r);border:2px solid var(--mint);background:var(--mint-g);color:var(--mint);font-family:var(--f);font-size:13px;font-weight:700;cursor:pointer;margin-bottom:10px">✅ Sin defectos — Todo conforme</button>
+        <div id="limpDefList"></div>
+      </div>
+      <div class="fs">
+        <div class="fg">
+          <div class="fd"><span class="fl">Uds retiradas</span><input class="fi" id="cLimpUds" placeholder="Total unidades retiradas" inputmode="numeric"/></div>
+          <div class="fd"><span class="fl">Motivo retiro</span><input class="fi" id="cLimpMotivo" placeholder="Motivo del retiro..."/></div>
+          <div class="fd"><span class="fl">Acción correctiva</span><input class="fi" id="cLimpAccion" placeholder="Acción tomada..."/></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Photos -->
+    <div class="fs"><div class="st">📸 Fotos</div>
+      <div class="pr">
+        <div style="flex:1"><div class="pb" id="pB0" onclick="takeP(0)"><span style="font-size:16px">📦</span><span style="font-size:7px;color:var(--text3)">Sticker</span></div></div>
+        <div style="flex:1"><div class="pb" id="pB1" onclick="takeP(1)"><span style="font-size:16px">🏷️</span><span style="font-size:7px;color:var(--text3)">Lote/Vence</span></div></div>
+      </div>
+      <input type="file" id="camIn" accept="image/*" capture="environment" style="display:none" onchange="gotP(event)"/>
+    </div>
+
+    <!-- Deviation -->
+    <div class="fs"><div class="st red">⚠️ Desvíos</div>
+      <div style="background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:8px">
+        <div style="font-size:9px;color:var(--text2);margin-bottom:5px">¿Desvíos?</div>
+        <div class="dtg"><div class="dt" id="dY" onclick="setDev(1)">Sí</div><div class="dt" id="dN" onclick="setDev(0)">No</div></div>
+        <div class="df" id="dF">
+          <div class="fg">
+            <div class="fd"><span class="fl">Descripción</span><input class="fi" id="cDevD" placeholder="..."/></div>
+            <div class="fd"><span class="fl">Unidades</span><input class="fi" id="cDevQ" placeholder="Cant." inputmode="numeric"/></div>
+          </div>
+          <div style="font-size:9px;color:var(--text2);margin:5px 0 3px">¿Reproceso?</div>
+          <div class="dtg"><div class="dt" id="rY" onclick="setRep(1)">Sí</div><div class="dt" id="rN" onclick="setRep(0)">No</div></div>
+          <div style="margin-top:6px"><div style="font-size:8px;color:var(--text3);margin-bottom:3px">📸 Foto desvío</div>
+            <div class="pb" id="pB2" onclick="takeP(2)" style="max-width:100px;aspect-ratio:4/3"><span style="font-size:16px">📷</span><span style="font-size:7px;color:var(--text3)">Desvío</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="fs"><div class="st">Observaciones</div><textarea class="obs" id="cObs" placeholder="Notas..."></textarea></div>
+    <div style="display:flex;gap:6px;margin-bottom:14px">
+      <button class="btn b2" onclick="cancelForm()">Cancelar</button>
+      <button class="btn b1" style="flex:1" onclick="saveCtrl()">💾 Guardar Control</button>
+    </div>
+  </div>
+</div></div>
+
+<!-- PAGE 1: DASHBOARD -->
+<div class="page" id="page1"><div class="wrap">
+  <div class="fs">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div class="st" style="margin:0">Resumen</div><button class="mb2" onclick="loadSheet()" style="font-size:8px;padding:4px 8px">🔄</button>
+    </div>
+    <div class="sg">
+      <div class="sc"><div class="sn blu" id="stT">0</div><div class="sl">Controles</div></div>
+      <div class="sc"><div class="sn grn" id="stOk">0</div><div class="sl">Sin desvío</div></div>
+      <div class="sc"><div class="sn rd" id="stDv">0</div><div class="sl">Con desvío</div></div>
+      <div class="sc"><div class="sn amb" id="stLt">0</div><div class="sl">Lotes</div></div>
+    </div>
+  </div>
+  <div class="fs"><div class="st">Filtrar</div>
+    <div class="fr">
+      <select id="dPer" onchange="onDF()"><option value="7">Semana</option><option value="30">Mes</option><option value="60" selected>2 meses</option><option value="90">3 meses</option><option value="365">Año</option><option value="0">Todo</option></select>
+      <select id="dMaq" onchange="onDF()"><option value="">Máquinas</option></select>
+      <select id="dPrs" onchange="onDF()"><option value="">Pres.</option></select>
+    </div>
+  </div>
+  <div class="fs"><div class="st">📈 Tendencia Pesos</div><div class="cw"><canvas id="chW" height="200"></canvas></div></div>
+  <div class="fs"><div class="st">📈 Tendencia pH</div><div class="cw"><canvas id="chPH" height="200"></canvas></div></div>
+  <div class="fs"><div class="st">📊 Estadísticas</div><div style="overflow-x:auto"><table class="stb" id="stTbl"><thead><tr><th>Máquina</th><th>Pres.</th><th>N</th><th>Prom</th><th>σ</th><th>Mín</th><th>Máx</th><th>Rango</th><th>Est.</th></tr></thead><tbody id="stBd"></tbody></table></div></div>
+  <div class="fs"><div class="st">Por Analista</div><div id="anaB"></div></div>
+  <div class="fs"><div class="st">Registros</div><div id="dList"></div></div>
+</div></div>
+</div>
+
+<script>
+const SURL='https://script.google.com/macros/s/AKfycbxmayMAPlLCrozmZRM3gLSf5MgcWO9lC5y_ayR0DkRdi_hHYaoLRI43OgIJ9d7nTPDGug/exec';
+let USER='',shift=null,ctrls=[],allR=[],curSlot=0,fotos=[null,null,null],hasDev=false,isRep=false,curSpec=null,maqCache={};
+
+// Populate machine selects
+(function(){['cMaq','dMaq'].forEach(id=>{const s=document.getElementById(id);MACHINES.forEach(m=>{const o=document.createElement('option');o.value=m;o.textContent=m;s.appendChild(o)})})})();
+
+// LOGIN
+function doLogin(){const n=document.getElementById('loginName').value.trim();if(!n){toast('Ingresa tu nombre',true);return}USER=n;localStorage.setItem('gmp_user',n);document.getElementById('loginScreen').style.display='none';document.getElementById('mainApp').style.display='block';document.getElementById('hdrU').textContent=USER;
+// Always start a new local shift for today and load any controls from the Sheet
+shift={fecha:new Date().toISOString().slice(0,10),analista:USER};ctrls=[];maqCache={};saveLocal();initShift();
+loadShiftFromSheet();
+}
+function logout(){USER='';localStorage.removeItem('gmp_user');location.reload()}
+(function(){const u=localStorage.getItem('gmp_user');if(u){document.getElementById('loginName').value=u;doLogin()}})();
+
+// Load today's controls from Google Sheets (shared shift)
+function loadShiftFromSheet(){
+  if(!SURL)return;
+  fetch(SURL).then(r=>r.json()).then(d=>{
+    if(d.status!=='ok'||!d.records)return;
+    const today=new Date().toISOString().slice(0,10);
+    // Filter records for today
+    const todayCtrls=d.records.filter(r=>{
+      const f=r.fecha||'';let dt=null;
+      if(typeof f==='string'){
+        const iso=f.match(/(\d{4})-(\d{2})-(\d{2})/);
+        if(iso)dt=iso[1]+'-'+iso[2]+'-'+iso[3];
+        if(!dt){const p=f.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/);
+          if(p)dt=p[3]+'-'+p[2].padStart(2,'0')+'-'+p[1].padStart(2,'0')}
+      }
+      return dt===today;
+    });
+    if(todayCtrls.length===0){
+      // No shift open, load all records for dashboard
+      allR=d.records;allR.forEach(r=>{r.promedio=r.promedio!=null?String(r.promedio):'';r.ph=r.ph!=null?String(r.ph):'';r.maquina=r.maquina?String(r.maquina).trim():'';r.presentacion=r.presentacion?String(r.presentacion).trim():'';r.lote=r.lote?String(r.lote).trim():'';r.analista=r.analista?String(r.analista).trim():'';if(r.pesos)r.pesos=r.pesos.map(p=>p!=null?String(p):'')});
+      return;
+    }
+    // Sort by control number ascending
+    todayCtrls.sort((a,b)=>(parseInt(a.controlNum)||0)-(parseInt(b.controlNum)||0));
+    // Convert sheet records to local control format
+    ctrls=todayCtrls.map(r=>({
+      hora:String(r.hora||''),
+      maquina:String(r.maquina||'').trim(),
+      presentacion:String(r.presentacion||'').trim(),
+      lote:String(r.lote||'').trim(),
+      orden:String(r.orden||'').trim(),
+      vence:String(r.vence||'').trim(),
+      granel:String(r.granel||'').trim(),
+      codPT:String(r.codPT||'').trim(),
+      ph:String(r.ph||''),
+      pesos:(r.pesos||['','','','','']).map(p=>p!=null?String(p):''),
+      promedio:String(r.promedio||''),
+      checks:Array.isArray(r.checks)?r.checks:[],
+      hasDev:r.hasDev===true||r.hasDev==='SÍ',
+      devDesc:String(r.devDesc||''),
+      devQty:String(r.devQty||''),
+      isRep:r.isRep===true||r.isRep==='SÍ',
+      fotos:[],
+      obs:String(r.obs||''),
+      timestamp:r.fecha+' '+r.hora,
+      analista:String(r.analista||'').trim(),
+      isLimp:String(r.maquina||'').trim()==='Limpiadores',
+      limpDefects:[],
+      fromSheet:true
+    }));
+    // Rebuild maqCache from previous controls
+    ctrls.forEach(c=>{
+      if(c.maquina)maqCache[c.maquina]={pres:c.presentacion,cLote:c.lote,cOrden:c.orden,cVence:c.vence,cGranel:c.granel,cCodPT:c.codPT};
+    });
+    saveLocal();initShift();
+    // Also keep allR for dashboard
+    allR=d.records;allR.forEach(r=>{r.promedio=r.promedio!=null?String(r.promedio):'';r.ph=r.ph!=null?String(r.ph):'';r.maquina=r.maquina?String(r.maquina).trim():'';r.presentacion=r.presentacion?String(r.presentacion).trim():'';r.lote=r.lote?String(r.lote).trim():'';r.analista=r.analista?String(r.analista).trim():'';if(r.pesos)r.pesos=r.pesos.map(p=>p!=null?String(p):'')});
+    toast('🔄 '+ctrls.length+' controles del turno cargados');
+  }).catch(()=>{});
+}
+
+function startNewShift(){shift={fecha:new Date().toISOString().slice(0,10),analista:USER};ctrls=[];maqCache={};saveLocal();initShift()}
+function initShift(){document.getElementById('shiftDate').textContent=shift.fecha;document.getElementById('shiftUser').textContent=USER;document.getElementById('shiftCount').textContent=ctrls.length;document.getElementById('hdrInfo').textContent=shift.fecha;renderTL()}
+function endShift(){if(!confirm('¿Salir del turno? Los controles ya cargados quedan guardados en Google Sheets. Esto solo limpia tu pantalla.'))return;shift=null;ctrls=[];maqCache={};localStorage.removeItem('gmp_shift');startNewShift();toast('🏁 Pantalla limpiada')}
+function saveLocal(){localStorage.setItem('gmp_shift',JSON.stringify({shift,ctrls,maqCache}))}
+
+// TABS
+function showTab(n){document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('on',i===n));document.querySelectorAll('.page').forEach((p,i)=>p.classList.toggle('on',i===n));if(n===1){loadSheet();renderDash()}}
+
+// MACHINE CHANGE - autocomplete from cache
+function onMaq(){
+  const m=document.getElementById('cMaq').value;
+  const ps=document.getElementById('cPres');ps.innerHTML='<option value="">Seleccionar...</option>';
+  curSpec=null;document.getElementById('specI').style.display='none';
+  if(!m)return;
+  
+  // Toggle standard vs Limpiadores controls
+  const isLimp=m==='Limpiadores';
+  document.getElementById('stdControls').style.display=isLimp?'none':'block';
+  document.getElementById('limpControls').style.display=isLimp?'block':'none';
+  
+  if(isLimp){
+    // Populate defects checklist
+    const dl=document.getElementById('limpDefList');
+    if(!dl.children.length){
+      dl.innerHTML=LIMP_DEFECTS.map((d,i)=>`<div style="background:var(--s1);border:1px solid var(--border);border-radius:var(--rs);padding:8px 10px;margin-bottom:4px;display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="ld${i}" style="width:16px;height:16px;accent-color:var(--red);flex-shrink:0">
+        <label for="ld${i}" style="font-size:10px;color:var(--text2);flex:1;cursor:pointer">${d}</label>
+        <input id="ldq${i}" placeholder="Uds" inputmode="numeric" style="width:50px;background:var(--s2);border:1px solid var(--border);border-radius:5px;padding:5px;color:var(--text);font-family:var(--m);font-size:10px;text-align:center;outline:none">
+      </div>`).join('');
+    }
+    ps.innerHTML='<option value="">Seleccionar...</option>';
+    (SPECS[m]||[]).forEach(p=>{const o=document.createElement('option');o.value=p.pres;o.textContent=p.pres;ps.appendChild(o)});
+  } else {
+    (SPECS[m]||[]).forEach(p=>{const o=document.createElement('option');o.value=p.pres;o.textContent=p.pres+' ('+p.obj+'g)';ps.appendChild(o)});
+  }
+  // Autocomplete from cache
+  if(maqCache[m]){const c=maqCache[m];['cLote','cOrden','cVence','cGranel','cCodPT'].forEach(id=>{if(c[id])document.getElementById(id).value=c[id]});
+    if(c.pres&&!isLimp){ps.value=c.pres;onPres()}
+    toast('📋 Datos autocompletados de '+m)}
+}
+function onPres(){
+  const m=document.getElementById('cMaq').value,p=document.getElementById('cPres').value;
+  curSpec=null;document.getElementById('specI').style.display='none';
+  if(!m||!p)return;
+  const sp=(SPECS[m]||[]).find(s=>s.pres===p);
+  if(sp){curSpec=sp;document.getElementById('specI').style.display='block';document.getElementById('specI').innerHTML='🎯 <b>Obj: '+sp.obj+'g</b> · Rango: '+sp.min+'g — '+sp.max+'g'}
+  updRange()
+}
+function updRange(){const rb=document.getElementById('rangeB');rb.innerHTML=curSpec?'🎯 <b>'+curSpec.min+'g — '+curSpec.max+'g</b>':'—'}
+function calcW(){
+  const vs=[1,2,3,4,5].map(i=>parseFloat(document.getElementById('cP'+i).value)).filter(v=>!isNaN(v));
+  const pr=vs.length?(vs.reduce((a,b)=>a+b,0)/vs.length):null;
+  const el=document.getElementById('cProm');
+  if(pr!==null){el.textContent=pr.toFixed(2);el.style.color=curSpec?(pr>=curSpec.min&&pr<=curSpec.max?'var(--mint)':'var(--red)'):'var(--mint)'}
+  else{el.textContent='—';el.style.color='var(--text)'};
+  [1,2,3,4,5].forEach(i=>{const e=document.getElementById('cP'+i);const v=parseFloat(e.value);if(isNaN(v)||!curSpec){e.className='';return}e.className=v>=curSpec.min&&v<=curSpec.max?'ok':'bad'})
+}
+
+// FORM
+function showForm(){document.getElementById('newBtn').style.display='none';document.getElementById('cForm').style.display='block';document.getElementById('cNum').textContent=ctrls.length+1;
+const now=new Date();document.getElementById('cHora').value=now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
+resetForm();document.getElementById('cForm').scrollIntoView({behavior:'smooth'})}
+function cancelForm(){document.getElementById('cForm').style.display='none';document.getElementById('newBtn').style.display='block'}
+function resetForm(){['cP1','cP2','cP3','cP4','cP5','cPH','cDevD','cDevQ','cObs','cLote','cOrden','cVence','cGranel','cCodPT'].forEach(id=>{const e=document.getElementById(id);if(e){e.value='';e.className='fi'}});
+document.getElementById('cProm').textContent='—';document.getElementById('cProm').style.color='var(--text)';
+document.getElementById('cMaq').value='';document.getElementById('cPres').innerHTML='<option value="">—</option>';
+document.querySelectorAll('#cChk .ci').forEach(c=>c.classList.remove('on'));
+fotos=[null,null,null];renP();hasDev=false;isRep=false;curSpec=null;
+['dY','dN','rY','rN'].forEach(id=>document.getElementById(id).className='dt');
+document.getElementById('dF').classList.remove('vis');document.getElementById('specI').style.display='none';
+document.getElementById('tBox').style.display='none';
+document.getElementById('stdControls').style.display='block';
+document.getElementById('limpControls').style.display='none';
+// Reset Limpiadores fields
+const dl=document.getElementById('limpDefList');if(dl)dl.innerHTML='';
+['cLimpUds','cLimpMotivo','cLimpAccion'].forEach(id=>{const e=document.getElementById(id);if(e)e.value=''})}
+
+function saveCtrl(){
+  const maq=document.getElementById('cMaq').value;if(!maq){toast('⚠️ Elegí máquina',true);return}
+  const pres=document.getElementById('cPres').value;if(!pres){toast('⚠️ Elegí presentación',true);return}
+  const lote=document.getElementById('cLote').value.trim();if(!lote){toast('⚠️ Ingresá N° Lote',true);return}
+  const orden=document.getElementById('cOrden').value.trim();if(!orden){toast('⚠️ Ingresá N° Orden',true);return}
+  const vence=document.getElementById('cVence').value.trim();if(!vence){toast('⚠️ Ingresá Vencimiento',true);return}
+  const granel=document.getElementById('cGranel').value.trim();if(!granel){toast('⚠️ Ingresá Cód. Granel',true);return}
+  const codPT=document.getElementById('cCodPT').value.trim();if(!codPT){toast('⚠️ Ingresá Cód. PT',true);return}
+  const isLimp=maq==='Limpiadores';
+  const pesos=isLimp?['','','','','']:[1,2,3,4,5].map(i=>document.getElementById('cP'+i).value);
+  const vs=pesos.map(Number).filter(v=>!isNaN(v)&&v>0);
+  // Pesos no son obligatorios (línea puede estar parada)
+  const prom=vs.length?(vs.reduce((a,b)=>a+b,0)/vs.length).toFixed(2):'';
+  let limpDefects=[],limpUds='',limpMotivo='',limpAccion='';
+  if(isLimp){
+    LIMP_DEFECTS.forEach((d,i)=>{const cb=document.getElementById('ld'+i);const qty=document.getElementById('ldq'+i);if(cb&&cb.checked)limpDefects.push(d+(qty&&qty.value?' ('+qty.value+')':''))});
+    limpUds=document.getElementById('cLimpUds')?document.getElementById('cLimpUds').value:'';
+    limpMotivo=document.getElementById('cLimpMotivo')?document.getElementById('cLimpMotivo').value:'';
+    limpAccion=document.getElementById('cLimpAccion')?document.getElementById('cLimpAccion').value:'';
+  }
+  const c={hora:document.getElementById('cHora').value,maquina:maq,presentacion:pres,lote,orden,vence,granel,codPT,ph:isLimp?'':document.getElementById('cPH').value,pesos,promedio:prom,checks:isLimp?[]:([...document.querySelectorAll('#cChk .ci.on .ct')].map(l=>l.textContent)),hasDev,devDesc:hasDev?document.getElementById('cDevD').value:'',devQty:hasDev?document.getElementById('cDevQ').value:'',isRep:hasDev?isRep:false,fotos:fotos.filter(Boolean),obs:document.getElementById('cObs').value,timestamp:new Date().toLocaleString('es-ES'),analista:USER,isLimp,limpDefects,limpUds,limpMotivo,limpAccion};
+  maqCache[maq]={pres,cLote:lote,cOrden:orden,cVence:vence,cGranel:granel,cCodPT:codPT};
+  ctrls.push(c);saveLocal();sendCtrl(c,ctrls.length);
+  document.getElementById('cForm').style.display='none';document.getElementById('newBtn').style.display='block';
+  document.getElementById('shiftCount').textContent=ctrls.length;renderTL();toast('✅ Control #'+ctrls.length)}
+
+// TIMELINE
+function renderTL(){
+  const el=document.getElementById('timeline');
+  if(!ctrls.length){el.innerHTML='<div style="text-align:center;color:var(--text3);font-size:9px;padding:12px;border:1px dashed var(--border);border-radius:var(--r);margin-bottom:8px">Sin controles en este turno</div>';return}
+  el.innerHTML=ctrls.map((c,i)=>{
+    const tags=(c.checks||[]).map(ch=>`<span class="ti-tag">${ch}</span>`).join('');
+    const dev=c.hasDev?`<span class="ti-tag red">⚠️ ${c.devQty||'?'}u</span>`:'';
+    const ph=c.ph?' · pH:'+c.ph:'';
+    const isL=c.isLimp||c.maquina==='Limpiadores';
+    const dataLine=isL
+      ?`Lote: ${c.lote} · Defectos: ${(c.limpDefects||[]).length||'0'}`
+      :`Lote: ${c.lote} · Pesos: ${(c.pesos||[]).filter(p=>p).join('|')||'—'} → <b>${c.promedio||'—'}</b>${ph}`;
+    const limpTags=isL?(c.limpDefects||[]).map(d=>`<span class="ti-tag red">${d}</span>`).join(''):'';
+    const ana=c.analista?`<span style="color:var(--text3);font-size:9px"> · 👤 ${c.analista}</span>`:'';
+    return `<div class="ti" onclick="viewC(${i})"><div class="ti-h"><span class="ti-t">🕐 ${c.hora||'--:--'}${ana}</span><span class="ti-m">${c.maquina} · ${c.presentacion||''}</span></div><div class="ti-d">${dataLine}</div><div class="ti-tags">${tags}${limpTags}${dev}</div></div>`}).join('')}
+
+// SHEETS
+function sendCtrl(c,num){if(!SURL)return;const pd=(c.fotos||[]).map(p=>p.replace(/^data:image\/\w+;base64,/,''));
+// Lookup spec for the product
+let spec='';if(c.maquina&&c.presentacion){const sp=(SPECS[c.maquina]||[]).find(s=>s.pres===c.presentacion);if(sp&&sp.min&&sp.max)spec=sp.min+'-'+sp.max+' g (obj: '+sp.obj+'g)'}
+fetch(SURL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({type:'control',fecha:shift.fecha,analista:USER,orden:c.orden,lote:c.lote,vence:c.vence,maquina:c.maquina,presentacion:c.presentacion,granel:c.granel,codPT:c.codPT,controlNum:num,hora:c.hora,pesos:c.pesos,promedio:c.promedio,spec:spec,ph:c.ph,checks:c.checks,hasDev:c.hasDev,devDesc:c.devDesc,devQty:c.devQty,isRep:c.isRep,obs:c.obs,timestamp:c.timestamp,numFotos:pd.length,photos:pd,isLimp:c.isLimp,limpDefects:c.limpDefects,limpUds:c.limpUds,limpMotivo:c.limpMotivo,limpAccion:c.limpAccion})}).catch(()=>toast('⚠️ Error',true))}
+function loadSheet(){if(!SURL)return;fetch(SURL).then(r=>r.json()).then(d=>{if(d.status==='ok'&&d.records){allR=d.records;allR.forEach(r=>{r.promedio=r.promedio!=null?String(r.promedio):'';r.ph=r.ph!=null?String(r.ph):'';r.maquina=r.maquina?String(r.maquina).trim():'';r.presentacion=r.presentacion?String(r.presentacion).trim():'';r.lote=r.lote?String(r.lote).trim():'';r.analista=r.analista?String(r.analista).trim():'';if(r.pesos)r.pesos=r.pesos.map(p=>p!=null?String(p):'')});renderDash();toast('📊 '+allR.length+' registros')}}).catch(()=>{toast('⚠️ Error carga',true)})}
+
+// PHOTOS
+function takeP(s){curSlot=s;document.getElementById('camIn').click()}
+function gotP(e){const f=e.target.files[0];if(!f)return;compP(f,800,.6).then(c=>{fotos[curSlot]=c;renP();toast('📸')});e.target.value=''}
+function compP(file,mx,q){return new Promise(res=>{const rd=new FileReader();rd.onload=e=>{const img=new Image();img.onload=()=>{const cv=document.createElement('canvas');let w=img.width,h=img.height;if(w>mx||h>mx){if(w>h){h=Math.round(h*mx/w);w=mx}else{w=Math.round(w*mx/h);h=mx}}cv.width=w;cv.height=h;cv.getContext('2d').drawImage(img,0,0,w,h);res(cv.toDataURL('image/jpeg',q))};img.src=e.target.result};rd.readAsDataURL(file)})}
+function renP(){const lb=[['📦','Sticker'],['🏷️','Lote/Vence'],['📷','Desvío']];for(let i=0;i<3;i++){const b=document.getElementById('pB'+i);if(!b)continue;if(fotos[i])b.innerHTML=`<img src="${fotos[i]}"/><button class="rx" onclick="event.stopPropagation();rmP(${i})">✕</button>`;else b.innerHTML=`<span style="font-size:16px">${lb[i][0]}</span><span style="font-size:7px;color:var(--text3)">${lb[i][1]}</span>`}}
+function rmP(i){fotos[i]=null;renP()}
+function tgC(e){e.classList.toggle('on')}
+function limpSinDef(){
+  // Uncheck all defects and clear quantities = no defects found
+  LIMP_DEFECTS.forEach((d,i)=>{
+    const cb=document.getElementById('ld'+i);if(cb)cb.checked=false;
+    const qty=document.getElementById('ldq'+i);if(qty)qty.value='';
+  });
+  // Clear retiradas fields
+  ['cLimpUds','cLimpMotivo','cLimpAccion'].forEach(id=>{const e=document.getElementById(id);if(e)e.value=''});
+  toast('✅ Sin defectos registrado');
+}
+function setDev(v){hasDev=!!v;document.getElementById('dY').className='dt'+(v?' ay':'');document.getElementById('dN').className='dt'+(v?'':' an');document.getElementById('dF').classList.toggle('vis',!!v)}
+function setRep(v){isRep=!!v;document.getElementById('rY').className='dt'+(v?' ay':'');document.getElementById('rN').className='dt'+(v?'':' an')}
+
+// VOICE
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+let isVR=false,vrec=null,vtmr=null;
+function toggleV(){if(!SR){toast('Usá Chrome',true);return}isVR?stopV():startV()}
+function startV(){vrec=new SR();vrec.lang='es-ES';vrec.continuous=true;vrec.interimResults=true;
+document.getElementById('vBtn').style.borderColor='var(--red)';document.getElementById('vBtn').style.background='var(--red-g)';
+document.getElementById('vMic').style.background='var(--red)';document.getElementById('vLbl').textContent='⏹️ Grabando...';document.getElementById('liveBadge').style.display='inline-block';isVR=true;let acc='';
+vrec.onresult=e=>{let fin='',int='';for(let i=0;i<e.results.length;i++){if(e.results[i].isFinal)fin+=e.results[i][0].transcript+' ';else int+=e.results[i][0].transcript}acc=fin;document.getElementById('tBox').style.display='block';document.getElementById('tTxt').textContent=fin+(int?'🔴 '+int:'');if(fin.trim().length>3){clearTimeout(vtmr);vtmr=setTimeout(()=>parseV(fin.trim()),400)}};
+vrec.onend=()=>{rstVB();if(isVR){const txt=acc.trim()||document.getElementById('tTxt').textContent.replace(/🔴\s*/g,'').trim();isVR=false;if(txt.length>3){const c=parseV(txt);if(c>0)toast('✅ '+c+' campos')}}isVR=false};
+vrec.onerror=()=>{stopV();toast('⚠️ Micrófono',true)};try{vrec.start()}catch(e){}}
+function stopV(){if(vrec)try{vrec.stop()}catch(e){}isVR=false;rstVB()}
+function rstVB(){const b=document.getElementById('vBtn');if(!b)return;b.style.borderColor='var(--border)';b.style.background='var(--s1)';document.getElementById('vMic').style.background='var(--s3)';document.getElementById('vLbl').textContent='Toca para dictar';document.getElementById('liveBadge').style.display='none'}
+
+function parseV(raw){const logs=[];const lg=(i,m)=>logs.push({i,m});let t=raw.replace(/(\d),(\d)/g,'$1.$2').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[.,;:!?]/g,' ').replace(/\s+/g,' ').trim();let n=0;
+const pm=t.match(/(?:pe\s*ache|p\s*h)\s*(?:de\s+)?(\d+\.?\d*)/);if(pm){document.getElementById('cPH').value=pm[1];lg('✅','pH: '+pm[1]);n++}
+const nw={'uno':1,'una':1,'dos':2,'tres':3,'cuatro':4,'cinco':5};let tw=t;for(const[w,num]of Object.entries(nw))tw=tw.replace(new RegExp('peso\\s+'+w+'\\b','g'),'peso '+num);
+for(let i=1;i<=5;i++){const m=tw.match(new RegExp('peso\\s+'+i+'\\s+(?:de\\s+)?(\\d+\\.?\\d*)'));if(m){document.getElementById('cP'+i).value=m[1];lg('✅','P'+i+': '+m[1]);n++}}
+calcW();
+const ci=document.querySelectorAll('#cChk .ci');
+if(/todo\s+(?:conforme|bien|ok)/.test(t)){ci.forEach(c=>{if(!c.classList.contains('on')){tgC(c);n++}});lg('✅','Checks')}
+else if(/conforme|ok\b|bien|correcto/.test(t)){const kw=[['lote'],['vence'],['funda','caja'],['tapado','tapa'],['etiqueta'],['apariencia','granel'],['limpieza','linea']];ci.forEach((c,idx)=>{(kw[idx]||[]).forEach(k=>{if(t.includes(k)&&!c.classList.contains('on')){tgC(c);n++}})})}
+if(/desvio|desviacion/.test(t)){setDev(1);lg('✅','Desvío');n++}else if(/sin\s+desvio|sin\s+novedad/.test(t)){setDev(0);lg('✅','Sin desvío');n++}
+document.getElementById('tLog').innerHTML=logs.map(l=>`<div style="color:${l.i==='✅'?'var(--mint)':'var(--text3)'}">${l.i} ${l.m}</div>`).join('');return n}
+
+// VIEW CONTROL
+function viewC(i){const c=ctrls[i];if(!c)return;document.getElementById('mTitle').textContent=c.maquina+' #'+(i+1)+' '+c.hora;
+let h=`<div class="ms"><div class="mt">Identificación</div>`;
+[['Máquina',c.maquina],['Presentación',c.presentacion],['Lote',c.lote],['Orden',c.orden],['Vence',c.vence]].forEach(([l,v])=>{h+=`<div class="mr"><span style="color:var(--text2)">${l}</span><span style="font-family:var(--m);font-weight:600">${v||'—'}</span></div>`});h+=`</div>`;
+h+=`<div class="ms"><div class="mt">Pesos</div>`;c.pesos.forEach((p,j)=>{h+=`<div class="mr"><span style="color:var(--text2)">P${j+1}</span><span style="font-family:var(--m);font-weight:600">${p||'—'}</span></div>`});
+h+=`<div class="mr"><span style="color:var(--text2)"><b>Promedio</b></span><span style="font-family:var(--m);font-weight:700;color:var(--mint)">${c.promedio||'—'}</span></div></div>`;
+if(c.ph)h+=`<div class="ms"><div class="mt">pH</div><div class="mr"><span style="color:var(--text2)">Valor</span><span style="font-family:var(--m);font-weight:600">${c.ph}</span></div></div>`;
+if(c.checks.length)h+=`<div class="ms"><div class="mt">Controles</div><div style="display:flex;flex-wrap:wrap;gap:3px">${c.checks.map(ch=>`<span class="ti-tag">${ch}</span>`).join('')}</div></div>`;
+if(c.fotos&&c.fotos.length)h+=`<div class="ms"><div class="mt">📸</div><div style="display:grid;grid-template-columns:repeat(2,1fr);gap:4px">${c.fotos.map(p=>`<img src="${p}" style="width:100%;border-radius:var(--rs);border:1px solid var(--border)"/>`).join('')}</div></div>`;
+if(c.hasDev)h+=`<div class="ms"><div class="mt red">⚠️ Desvío</div><div class="mr"><span style="color:var(--text2)">Desc.</span><span style="font-family:var(--m)">${c.devDesc||'—'}</span></div><div class="mr"><span style="color:var(--text2)">Uds</span><span style="font-family:var(--m)">${c.devQty||'—'}</span></div><div class="mr"><span style="color:var(--text2)">Reproc.</span><span style="font-family:var(--m);color:${c.isRep?'var(--red)':'var(--mint)'}">${c.isRep?'SÍ':'NO'}</span></div></div>`;
+if(c.obs)h+=`<div class="ms"><div class="mt">Obs</div><div style="font-size:9px;color:var(--text2);font-style:italic">${c.obs}</div></div>`;
+document.getElementById('mBody').innerHTML=h;document.getElementById('mover').classList.add('open');document.body.style.overflow='hidden'}
+function closeM(){document.getElementById('mover').classList.remove('open');document.body.style.overflow=''}
+
+// DASHBOARD
+function onDF(){renderDash()}
+function getF(){let r=allR;const days=parseInt(document.getElementById('dPer').value)||0;
+if(days>0){const cut=new Date();cut.setDate(cut.getDate()-days);r=r.filter(x=>{const f=x.fecha||'';let d=null;if(typeof f==='string'){const p=f.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/);if(p)d=new Date(p[3],p[2]-1,p[1]);if(!d||isNaN(d)){const iso=f.match(/(\d{4})-(\d{2})-(\d{2})/);if(iso)d=new Date(iso[1],iso[2]-1,iso[3])}if(!d||isNaN(d))d=new Date(f)}else d=new Date(f);return d&&!isNaN(d)&&d>=cut})}
+const m=document.getElementById('dMaq').value;const p=document.getElementById('dPrs').value;
+if(m)r=r.filter(x=>x.maquina===m);if(p)r=r.filter(x=>x.presentacion===p);return r}
+
+function renderDash(){
+  const mf=document.getElementById('dMaq').value;const ps=document.getElementById('dPrs');const cp=ps.value;
+  ps.innerHTML='<option value="">Pres.</option>';
+  if(mf)(SPECS[mf]||[]).forEach(s=>{const o=document.createElement('option');o.value=s.pres;o.textContent=s.pres;ps.appendChild(o)});
+  else{const ap=new Set(allR.map(r=>r.presentacion).filter(Boolean));ap.forEach(p=>{const o=document.createElement('option');o.value=p;o.textContent=p;ps.appendChild(o)})}
+  if(cp)ps.value=cp;
+  const r=getF();const tot=r.length;const dv=r.filter(x=>x.hasDev).length;const lt=new Set(r.map(x=>x.lote)).size;
+  document.getElementById('stT').textContent=tot;document.getElementById('stOk').textContent=tot-dv;document.getElementById('stDv').textContent=dv;document.getElementById('stLt').textContent=lt;
+  drwW(r);drwPH(r);drwSt(r);
+  const byA={};r.forEach(x=>{const a=x.analista||'?';if(!byA[a])byA[a]={t:0,d:0};byA[a].t++;if(x.hasDev)byA[a].d++});
+  document.getElementById('anaB').innerHTML=Object.entries(byA).map(([n,d])=>`<div style="background:var(--s1);border:1px solid var(--border);border-radius:var(--rs);padding:7px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center"><div><span style="font-size:10px;font-weight:700">👤 ${n}</span><span style="font-size:8px;color:var(--text3);margin-left:4px">${d.t}c</span></div><div style="font-size:15px;font-weight:800;color:${d.d===0?'var(--mint)':'var(--red)'}">${d.t?Math.round((d.t-d.d)/d.t*100):0}%</div></div>`).join('');
+  document.getElementById('dList').innerHTML=r.slice(0,30).map(x=>`<div style="background:var(--s1);border:1px solid var(--border);border-radius:var(--rs);padding:7px;margin-bottom:3px;display:flex;justify-content:space-between;font-size:9px"><div><b>${x.maquina||''}</b> ${x.presentacion||''} · Lote:${x.lote}<br><span style="color:var(--text3)">${x.analista} · ${x.hora||''}</span></div><div style="text-align:right"><span style="color:${x.hasDev?'var(--red)':'var(--mint)'};font-weight:700">${x.hasDev?'DEV':'OK'}</span><br><span style="color:var(--text3);font-family:var(--m)">${x.promedio||'—'}g</span></div></div>`).join('')}
+
+function drwW(data){const cv=document.getElementById('chW');const ctx=cv.getContext('2d');cv.width=cv.offsetWidth*2;cv.height=400;ctx.scale(2,2);const W=cv.offsetWidth,H=200;ctx.clearRect(0,0,W,H);
+const pts=data.map(d=>{const v=parseFloat(d.promedio);return isNaN(v)?null:{v,maq:d.maquina,pres:d.presentacion}}).filter(p=>p).reverse();
+if(pts.length<2){ctx.fillStyle='#5c6f94';ctx.font='11px Outfit';ctx.fillText(pts.length?'1 dato, necesita 2+':'Sin datos de peso',W/2-60,H/2);return}
+const vs=pts.map(p=>p.v);const mn=Math.min(...vs),mx=Math.max(...vs);const pd=Math.max((mx-mn)*.15,5);const yN=mn-pd,yX=mx+pd;const xS=Math.max((W-50)/(pts.length-1),2);
+const mf=document.getElementById('dMaq').value;const pf=document.getElementById('dPrs').value;
+let sp=null;if(mf&&pf)sp=(SPECS[mf]||[]).find(s=>s.pres===pf);if(!sp&&pts[0]&&pts[0].maq&&pts[0].pres)sp=(SPECS[pts[0].maq]||[]).find(s=>s.pres===pts[0].pres);
+if(sp){const y1=H-((sp.max-yN)/(yX-yN))*(H-40)-20;const y2=H-((sp.min-yN)/(yX-yN))*(H-40)-20;ctx.fillStyle='rgba(45,212,168,.07)';ctx.fillRect(35,y1,W-45,y2-y1);ctx.strokeStyle='rgba(45,212,168,.25)';ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(35,y1);ctx.lineTo(W-5,y1);ctx.stroke();ctx.beginPath();ctx.moveTo(35,y2);ctx.lineTo(W-5,y2);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#2dd4a8';ctx.font='8px IBM Plex Mono';ctx.fillText(sp.max,W-5,y1-1);ctx.fillText(sp.min,W-5,y2+8)}
+ctx.beginPath();ctx.strokeStyle='#5b9cf6';ctx.lineWidth=1.5;pts.forEach((p,i)=>{const x=35+i*xS;const y=H-((p.v-yN)/(yX-yN))*(H-40)-20;i===0?ctx.moveTo(x,y):ctx.lineTo(x,y)});ctx.stroke();
+pts.forEach((p,i)=>{const x=35+i*xS;const y=H-((p.v-yN)/(yX-yN))*(H-40)-20;const ok=sp?p.v>=sp.min&&p.v<=sp.max:true;ctx.beginPath();ctx.arc(x,y,2.5,0,Math.PI*2);ctx.fillStyle=ok?'#2dd4a8':'#f4587a';ctx.fill()});
+ctx.fillStyle='#5c6f94';ctx.font='8px IBM Plex Mono';for(let i=0;i<=4;i++){const v=yN+(yX-yN)*i/4;const y=H-(i/4)*(H-40)-20;ctx.fillText(v.toFixed(0),1,y+3)}}
+
+function drwPH(data){const cv=document.getElementById('chPH');const ctx=cv.getContext('2d');cv.width=cv.offsetWidth*2;cv.height=400;ctx.scale(2,2);const W=cv.offsetWidth,H=200;ctx.clearRect(0,0,W,H);
+const pts=data.map(d=>{const v=parseFloat(d.ph);return isNaN(v)?null:{v}}).filter(p=>p).reverse();
+if(pts.length<2){ctx.fillStyle='#5c6f94';ctx.font='11px Outfit';ctx.fillText(pts.length?'1 dato pH':'Sin datos pH',W/2-40,H/2);return}
+const vs=pts.map(p=>p.v);const mn=Math.min(...vs)-.5,mx=Math.max(...vs)+.5;const xS=Math.max((W-50)/(pts.length-1),2);
+ctx.beginPath();ctx.strokeStyle='#f5a623';ctx.lineWidth=1.5;pts.forEach((p,i)=>{const x=35+i*xS;const y=H-((p.v-mn)/(mx-mn))*(H-40)-20;i===0?ctx.moveTo(x,y):ctx.lineTo(x,y)});ctx.stroke();
+pts.forEach((p,i)=>{const x=35+i*xS;const y=H-((p.v-mn)/(mx-mn))*(H-40)-20;ctx.beginPath();ctx.arc(x,y,2.5,0,Math.PI*2);ctx.fillStyle='#f5a623';ctx.fill()});
+ctx.fillStyle='#5c6f94';ctx.font='8px IBM Plex Mono';for(let i=0;i<=4;i++){const v=mn+(mx-mn)*i/4;const y=H-(i/4)*(H-40)-20;ctx.fillText(v.toFixed(1),1,y+3)}}
+
+function drwSt(data){const grp={};data.forEach(r=>{const k=(r.maquina||'?')+'|||'+(r.presentacion||'?');if(!grp[k])grp[k]=[];(r.pesos||[]).map(Number).filter(v=>!isNaN(v)&&v>0).forEach(v=>grp[k].push(v))});
+const tb=document.getElementById('stBd');tb.innerHTML='';
+Object.entries(grp).forEach(([k,vs])=>{if(!vs.length)return;const[mq,pr]=k.split('|||');const n=vs.length;const me=vs.reduce((a,b)=>a+b,0)/n;const va=vs.reduce((a,b)=>a+Math.pow(b-me,2),0)/n;const sd=Math.sqrt(va);const mn=Math.min(...vs);const mx=Math.max(...vs);
+const sp=(SPECS[mq]||[]).find(s=>s.pres===pr);const ok=sp?me>=sp.min&&me<=sp.max:true;
+const tr=document.createElement('tr');tr.innerHTML=`<td>${mq}</td><td>${pr}</td><td>${n}</td><td><b>${me.toFixed(1)}</b></td><td class="${sd>10?'twn':''}">${sd.toFixed(2)}</td><td>${mn}</td><td>${mx}</td><td>${sp?sp.min+'-'+sp.max:'—'}</td><td class="${ok?'tok':'tbd'}">${ok?'✅':'❌'}</td>`;tb.appendChild(tr)})}
+
+function dlCSV(){if(!allR.length)return;const hd=['Fecha','Analista','Orden','Lote','Vence','Máquina','Pres.','Granel','PT','Ctrl#','Hora','P1','P2','P3','P4','P5','Prom','pH','Controles','Desvío','Desc','Uds','Reproc','Obs'];const rows=allR.map(r=>[r.fecha,r.analista,r.orden,r.lote,r.vence,r.maquina,r.presentacion,r.granel,r.codPT,r.controlNum,r.hora,...(r.pesos||['','','','','']),r.promedio,r.ph,(r.checks||[]).join('; '),r.hasDev?'SÍ':'NO',r.devDesc,r.devQty,r.isRep?'SÍ':'NO',r.obs].map(v=>'"'+(v||'').toString().replace(/"/g,'""')+'"'));const csv='\uFEFF'+[hd.join(','),...rows.map(r=>r.join(','))].join('\n');const b=new Blob([csv],{type:'text/csv;charset=utf-8'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download='gmp_'+new Date().toISOString().slice(0,10)+'.csv';a.click();URL.revokeObjectURL(u);toast('📥')}
+function toast(m,e){const t=document.getElementById('toast');t.textContent=m;t.className='toast on'+(e?' err':'');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('on'),3000)}
+</script>
+</body>
+</html>

@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Guía de Entrenamiento — Control en Proceso GMP</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f0f4f8;--card:#ffffff;--border:#e2e8f0;--text:#1a202c;--text2:#4a5568;--text3:#718096;--mint:#10b981;--mint-l:#d1fae5;--blue:#3b82f6;--blue-l:#dbeafe;--red:#ef4444;--red-l:#fee2e2;--amber:#f59e0b;--amber-l:#fef3c7;--purple:#8b5cf6;--purple-l:#ede9fe;--r:16px;--f:'Nunito',sans-serif;--m:'IBM Plex Mono',monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--f);background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6}
+
+/* HEADER */
+.header{background:linear-gradient(135deg,#065f46,#047857);color:white;padding:24px;text-align:center;position:sticky;top:0;z-index:50;box-shadow:0 4px 20px rgba(0,0,0,.15)}
+.header h1{font-size:20px;font-weight:900;margin-bottom:2px}
+.header p{font-size:12px;opacity:.8;font-weight:600}
+
+/* PROGRESS */
+.progress-bar{background:#e2e8f0;height:6px;position:sticky;top:72px;z-index:49}
+.progress-fill{height:100%;background:var(--mint);transition:width .5s ease;border-radius:0 3px 3px 0}
+
+/* NAV */
+.step-nav{display:flex;overflow-x:auto;gap:0;background:white;border-bottom:1px solid var(--border);position:sticky;top:78px;z-index:48;padding:0 8px}
+.step-dot{padding:10px 12px;font-size:10px;font-weight:700;color:var(--text3);cursor:pointer;white-space:nowrap;border-bottom:3px solid transparent;transition:all .2s}
+.step-dot.active{color:var(--mint);border-bottom-color:var(--mint)}
+.step-dot.done{color:var(--text2)}
+.step-dot.done::before{content:'✅ ';font-size:9px}
+
+.wrap{max-width:680px;margin:0 auto;padding:20px 16px 100px}
+
+/* SECTIONS */
+.section{display:none;animation:fadeUp .4s ease}
+.section.active{display:block}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+
+.card{background:var(--card);border-radius:var(--r);border:1px solid var(--border);padding:24px;margin-bottom:16px;box-shadow:0 2px 8px rgba(0,0,0,.04)}
+.card h2{font-size:18px;font-weight:900;margin-bottom:12px;color:var(--text)}
+.card h3{font-size:15px;font-weight:800;margin-bottom:8px;color:var(--text)}
+.card p{font-size:13px;color:var(--text2);margin-bottom:10px}
+
+/* BADGES */
+.badge{display:inline-block;padding:4px 12px;border-radius:50px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px}
+.badge.gmp{background:var(--mint-l);color:#065f46}
+.badge.app{background:var(--blue-l);color:#1e40af}
+.badge.warn{background:var(--red-l);color:#991b1b}
+.badge.tip{background:var(--amber-l);color:#92400e}
+.badge.quiz{background:var(--purple-l);color:#5b21b6}
+
+/* STEPS */
+.step-card{background:var(--card);border-radius:var(--r);border:1px solid var(--border);padding:20px;margin-bottom:14px;display:flex;gap:14px;align-items:flex-start}
+.step-num{width:36px;height:36px;border-radius:50%;background:var(--mint);color:white;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;flex-shrink:0}
+.step-content{flex:1}
+.step-content h4{font-size:13px;font-weight:800;margin-bottom:4px}
+.step-content p{font-size:12px;color:var(--text2);margin:0}
+
+/* SIMULATED SCREENS */
+.sim-screen{background:#0b1120;border-radius:12px;padding:16px;margin:12px 0;color:#e4eaf6;font-family:var(--m);font-size:11px;line-height:1.7;border:2px solid #253354;position:relative;overflow:hidden}
+.sim-screen::before{content:'📱 App';position:absolute;top:6px;right:10px;font-size:8px;color:#5c6f94;font-family:var(--f);font-weight:700}
+.sim-field{background:#131d33;border:1px solid #253354;border-radius:8px;padding:8px 12px;margin:4px 0;display:flex;justify-content:space-between}
+.sim-field .label{color:#8494b7;font-size:10px}
+.sim-field .value{color:#2dd4a8;font-weight:600;font-size:11px}
+.sim-btn{background:linear-gradient(135deg,#2dd4a8,#1fad88);color:#0b1120;border:none;border-radius:50px;padding:8px 20px;font-weight:800;font-size:11px;display:inline-block;margin-top:8px}
+.sim-check{display:inline-block;background:rgba(45,212,168,.12);border:1px solid rgba(45,212,168,.3);border-radius:6px;padding:4px 10px;margin:2px;font-size:9px;color:#2dd4a8;font-weight:600}
+
+/* IMPORTANT BOX */
+.imp-box{border-left:4px solid var(--red);background:var(--red-l);border-radius:0 var(--r) var(--r) 0;padding:14px 16px;margin:12px 0;font-size:12px;color:#991b1b;font-weight:600}
+.tip-box{border-left:4px solid var(--amber);background:var(--amber-l);border-radius:0 var(--r) var(--r) 0;padding:14px 16px;margin:12px 0;font-size:12px;color:#92400e;font-weight:600}
+.info-box{border-left:4px solid var(--blue);background:var(--blue-l);border-radius:0 var(--r) var(--r) 0;padding:14px 16px;margin:12px 0;font-size:12px;color:#1e40af;font-weight:600}
+
+/* QUIZ */
+.quiz-q{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:18px;margin-bottom:14px}
+.quiz-q h4{font-size:13px;font-weight:800;margin-bottom:10px}
+.quiz-opt{display:block;width:100%;padding:10px 14px;margin:4px 0;border-radius:10px;border:2px solid var(--border);background:white;font-family:var(--f);font-size:12px;font-weight:600;cursor:pointer;text-align:left;transition:all .2s;color:var(--text)}
+.quiz-opt:hover{border-color:var(--blue);background:var(--blue-l)}
+.quiz-opt.correct{border-color:var(--mint);background:var(--mint-l);color:#065f46}
+.quiz-opt.wrong{border-color:var(--red);background:var(--red-l);color:#991b1b}
+.quiz-opt.disabled{pointer-events:none;opacity:.7}
+.quiz-feedback{margin-top:8px;padding:10px;border-radius:8px;font-size:11px;font-weight:700;display:none}
+.quiz-feedback.show{display:block}
+.quiz-feedback.ok{background:var(--mint-l);color:#065f46}
+.quiz-feedback.no{background:var(--red-l);color:#991b1b}
+
+/* SCORE */
+.score-card{background:linear-gradient(135deg,#065f46,#047857);border-radius:var(--r);padding:32px;text-align:center;color:white}
+.score-num{font-size:64px;font-weight:900}
+.score-label{font-size:14px;font-weight:700;opacity:.9}
+
+/* NAV BUTTONS */
+.nav-btns{display:flex;gap:10px;margin-top:20px}
+.nav-btn{flex:1;padding:14px;border-radius:50px;font-family:var(--f);font-size:13px;font-weight:800;cursor:pointer;border:none;text-align:center;transition:all .2s}
+.nav-btn:active{transform:scale(.97)}
+.nav-btn.next{background:var(--mint);color:white}
+.nav-btn.prev{background:white;color:var(--text2);border:2px solid var(--border)}
+.nav-btn:disabled{opacity:.4;cursor:default}
+
+/* Machine table */
+.maq-table{width:100%;border-collapse:collapse;font-size:11px;margin:10px 0}
+.maq-table th{background:var(--mint-l);color:#065f46;padding:8px;text-align:left;font-weight:700;border-bottom:2px solid var(--mint)}
+.maq-table td{padding:7px 8px;border-bottom:1px solid var(--border)}
+.maq-table tr:nth-child(even){background:#f7fafc}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📚 Guía de Entrenamiento</h1>
+  <p>Control en Proceso GMP — Envasado</p>
+</div>
+
+<div class="progress-bar"><div class="progress-fill" id="progFill" style="width:0%"></div></div>
+
+<div class="step-nav" id="stepNav"></div>
+
+<div class="wrap">
+
+<!-- ============ SECCIÓN 0: BIENVENIDA ============ -->
+<div class="section active" data-step="0">
+  <div class="card" style="text-align:center;padding:32px">
+    <div style="font-size:56px;margin-bottom:12px">⚗️</div>
+    <h2>Bienvenido al Entrenamiento</h2>
+    <p style="font-size:14px;max-width:400px;margin:0 auto 16px">Esta guía te va a enseñar cómo realizar los controles en proceso durante el envasado usando la app digital.</p>
+    <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:16px">
+      <span class="badge gmp">Procedimientos GMP</span>
+      <span class="badge app">Uso de la App</span>
+      <span class="badge quiz">Quiz Final</span>
+    </div>
+    <p style="font-size:11px;color:var(--text3)">Duración estimada: 15-20 minutos · 8 módulos + evaluación</p>
+    <div style="margin-top:16px;max-width:300px;margin-left:auto;margin-right:auto">
+      <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:6px;text-align:left">👤 Tu nombre completo:</div>
+      <input id="trainName" placeholder="Nombre y Apellido..." style="width:100%;padding:12px;border-radius:10px;border:2px solid var(--border);font-family:var(--f);font-size:14px;font-weight:600;text-align:center;outline:none" onfocus="this.style.borderColor='var(--mint)'" onblur="this.style.borderColor='var(--border)'" />
+    </div>
+  </div>
+  <div class="nav-btns"><div></div><button class="nav-btn next" onclick="startTraining()">Comenzar →</button></div>
+</div>
+
+<!-- ============ SECCIÓN 1: QUÉ ES EL CONTROL EN PROCESO ============ -->
+<div class="section" data-step="1">
+  <div class="card">
+    <span class="badge gmp">GMP</span>
+    <h2 style="margin-top:10px">¿Qué es el Control en Proceso?</h2>
+    <p>El control en proceso es la verificación que realizamos <b>durante la producción</b> para asegurar que el producto cumple con las especificaciones de calidad. En envasado, esto incluye:</p>
+    
+    <div class="step-card"><div class="step-num">⚖️</div><div class="step-content"><h4>Control de Peso</h4><p>Verificar que cada envase tiene el peso correcto según la presentación</p></div></div>
+    <div class="step-card"><div class="step-num">🔬</div><div class="step-content"><h4>Control de pH</h4><p>Medir el pH del producto para asegurar que está dentro de especificación</p></div></div>
+    <div class="step-card"><div class="step-num">✅</div><div class="step-content"><h4>Atributos de Calidad</h4><p>Verificar lote, vencimiento, etiqueta, tapado, sellado, apariencia y limpieza</p></div></div>
+    <div class="step-card"><div class="step-num">📸</div><div class="step-content"><h4>Evidencia Fotográfica</h4><p>Documentar con fotos el sticker de caja y el lote/vencimiento</p></div></div>
+    
+    <div class="imp-box">⚠️ Los controles se realizan <b>cada 2 horas</b> en cada línea de envasado activa. Es responsabilidad del analista cubrir todas las máquinas en su ronda.</div>
+  </div>
+  <div class="nav-btns"><button class="nav-btn prev" onclick="goStep(0)">← Atrás</button><button class="nav-btn next" onclick="goStep(2)">Siguiente →</button></div>
+</div>
+
+<!-- ============ SECCIÓN 2: INGRESO A LA APP ============ -->
+<div class="section" data-step="2">
+  <div class="card">
+    <span class="badge app">APP</span>
+    <h2 style="margin-top:10px">Ingreso a la App</h2>
+    <p>La app se abre desde el celular usando <b>Google Chrome</b>. Al entrar, verás la pantalla de identificación:</p>
+    
+    <div class="sim-screen">
+      <div style="text-align:center;padding:16px 0">
+        <div style="font-size:32px;margin-bottom:8px">👤</div>
+        <div style="font-size:16px;font-weight:800;margin-bottom:4px">Identificación</div>
+        <div style="font-size:10px;color:#8494b7;margin-bottom:12px">Ingresa tu nombre para registrar controles</div>
+        <div style="background:#182340;border:1px solid #253354;border-radius:8px;padding:10px;margin:0 20px 10px;color:#e4eaf6;font-size:13px">Tu nombre...</div>
+        <div class="sim-btn">Entrar</div>
+      </div>
+    </div>
+    
+    <div class="step-card"><div class="step-num">1</div><div class="step-content"><h4>Escribí tu nombre completo</h4><p>Siempre usá el mismo nombre para que los registros queden consistentes</p></div></div>
+    <div class="step-card"><div class="step-num">2</div><div class="step-content"><h4>Tocá "Entrar"</h4><p>Se inicia tu turno automáticamente con la fecha de hoy</p></div></div>
+    
+    <div class="tip-box">💡 La app recuerda tu nombre. La próxima vez que entres, solo tocás "Entrar".</div>
+  </div>
+  <div class="nav-btns"><button class="nav-btn prev" onclick="goStep(1)">← Atrás</button><button class="nav-btn next" onclick="goStep(3)">Siguiente →</button></div>
+</div>
+
+<!-- ============ SECCIÓN 3: PANTALLA PRINCIPAL ============ -->
+<div class="section" data-step="3">
+  <div class="card">
+    <span class="badge app">APP</span>
+    <h2 style="margin-top:10px">Pantalla Principal del Turno</h2>
+    <p>Al entrar ves tu turno activo con la fecha, tu nombre, y la cantidad de controles realizados:</p>
+    
+    <div class="sim-screen">
+      <div style="background:#182340;border:1px solid #253354;border-radius:8px;padding:8px 12px;margin-bottom:10px;display:flex;justify-content:space-between;font-size:10px">
+        <span>📅 <span style="color:#2dd4a8;font-weight:700">2025-04-14</span> · 👤 <span style="color:#2dd4a8;font-weight:700">María</span> · 0 controles</span>
+        <span style="color:#5c6f94">🏁 Cerrar turno</span>
+      </div>
+      <div style="text-align:center;color:#5c6f94;font-size:10px;padding:12px;border:1px dashed #253354;border-radius:8px;margin-bottom:10px">Sin controles en este turno</div>
+      <div style="text-align:center;border:2px dashed #2dd4a8;background:rgba(45,212,168,.08);border-radius:10px;padding:12px;color:#2dd4a8;font-weight:700;font-size:12px">＋ Nuevo control</div>
+    </div>
+    
+    <p>Desde acá podés:</p>
+    <div class="step-card"><div class="step-num">＋</div><div class="step-content"><h4>Agregar un nuevo control</h4><p>Cada vez que pasás por una máquina, tocás este botón</p></div></div>
+    <div class="step-card"><div class="step-num">📋</div><div class="step-content"><h4>Ver controles anteriores</h4><p>Los controles del turno aparecen en una línea de tiempo. Tocá cualquiera para ver el detalle</p></div></div>
+    <div class="step-card"><div class="step-num">🏁</div><div class="step-content"><h4>Cerrar turno</h4><p>Al final de tu turno, cerrá para empezar uno limpio la próxima vez</p></div></div>
+    
+    <div class="info-box">📊 La pestaña "Dashboard" te permite ver estadísticas, tendencias de peso y pH de todas las máquinas.</div>
+  </div>
+  <div class="nav-btns"><button class="nav-btn prev" onclick="goStep(2)">← Atrás</button><button class="nav-btn next" onclick="goStep(4)">Siguiente →</button></div>
+</div>
+
+<!-- ============ SECCIÓN 4: COMPLETAR UN CONTROL ============ -->
+<div class="section" data-step="4">
+  <div class="card">
+    <span class="badge app">APP</span> <span class="badge gmp">GMP</span>
+    <h2 style="margin-top:10px">Completar un Control</h2>
+    <p>Al tocar "＋ Nuevo control" se abre el formulario. Lo primero es elegir la <b>máquina y la presentación</b>:</p>
+    
+    <div class="sim-screen">
+      <div class="sim-field"><span class="label">Hora</span><span class="value">06:30</span></div>
+      <div class="sim-field"><span class="label">Máquina</span><span class="value">Strunk ▾</span></div>
+      <div class="sim-field"><span class="label">Presentación</span><span class="value">900 ml (obj: 905g) ▾</span></div>
+      <div class="sim-field"><span class="label">N° Lote</span><span class="value">240315</span></div>
+      <div class="sim-field"><span class="label">N° Orden</span><span class="value">5012</span></div>
+      <div class="sim-field"><span class="label">F. Vencimiento</span><span class="value">06/2027</span></div>
+      <div style="margin-top:8px;text-align:center;background:#131d33;border:1px solid #253354;border-radius:8px;padding:6px;font-size:9px">🎯 <span style="color:#2dd4a8;font-weight:700">Obj: 905g</span> · Rango: 900g — 910g</div>
+    </div>
+    
+    <div class="tip-box">💡 <b>Autocompletado:</b> Si ya cargaste un control para una máquina en este turno, al elegirla de nuevo se autocompletan Lote, Orden, Vencimiento, etc. Solo verificá que estén correctos.</div>
+    
+    <h3 style="margin-top:16px">Máquinas y Presentaciones</h3>
+    <p>Estas son las máquinas configuradas con sus rangos de peso:</p>
+    
+    <table class="maq-table">
+      <tr><th>Máquina</th><th>Presentación</th><th>Obj.</th><th>Rango</th></tr>
+      <tr><td>Strunk</td><td>900 ml</td><td>905g</td><td>900-910g</td></tr>
+      <tr><td>Strunk</td><td>1.8 L</td><td>1805g</td><td>1800-1830g</td></tr>
+      <tr><td>Alfi</td><td>3 L Suavizante</td><td>3000g</td><td>2918-3010g</td></tr>
+      <tr><td>Alfi</td><td>3 L Detergente</td><td>3050g</td><td>3048-3140g</td></tr>
+      <tr><td>Alfi</td><td>750 ml</td><td>765g</td><td>765-790g</td></tr>
+      <tr><td>Hipo 1</td><td>1 L</td><td>1056g</td><td>1056-1087g</td></tr>
+      <tr><td>Hipo 1</td><td>750 ml</td><td>792g</td><td>792-800g</td></tr>
+      <tr><td>Hipo 2</td><td>2 L</td><td>2112g</td><td>2112-2175g</td></tr>
+      <tr><td>Alcoholes</td><td>900 ml</td><td>774g</td><td>774-800g</td></tr>
+      <tr><td>Elf</td><td>1.25 L / 640ml / 1.3L / 1.1L</td><td>—</td><td>Ver app</td></tr>
+      <tr><td>Bidonera</td><td>1 L</td><td>970g</td><td>970-1000g</td></tr>
+      <tr><td>Bossar</td><td>900/800/450/500/600 ml</td><td>—</td><td>Ver app</td></tr>
+      <tr><td>Alwid</td><td>1.25 L</td><td>1275g</td><td>1275-1289g</td></tr>
+      <tr><td>Cleanway</td><td>5L / 4L</td><td>—</td><td>Ver app</td></tr>
+    </table>
+  </div>
+  <div class="nav-btns"><button class="nav-btn prev" onclick="goStep(3)">← Atrás</button><button class="nav-btn next" onclick="goStep(5)">Siguiente →</button></div>
+</div>
+
+<!-- ============ SECCIÓN 5: PESOS Y pH ============ -->
+<div class="section" data-step="5">
+  <div class="card">
+    <span class="badge gmp">GMP</span>
+    <h2 style="margin-top:10px">Control de Pesos y pH</h2>
+    
+    <h3>Pesos</h3>
+    <p>Se toman <b>5 envases al azar</b> de la línea y se pesan individualmente. La app calcula el promedio automáticamente.</p>
+    
+    <div class="sim-screen">
+      <div style="font-size:9px;color:#5c6f94;text-align:center;margin-bottom:4px">P1 &nbsp;&nbsp;&nbsp; P2 &nbsp;&nbsp;&nbsp; P3 &nbsp;&nbsp;&nbsp; P4 &nbsp;&nbsp;&nbsp; P5</div>
+      <div style="display:flex;gap:4px;margin-bottom:6px">
+        <div style="flex:1;background:#182340;border:1px solid #2dd4a8;border-radius:6px;padding:8px;text-align:center;color:#2dd4a8;font-weight:700">905</div>
+        <div style="flex:1;background:#182340;border:1px solid #2dd4a8;border-radius:6px;padding:8px;text-align:center;color:#2dd4a8;font-weight:700">908</div>
+        <div style="flex:1;background:#182340;border:1px solid #2dd4a8;border-radius:6px;padding:8px;text-align:center;color:#2dd4a8;font-weight:700">902</div>
+        <div style="flex:1;background:#182340;border:1px solid #f4587a;border-radius:6px;padding:8px;text-align:center;color:#f4587a;font-weight:700">895</div>
+        <div style="flex:1;background:#182340;border:1px solid #2dd4a8;border-radius:6px;padding:8px;text-align:center;color:#2dd4a8;font-weight:700">907</div>
+      </div>
+      <div class="sim-field"><span class="label">Promedio</span><span class="value">903.40</span></div>
+      <div style="text-align:center;font-size:9px;color:#5c6f94;margin-top:4px">🎯 Rango: <b style="color:#2dd4a8">900g — 910g</b></div>
+    </div>
+    
+    <p>Los pesos individuales se muestran en <b style="color:var(--mint)">verde</b> si están dentro del rango y en <b style="color:var(--red)">rojo</b> si están fuera.</p>
+    
+    <div class="imp-box">⚠️ Si un peso individual está fuera de rango, reportalo como desvío aunque el promedio esté bien.</div>
+    
+    <h3 style="margin-top:16px">pH</h3>
+    <p>El pH se mide <b>opcionalmente</b> en cada control. Registrá el valor medido con el pHmetro calibrado.</p>
+    
+    <div class="tip-box">💡 Recordá calibrar el pHmetro al inicio del turno con las soluciones buffer correspondientes.</div>
+  </div>
+  <div class="nav-btns"><button class="nav-btn prev" onclick="goStep(4)">← Atrás</button><button class="nav-btn next" onclick="goStep(6)">Siguiente →</button></div>
+</div>
+
+<!-- ============ SECCIÓN 6: CHECKS, FOTOS Y DESVÍOS ============ -->
+<div class="section" data-step="6">
+  <div class="card">
+    <span class="badge gmp">GMP</span> <span class="badge app">APP</span>
+    <h2 style="margin-top:10px">Controles, Fotos y Desvíos</h2>
+    
+    <h3>Controles de Calidad</h3>
+    <p>Verificá cada uno de estos atributos y marcalos en la app:</p>
+    
+    <div class="sim-screen" style="padding:10px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+        <div class="sim-check">✓ Ctrl Lote</div>
+        <div class="sim-check">✓ Ctrl Vence</div>
+        <div class="sim-check">✓ Funda/Caja</div>
+        <div class="sim-check">✓ Tapado</div>
+        <div class="sim-check">✓ Etiqueta</div>
+        <div class="sim-check">✓ Apar. Granel</div>
+        <div class="sim-check">✓ Limp. Línea</div>
+      </div>
+    </div>
+    
+    <h3 style="margin-top:14px">📸 Fotos Obligatorias</h3>
+    <p>En <b>cada control</b> debés tomar 2 fotos:</p>
+    <div class="step-card"><div class="step-num">📦</div><div class="step-content"><h4>Sticker de Caja</h4><p>Foto del sticker/etiqueta de la caja de cartón</p></div></div>
+    <div class="step-card"><div class="step-num">🏷️</div><div class="step-content"><h4>Lote y Vencimiento</h4><p>Foto donde se vea el lote y fecha de vencimiento impresos en el envase</p></div></div>
+    
+    <h3 style="margin-top:14px">⚠️ Desvíos</h3>
+    <p>Si detectás algún desvío (peso fuera de rango, etiqueta incorrecta, etc.):</p>
+    <div class="step-card"><div class="step-num">1</div><div class="step-content"><h4>Marcá "Sí" en Desvíos</h4><p>Se abre la sección de desvíos</p></div></div>
+    <div class="step-card"><div class="step-num">2</div><div class="step-content"><h4>Describí el desvío</h4><p>Indicá qué pasó (ej: "Etiqueta corrida en lote")</p></div></div>
+    <div class="step-card"><div class="step-num">3</div><div class="step-content"><h4>Indicá cantidad de unidades</h4><p>¿Cuántas unidades tienen el desvío?</p></div></div>
+    <div class="step-card"><div class="step-num">4</div><div class="step-content"><h4>¿Es para reproceso?</h4><p>Marcá si las unidades van a reproceso o se descartan</p></div></div>
+    <div class="step-card"><div class="step-num">5</div><div class="step-content"><h4>📷 Foto del desvío</h4><p>Tomá una foto que muestre claramente el problema</p></div></div>
+    
+    <div class="imp-box">⚠️ <b>Nunca ignores un desvío.</b> Aunque parezca menor, registralo. Es información clave para mejorar el proceso.</div>
+  </div>
+  <div class="nav-btns"><button class="nav-btn prev" onclick="goStep(5)">← Atrás</button><button class="nav-btn next" onclick="goStep(7)">Siguiente →</button></div>
+</div>
+
+<!-- ============ SECCIÓN 7: VOZ ============ -->
+<div class="section" data-step="7">
+  <div class="card">
+    <span class="badge app">APP</span> <span class="badge tip">TIP</span>
+    <h2 style="margin-top:10px">🎙️ Dictado por Voz</h2>
+    <p>Para agilizar el registro, podés <b>dictar los datos por voz</b>. La app llena los campos automáticamente.</p>
+    
+    <h3>¿Cómo usarlo?</h3>
+    <div class="step-card"><div class="step-num">1</div><div class="step-content"><h4>Tocá el botón de micrófono 🎙️</h4><p>Aparece al abrir un nuevo control, arriba del formulario</p></div></div>
+    <div class="step-card"><div class="step-num">2</div><div class="step-content"><h4>Hablá claro y natural</h4><p>Decí los datos usando palabras clave</p></div></div>
+    <div class="step-card"><div class="step-num">3</div><div class="step-content"><h4>Tocá de nuevo para detener</h4><p>Los campos se llenan automáticamente</p></div></div>
+    
+    <h3 style="margin-top:14px">Ejemplos de dictado:</h3>
+    <div class="sim-screen" style="font-size:12px;line-height:2">
+      🗣️ "pH 6.5 peso 1 905 peso 2 908 peso 3 902 peso 4 910 peso 5 907 <b>todo conforme</b>"
+    </div>
+    <div class="sim-screen" style="font-size:12px;line-height:2">
+      🗣️ "peso 1 3005 peso 2 2998 peso 3 3010 peso 4 3002 peso 5 3008 todo conforme <b>sin desvío</b>"
+    </div>
+    <div class="sim-screen" style="font-size:12px;line-height:2">
+      🗣️ "pH 7.2 peso 1 770 peso 2 768 peso 3 765 peso 4 771 peso 5 769 conforme <b>desvío</b>"
+    </div>
+    
+    <h3 style="margin-top:14px">Palabras clave que reconoce:</h3>
+    <table class="maq-table">
+      <tr><th>Decís...</th><th>Se llena...</th></tr>
+      <tr><td>"pH 6.5"</td><td>Campo de pH</td></tr>
+      <tr><td>"peso 1 905"</td><td>Peso 1</td></tr>
+      <tr><td>"peso 2 908"</td><td>Peso 2</td></tr>
+      <tr><td>"todo conforme"</td><td>Todos los checks ✅</td></tr>
+      <tr><td>"sin desvío"</td><td>Desvío: No</td></tr>
+      <tr><td>"desvío"</td><td>Desvío: Sí</td></tr>
+    </table>
+    
+    <div class="tip-box">💡 <b>Requisito:</b> Usá Google Chrome y permití el acceso al micrófono cuando te lo pida.</div>
+  </div>
+  <div class="nav-btns"><button class="nav-btn prev" onclick="goStep(6)">← Atrás</button><button class="nav-btn next" onclick="goStep(8)">Ir al Quiz →</button></div>
+</div>
+
+<!-- ============ SECCIÓN 8: QUIZ ============ -->
+<div class="section" data-step="8">
+  <div class="card" style="text-align:center">
+    <span class="badge quiz">EVALUACIÓN</span>
+    <h2 style="margin-top:10px">Quiz de Evaluación</h2>
+    <p>Respondé estas preguntas para verificar lo aprendido. Necesitás <b>70% o más</b> para aprobar.</p>
+  </div>
+
+  <div class="quiz-q" id="q0">
+    <h4>1. ¿Cada cuánto tiempo se deben realizar los controles en proceso?</h4>
+    <button class="quiz-opt" onclick="answer(0,this,false)">Cada 30 minutos</button>
+    <button class="quiz-opt" onclick="answer(0,this,true)">Cada 2 horas</button>
+    <button class="quiz-opt" onclick="answer(0,this,false)">Una vez por turno</button>
+    <button class="quiz-opt" onclick="answer(0,this,false)">Solo cuando hay problemas</button>
+    <div class="quiz-feedback" id="fb0"></div>
+  </div>
+
+  <div class="quiz-q" id="q1">
+    <h4>2. ¿Cuántos envases se pesan en cada control?</h4>
+    <button class="quiz-opt" onclick="answer(1,this,false)">3</button>
+    <button class="quiz-opt" onclick="answer(1,this,true)">5</button>
+    <button class="quiz-opt" onclick="answer(1,this,false)">10</button>
+    <button class="quiz-opt" onclick="answer(1,this,false)">1</button>
+    <div class="quiz-feedback" id="fb1"></div>
+  </div>
+
+  <div class="quiz-q" id="q2">
+    <h4>3. Si un peso individual está fuera de rango pero el promedio está bien, ¿qué hacés?</h4>
+    <button class="quiz-opt" onclick="answer(2,this,false)">No pasa nada, el promedio es lo que importa</button>
+    <button class="quiz-opt" onclick="answer(2,this,true)">Lo reporto como desvío</button>
+    <button class="quiz-opt" onclick="answer(2,this,false)">Lo borro y peso otro envase</button>
+    <div class="quiz-feedback" id="fb2"></div>
+  </div>
+
+  <div class="quiz-q" id="q3">
+    <h4>4. ¿Cuántas fotos se deben tomar en cada control?</h4>
+    <button class="quiz-opt" onclick="answer(3,this,false)">1 (solo el producto)</button>
+    <button class="quiz-opt" onclick="answer(3,this,true)">2 (sticker de caja + lote/vencimiento)</button>
+    <button class="quiz-opt" onclick="answer(3,this,false)">No es obligatorio tomar fotos</button>
+    <div class="quiz-feedback" id="fb3"></div>
+  </div>
+
+  <div class="quiz-q" id="q4">
+    <h4>5. ¿Qué navegador hay que usar para que funcione el dictado por voz?</h4>
+    <button class="quiz-opt" onclick="answer(4,this,false)">Safari</button>
+    <button class="quiz-opt" onclick="answer(4,this,false)">Firefox</button>
+    <button class="quiz-opt" onclick="answer(4,this,true)">Google Chrome</button>
+    <button class="quiz-opt" onclick="answer(4,this,false)">Cualquiera</button>
+    <div class="quiz-feedback" id="fb4"></div>
+  </div>
+
+  <div class="quiz-q" id="q5">
+    <h4>6. Si detectás un desvío, ¿qué datos debés registrar?</h4>
+    <button class="quiz-opt" onclick="answer(5,this,false)">Solo la descripción</button>
+    <button class="quiz-opt" onclick="answer(5,this,false)">Descripción y foto</button>
+    <button class="quiz-opt" onclick="answer(5,this,true)">Descripción, cantidad de unidades, si es reproceso, y foto</button>
+    <button class="quiz-opt" onclick="answer(5,this,false)">Se avisa verbal al supervisor y listo</button>
+    <div class="quiz-feedback" id="fb5"></div>
+  </div>
+
+  <div class="quiz-q" id="q6">
+    <h4>7. Al cambiar de máquina durante la ronda, ¿qué pasa con los datos?</h4>
+    <button class="quiz-opt" onclick="answer(6,this,false)">Hay que cerrar el lote y abrir uno nuevo</button>
+    <button class="quiz-opt" onclick="answer(6,this,true)">Se elige la nueva máquina y se autocompletan los datos si ya se usó antes</button>
+    <button class="quiz-opt" onclick="answer(6,this,false)">Hay que salir y volver a entrar</button>
+    <div class="quiz-feedback" id="fb6"></div>
+  </div>
+
+  <div class="quiz-q" id="q7">
+    <h4>8. ¿Cuál es el rango de peso aceptado para la Strunk 900ml?</h4>
+    <button class="quiz-opt" onclick="answer(7,this,false)">890g — 920g</button>
+    <button class="quiz-opt" onclick="answer(7,this,true)">900g — 910g</button>
+    <button class="quiz-opt" onclick="answer(7,this,false)">905g — 915g</button>
+    <div class="quiz-feedback" id="fb7"></div>
+  </div>
+
+  <!-- SCORE -->
+  <div id="scoreCard" style="display:none;margin-top:16px">
+    <div class="score-card">
+      <div class="score-num" id="scoreNum">0%</div>
+      <div class="score-label" id="scoreLbl">Resultado</div>
+    </div>
+    <div id="scoreMsg" class="card" style="margin-top:12px;text-align:center"></div>
+  </div>
+
+  <div class="nav-btns"><button class="nav-btn prev" onclick="goStep(7)">← Atrás</button><button class="nav-btn next" id="finishBtn" onclick="showScore()" disabled>Ver Resultado</button></div>
+</div>
+
+</div>
+
+<script>
+const SURL='https://script.google.com/macros/s/AKfycbxmayMAPlLCrozmZRM3gLSf5MgcWO9lC5y_ayR0DkRdi_hHYaoLRI43OgIJ9d7nTPDGug/exec';
+const STEPS=['Inicio','¿Qué es?','Ingreso','Pantalla','Control','Pesos/pH','Checks/Fotos','Voz','Quiz'];
+let curStep=0, trainUser='';
+const answered=new Array(8).fill(null);
+const questions=[
+  '¿Cada cuánto se realizan los controles?',
+  '¿Cuántos envases se pesan?',
+  'Peso individual fuera de rango, promedio OK',
+  '¿Cuántas fotos por control?',
+  '¿Qué navegador para voz?',
+  '¿Qué datos del desvío?',
+  'Al cambiar de máquina...',
+  'Rango Strunk 900ml'
+];
+const feedback=[
+  ['Los controles se realizan cada 2 horas en cada línea activa.','Incorrecto.'],
+  ['Se pesan 5 envases al azar en cada control.','Son 5 envases.'],
+  ['Todo desvío debe reportarse, aunque el promedio esté bien.','Los desvíos individuales también se reportan.'],
+  ['Son 2 fotos obligatorias: sticker de caja y lote/vencimiento.','Son 2 fotos en cada control.'],
+  ['El dictado por voz funciona en Google Chrome.','Solo funciona en Chrome.'],
+  ['Hay que registrar descripción, cantidad, reproceso y foto.','Se necesitan todos los datos del desvío.'],
+  ['La app permite cambiar de máquina y autocompleta datos previos.','No hace falta cerrar lotes.'],
+  ['El rango de la Strunk 900ml es 900g a 910g con objetivo 905g.','Revisá la tabla de especificaciones.']
+];
+
+const nav=document.getElementById('stepNav');
+STEPS.forEach((s,i)=>{const d=document.createElement('div');d.className='step-dot'+(i===0?' active':'');d.textContent=s;d.onclick=()=>goStep(i);nav.appendChild(d)});
+
+function startTraining(){
+  const name=document.getElementById('trainName').value.trim();
+  if(!name){alert('Ingresá tu nombre completo para comenzar');return}
+  trainUser=name;
+  goStep(1);
+}
+
+function goStep(n){
+  curStep=n;
+  document.querySelectorAll('.section').forEach((s,i)=>s.classList.toggle('active',i===n));
+  document.querySelectorAll('.step-dot').forEach((d,i)=>{d.className='step-dot'+(i===n?' active':i<n?' done':'')});
+  document.getElementById('progFill').style.width=((n/(STEPS.length-1))*100)+'%';
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function answer(qIdx,btn,correct){
+  if(answered[qIdx]!==null)return;
+  answered[qIdx]=correct;
+  const opts=btn.parentElement.querySelectorAll('.quiz-opt');
+  opts.forEach(o=>o.classList.add('disabled'));
+  btn.classList.add(correct?'correct':'wrong');
+  // Highlight correct answer if wrong
+  if(!correct){opts.forEach(o=>{if(o.getAttribute('onclick').includes(',true)'))o.classList.add('correct')})}
+  const fb=document.getElementById('fb'+qIdx);
+  fb.textContent=(correct?'✅ ':'❌ ')+feedback[qIdx][correct?0:1];
+  fb.className='quiz-feedback show '+(correct?'ok':'no');
+  if(answered.every(a=>a!==null))document.getElementById('finishBtn').disabled=false;
+}
+
+function showScore(){
+  const correct=answered.filter(a=>a===true).length;
+  const pct=Math.round(correct/answered.length*100);
+  document.getElementById('scoreNum').textContent=pct+'%';
+  document.getElementById('scoreCard').style.display='block';
+  const pass=pct>=70;
+  document.getElementById('scoreLbl').textContent=correct+'/'+answered.length+' respuestas correctas';
+  document.getElementById('scoreMsg').innerHTML=pass
+    ?'<div style="font-size:36px;margin-bottom:8px">🎉</div><h3 style="color:var(--mint)">¡Aprobado!</h3><p>Estás listo/a para realizar controles en proceso. Recordá siempre seguir los procedimientos GMP.</p><p style="font-size:11px;color:var(--text3);margin-top:8px">✅ Resultado guardado en el sistema</p>'
+    :'<div style="font-size:36px;margin-bottom:8px">📖</div><h3 style="color:var(--red)">No aprobado</h3><p>Necesitás 70% para aprobar. Revisá los módulos y volvé a intentar.</p><p style="font-size:11px;color:var(--text3);margin-top:8px">⚠️ Resultado guardado en el sistema</p>';
+  document.getElementById('scoreCard').scrollIntoView({behavior:'smooth'});
+  
+  // Send results to Google Sheets
+  sendResults(correct, pct, pass);
+}
+
+function sendResults(correct, pct, pass){
+  const payload={
+    type: 'training',
+    analista: trainUser,
+    fecha: new Date().toLocaleString('es-ES'),
+    puntaje: pct,
+    correctas: correct,
+    total: answered.length,
+    aprobado: pass ? 'SÍ' : 'NO',
+    respuestas: answered.map((a,i) => questions[i] + ': ' + (a ? '✅' : '❌')).join(' | ')
+  };
+  
+  fetch(SURL, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: {'Content-Type': 'text/plain'},
+    body: JSON.stringify(payload)
+  }).then(() => {
+    console.log('Resultados enviados');
+  }).catch(err => {
+    console.error('Error enviando resultados:', err);
+  });
+}
+</script>
+</body>
+</html>
