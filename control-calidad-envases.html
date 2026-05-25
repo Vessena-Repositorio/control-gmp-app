@@ -318,11 +318,35 @@
             }
         };
 
+        // =====================================================
+        // CONFIGURACIÓN: Pegá tu URL de Google Apps Script acá
+        // =====================================================
+        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbysLvLlh4s4HKj2jWiSGbcpBBq5BvemMWCWF6LS8_ReV6K3_GXTv35L0iUZWwBYqwCL/exec';
+        // =====================================================
+
+        // Helper para llamadas a la API de Google Sheets
+        async function apiCall(action, data = null, params = {}) {
+            const url = new URL(GOOGLE_SCRIPT_URL);
+            url.searchParams.set('action', action);
+            Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+
+            const options = data
+                ? { method: 'POST', body: JSON.stringify(data), headers: { 'Content-Type': 'text/plain' } }
+                : { method: 'GET' };
+            
+            // Google redirige, hay que seguir la redirección
+            const response = await fetch(url.toString(), { ...options, redirect: 'follow' });
+            return response.json();
+        }
+
         function App() {
             const [activeTab, setActiveTab] = useState('soplado');
             const [ordenesSoplado, setOrdenesSoplado] = useState([]);
             const [controlesLCC, setControlesLCC] = useState([]);
             const [mensaje, setMensaje] = useState(null);
+            const [cargando, setCargando] = useState(true);
+            const [guardando, setGuardando] = useState(false);
+            const [configurado, setConfigurado] = useState(GOOGLE_SCRIPT_URL !== 'PEGAR_TU_URL_AQUI');
             
             // Estados Órdenes Soplado
             const [mostrarNuevaOrden, setMostrarNuevaOrden] = useState(false);
@@ -352,24 +376,43 @@
             const [busqueda, setBusqueda] = useState('');
             const [mostrarAlertasOOS, setMostrarAlertasOOS] = useState(false);
 
-            useEffect(() => {
-                const storedOrdenes = localStorage.getItem('ordenes_soplado');
-                const storedLCC = localStorage.getItem('controles_lcc');
-                if (storedOrdenes) setOrdenesSoplado(JSON.parse(storedOrdenes));
-                if (storedLCC) setControlesLCC(JSON.parse(storedLCC));
-            }, []);
+            // Cargar datos desde Google Sheets al iniciar
+            const cargarDatos = async () => {
+                if (!configurado) { setCargando(false); return; }
+                try {
+                    setCargando(true);
+                    const result = await apiCall('getAll');
+                    if (result.error) throw new Error(result.error);
+                    setOrdenesSoplado(result.ordenes || []);
+                    setControlesLCC(result.lcc || []);
+                } catch (err) {
+                    console.error('Error cargando datos:', err);
+                    setMensaje({ tipo: 'warning', texto: '⚠️ Error al conectar con Google Sheets. Verificá la URL del script.' });
+                    // Fallback a localStorage
+                    const storedOrdenes = localStorage.getItem('ordenes_soplado');
+                    const storedLCC = localStorage.getItem('controles_lcc');
+                    if (storedOrdenes) setOrdenesSoplado(JSON.parse(storedOrdenes));
+                    if (storedLCC) setControlesLCC(JSON.parse(storedLCC));
+                } finally {
+                    setCargando(false);
+                }
+            };
 
+            useEffect(() => { cargarDatos(); }, []);
+
+            // Guardar órdenes en Google Sheets (y localStorage como backup)
             const guardarOrdenes = (nuevasOrdenes) => {
                 localStorage.setItem('ordenes_soplado', JSON.stringify(nuevasOrdenes));
                 setOrdenesSoplado(nuevasOrdenes);
             };
 
+            // Guardar controles LCC en Google Sheets (y localStorage como backup)
             const guardarControlesLCC = (nuevosControles) => {
                 localStorage.setItem('controles_lcc', JSON.stringify(nuevosControles));
                 setControlesLCC(nuevosControles);
             };
 
-            const crearNuevaOrden = () => {
+            const crearNuevaOrden = async () => {
                 if (!nuevaOrdenData.numeroOrden || !nuevaOrdenData.envase || !nuevaOrdenData.operador) {
                     setMensaje({ tipo: 'warning', texto: 'Complete todos los campos obligatorios' });
                     return;
@@ -378,7 +421,19 @@
                     id: Date.now(), ...nuevaOrdenData, estado: 'activa', controles: [],
                     createdAt: new Date().toISOString()
                 };
+                setGuardando(true);
                 guardarOrdenes([nuevaOrden, ...ordenesSoplado]);
+                
+                // Enviar a Google Sheets
+                if (configurado) {
+                    try {
+                        await apiCall('saveOrden', nuevaOrden);
+                    } catch (err) {
+                        console.error('Error guardando en Sheets:', err);
+                        setMensaje({ tipo: 'warning', texto: '⚠️ Guardado local OK, pero falló la sincronización con Google Sheets' });
+                    }
+                }
+                setGuardando(false);
                 setMensaje({ tipo: 'success', texto: `✓ Orden ${nuevaOrdenData.numeroOrden} creada` });
                 setMostrarNuevaOrden(false);
                 setNuevaOrdenData({
@@ -387,7 +442,7 @@
                 });
             };
 
-            const registrarControlSoplado = () => {
+            const registrarControlSoplado = async () => {
                 if (!ordenSeleccionada) {
                     setMensaje({ tipo: 'warning', texto: 'Seleccione una orden' });
                     return;
@@ -408,12 +463,24 @@
                     }
                     return orden;
                 });
+                setGuardando(true);
                 guardarOrdenes(ordenesActualizadas);
+                
+                // Sincronizar con Google Sheets
+                if (configurado) {
+                    try {
+                        const ordenActualizada = ordenesActualizadas.find(o => o.id === ordenSeleccionada.id);
+                        await apiCall('updateOrden', ordenActualizada);
+                    } catch (err) {
+                        console.error('Error sincronizando:', err);
+                    }
+                }
+                setGuardando(false);
                 setMensaje({ tipo: 'success', texto: `✓ Control de ${tipoControlSoplado} registrado` });
                 resetFormularios();
             };
 
-            const registrarControlLCC = () => {
+            const registrarControlLCC = async () => {
                 if (!nuevoControlLCC.envase || !nuevoControlLCC.operador || !tipoControlLCC) {
                     setMensaje({ tipo: 'warning', texto: 'Complete todos los campos obligatorios' });
                     return;
@@ -423,7 +490,18 @@
                     hora: new Date().toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' }),
                     mediciones: { ...mediciones }, observaciones, timestamp: new Date().toISOString()
                 };
+                setGuardando(true);
                 guardarControlesLCC([nuevoControl, ...controlesLCC]);
+                
+                // Enviar a Google Sheets
+                if (configurado) {
+                    try {
+                        await apiCall('saveLCC', nuevoControl);
+                    } catch (err) {
+                        console.error('Error guardando LCC en Sheets:', err);
+                    }
+                }
+                setGuardando(false);
                 setMensaje({ tipo: 'success', texto: `✓ Control ${tipoControlLCC} registrado` });
                 resetFormularios();
                 setMostrarNuevoLCC(false);
@@ -446,25 +524,42 @@
 
             const esFabuloso = (envase) => envase === 'FAB-1L' || envase === 'FAB-2L';
 
-            const finalizarOrden = (ordenId) => {
+            const finalizarOrden = async (ordenId) => {
                 const ordenesActualizadas = ordenesSoplado.map(orden => {
                     if (orden.id === ordenId) return { ...orden, estado: 'finalizada' };
                     return orden;
                 });
                 guardarOrdenes(ordenesActualizadas);
+                
+                if (configurado) {
+                    try {
+                        const ordenFinalizada = ordenesActualizadas.find(o => o.id === ordenId);
+                        await apiCall('updateOrden', ordenFinalizada);
+                    } catch (err) { console.error('Error finalizando:', err); }
+                }
                 setMensaje({ tipo: 'success', texto: 'Orden finalizada' });
             };
 
-            const eliminarOrden = (ordenId) => {
+            const eliminarOrden = async (ordenId) => {
                 if (confirm('¿Eliminar esta orden?')) {
                     guardarOrdenes(ordenesSoplado.filter(orden => orden.id !== ordenId));
+                    
+                    if (configurado) {
+                        try { await apiCall('deleteOrden', null, { id: ordenId }); }
+                        catch (err) { console.error('Error eliminando:', err); }
+                    }
                     setMensaje({ tipo: 'success', texto: 'Orden eliminada' });
                 }
             };
 
-            const eliminarControlLCC = (controlId) => {
+            const eliminarControlLCC = async (controlId) => {
                 if (confirm('¿Eliminar este control LCC?')) {
                     guardarControlesLCC(controlesLCC.filter(c => c.id !== controlId));
+                    
+                    if (configurado) {
+                        try { await apiCall('deleteLCC', null, { id: controlId }); }
+                        catch (err) { console.error('Error eliminando LCC:', err); }
+                    }
                     setMensaje({ tipo: 'success', texto: 'Control eliminado' });
                 }
             };
@@ -496,11 +591,44 @@
                             <div className="logo">VESSENA</div>
                             <h1>Control de Calidad - Envases</h1>
                         </div>
-                        <div style={{textAlign: 'right', color: '#718096'}}>
+                        <div style={{textAlign: 'right', color: '#718096', display: 'flex', alignItems: 'center', gap: '15px'}}>
                             <div style={{fontSize: '14px'}}>SOP-PR-138</div>
+                            {configurado && (
+                                <button className="btn btn-secondary" onClick={cargarDatos}
+                                    style={{fontSize: '13px', padding: '6px 14px'}}
+                                    disabled={cargando}>
+                                    {cargando ? '⏳ Cargando...' : '🔄 Sincronizar'}
+                                </button>
+                            )}
+                            <div style={{fontSize: '12px'}}>
+                                {configurado 
+                                    ? <span style={{color: '#38a169'}}>● Google Sheets conectado</span>
+                                    : <span style={{color: '#e53e3e'}}>● Solo local</span>
+                                }
+                            </div>
                         </div>
                     </div>
 
+                    {!configurado && (
+                        <div className="alert alert-warning" style={{marginBottom: '20px', borderRadius: '12px'}}>
+                            <strong>⚠️ Google Sheets no configurado.</strong> Los datos se guardan solo en este navegador (localStorage). 
+                            Para compartir datos entre usuarios, seguí las instrucciones del archivo <code>google-apps-script.js</code> 
+                            y pegá la URL en la constante <code>GOOGLE_SCRIPT_URL</code> al inicio del código.
+                        </div>
+                    )}
+
+                    {guardando && (
+                        <div className="alert alert-info" style={{marginBottom: '20px', borderRadius: '12px'}}>
+                            ⏳ Guardando en Google Sheets...
+                        </div>
+                    )}
+
+                    {cargando ? (
+                        <div style={{background: 'white', borderRadius: '12px', padding: '60px 20px', textAlign: 'center'}}>
+                            <div style={{fontSize: '48px', marginBottom: '15px'}}>⏳</div>
+                            <p style={{color: '#718096', fontSize: '16px'}}>Cargando datos desde Google Sheets...</p>
+                        </div>
+                    ) : (
                     <div className="main-content">
                         <div className="tabs">
                             <button className={`tab ${activeTab === 'soplado' ? 'active' : ''}`}
@@ -1327,6 +1455,7 @@
                             )}
                         </div>
                     </div>
+                    )}
                 </div>
             );
         }
