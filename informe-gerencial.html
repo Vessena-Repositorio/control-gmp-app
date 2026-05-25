@@ -204,6 +204,44 @@ body{font-family:var(--f);background:var(--bg);color:var(--text);line-height:1.5
 
 <script>
 const SURL='https://script.google.com/macros/s/AKfycbxmayMAPlLCrozmZRM3gLSf5MgcWO9lC5y_ayR0DkRdi_hHYaoLRI43OgIJ9d7nTPDGug/exec';
+
+// SPECS embebidos para que el informe pueda calcular Qn aunque los registros viejos no lo tengan
+const SPECS={
+  'Elf':[
+    {pres:'280 ml Det LV',qn:285.6},{pres:'300 ml Det LV',qn:306},
+    {pres:'500 ml Det LV',qn:510},{pres:'600 ml Det LV',qn:612},
+    {pres:'640 ml Det LV',qn:652.8},{pres:'900 ml Det LV/Manos',qn:918},
+    {pres:'1.1 L Det LV',qn:1122},{pres:'1.25 L Det LV',qn:1275},
+    {pres:'1.35 L Det LV',qn:1377},{pres:'500 ml Det Ropa Diluir',qn:648}
+  ],
+  'Strunk':[{pres:'900 ml Limpiador',qn:899.91},{pres:'1.8 L Limpiador',qn:1799.82}],
+  'Alfi':[{pres:'3 L Suavizante',qn:2910},{pres:'5 L Suavizante',qn:4850},{pres:'3 L Det Ropa',qn:3060},{pres:'5 L Det Ropa',qn:5100}],
+  'Bossar':[
+    {pres:'400 ml Det Pluma',qn:408},{pres:'450 ml Det Pluma',qn:459},{pres:'800 ml Det Pluma',qn:816},
+    {pres:'400 ml Det Conejo',qn:459},{pres:'800 ml Det Conejo',qn:816},
+    {pres:'600 ml Suav Pluma',qn:588},{pres:'700 ml Suav Pluma',qn:686},{pres:'900 ml Suav Pluma',qn:882},
+    {pres:'450 ml Suav Conejo',qn:436},{pres:'900 ml Suav Conejo',qn:873},
+    {pres:'400 ml Baños/Antigrasa',qn:400},{pres:'500 ml Baños/Antigrasa',qn:500},
+    {pres:'400 ml Vidrios',qn:390},{pres:'500 ml Vidrios',qn:490}
+  ],
+  'Fabuloso':[{pres:'1 L Limpiador',qn:1000},{pres:'2 L Limpiador',qn:2000}],
+  'Hipo 1':[{pres:'1 L',qn:1056},{pres:'750 ml',qn:792}],
+  'Hipo 2':[{pres:'2 L',qn:2112}],
+  'Alcoholes':[{pres:'900 ml',qn:774},{pres:'600 ml',qn:530}],
+  'Bidonera':[{pres:'1 L',qn:970}],
+  'Alwid':[{pres:'1.25 L',qn:1275}],
+  'Cleanway':[
+    {pres:'5 L Detergente',qn:5105},{pres:'5 L Suavizante',qn:5000},{pres:'4 L',qn:4224},{pres:'5 L Limpiadores',qn:5000},
+    {pres:'10 L Suav Conejo',qn:10170},{pres:'10 L Det Neutro',qn:9894},{pres:'5 L Det Cristal Limón',qn:5100},
+    {pres:'5 L Limpiador Cristal',qn:5000},{pres:'4 L Hipoclorito 40g/L',qn:4240},
+    {pres:'10 L Hipoclorito 100g/L',qn:10800},{pres:'10 L Alcohol 70',qn:8800},{pres:'10 L Alcohol Rectificado',qn:8060}
+  ]
+};
+// Busca Qn para una combinación máquina+presentación
+function getQn(maq,pres){
+  const ms=SPECS[maq];if(!ms)return 0;
+  const s=ms.find(x=>x.pres===pres);return s?s.qn:0;
+}
 let USER='', allR=[], filtered=[];
 let charts={};
 
@@ -437,9 +475,11 @@ function renderProducts(){
     const devs=recs.filter(r=>r.hasDev).length;
     const conf=recs.length?Math.round((recs.length-devs)/recs.length*100):0;
     
-    // Extract spec from first record
+    // Get Qn from SPECS lookup (works even with old records without spec field)
     const firstSpec=recs.find(r=>r.spec)?.spec||'';
-    let qn=0;const qnMatch=firstSpec.match(/Qn:(\d+\.?\d*)/);if(qnMatch)qn=parseFloat(qnMatch[1]);
+    let qn=getQn(prod.maquina,prod.presentacion);
+    // Fallback: try to extract from spec field if not found in SPECS
+    if(!qn&&firstSpec){const qnMatch=firstSpec.match(/Qn:(\d+\.?\d*)/);if(qnMatch)qn=parseFloat(qnMatch[1])}
     const t=qn?calcT(qn):0;const qnT=qn-t;
     
     // Status
@@ -480,11 +520,21 @@ function renderProducts(){
     const allPesos=[];recs.forEach(r=>(r.pesos||[]).forEach(p=>{if(p>0)allPesos.push(p)}));
     
     const firstSpec=recs.find(r=>r.spec)?.spec||'';
-    let qn=0;const qnMatch=firstSpec.match(/Qn:(\d+\.?\d*)/);if(qnMatch)qn=parseFloat(qnMatch[1]);
+    let qn=getQn(prod.maquina,prod.presentacion);
+    if(!qn&&firstSpec){const qnMatch=firstSpec.match(/Qn:(\d+\.?\d*)/);if(qnMatch)qn=parseFloat(qnMatch[1])}
     const t=qn?calcT(qn):0;
     
     // Trend
     destroyChart('ch-trend-'+idx);
+    // Calculate Y axis range to ensure decree lines are visible
+    let yMin,yMax;
+    if(qn){
+      const dataMin=Math.min(...promValues,qn);
+      const dataMax=Math.max(...promValues,qn);
+      const pad=(dataMax-dataMin)*0.1||1;
+      yMin=dataMin-pad;
+      yMax=dataMax+pad;
+    }
     charts['ch-trend-'+idx]=new Chart(document.getElementById('ch-trend-'+idx),{
       type:'line',
       data:{
@@ -492,13 +542,12 @@ function renderProducts(){
         datasets:[
           {label:'Promedio',data:promValues,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.1)',fill:true,tension:0.2,pointRadius:3},
           ...(qn?[
-            {label:'Nominal Qn',data:promValues.map(()=>qn),borderColor:'#10b981',borderWidth:1.5,borderDash:[],pointRadius:0,fill:false},
-            {label:'Qn-T',data:promValues.map(()=>qn-t),borderColor:'#f59e0b',borderWidth:1,borderDash:[4,3],pointRadius:0,fill:false},
-            {label:'Qn-2T',data:promValues.map(()=>qn-2*t),borderColor:'#ef4444',borderWidth:1,borderDash:[2,3],pointRadius:0,fill:false}
+            {label:'Nominal Qn ('+qn+'g)',data:promValues.map(()=>qn),borderColor:'#10b981',borderWidth:2,borderDash:[],pointRadius:0,fill:false},
+            {label:'Qn-T ('+(qn-t).toFixed(1)+'g)',data:promValues.map(()=>qn-t),borderColor:'#f59e0b',borderWidth:1.5,borderDash:[5,3],pointRadius:0,fill:false}
           ]:[])
         ]
       },
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:10}}},scales:{x:{ticks:{font:{size:8},maxRotation:60}},y:{ticks:{font:{size:9}}}}}
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:9},boxWidth:14}}},scales:{x:{ticks:{font:{size:8},maxRotation:60}},y:{ticks:{font:{size:9}},...(qn?{suggestedMin:yMin,suggestedMax:yMax}:{})}}}
     });
     
     // Histogram
@@ -549,7 +598,8 @@ function exportExcel(){
     const allP=[];prod.recs.forEach(r=>(r.pesos||[]).forEach(p=>{if(p>0)allP.push(p)}));
     const s=calcStats(allP);
     const firstSpec=prod.recs.find(r=>r.spec)?.spec||'';
-    let qn=0;const qnM=firstSpec.match(/Qn:(\d+\.?\d*)/);if(qnM)qn=parseFloat(qnM[1]);
+    let qn=getQn(prod.m,prod.p);
+    if(!qn&&firstSpec){const qnM=firstSpec.match(/Qn:(\d+\.?\d*)/);if(qnM)qn=parseFloat(qnM[1])}
     const t=qn?calcT(qn):0;const qnT=qn-t;
     const cpk=(qn&&s&&s.sd>0)?((s.mean-qnT)/(3*s.sd)):null;
     const devs=prod.recs.filter(r=>r.hasDev).length;
