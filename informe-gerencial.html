@@ -87,6 +87,17 @@ body{font-family:var(--f);background:var(--bg);color:var(--text);line-height:1.5
 .stat-val{font-size:18px;font-weight:800;font-family:var(--m);margin-top:2px}
 .stat-val.ok{color:var(--mint-d)}.stat-val.bad{color:var(--red-d)}.stat-val.warn{color:var(--amber-d)}
 
+/* INSIGHTS */
+.insights{background:linear-gradient(135deg,#f8fafc,#f1f5f9);border-left:4px solid var(--blue);border-radius:0 var(--rs) var(--rs) 0;padding:12px 14px;margin-top:12px;margin-bottom:12px}
+.insights h4{font-size:11px;font-weight:800;color:var(--blue-d);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.insights .ins-item{display:flex;align-items:flex-start;gap:8px;font-size:11px;color:var(--text2);line-height:1.5;margin-bottom:4px}
+.insights .ins-item .ico{flex-shrink:0;font-size:12px}
+.insights .ins-item.good{color:var(--mint-d)}
+.insights .ins-item.warn{color:var(--amber-d)}
+.insights .ins-item.bad{color:var(--red-d)}
+.insights .rec{margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);font-size:11px;font-weight:600;color:var(--text);font-style:italic}
+.insights .rec::before{content:'💡 Recomendación: ';font-weight:800;font-style:normal;color:var(--purple-d)}
+
 /* MSG */
 .msg{padding:16px;background:var(--amber-l);color:var(--amber-d);border-radius:var(--rs);font-size:12px;text-align:center}
 
@@ -453,6 +464,88 @@ function calcStats(values){
   return{n,mean,sd,min:Math.min(...values),max:Math.max(...values)};
 }
 
+// Genera análisis e interpretación gerencial automática
+function genInsights(prod, recs, stats, indivStats, qn, t, devs, conf){
+  if(!indivStats||!qn)return '';
+  const items=[];
+  const qnT=qn-t;
+  const exceso=indivStats.mean-qn;
+  const excesoPct=qn?(exceso/qn*100):0;
+  const cpk=indivStats.sd>0?((indivStats.mean-qnT)/(3*indivStats.sd)):null;
+  
+  // 1. Cumplimiento normativo (Decreto 129/009)
+  if(indivStats.min>=qnT){
+    items.push({c:'good',i:'✅',t:`<b>Cumplimiento Decreto 129/009:</b> Todos los pesos individuales (mín ${indivStats.min}g) están por encima del límite tolerante Qn-T (${qnT.toFixed(1)}g).`});
+  } else if(indivStats.min>=qn-2*t){
+    items.push({c:'warn',i:'⚠️',t:`<b>Atención normativa:</b> Hay pesos individuales entre Qn-T (${qnT.toFixed(1)}g) y Qn-2T. Tolerantes admisibles pero requieren control.`});
+  } else {
+    items.push({c:'bad',i:'❌',t:`<b>Incumplimiento crítico:</b> Hay pesos por debajo de Qn-2T (${(qn-2*t).toFixed(1)}g). No conforme al Decreto 129/009.`});
+  }
+  
+  // 2. Promedio vs Nominal
+  if(indivStats.mean>=qn){
+    if(excesoPct>3){
+      items.push({c:'warn',i:'💰',t:`<b>Sobrellenado detectado:</b> Promedio ${indivStats.mean.toFixed(1)}g vs Nominal ${qn}g = <b>+${exceso.toFixed(1)}g (+${excesoPct.toFixed(1)}%)</b> por unidad. Oportunidad de ahorro económico.`});
+    } else {
+      items.push({c:'good',i:'🎯',t:`<b>Llenado óptimo:</b> Promedio ${indivStats.mean.toFixed(1)}g supera el nominal en ${exceso.toFixed(1)}g (+${excesoPct.toFixed(1)}%). Margen adecuado.`});
+    }
+  } else {
+    items.push({c:'bad',i:'⚠️',t:`<b>Promedio por debajo del nominal:</b> Media ${indivStats.mean.toFixed(1)}g vs Qn ${qn}g (déficit ${(-exceso).toFixed(1)}g).`});
+  }
+  
+  // 3. Cpk
+  if(cpk!==null){
+    if(cpk>=1.67){
+      items.push({c:'good',i:'📊',t:`<b>Capacidad excelente:</b> Cpk = ${cpk.toFixed(2)} (Cpk ≥ 1.67). Proceso muy estable y altamente capaz.`});
+    } else if(cpk>=1.33){
+      items.push({c:'good',i:'📊',t:`<b>Proceso capaz:</b> Cpk = ${cpk.toFixed(2)} (Cpk ≥ 1.33). Buen margen estadístico respecto al límite legal.`});
+    } else if(cpk>=1.0){
+      items.push({c:'warn',i:'📊',t:`<b>Capacidad marginal:</b> Cpk = ${cpk.toFixed(2)}. El proceso cumple pero con poco margen ante variaciones.`});
+    } else {
+      items.push({c:'bad',i:'📊',t:`<b>Proceso NO capaz:</b> Cpk = ${cpk.toFixed(2)} (< 1.0). Riesgo de incumplimiento por variabilidad del proceso.`});
+    }
+  }
+  
+  // 4. Variabilidad (σ relativa)
+  const sdPct=qn?(indivStats.sd/qn*100):0;
+  if(sdPct>2){
+    items.push({c:'warn',i:'📈',t:`<b>Variabilidad alta:</b> σ = ${indivStats.sd.toFixed(2)}g (${sdPct.toFixed(2)}% de Qn). Considerar revisar calibración o mantenimiento de la envasadora.`});
+  } else if(sdPct<0.5){
+    items.push({c:'good',i:'📈',t:`<b>Variabilidad muy baja:</b> σ = ${indivStats.sd.toFixed(2)}g (${sdPct.toFixed(2)}% de Qn). Proceso muy estable.`});
+  }
+  
+  // 5. Desvíos
+  if(devs===0){
+    items.push({c:'good',i:'🛡️',t:`<b>Cero desvíos</b> reportados en ${recs.length} controles. Excelente disciplina operativa.`});
+  } else if(devs/recs.length>0.1){
+    items.push({c:'bad',i:'🚨',t:`<b>Alta tasa de desvíos:</b> ${devs} desvíos en ${recs.length} controles (${(devs/recs.length*100).toFixed(0)}%). Requiere análisis de causa raíz.`});
+  }
+  
+  // RECOMMENDATION
+  let rec='';
+  if(conf===100&&excesoPct>3){
+    const targetMean=qn+(2*indivStats.sd);
+    rec=`Proceso 100% conforme pero con sobrellenado de ${exceso.toFixed(1)}g/unidad. Evaluar ajuste del setpoint hacia <b>${targetMean.toFixed(0)}g</b> (Qn + 2σ) para reducir costo manteniendo cumplimiento normativo.`;
+  } else if(conf<85){
+    rec=`Conformidad baja (${conf}%). Priorizar análisis de causa raíz de desvíos y verificar calibración/mantenimiento de la línea.`;
+  } else if(cpk!==null&&cpk<1.33){
+    rec=`Cpk insuficiente (${cpk.toFixed(2)}). Reducir variabilidad del proceso o incrementar setpoint para mejorar margen ante límite legal.`;
+  } else if(sdPct>2){
+    rec=`Variabilidad elevada (σ=${indivStats.sd.toFixed(2)}g). Investigar fuentes de variación: balanza, operario, materia prima, válvulas dosificadoras.`;
+  } else if(devs===0&&conf===100&&cpk>=1.33){
+    rec=`Proceso bajo control estadístico. Mantener parámetros actuales y continuar monitoreo.`;
+  } else {
+    rec=`Monitorear evolución del proceso. Continuar registro sistemático.`;
+  }
+  
+  let html='<div class="insights"><h4>🔍 Análisis Automático</h4>';
+  items.forEach(it=>{
+    html+=`<div class="ins-item ${it.c}"><span class="ico">${it.i}</span><span>${it.t}</span></div>`;
+  });
+  html+=`<div class="rec">${rec}</div></div>`;
+  return html;
+}
+
 function renderProducts(){
   const byProd={};
   filtered.forEach(r=>{
@@ -503,6 +596,8 @@ function renderProducts(){
         <div class="stat"><div class="stat-lbl">Cpk estimado</div><div class="stat-val">${(qn&&indivStats&&indivStats.sd>0)?((indivStats.mean-qnT)/(3*indivStats.sd)).toFixed(2):'—'}</div></div>
         <div class="stat"><div class="stat-lbl">Desvíos</div><div class="stat-val ${devs===0?'ok':'bad'}">${devs}</div></div>
       </div>
+      
+      ${genInsights(prod,recs,stats,indivStats,qn,t,devs,conf)}
       
       <div class="chart-grid">
         <div class="chart-card"><h3>Tendencia de pesos</h3><canvas id="ch-trend-${idx}"></canvas></div>
