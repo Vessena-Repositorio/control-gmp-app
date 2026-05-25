@@ -409,84 +409,6 @@
                 return () => clearInterval(intervalo);
             }, [configurado]);
 
-            // Migrar datos locales (localStorage) a Google Sheets
-            const [migrando, setMigrando] = useState(false);
-            const [migrado, setMigrado] = useState(localStorage.getItem('datos_migrados') === 'true');
-
-            const migrarDatosLocales = async () => {
-                if (!configurado) {
-                    setMensaje({ tipo: 'warning', texto: 'Primero configurá la URL de Google Sheets' });
-                    return;
-                }
-
-                const storedOrdenes = localStorage.getItem('ordenes_soplado');
-                const storedLCC = localStorage.getItem('controles_lcc');
-                const ordenesLocales = storedOrdenes ? JSON.parse(storedOrdenes) : [];
-                const lccLocales = storedLCC ? JSON.parse(storedLCC) : [];
-
-                if (ordenesLocales.length === 0 && lccLocales.length === 0) {
-                    setMensaje({ tipo: 'warning', texto: 'No hay datos locales para migrar' });
-                    return;
-                }
-
-                if (!confirm(`Se van a subir ${ordenesLocales.length} órdenes y ${lccLocales.length} controles LCC a Google Sheets. ¿Continuar?`)) {
-                    return;
-                }
-
-                setMigrando(true);
-                let errores = 0;
-                let subidos = 0;
-
-                // Primero obtener IDs existentes en Sheets para no duplicar
-                try {
-                    const existentes = await apiCall('getAll');
-                    const idsOrdenesExistentes = new Set((existentes.ordenes || []).map(o => String(o.id)));
-                    const idsLCCExistentes = new Set((existentes.lcc || []).map(c => String(c.id)));
-
-                    // Subir órdenes que no existan
-                    for (const orden of ordenesLocales) {
-                        if (idsOrdenesExistentes.has(String(orden.id))) continue;
-                        try {
-                            await apiCall('saveOrden', orden);
-                            subidos++;
-                        } catch (err) {
-                            errores++;
-                            console.error('Error migrando orden:', err);
-                        }
-                    }
-
-                    // Subir controles LCC que no existan
-                    for (const control of lccLocales) {
-                        if (idsLCCExistentes.has(String(control.id))) continue;
-                        try {
-                            await apiCall('saveLCC', control);
-                            subidos++;
-                        } catch (err) {
-                            errores++;
-                            console.error('Error migrando LCC:', err);
-                        }
-                    }
-
-                    localStorage.setItem('datos_migrados', 'true');
-                    setMigrado(true);
-
-                    if (errores > 0) {
-                        setMensaje({ tipo: 'warning', texto: `⚠️ Migración parcial: ${subidos} registros subidos, ${errores} errores` });
-                    } else {
-                        setMensaje({ tipo: 'success', texto: `✓ Migración completa: ${subidos} registros nuevos subidos a Google Sheets` });
-                    }
-
-                    // Recargar datos desde Sheets
-                    await cargarDatos();
-
-                } catch (err) {
-                    console.error('Error en migración:', err);
-                    setMensaje({ tipo: 'warning', texto: '⚠️ Error conectando con Google Sheets. Intentá de nuevo.' });
-                } finally {
-                    setMigrando(false);
-                }
-            };
-
             // Guardar órdenes en Google Sheets (y localStorage como backup)
             const guardarOrdenes = (nuevasOrdenes) => {
                 localStorage.setItem('ordenes_soplado', JSON.stringify(nuevasOrdenes));
@@ -552,8 +474,20 @@
                 // Sincronizar con Google Sheets
                 if (configurado) {
                     try {
-                        const ordenActualizada = ordenesActualizadas.find(o => o.id === ordenSeleccionada.id);
-                        await apiCall('updateOrden', ordenActualizada);
+                        await apiCall('saveControlSoplado', {
+                            id: nuevoControl.id,
+                            ordenId: ordenSeleccionada.id,
+                            numeroOrden: ordenSeleccionada.numeroOrden,
+                            envase: ordenSeleccionada.envase,
+                            tipoControl: nuevoControl.tipo,
+                            fecha: nuevoControl.fecha,
+                            hora: nuevoControl.hora,
+                            operador: ordenSeleccionada.operador,
+                            turno: ordenSeleccionada.turno || '',
+                            observaciones: nuevoControl.observaciones,
+                            mediciones: nuevoControl.mediciones,
+                            timestamp: nuevoControl.timestamp
+                        });
                     } catch (err) {
                         console.error('Error sincronizando:', err);
                     }
@@ -703,28 +637,6 @@
                     {guardando && (
                         <div className="alert alert-info" style={{marginBottom: '20px', borderRadius: '12px'}}>
                             ⏳ Guardando en Google Sheets...
-                        </div>
-                    )}
-
-                    {migrando && (
-                        <div className="alert alert-info" style={{marginBottom: '20px', borderRadius: '12px'}}>
-                            ⏳ Migrando datos locales a Google Sheets... No cierres la página.
-                        </div>
-                    )}
-
-                    {configurado && !migrado && !migrando && (
-                        <div style={{marginBottom: '20px', padding: '18px', background: '#ebf8ff', border: '2px solid #4299e1',
-                            borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px'}}>
-                            <div>
-                                <strong style={{color: '#2b6cb0'}}>📲 ¿Tenés datos cargados en este dispositivo?</strong>
-                                <p style={{color: '#4a5568', fontSize: '14px', margin: '4px 0 0'}}>
-                                    Presioná el botón para subir los registros locales a Google Sheets y que todos los analistas puedan verlos.
-                                </p>
-                            </div>
-                            <button className="btn btn-primary" onClick={migrarDatosLocales}
-                                style={{fontSize: '14px', padding: '10px 20px', whiteSpace: 'nowrap'}}>
-                                📤 Migrar datos a Google Sheets
-                            </button>
                         </div>
                     )}
 
