@@ -115,6 +115,64 @@ body{font-family:var(--f);background:var(--bg);color:var(--text);line-height:1.5
   .hdr{padding:14px 16px}
   .hdr-info h1{font-size:16px}
 }
+
+/* MAIN TABS (Informe / Guía) */
+.main-tabs{display:flex;background:#fff;border-bottom:2px solid var(--border);position:sticky;top:0;z-index:20;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.m-tab{flex:1;max-width:240px;padding:14px 20px;font-size:13px;font-weight:700;color:var(--text3);cursor:pointer;text-align:center;border-bottom:3px solid transparent;transition:all .2s}
+.m-tab.active{color:var(--mint-d);border-bottom-color:var(--mint);background:var(--mint-l)}
+.m-tab:hover:not(.active){background:#f8fafc;color:var(--text2)}
+.main-view{display:none;animation:fade .3s ease}
+.main-view.active{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* TEORIA TABS */
+.teoria-tabs{display:flex;background:#fff;border-bottom:1px solid var(--border);overflow-x:auto;position:sticky;top:48px;z-index:15;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.t-tab{padding:12px 18px;font-size:11px;font-weight:700;color:var(--text3);cursor:pointer;white-space:nowrap;border-bottom:3px solid transparent;transition:all .2s}
+.t-tab.active{color:var(--blue-d);border-bottom-color:var(--blue);background:var(--blue-l)}
+.t-tab:hover:not(.active){background:#f8fafc;color:var(--text2)}
+.t-view{display:none;animation:fade .3s ease}
+.t-view.active{display:block}
+
+/* TEORIA STYLES */
+.t-card{background:#fff;border-radius:var(--r);padding:22px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.t-card h2{font-size:17px;font-weight:800;color:var(--text);margin-bottom:8px}
+.t-card h3{font-size:14px;font-weight:700;color:var(--text);margin-top:16px;margin-bottom:8px}
+.t-card p{font-size:12px;color:var(--text2);margin-bottom:8px}
+.t-card .lead{font-size:13px;color:var(--text);font-weight:500;line-height:1.7}
+.t-badge{display:inline-block;padding:3px 10px;border-radius:50px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;background:var(--blue-l);color:var(--blue-d)}
+.t-badge.purple{background:var(--purple-l);color:var(--purple-d)}
+.t-callout{border-left:4px solid var(--blue);background:var(--blue-l);border-radius:0 10px 10px 0;padding:12px 14px;margin:10px 0;font-size:12px;color:var(--blue-d);font-weight:500}
+.t-callout.warn{border-color:var(--amber);background:var(--amber-l);color:var(--amber-d)}
+.t-callout.bad{border-color:var(--red);background:var(--red-l);color:var(--red-d)}
+.t-callout.ok{border-color:var(--mint);background:var(--mint-l);color:var(--mint-d)}
+.t-callout b{font-weight:800}
+.t-formula{background:#0f172a;color:#10b981;padding:16px;border-radius:10px;font-family:var(--m);font-size:13px;text-align:center;margin:12px 0;line-height:1.8}
+.t-formula .var{color:#f59e0b}
+.t-formula .num{color:#3b82f6}
+.t-formula .small{color:#94a3b8;font-size:10px;display:block;margin-top:4px}
+.t-tbl{width:100%;border-collapse:collapse;font-size:11px;margin:10px 0}
+.t-tbl th{background:linear-gradient(135deg,#065f46,#047857);color:#fff;padding:9px 8px;text-align:left;font-weight:700;font-size:10px}
+.t-tbl td{padding:7px 8px;border-bottom:1px solid var(--border);font-family:var(--m);font-size:11px}
+.t-tbl tr:nth-child(even){background:#f8fafc}
+.t-viz{background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px;margin:12px 0;overflow:hidden}
+.t-viz svg{width:100%;height:auto;max-width:100%;display:block}
+.t-grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}
+.t-example{background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:12px}
+.t-ex-title{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.t-example p{font-size:11px;margin-top:4px}
+.t-cpk-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin:12px 0}
+.t-cpk-card{padding:12px;border-radius:8px;border:2px solid}
+.t-cpk-card.bad{border-color:var(--red);background:var(--red-l);color:var(--red-d)}
+.t-cpk-card.warn{border-color:var(--amber);background:var(--amber-l);color:var(--amber-d)}
+.t-cpk-card.good{border-color:var(--mint);background:var(--mint-l);color:var(--mint-d)}
+.t-cpk-card.excellent{border-color:var(--blue);background:var(--blue-l);color:var(--blue-d)}
+.t-cpk-card .t-cpk-range{font-family:var(--m);font-size:13px;font-weight:800;margin-bottom:2px}
+.t-cpk-card .t-cpk-name{font-size:11px;font-weight:700;margin-bottom:4px}
+.t-cpk-card .t-cpk-desc{font-size:9px;font-weight:500;opacity:.9}
+.t-kpi{display:inline-block;padding:4px 10px;border-radius:6px;font-family:var(--m);font-weight:700;font-size:11px;margin:2px}
+.t-kpi.ok{background:var(--mint-l);color:var(--mint-d)}
+.t-kpi.bad{background:var(--red-l);color:var(--red-d)}
+@media(max-width:680px){.t-grid2{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -145,6 +203,13 @@ body{font-family:var(--f);background:var(--bg);color:var(--text);line-height:1.5
     </div>
   </div>
 
+  <div class="main-tabs">
+    <div class="m-tab active" onclick="showMainTab(0)">📊 Informe</div>
+    <div class="m-tab" onclick="showMainTab(1)">📚 Guía Teórica</div>
+  </div>
+
+  <!-- TAB 1: INFORME -->
+  <div class="main-view active" id="mv-informe">
   <div class="wrap">
     <!-- FILTERS -->
     <div class="filters">
@@ -211,7 +276,224 @@ body{font-family:var(--f);background:var(--bg);color:var(--text);line-height:1.5
     <h2 style="font-size:16px;font-weight:800;margin:24px 0 12px;padding:0 4px">📦 Detalle por Producto</h2>
     <div id="productsContent"></div>
   </div>
+  </div>
+  <!-- END TAB 1 -->
+
+  <!-- TAB 2: GUÍA TEÓRICA -->
+  <div class="main-view" id="mv-teoria">
+    <div class="teoria-tabs">
+      <div class="t-tab active" onclick="showTeoria(0)">📖 ¿Qué medimos?</div>
+      <div class="t-tab" onclick="showTeoria(1)">⚖️ Decreto 129/009</div>
+      <div class="t-tab" onclick="showTeoria(2)">📊 Cpk</div>
+      <div class="t-tab" onclick="showTeoria(3)">🔍 Cómo leer un gráfico</div>
+      <div class="t-tab" onclick="showTeoria(4)">💡 Casos prácticos</div>
+    </div>
+
+    <div class="wrap">
+      <!-- TEORIA 0: QUÉ MEDIMOS -->
+      <div class="t-view active" data-tview="0">
+        <div class="t-card">
+          <h2>📖 ¿Qué estamos midiendo?</h2>
+          <p class="lead">El control en proceso del envasado verifica que <b>cada unidad producida cumpla con el contenido declarado en la etiqueta</b>. Esto protege al consumidor (recibe lo que paga) y a la empresa (cumple la ley y optimiza costos).</p>
+          <h3>Las 3 preguntas clave</h3>
+          <div class="t-callout"><b>1️⃣ ¿Cumple la ley?</b><br>El <b>Decreto 129/009</b> establece tolerancias máximas. Ningún envase puede tener menos de cierto peso mínimo.</div>
+          <div class="t-callout"><b>2️⃣ ¿Cuánto sobrellenamos?</b><br>Si el promedio es muy superior al nominal, estamos regalando producto. <b>Cada gramo extra × millones de unidades = pérdida importante</b>.</div>
+          <div class="t-callout"><b>3️⃣ ¿Es estable el proceso?</b><br>El <b>Cpk</b> mide si el proceso es predecible y capaz de mantenerse dentro de especificación.</div>
+          <h3>Conceptos básicos</h3>
+          <table class="t-tbl">
+            <tr><th>Concepto</th><th>Símbolo</th><th>Qué es</th></tr>
+            <tr><td><b>Contenido Nominal</b></td><td>Qn</td><td>Lo que dice la etiqueta (ej: 900g)</td></tr>
+            <tr><td><b>Tolerancia individual</b></td><td>T</td><td>Cuánto puede pesar menos una unidad sin incumplir</td></tr>
+            <tr><td><b>Promedio</b></td><td>x̄ (media)</td><td>Promedio de los pesos medidos</td></tr>
+            <tr><td><b>Desviación Estándar</b></td><td>σ (sigma)</td><td>Qué tan dispersos están los pesos</td></tr>
+            <tr><td><b>Cpk</b></td><td>Cpk</td><td>Índice de capacidad: qué tan capaz es el proceso</td></tr>
+          </table>
+        </div>
+        <div class="t-card">
+          <h2>🎯 Concepto visual</h2>
+          <div class="t-viz"><svg viewBox="0 0 700 280" xmlns="http://www.w3.org/2000/svg">
+            <defs><linearGradient id="g1" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#3b82f6" stop-opacity="0.6"/><stop offset="100%" stop-color="#3b82f6" stop-opacity="0.1"/></linearGradient></defs>
+            <line x1="60" y1="230" x2="660" y2="230" stroke="#cbd5e1" stroke-width="1.5"/>
+            <line x1="60" y1="40" x2="60" y2="230" stroke="#cbd5e1" stroke-width="1.5"/>
+            <path d="M 100 230 Q 130 230, 160 220 Q 200 200, 240 150 Q 280 80, 320 60 Q 360 80, 400 150 Q 440 200, 480 220 Q 520 230, 560 230 L 560 230 L 100 230 Z" fill="url(#g1)" stroke="#3b82f6" stroke-width="2"/>
+            <line x1="240" y1="40" x2="240" y2="230" stroke="#10b981" stroke-width="2"/>
+            <text x="240" y="32" fill="#047857" font-size="12" font-weight="700" text-anchor="middle">Qn (nominal)</text>
+            <line x1="150" y1="40" x2="150" y2="230" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4 3"/>
+            <text x="150" y="32" fill="#92400e" font-size="11" font-weight="700" text-anchor="middle">Qn-T</text>
+            <line x1="100" y1="40" x2="100" y2="230" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="2 3"/>
+            <text x="100" y="32" fill="#991b1b" font-size="11" font-weight="700" text-anchor="middle">Qn-2T</text>
+            <line x1="320" y1="60" x2="320" y2="230" stroke="#1e40af" stroke-width="2" stroke-dasharray="6 3"/>
+            <text x="320" y="55" fill="#1e40af" font-size="12" font-weight="700" text-anchor="middle">Media (x̄)</text>
+            <text x="125" y="265" fill="#991b1b" font-size="9" text-anchor="middle">CRÍTICO</text>
+            <text x="195" y="265" fill="#92400e" font-size="9" text-anchor="middle">TOLERANTE</text>
+            <text x="450" y="265" fill="#047857" font-size="9" text-anchor="middle">CONFORME</text>
+          </svg></div>
+          <p style="text-align:center;font-size:12px;color:#94a3b8;margin-top:8px"><b>Distribución típica de pesos:</b> la "campana" muestra cómo se distribuyen los pesos. Cuanto más estrecha y más a la derecha de Qn, mejor.</p>
+        </div>
+      </div>
+
+      <!-- TEORIA 1: DECRETO -->
+      <div class="t-view" data-tview="1">
+        <div class="t-card">
+          <h2>⚖️ Decreto 129/009</h2>
+          <span class="t-badge blue">Normativa Uruguay · Base MERCOSUR Res. GMC 91/94</span>
+          <p class="lead" style="margin-top:14px">El <b>Decreto 129/009</b> regula el contenido neto de productos pre-medidos destinados al consumidor final. Define cuánto puede pesar de menos un envase sin que sea considerado incumplimiento.</p>
+          <h3>Tabla de Tolerancias (T)</h3>
+          <table class="t-tbl">
+            <tr><th>Contenido Nominal Qn (g o mL)</th><th>T (% de Qn)</th><th>T (en g o mL)</th></tr>
+            <tr><td>5 a 50</td><td>9%</td><td>—</td></tr>
+            <tr><td>50 a 100</td><td>—</td><td>4.5</td></tr>
+            <tr><td>100 a 200</td><td>4.5%</td><td>—</td></tr>
+            <tr><td>200 a 300</td><td>—</td><td>9</td></tr>
+            <tr><td>300 a 500</td><td>3%</td><td>—</td></tr>
+            <tr><td>500 a 1000</td><td>—</td><td>15</td></tr>
+            <tr><td>1000 a 10000</td><td>1.5%</td><td>—</td></tr>
+            <tr><td>10000 a 15000</td><td>—</td><td>150</td></tr>
+            <tr><td>&gt; 15000</td><td>1%</td><td>—</td></tr>
+          </table>
+        </div>
+        <div class="t-card">
+          <h2>📐 Criterios de Aceptación</h2>
+          <p>Para que un lote sea conforme, debe cumplir <b>3 criterios simultáneamente</b>:</p>
+          <div class="t-callout ok"><b>✅ Criterio 1 — Media muestral:</b><br>El promedio de los envases medidos debe ser <b>mayor o igual al contenido nominal (Qn)</b>.<br><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">x̄ ≥ Qn</span></div>
+          <div class="t-callout warn"><b>⚠️ Criterio 2 — Tolerantes (Qn − T):</b><br>Solo un número limitado de envases puede pesar entre <b>(Qn − T)</b> y <b>Qn</b>.<br><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">peso ≥ Qn − T</span></div>
+          <div class="t-callout bad"><b>❌ Criterio 3 — Defectos críticos (Qn − 2T):</b><br><b>NINGÚN envase</b> puede pesar menos de <b>(Qn − 2T)</b>. Una sola unidad por debajo = lote rechazado.<br><span style="font-family:'IBM Plex Mono',monospace;font-size:11px">peso ≥ Qn − 2T (TODOS sin excepción)</span></div>
+        </div>
+        <div class="t-card">
+          <h2>🧮 Ejemplo práctico</h2>
+          <p>Producto: <b>Limpiador Strunk 900 ml</b> con contenido nominal <b>Qn = 900 g</b></p>
+          <div class="t-formula">Qn = <span class="num">900</span> g (está entre 500-1000)<br>→ T = <span class="num">15</span> g (de la tabla)<br>→ Qn − T = <span class="num">885</span> g<br>→ Qn − 2T = <span class="num">870</span> g<br><span class="small">Ningún envase puede pesar menos de 870g</span></div>
+        </div>
+      </div>
+
+      <!-- TEORIA 2: CPK -->
+      <div class="t-view" data-tview="2">
+        <div class="t-card">
+          <h2>📊 Cpk — Índice de Capacidad del Proceso</h2>
+          <span class="t-badge purple">Estadística de Control de Calidad</span>
+          <p class="lead" style="margin-top:14px">El <b>Cpk</b> es un número que indica <b>qué tan capaz</b> es un proceso de mantenerse dentro de los límites de especificación. Mide tanto la <b>variabilidad</b> como el <b>centrado</b> del proceso.</p>
+          <h3>Fórmula</h3>
+          <div class="t-formula">Cpk = <span class="var">(x̄ − Qn-T)</span> / (<span class="num">3</span> × <span class="var">σ</span>)<span class="small">Distancia entre la media y el límite legal mínimo, dividida 3σ</span></div>
+          <h3>Interpretación</h3>
+          <div class="t-cpk-grid">
+            <div class="t-cpk-card bad"><div class="t-cpk-range">Cpk &lt; 1.0</div><div class="t-cpk-name">NO CAPAZ</div><div class="t-cpk-desc">Proceso fuera de control. Se producen no conformes.</div></div>
+            <div class="t-cpk-card warn"><div class="t-cpk-range">1.0 ≤ Cpk &lt; 1.33</div><div class="t-cpk-name">MARGINAL</div><div class="t-cpk-desc">Cumple pero sin margen. Cualquier variación causa problemas.</div></div>
+            <div class="t-cpk-card good"><div class="t-cpk-range">1.33 ≤ Cpk &lt; 1.67</div><div class="t-cpk-name">CAPAZ</div><div class="t-cpk-desc">Buen margen estadístico. Estándar industrial aceptado.</div></div>
+            <div class="t-cpk-card excellent"><div class="t-cpk-range">Cpk ≥ 1.67</div><div class="t-cpk-name">EXCELENTE</div><div class="t-cpk-desc">Proceso de clase mundial. Muy bajo riesgo.</div></div>
+          </div>
+        </div>
+        <div class="t-card">
+          <h2>🎯 ¿Por qué importa el Cpk?</h2>
+          <p>Imaginemos dos procesos que cumplen el nominal, pero con diferente variabilidad:</p>
+          <div class="t-viz"><svg viewBox="0 0 700 240" xmlns="http://www.w3.org/2000/svg">
+            <line x1="160" y1="20" x2="160" y2="220" stroke="#ef4444" stroke-width="2" stroke-dasharray="4 3"/>
+            <text x="160" y="14" fill="#991b1b" font-size="11" font-weight="700" text-anchor="middle">Qn-T (límite)</text>
+            <text x="50" y="50" fill="#475569" font-size="12" font-weight="800">Proceso A</text>
+            <text x="50" y="65" fill="#94a3b8" font-size="9">Cpk = 0.8</text>
+            <path d="M 100 130 Q 160 90 220 70 Q 320 50 420 70 Q 520 90 580 130 L 580 130 L 100 130 Z" fill="#fee2e2" stroke="#ef4444" stroke-width="2"/>
+            <text x="580" y="125" fill="#991b1b" font-size="10">⚠️ Cola pasa el límite</text>
+            <text x="50" y="170" fill="#475569" font-size="12" font-weight="800">Proceso B</text>
+            <text x="50" y="185" fill="#94a3b8" font-size="9">Cpk = 1.67</text>
+            <path d="M 280 220 Q 320 200 360 165 Q 380 145 400 165 Q 440 200 480 220 L 480 220 L 280 220 Z" fill="#d1fae5" stroke="#10b981" stroke-width="2"/>
+            <text x="480" y="215" fill="#047857" font-size="10">✅ Bien lejos del límite</text>
+          </svg></div>
+          <p style="font-size:12px;color:#475569;margin-top:8px">Ambos procesos tienen la <b>misma media</b>, pero el A es más variable y parte de su distribución cruza el límite legal.</p>
+        </div>
+        <div class="t-card">
+          <h2>🧮 Cálculo paso a paso</h2>
+          <p>Tomemos los pesos reales de un control: <b>905, 908, 902, 910, 907</b> (en gramos)</p>
+          <div class="t-formula" style="text-align:left;font-size:13px">
+            <b>Paso 1 · Media:</b> x̄ = (905+908+902+910+907)/5 = <span class="num">906.4 g</span><br><br>
+            <b>Paso 2 · Desviación estándar:</b> σ = <span class="num">2.97 g</span><br><br>
+            <b>Paso 3 · Qn-T:</b> Para Qn=900: T=15 → Qn-T = <span class="num">885 g</span><br><br>
+            <b>Paso 4 · Cpk:</b> (906.4 - 885) / (3 × 2.97) = 21.4 / 8.91 = <span class="num">2.40</span><br><br>
+            <span class="small">→ Cpk = 2.40 → EXCELENTE (proceso de clase mundial)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- TEORIA 3: COMO LEER GRAFICO -->
+      <div class="t-view" data-tview="3">
+        <div class="t-card">
+          <h2>🔍 Cómo leer un gráfico de tendencia</h2>
+          <p>Los gráficos del informe gerencial muestran 3 elementos clave:</p>
+          <div class="t-viz"><svg viewBox="0 0 700 260" xmlns="http://www.w3.org/2000/svg">
+            <line x1="60" y1="220" x2="660" y2="220" stroke="#cbd5e1" stroke-width="1.5"/>
+            <line x1="60" y1="40" x2="60" y2="220" stroke="#cbd5e1" stroke-width="1.5"/>
+            <line x1="60" y1="120" x2="660" y2="120" stroke="#10b981" stroke-width="2"/>
+            <text x="668" y="124" fill="#047857" font-size="10" font-weight="700">Qn (nominal)</text>
+            <line x1="60" y1="180" x2="660" y2="180" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="5 3"/>
+            <text x="668" y="184" fill="#92400e" font-size="10" font-weight="700">Qn-T</text>
+            <polyline points="100,80 160,95 220,75 280,90 340,70 400,85 460,78 520,72 580,82 640,90" fill="none" stroke="#3b82f6" stroke-width="2.5"/>
+            <g fill="#3b82f6"><circle cx="100" cy="80" r="3.5"/><circle cx="160" cy="95" r="3.5"/><circle cx="220" cy="75" r="3.5"/><circle cx="280" cy="90" r="3.5"/><circle cx="340" cy="70" r="3.5"/><circle cx="400" cy="85" r="3.5"/><circle cx="460" cy="78" r="3.5"/><circle cx="520" cy="72" r="3.5"/><circle cx="580" cy="82" r="3.5"/><circle cx="640" cy="90" r="3.5"/></g>
+            <text x="30" y="84" fill="#1e40af" font-size="10" font-weight="700">Promedios</text>
+            <text x="30" y="124" fill="#047857" font-size="10" font-weight="700">Qn</text>
+            <text x="30" y="184" fill="#92400e" font-size="10" font-weight="700">Qn-T</text>
+            <text x="360" y="245" fill="#94a3b8" font-size="11" text-anchor="middle">Tiempo →</text>
+          </svg></div>
+          <h3>Las 3 líneas y qué significan</h3>
+          <div class="t-callout"><b>🔵 Azul (Promedios reales):</b> Cada punto es el promedio de un control. Todos deben estar por encima de la línea verde.</div>
+          <div class="t-callout ok"><b>🟢 Verde (Qn nominal):</b> El peso declarado en la etiqueta. Los promedios deben quedar arriba de esta línea.</div>
+          <div class="t-callout warn"><b>🟡 Amarillo punteado (Qn − T):</b> Límite tolerante individual del Decreto.</div>
+        </div>
+        <div class="t-card">
+          <h2>📌 Patrones a reconocer</h2>
+          <div class="t-grid2">
+            <div class="t-example"><div class="t-ex-title" style="color:#047857">✅ Proceso estable</div><p>Puntos bien arriba del verde, poca dispersión. <b>Cpk alto</b>.</p></div>
+            <div class="t-example"><div class="t-ex-title" style="color:#92400e">⚠️ Sobrellenado</div><p>Puntos <b>muy</b> arriba del verde. Cumple ley pero pierde dinero.</p></div>
+            <div class="t-example"><div class="t-ex-title" style="color:#991b1b">❌ Tendencia bajista</div><p>Los puntos van bajando hacia el verde. <b>Anticipar desvíos</b>.</p></div>
+            <div class="t-example"><div class="t-ex-title" style="color:#991b1b">❌ Puntos cerca o bajo Qn</div><p>Riesgo de incumplimiento. <b>Acción inmediata</b>.</p></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TEORIA 4: CASOS PRACTICOS -->
+      <div class="t-view" data-tview="4">
+        <div class="t-card">
+          <h2>💡 Casos prácticos para la toma de decisiones</h2>
+          <p>Cómo interpretar combinaciones de indicadores del informe.</p>
+        </div>
+        <div class="t-card" style="border-left:4px solid #10b981">
+          <h3>🟢 Caso 1: Proceso ideal</h3>
+          <p><span class="t-kpi ok">Conformidad: 100%</span> <span class="t-kpi ok">Cpk: 1.85</span> <span class="t-kpi ok">x̄ = Qn + 1σ</span></p>
+          <p style="margin-top:10px"><b>Interpretación:</b> El proceso está bien centrado, con baja variabilidad y buen margen sobre el límite legal.</p>
+          <p><b>Acción:</b> Mantener parámetros actuales. Continuar monitoreo.</p>
+        </div>
+        <div class="t-card" style="border-left:4px solid #f59e0b">
+          <h3>🟡 Caso 2: Sobrellenado económico</h3>
+          <p><span class="t-kpi ok">Conformidad: 100%</span> <span class="t-kpi ok">Cpk: 2.50</span> <span class="t-kpi" style="background:#fef3c7;color:#92400e">x̄ = Qn + 122g (+4%)</span></p>
+          <p style="margin-top:10px"><b>Interpretación:</b> Cumple normativa pero sobrellenando. Millones de unidades = pérdida importante.</p>
+          <p><b>Acción:</b> Ajustar setpoint hacia Qn + 2σ. Recalibrar válvula dosificadora.</p>
+        </div>
+        <div class="t-card" style="border-left:4px solid #f59e0b">
+          <h3>🟡 Caso 3: Variabilidad alta</h3>
+          <p><span class="t-kpi ok">Conformidad: 92%</span> <span class="t-kpi" style="background:#fef3c7;color:#92400e">Cpk: 1.10</span> <span class="t-kpi" style="background:#fef3c7;color:#92400e">σ alto (3% de Qn)</span></p>
+          <p style="margin-top:10px"><b>Interpretación:</b> Dispersión alta. Cpk marginal indica poco margen.</p>
+          <p><b>Acción:</b> Investigar fuentes de variación: balanza, materia prima, velocidad, operario.</p>
+        </div>
+        <div class="t-card" style="border-left:4px solid #ef4444">
+          <h3>🔴 Caso 4: Riesgo legal</h3>
+          <p><span class="t-kpi bad">Conformidad: 78%</span> <span class="t-kpi bad">Cpk: 0.65</span> <span class="t-kpi bad">x̄ ≈ Qn</span></p>
+          <p style="margin-top:10px"><b>Interpretación:</b> Apenas centrado en nominal con tanta variabilidad que muchos envases incumplen. Riesgo de multa.</p>
+          <p><b>Acción urgente:</b> Detener línea. Análisis de causa raíz. Aumentar setpoint hasta Qn + 3σ.</p>
+        </div>
+        <div class="t-card">
+          <h2>📋 Resumen ejecutivo de indicadores</h2>
+          <table class="t-tbl">
+            <tr><th>Indicador</th><th>Bueno</th><th>Aceptable</th><th>Atención</th></tr>
+            <tr><td><b>Conformidad</b></td><td>100%</td><td>≥ 95%</td><td>&lt; 95%</td></tr>
+            <tr><td><b>Cpk</b></td><td>≥ 1.67</td><td>≥ 1.33</td><td>&lt; 1.33</td></tr>
+            <tr><td><b>x̄ vs Qn</b></td><td>≥ Qn</td><td>≥ Qn</td><td>&lt; Qn</td></tr>
+            <tr><td><b>Sobrellenado</b></td><td>1-3%</td><td>3-5%</td><td>&gt; 5%</td></tr>
+            <tr><td><b>σ / Qn</b></td><td>&lt; 1%</td><td>1-2%</td><td>&gt; 2%</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- END TAB 2 -->
 </div>
+<!-- END mainView -->
 
 <script>
 const SURL='https://script.google.com/macros/s/AKfycbxmayMAPlLCrozmZRM3gLSf5MgcWO9lC5y_ayR0DkRdi_hHYaoLRI43OgIJ9d7nTPDGug/exec';
@@ -270,6 +552,18 @@ function calcT(qn){
 }
 
 // LOGIN
+// Tab switching
+function showMainTab(n){
+  document.querySelectorAll('.m-tab').forEach((t,i)=>t.classList.toggle('active',i===n));
+  document.querySelectorAll('.main-view').forEach((v,i)=>v.classList.toggle('active',i===n));
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function showTeoria(n){
+  document.querySelectorAll('.t-tab').forEach((t,i)=>t.classList.toggle('active',i===n));
+  document.querySelectorAll('.t-view').forEach((v,i)=>v.classList.toggle('active',i===n));
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
 function doLogin(){
   const n=document.getElementById('loginName').value.trim();
   if(!n){alert('Ingresá tu nombre');return}
