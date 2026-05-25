@@ -400,6 +400,93 @@
 
             useEffect(() => { cargarDatos(); }, []);
 
+            // Auto-sincronización cada 5 minutos
+            useEffect(() => {
+                if (!configurado) return;
+                const intervalo = setInterval(() => {
+                    cargarDatos();
+                }, 5 * 60 * 1000);
+                return () => clearInterval(intervalo);
+            }, [configurado]);
+
+            // Migrar datos locales (localStorage) a Google Sheets
+            const [migrando, setMigrando] = useState(false);
+            const [migrado, setMigrado] = useState(localStorage.getItem('datos_migrados') === 'true');
+
+            const migrarDatosLocales = async () => {
+                if (!configurado) {
+                    setMensaje({ tipo: 'warning', texto: 'Primero configurá la URL de Google Sheets' });
+                    return;
+                }
+
+                const storedOrdenes = localStorage.getItem('ordenes_soplado');
+                const storedLCC = localStorage.getItem('controles_lcc');
+                const ordenesLocales = storedOrdenes ? JSON.parse(storedOrdenes) : [];
+                const lccLocales = storedLCC ? JSON.parse(storedLCC) : [];
+
+                if (ordenesLocales.length === 0 && lccLocales.length === 0) {
+                    setMensaje({ tipo: 'warning', texto: 'No hay datos locales para migrar' });
+                    return;
+                }
+
+                if (!confirm(`Se van a subir ${ordenesLocales.length} órdenes y ${lccLocales.length} controles LCC a Google Sheets. ¿Continuar?`)) {
+                    return;
+                }
+
+                setMigrando(true);
+                let errores = 0;
+                let subidos = 0;
+
+                // Primero obtener IDs existentes en Sheets para no duplicar
+                try {
+                    const existentes = await apiCall('getAll');
+                    const idsOrdenesExistentes = new Set((existentes.ordenes || []).map(o => String(o.id)));
+                    const idsLCCExistentes = new Set((existentes.lcc || []).map(c => String(c.id)));
+
+                    // Subir órdenes que no existan
+                    for (const orden of ordenesLocales) {
+                        if (idsOrdenesExistentes.has(String(orden.id))) continue;
+                        try {
+                            await apiCall('saveOrden', orden);
+                            subidos++;
+                        } catch (err) {
+                            errores++;
+                            console.error('Error migrando orden:', err);
+                        }
+                    }
+
+                    // Subir controles LCC que no existan
+                    for (const control of lccLocales) {
+                        if (idsLCCExistentes.has(String(control.id))) continue;
+                        try {
+                            await apiCall('saveLCC', control);
+                            subidos++;
+                        } catch (err) {
+                            errores++;
+                            console.error('Error migrando LCC:', err);
+                        }
+                    }
+
+                    localStorage.setItem('datos_migrados', 'true');
+                    setMigrado(true);
+
+                    if (errores > 0) {
+                        setMensaje({ tipo: 'warning', texto: `⚠️ Migración parcial: ${subidos} registros subidos, ${errores} errores` });
+                    } else {
+                        setMensaje({ tipo: 'success', texto: `✓ Migración completa: ${subidos} registros nuevos subidos a Google Sheets` });
+                    }
+
+                    // Recargar datos desde Sheets
+                    await cargarDatos();
+
+                } catch (err) {
+                    console.error('Error en migración:', err);
+                    setMensaje({ tipo: 'warning', texto: '⚠️ Error conectando con Google Sheets. Intentá de nuevo.' });
+                } finally {
+                    setMigrando(false);
+                }
+            };
+
             // Guardar órdenes en Google Sheets (y localStorage como backup)
             const guardarOrdenes = (nuevasOrdenes) => {
                 localStorage.setItem('ordenes_soplado', JSON.stringify(nuevasOrdenes));
@@ -447,14 +534,10 @@
                     setMensaje({ tipo: 'warning', texto: 'Seleccione una orden' });
                     return;
                 }
-                if (tipoControlSoplado === 'proceso' && !hora) {
-                    setMensaje({ tipo: 'warning', texto: 'Ingrese la hora' });
-                    return;
-                }
                 const nuevoControl = {
                     id: Date.now(), tipo: tipoControlSoplado,
                     fecha: new Date().toISOString().split('T')[0],
-                    hora: tipoControlSoplado === 'proceso' ? hora : new Date().toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' }),
+                    hora: new Date().toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' }),
                     mediciones: { ...mediciones }, observaciones, timestamp: new Date().toISOString()
                 };
                 const ordenesActualizadas = ordenesSoplado.map(orden => {
@@ -620,6 +703,28 @@
                     {guardando && (
                         <div className="alert alert-info" style={{marginBottom: '20px', borderRadius: '12px'}}>
                             ⏳ Guardando en Google Sheets...
+                        </div>
+                    )}
+
+                    {migrando && (
+                        <div className="alert alert-info" style={{marginBottom: '20px', borderRadius: '12px'}}>
+                            ⏳ Migrando datos locales a Google Sheets... No cierres la página.
+                        </div>
+                    )}
+
+                    {configurado && !migrado && !migrando && (
+                        <div style={{marginBottom: '20px', padding: '18px', background: '#ebf8ff', border: '2px solid #4299e1',
+                            borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px'}}>
+                            <div>
+                                <strong style={{color: '#2b6cb0'}}>📲 ¿Tenés datos cargados en este dispositivo?</strong>
+                                <p style={{color: '#4a5568', fontSize: '14px', margin: '4px 0 0'}}>
+                                    Presioná el botón para subir los registros locales a Google Sheets y que todos los analistas puedan verlos.
+                                </p>
+                            </div>
+                            <button className="btn btn-primary" onClick={migrarDatosLocales}
+                                style={{fontSize: '14px', padding: '10px 20px', whiteSpace: 'nowrap'}}>
+                                📤 Migrar datos a Google Sheets
+                            </button>
                         </div>
                     )}
 
@@ -799,13 +904,9 @@
                                                     <strong> Registro:</strong> {esFab ? 'REG-SOP-PR-138-G' : 'REG-SOP-PR-138-B'}
                                                 </div>
 
-                                                {tipoControlSoplado === 'proceso' && (
-                                                    <div className="form-group">
-                                                        <label>Hora del Control *</label>
-                                                        <input type="time" value={hora}
-                                                            onChange={(e) => setHora(e.target.value)} />
-                                                    </div>
-                                                )}
+                                                <div className="alert alert-info" style={{marginTop: '10px'}}>
+                                                    🕐 La hora se registra automáticamente del dispositivo al guardar
+                                                </div>
 
                                                 {/* CONTROL DE ARRANQUE */}
                                                 {tipoControlSoplado === 'arranque' && (
@@ -1398,6 +1499,76 @@
                                                             </div>
                                                         )}
 
+                                                        {/* Mediciones LCC */}
+                                                        {control.mediciones && Object.keys(control.mediciones).length > 0 && (
+                                                            <div style={{marginTop: '15px'}}>
+                                                                <h4 style={{marginBottom: '10px', color: '#2d3748', fontSize: '14px'}}>📏 Mediciones:</h4>
+                                                                <div className="measurement-table">
+                                                                    <table>
+                                                                        <thead>
+                                                                            <tr>
+                                                                                <th>Parámetro</th>
+                                                                                <th>Valores</th>
+                                                                                {spec && <th>Especificación</th>}
+                                                                                <th>Estado</th>
+                                                                            </tr>
+                                                                        </thead>
+                                                                        <tbody>
+                                                                            {Object.entries(control.mediciones).map(([key, value]) => {
+                                                                                if (value === '' || value === null || value === undefined) return null;
+                                                                                if (Array.isArray(value) && value.every(v => v === '')) return null;
+                                                                                
+                                                                                const nombreParam = key
+                                                                                    .replace(/^(validacion_|quincenal_|semanal_)/, '')
+                                                                                    .replace(/_/g, ' ')
+                                                                                    .replace(/cav(\d)/, 'Cav $1')
+                                                                                    .replace(/\b\w/g, l => l.toUpperCase());
+                                                                                
+                                                                                // Buscar spec del parámetro
+                                                                                const paramBase = key.replace(/^(validacion_|quincenal_|semanal_)/, '').replace(/_cav\d$/, '');
+                                                                                const specParam = spec?.parametros?.[paramBase];
+                                                                                
+                                                                                let displayValue, esOOS = false;
+                                                                                if (Array.isArray(value)) {
+                                                                                    const nums = value.filter(v => v && !isNaN(parseFloat(v))).map(v => parseFloat(v));
+                                                                                    displayValue = value.filter(v => v !== '').join(', ');
+                                                                                    if (specParam && nums.length > 0) {
+                                                                                        esOOS = nums.some(v => v < specParam.min || v > specParam.max);
+                                                                                    }
+                                                                                } else {
+                                                                                    displayValue = value;
+                                                                                    const numVal = parseFloat(value);
+                                                                                    if (specParam && !isNaN(numVal)) {
+                                                                                        esOOS = numVal < specParam.min || numVal > specParam.max;
+                                                                                    }
+                                                                                }
+                                                                                
+                                                                                return (
+                                                                                    <tr key={key} style={{background: esOOS ? '#fff5f5' : 'transparent'}}>
+                                                                                        <td style={{fontWeight: '600', fontSize: '13px'}}>{nombreParam}</td>
+                                                                                        <td>{displayValue}</td>
+                                                                                        {spec && (
+                                                                                            <td style={{fontSize: '12px', color: '#718096'}}>
+                                                                                                {specParam ? `${specParam.min} - ${specParam.max} ${specParam.unidad}` : ''}
+                                                                                            </td>
+                                                                                        )}
+                                                                                        <td>
+                                                                                            {esOOS 
+                                                                                                ? <span style={{color: '#e53e3e', fontWeight: '700'}}>⚠️ OOS</span>
+                                                                                                : specParam 
+                                                                                                    ? <span style={{color: '#38a169'}}>✓</span>
+                                                                                                    : ''
+                                                                                            }
+                                                                                        </td>
+                                                                                    </tr>
+                                                                                );
+                                                                            })}
+                                                                        </tbody>
+                                                                    </table>
+                                                                </div>
+                                                            </div>
+                                                        )}
+
                                                         <div style={{marginTop: '15px', display: 'flex', gap: '10px'}}>
                                                             <button className="btn btn-danger"
                                                                 onClick={() => eliminarControlLCC(control.id)}
@@ -1442,6 +1613,86 @@
                                                     <div className="detalle-value">{controlDetalle.control.hora}</div>
                                                 </div>
                                             </div>
+
+                                            {/* MEDICIONES DEL CONTROL */}
+                                            {controlDetalle.control.mediciones && Object.keys(controlDetalle.control.mediciones).length > 0 && (
+                                                <div style={{marginTop: '20px'}}>
+                                                    <h4 style={{marginBottom: '12px', color: '#2d3748', borderBottom: '2px solid #e2e8f0', paddingBottom: '8px'}}>
+                                                        📏 Mediciones Registradas
+                                                    </h4>
+                                                    <div className="measurement-table">
+                                                        <table>
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>Parámetro</th>
+                                                                    <th>Valor</th>
+                                                                    {controlDetalle.tipo === 'soplado' && controlDetalle.orden && (() => {
+                                                                        const spec = ESPECIFICACIONES[controlDetalle.orden.envase];
+                                                                        return spec ? <th>Especificación</th> : null;
+                                                                    })()}
+                                                                    <th>Estado</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {Object.entries(controlDetalle.control.mediciones).map(([key, value]) => {
+                                                                    if (value === '' || value === null || value === undefined) return null;
+                                                                    
+                                                                    // Formatear nombre del parámetro
+                                                                    const nombreParam = key
+                                                                        .replace(/^(arr_|proc_|obs_)/, '')
+                                                                        .replace(/_/g, ' ')
+                                                                        .replace(/cav(\d)/, 'Cav $1')
+                                                                        .replace(/\b\w/g, l => l.toUpperCase());
+                                                                    
+                                                                    // Determinar si está en spec
+                                                                    let enSpec = false;
+                                                                    let specMin = null, specMax = null, specUnidad = '';
+                                                                    if (controlDetalle.tipo === 'soplado' && controlDetalle.orden) {
+                                                                        const spec = ESPECIFICACIONES[controlDetalle.orden.envase];
+                                                                        if (spec) {
+                                                                            const paramBase = key.replace(/^(arr_|proc_)/, '').replace(/_cav\d$/, '');
+                                                                            if (spec.parametros[paramBase]) {
+                                                                                enSpec = true;
+                                                                                specMin = spec.parametros[paramBase].min;
+                                                                                specMax = spec.parametros[paramBase].max;
+                                                                                specUnidad = spec.parametros[paramBase].unidad;
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                    
+                                                                    const numVal = parseFloat(value);
+                                                                    const esOOS = enSpec && !isNaN(numVal) && (numVal < specMin || numVal > specMax);
+                                                                    const displayValue = typeof value === 'boolean' 
+                                                                        ? (value ? '✗ Sí' : '✓ No') 
+                                                                        : (value === 'ok' ? '✓ OK' : value === 'no' ? '✗ NO' : value);
+                                                                    
+                                                                    return (
+                                                                        <tr key={key} style={{background: esOOS ? '#fff5f5' : 'transparent'}}>
+                                                                            <td style={{fontWeight: '600', fontSize: '13px'}}>{nombreParam}</td>
+                                                                            <td style={{fontWeight: '500'}}>{displayValue}</td>
+                                                                            {enSpec ? (
+                                                                                <td style={{fontSize: '12px', color: '#718096'}}>
+                                                                                    {specMin} - {specMax} {specUnidad}
+                                                                                </td>
+                                                                            ) : controlDetalle.tipo === 'soplado' && controlDetalle.orden && ESPECIFICACIONES[controlDetalle.orden.envase] ? (
+                                                                                <td></td>
+                                                                            ) : null}
+                                                                            <td>
+                                                                                {esOOS 
+                                                                                    ? <span style={{color: '#e53e3e', fontWeight: '700'}}>⚠️ OOS</span>
+                                                                                    : enSpec 
+                                                                                        ? <span style={{color: '#38a169'}}>✓</span>
+                                                                                        : ''
+                                                                                }
+                                                                            </td>
+                                                                        </tr>
+                                                                    );
+                                                                })}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            )}
                                             {controlDetalle.control.observaciones && (
                                                 <div style={{marginTop: '20px', padding: '15px', background: '#fff5f5',
                                                     borderRadius: '8px', borderLeft: '4px solid #e53e3e'}}>
