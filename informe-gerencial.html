@@ -69,6 +69,29 @@ body{font-family:var(--f);background:var(--bg);color:var(--text);line-height:1.5
 .pill.bad{background:var(--red-l);color:var(--red-d)}
 .pill.warn{background:var(--amber-l);color:var(--amber-d)}
 
+/* SUMMARY TABLE */
+.sum-tbl{width:100%;border-collapse:collapse;font-size:12px}
+.sum-tbl th{background:#f1f5f9;color:var(--text2);padding:10px 8px;text-align:left;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid var(--border);position:sticky;top:0}
+.sum-tbl td{padding:9px 8px;border-bottom:1px solid var(--border);font-family:var(--m);font-size:11px;cursor:pointer}
+.sum-tbl tr:hover td{background:#f8fafc}
+.sum-tbl tr.status-bad td{background:#fef2f2}
+.sum-tbl tr.status-bad:hover td{background:#fee2e2}
+.sum-tbl tr.status-warn td{background:#fffbeb}
+.sum-tbl tr.status-warn:hover td{background:#fef3c7}
+.sum-tbl tr.status-opp td{background:#eff6ff}
+.sum-tbl tr.status-opp:hover td{background:#dbeafe}
+.sum-tbl .prod-name{font-family:var(--f);font-weight:700;color:var(--text)}
+.sum-tbl .prod-name small{font-weight:500;color:var(--text3);font-size:10px;font-family:var(--f)}
+.status-badge{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:50px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.3px;font-family:var(--f)}
+.status-badge.s-ok{background:var(--mint-l);color:var(--mint-d)}
+.status-badge.s-bad{background:var(--red-l);color:var(--red-d)}
+.status-badge.s-warn{background:var(--amber-l);color:var(--amber-d)}
+.status-badge.s-opp{background:var(--blue-l);color:var(--blue-d)}
+.sum-filters{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.sum-fbtn{padding:6px 12px;border-radius:50px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid var(--border);background:#fff;color:var(--text2);font-family:var(--f)}
+.sum-fbtn:hover{background:#f8fafc}
+.sum-fbtn.active{background:var(--mint-d);color:#fff;border-color:var(--mint-d)}
+
 /* CHART CONTAINER */
 .chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}
 .chart-card{background:#fff;border:1px solid var(--border);border-radius:var(--rs);padding:12px}
@@ -250,6 +273,12 @@ body{font-family:var(--f);background:var(--bg);color:var(--text);line-height:1.5
 
     <!-- KPIS -->
     <div class="kpis" id="kpis"></div>
+
+    <!-- SUMMARY TABLE -->
+    <div class="section">
+      <h2>🚦 Estado por Producto <span style="font-size:10px;color:var(--text3);font-weight:500;margin-left:6px">Clic en una fila para ver el detalle</span></h2>
+      <div id="summaryTable"></div>
+    </div>
 
     <!-- GENERAL OVERVIEW -->
     <div class="section">
@@ -667,6 +696,7 @@ function render(){
   updatePresFilter();
   filtered=getFiltered();
   renderKPIs();
+  renderSummary();
   renderCharts();
   renderDevs();
   renderAnalysts();
@@ -690,6 +720,131 @@ function renderKPIs(){
 }
 
 function destroyChart(id){if(charts[id])charts[id].destroy()}
+
+// SUMMARY TABLE - status by product
+let summaryFilter='all';
+function renderSummary(){
+  // Group records by product
+  const byProd={};
+  filtered.forEach(r=>{
+    if(!r.maquina||!r.presentacion)return;
+    const k=r.maquina+' ||| '+r.presentacion;
+    if(!byProd[k])byProd[k]={maquina:r.maquina,presentacion:r.presentacion,records:[]};
+    byProd[k].records.push(r);
+  });
+  
+  // Calculate status per product
+  const products=Object.values(byProd).map((prod,idx)=>{
+    const recs=prod.records;
+    const allP=[];recs.forEach(r=>(r.pesos||[]).forEach(p=>{if(p>0)allP.push(p)}));
+    const s=calcStats(allP);
+    const devs=recs.filter(r=>r.hasDev).length;
+    const conf=recs.length?Math.round((recs.length-devs)/recs.length*100):0;
+    const qn=getQn(prod.maquina,prod.presentacion);
+    const t=qn?calcT(qn):0;const qnT=qn-t;
+    const cpk=(qn&&s&&s.sd>0)?((s.mean-qnT)/(3*s.sd)):null;
+    const exceso=(qn&&s)?(s.mean-qn):0;
+    const excesoPct=(qn&&s)?(exceso/qn*100):0;
+    const minBelow2T=(qn&&s)?s.min<(qn-2*t):false;
+    const minBelowT=(qn&&s)?s.min<qnT:false;
+    
+    // Determine status
+    let status='ok', stTxt='OK', stIcon='✅', stClass='s-ok', priority=4;
+    let reason='';
+    
+    if(minBelow2T){
+      status='bad';stTxt='Incumplimiento';stIcon='🚨';stClass='s-bad';priority=1;
+      reason=`Pesos bajo Qn-2T (${(qn-2*t).toFixed(1)}g) — Defecto crítico`;
+    } else if(conf<85){
+      status='bad';stTxt='Incumplimiento';stIcon='❌';stClass='s-bad';priority=1;
+      reason=`Conformidad ${conf}% — Múltiples desvíos`;
+    } else if(minBelowT||(cpk!==null&&cpk<1.0)){
+      status='warn';stTxt='Atención';stIcon='⚠️';stClass='s-warn';priority=2;
+      reason=cpk<1.0?`Cpk ${cpk.toFixed(2)} — No capaz`:'Pesos bajo Qn-T detectados';
+    } else if(conf<95||(cpk!==null&&cpk<1.33)){
+      status='warn';stTxt='Atención';stIcon='⚠️';stClass='s-warn';priority=2;
+      reason=cpk!==null&&cpk<1.33?`Cpk ${cpk.toFixed(2)} — Marginal`:`Conformidad ${conf}%`;
+    } else if(excesoPct>3){
+      status='opp';stTxt='Oportunidad';stIcon='💰';stClass='s-opp';priority=3;
+      reason=`Sobrellenado +${exceso.toFixed(1)}g (+${excesoPct.toFixed(1)}%) — Ahorro posible`;
+    } else {
+      reason=cpk!==null?`Cpk ${cpk.toFixed(2)} · Conf. ${conf}%`:`Conf. ${conf}%`;
+    }
+    
+    return{prod,recs,s,devs,conf,qn,cpk,exceso,status,stTxt,stIcon,stClass,priority,reason,idx};
+  });
+  
+  // Sort by priority (worst first)
+  products.sort((a,b)=>a.priority-b.priority||(a.prod.maquina+a.prod.presentacion).localeCompare(b.prod.maquina+b.prod.presentacion));
+  
+  // Counters by status
+  const cnt={bad:0,warn:0,opp:0,ok:0};
+  products.forEach(p=>{cnt[p.status]++});
+  
+  // Apply current filter
+  const filteredProds=summaryFilter==='all'?products:products.filter(p=>p.status===summaryFilter);
+  
+  if(products.length===0){
+    document.getElementById('summaryTable').innerHTML='<div class="msg">Sin datos para el período seleccionado</div>';
+    return;
+  }
+  
+  // Build HTML
+  let html=`<div class="sum-filters">
+    <div class="sum-fbtn ${summaryFilter==='all'?'active':''}" onclick="setSumFilter('all')">Todos (${products.length})</div>
+    <div class="sum-fbtn ${summaryFilter==='bad'?'active':''}" onclick="setSumFilter('bad')" style="color:var(--red-d);border-color:${summaryFilter==='bad'?'var(--red)':'var(--border)'};${summaryFilter==='bad'?'background:var(--red);color:#fff':''}">🚨 Incumplimiento (${cnt.bad})</div>
+    <div class="sum-fbtn ${summaryFilter==='warn'?'active':''}" onclick="setSumFilter('warn')" style="color:var(--amber-d);${summaryFilter==='warn'?'background:var(--amber);color:#fff;border-color:var(--amber)':''}">⚠️ Atención (${cnt.warn})</div>
+    <div class="sum-fbtn ${summaryFilter==='opp'?'active':''}" onclick="setSumFilter('opp')" style="color:var(--blue-d);${summaryFilter==='opp'?'background:var(--blue);color:#fff;border-color:var(--blue)':''}">💰 Oportunidad (${cnt.opp})</div>
+    <div class="sum-fbtn ${summaryFilter==='ok'?'active':''}" onclick="setSumFilter('ok')" style="color:var(--mint-d);${summaryFilter==='ok'?'background:var(--mint);color:#fff;border-color:var(--mint)':''}">✅ OK (${cnt.ok})</div>
+  </div>`;
+  
+  html+=`<div style="overflow-x:auto"><table class="sum-tbl">
+    <thead><tr>
+      <th>Estado</th><th>Producto</th><th>N</th><th>Prom (g)</th><th>σ</th><th>Cpk</th><th>Conf.</th><th>Motivo / Acción</th>
+    </tr></thead><tbody>`;
+  
+  filteredProds.forEach(p=>{
+    const sdTxt=p.s?p.s.sd.toFixed(2):'—';
+    const cpkTxt=p.cpk!==null?p.cpk.toFixed(2):'—';
+    const cpkCls=p.cpk!==null?(p.cpk>=1.33?'t-ok':(p.cpk>=1?'t-wn':'t-bd')):'';
+    const promTxt=p.s?p.s.mean.toFixed(1):'—';
+    html+=`<tr class="status-${p.status}" onclick="scrollToProduct('${p.prod.maquina}','${p.prod.presentacion}')" title="Clic para ver detalle">
+      <td><span class="status-badge ${p.stClass}">${p.stIcon} ${p.stTxt}</span></td>
+      <td><div class="prod-name">${p.prod.maquina}<br><small>${p.prod.presentacion}</small></div></td>
+      <td>${p.recs.length}</td>
+      <td><b>${promTxt}</b></td>
+      <td>${sdTxt}</td>
+      <td class="${cpkCls}"><b>${cpkTxt}</b></td>
+      <td>${p.conf}%</td>
+      <td style="font-family:var(--f);font-size:11px;color:var(--text2)">${p.reason}</td>
+    </tr>`;
+  });
+  
+  if(filteredProds.length===0){
+    html+=`<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:20px;font-family:var(--f)">Sin productos en esta categoría</td></tr>`;
+  }
+  
+  html+='</tbody></table></div>';
+  document.getElementById('summaryTable').innerHTML=html;
+}
+
+function setSumFilter(f){summaryFilter=f;renderSummary()}
+
+function scrollToProduct(maq,pres){
+  // Find product section and scroll to it
+  const sections=document.querySelectorAll('.product-section');
+  for(const s of sections){
+    const title=s.querySelector('.product-title');
+    if(title&&title.textContent.includes(maq)&&title.textContent.includes(pres)){
+      s.scrollIntoView({behavior:'smooth',block:'start'});
+      // Highlight briefly
+      s.style.transition='box-shadow .5s';
+      s.style.boxShadow='0 0 0 3px var(--mint)';
+      setTimeout(()=>{s.style.boxShadow='0 1px 3px rgba(0,0,0,.04)'},1500);
+      return;
+    }
+  }
+}
 
 function renderCharts(){
   // Conformidad por máquina
