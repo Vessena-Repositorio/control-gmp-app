@@ -1,0 +1,1303 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Calidad - Vessena</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f1f5f9;
+            color: #1e293b;
+            min-height: 100vh;
+            padding: 16px;
+        }
+        .container { max-width: 1600px; margin: 0 auto; }
+
+        /* Header */
+        .header {
+            background: white;
+            border-radius: 16px;
+            padding: 20px 28px;
+            margin-bottom: 20px;
+            display: flex; justify-content: space-between; align-items: center;
+            flex-wrap: wrap; gap: 16px;
+            box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+            border: 1px solid #e2e8f0;
+        }
+        .header-left { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+        .logo {
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-size: 28px; font-weight: 900; letter-spacing: -0.5px;
+        }
+        .header h1 {
+            color: #1e293b; font-size: 18px; font-weight: 600;
+            border-left: 2px solid #cbd5e1; padding-left: 20px;
+        }
+        .status-bar { display: flex; gap: 16px; align-items: center; font-size: 13px; color: #64748b; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+        .dot-live { background: #10b981; box-shadow: 0 0 8px #10b981; animation: pulse 2s infinite; }
+        .dot-error { background: #ef4444; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+        .btn-refresh {
+            background: #f8fafc; color: #334155; border: 1px solid #cbd5e1;
+            padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 13px;
+            transition: all 0.2s; font-weight: 500;
+        }
+        .btn-refresh:hover { background: #e2e8f0; }
+        .btn-refresh:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Tabs */
+        .tabs {
+            display: flex; gap: 4px; background: white; padding: 6px;
+            border-radius: 12px; margin-bottom: 20px; max-width: fit-content;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+        }
+        .tab {
+            padding: 10px 24px; border: none; background: transparent; color: #64748b;
+            cursor: pointer; border-radius: 8px; font-size: 14px; font-weight: 600;
+            transition: all 0.2s; display: flex; align-items: center; gap: 8px;
+        }
+        .tab.active {
+            background: linear-gradient(135deg, #3b82f6, #6366f1);
+            color: white; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+        }
+        .tab:hover:not(.active) { background: #f1f5f9; color: #334155; }
+
+        /* KPI Cards */
+        .kpi-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px; margin-bottom: 20px;
+        }
+        .kpi-card {
+            background: white;
+            border-radius: 16px; padding: 22px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+            position: relative; overflow: hidden;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .kpi-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08); }
+        .kpi-card::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+        }
+        .kpi-card.success::before { background: linear-gradient(90deg, #10b981, #34d399); }
+        .kpi-card.warning::before { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+        .kpi-card.danger::before { background: linear-gradient(90deg, #ef4444, #f87171); }
+        .kpi-card.info::before { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+        .kpi-card.neutral::before { background: linear-gradient(90deg, #8b5cf6, #a78bfa); }
+
+        .kpi-label {
+            font-size: 11px; color: #64748b; text-transform: uppercase;
+            letter-spacing: 1px; font-weight: 600; margin-bottom: 8px;
+        }
+        .kpi-value {
+            font-size: 36px; font-weight: 800; color: #1e293b; line-height: 1.1;
+            margin-bottom: 4px;
+        }
+        .kpi-subtext { font-size: 13px; color: #64748b; }
+        .kpi-trend { font-size: 12px; margin-top: 8px; }
+        .kpi-trend.up { color: #059669; }
+        .kpi-trend.down { color: #dc2626; }
+
+        /* Panels */
+        .panel {
+            background: white; border-radius: 16px; padding: 22px;
+            margin-bottom: 20px; border: 1px solid #e2e8f0;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+        }
+        .panel-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 18px; flex-wrap: wrap; gap: 12px;
+        }
+        .panel-title {
+            font-size: 16px; font-weight: 700; color: #1e293b;
+            display: flex; align-items: center; gap: 10px;
+        }
+        .panel-subtitle { font-size: 13px; color: #64748b; }
+
+        .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); gap: 20px; }
+
+        /* Envase cards */
+        .envases-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 14px;
+        }
+        .envase-card {
+            background: #f8fafc; border-radius: 12px; padding: 16px;
+            border: 1px solid #e2e8f0;
+            border-left: 4px solid #3b82f6;
+            position: relative;
+        }
+        .envase-card.has-oos { border-left-color: #ef4444; background: #fef2f2; }
+        .envase-card.warning { border-left-color: #f59e0b; background: #fffbeb; }
+        .envase-card.success { border-left-color: #10b981; background: #f0fdf4; }
+        .envase-name { font-weight: 700; color: #1e293b; margin-bottom: 6px; font-size: 15px; }
+        .envase-stats { font-size: 12px; color: #64748b; line-height: 1.7; }
+        .envase-stats strong { color: #1e293b; }
+        .envase-badge {
+            position: absolute; top: 12px; right: 12px;
+            padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;
+        }
+        .envase-badge.green { background: #d1fae5; color: #047857; }
+        .envase-badge.red { background: #fee2e2; color: #b91c1c; }
+        .envase-badge.yellow { background: #fef3c7; color: #b45309; }
+
+        /* Alert list */
+        .alert-item {
+            background: #fef2f2; border-left: 3px solid #ef4444;
+            padding: 12px 16px; margin-bottom: 8px; border-radius: 8px;
+            display: flex; justify-content: space-between; align-items: center;
+            flex-wrap: wrap; gap: 10px;
+            border-top: 1px solid #fecaca;
+            border-right: 1px solid #fecaca;
+            border-bottom: 1px solid #fecaca;
+        }
+        .alert-info { flex: 1; min-width: 200px; }
+        .alert-title { font-weight: 600; color: #1e293b; font-size: 14px; margin-bottom: 4px; }
+        .alert-meta { font-size: 12px; color: #64748b; }
+        .alert-value {
+            background: #fee2e2; color: #b91c1c;
+            padding: 6px 12px; border-radius: 6px; font-weight: 700; font-size: 13px;
+            font-family: ui-monospace, monospace;
+        }
+
+        /* Filters */
+        .filters {
+            display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
+            margin-bottom: 16px;
+        }
+        .filter-group { display: flex; flex-direction: column; gap: 4px; }
+        .filter-label { font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: 600; }
+        .filter-select, .filter-input {
+            background: white; color: #1e293b; border: 1px solid #cbd5e1;
+            padding: 8px 12px; border-radius: 8px; font-size: 13px; min-width: 140px;
+        }
+        .filter-select:focus, .filter-input:focus {
+            outline: none; border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        /* Chart container */
+        .chart-container {
+            position: relative; height: 320px; background: #f8fafc;
+            border-radius: 12px; padding: 16px;
+            border: 1px solid #e2e8f0;
+        }
+        .chart-container.large { height: 380px; }
+
+        /* Loading state */
+        .loading {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 80px 20px; color: #64748b;
+            background: white; border-radius: 16px; border: 1px solid #e2e8f0;
+        }
+        .spinner {
+            border: 3px solid #e2e8f0; border-top-color: #3b82f6;
+            border-radius: 50%; width: 50px; height: 50px;
+            animation: spin 1s linear infinite; margin-bottom: 16px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .empty-state {
+            text-align: center; padding: 50px 20px; color: #94a3b8;
+        }
+        .empty-state-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.6; }
+
+        /* Sparkline mini */
+        .sparkline-row {
+            display: flex; align-items: center; gap: 12px;
+            padding: 12px; border-radius: 8px; background: #f8fafc;
+            margin-bottom: 8px; border: 1px solid #e2e8f0;
+        }
+        .sparkline-info { flex: 1; min-width: 0; }
+        .sparkline-label { font-size: 13px; font-weight: 600; color: #1e293b; margin-bottom: 2px; }
+        .sparkline-meta { font-size: 11px; color: #64748b; }
+        .sparkline-chart { width: 140px; height: 40px; }
+        .sparkline-value {
+            font-family: ui-monospace, monospace; font-size: 14px; font-weight: 700;
+            min-width: 70px; text-align: right;
+        }
+        .val-good { color: #059669; }
+        .val-bad { color: #dc2626; }
+        .val-warn { color: #d97706; }
+
+        /* TV mode (large screens) */
+        @media (min-width: 1400px) {
+            .kpi-value { font-size: 42px; }
+            .panel-title { font-size: 18px; }
+        }
+
+        /* Mobile */
+        @media (max-width: 640px) {
+            body { padding: 10px; }
+            .header { padding: 14px 18px; }
+            .logo { font-size: 22px; }
+            .header h1 { font-size: 14px; padding-left: 14px; }
+            .kpi-value { font-size: 28px; }
+            .kpi-card { padding: 16px; }
+            .grid-2 { grid-template-columns: 1fr; }
+            .chart-container { height: 240px; }
+            .tab { padding: 8px 14px; font-size: 12px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef } = React;
+
+        // Error Boundary para capturar errores de render
+        class ErrorBoundary extends React.Component {
+            constructor(props) {
+                super(props);
+                this.state = { hasError: false, error: null };
+            }
+            static getDerivedStateFromError(error) {
+                return { hasError: true, error };
+            }
+            componentDidCatch(error, info) {
+                console.error('Dashboard error:', error, info);
+            }
+            render() {
+                if (this.state.hasError) {
+                    return (
+                        <div style={{padding: '40px', background: 'white', borderRadius: '12px', border: '1px solid #fecaca'}}>
+                            <h2 style={{color: '#b91c1c', marginBottom: '12px'}}>⚠️ Error al renderizar el panel</h2>
+                            <p style={{color: '#64748b', marginBottom: '8px'}}>Detalle técnico:</p>
+                            <pre style={{background: '#f8fafc', padding: '12px', borderRadius: '8px', fontSize: '12px', overflow: 'auto', color: '#1e293b'}}>
+                                {String(this.state.error?.message || this.state.error)}
+                            </pre>
+                            <button className="btn-refresh" style={{marginTop: '12px'}} onClick={() => this.setState({hasError: false, error: null})}>
+                                Reintentar
+                            </button>
+                        </div>
+                    );
+                }
+                return this.props.children;
+            }
+        }
+
+        // ============================================================
+        // CONFIGURACIÓN
+        // ============================================================
+        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby0Idz2-18NsukOhRqqrQrgHCpO7f4gX67kb-5gH0xA1DLxw7t39Yr37_PakYth5srj/exec';
+
+        // Especificaciones (copiadas del control principal)
+        const ESPECIFICACIONES = {
+            'FAB-2L': { nombre: 'Fabuloso 2L', parametros: {
+                'brimful': { min: 2029.00, max: 2069.00, unidad: 'mL' },
+                'altura_h': { min: 299.40, max: 305.40, unidad: 'mm' },
+                'ancho_pie_hw': { min: 112.90, max: 115.10, unidad: 'mm' },
+                'profundidad_pie_hd': { min: 93.80, max: 97.30, unidad: 'mm' },
+                'ancho_hombro_sw': { min: 111.60, max: 113.80, unidad: 'mm' },
+                'profundidad_hombro_sd': { min: 82.30, max: 85.80, unidad: 'mm' },
+                'peso': { min: 90.00, max: 95.00, unidad: 'g' }
+            }},
+            'FAB-1L': { nombre: 'Fabuloso 1L', parametros: {
+                'brimful': { min: 1018, max: 1042, unidad: 'mL' },
+                'altura_h': { min: 267.2, max: 269.9, unidad: 'mm' },
+                'ancho_pie_hw': { min: 100.8, max: 102.8, unidad: 'mm' },
+                'profundidad_pie_hd': { min: 61.2, max: 62.8, unidad: 'mm' },
+                'ancho_hombro_sw': { min: 96.1, max: 98.1, unidad: 'mm' },
+                'profundidad_hombro_sd': { min: 51.4, max: 53.0, unidad: 'mm' }
+            }},
+            'PET-1800': { nombre: 'PET 1800 ML', parametros: {
+                'altura_h': { min: 312.20, max: 312.55, unidad: 'mm' },
+                'ancho_pie_hw': { min: 98.00, max: 98.12, unidad: 'mm' },
+                'brimful': { min: 1840, max: 1845, unidad: 'mL' },
+                'peso': { min: 48.00, max: 48.05, unidad: 'g' }
+            }},
+            'PET-900': { nombre: 'PET 900 ML', parametros: {
+                'altura_h': { min: 237.50, max: 238.50, unidad: 'mm' },
+                'ancho_pie_hw': { min: 65.00, max: 66.00, unidad: 'mm' },
+                'brimful': { min: 915, max: 920, unidad: 'mL' }
+            }},
+            'DET-1.25L': { nombre: 'Detergente Lavavajilla 1.25L', parametros: {
+                'altura_h': { min: 294.5, max: 295.5, unidad: 'mm' },
+                'ancho_hombro_sw': { min: 89.00, max: 89.90, unidad: 'mm' },
+                'profundidad_hombro_sd': { min: 70.00, max: 71.00, unidad: 'mm' },
+                'ancho_pie_hw': { min: 99.50, max: 101.50, unidad: 'mm' },
+                'profundidad_pie_hd': { min: 78.40, max: 79.60, unidad: 'mm' },
+                'brimful': { min: 1286, max: 1292, unidad: 'mL' }
+            }},
+            'HIPO-750': { nombre: 'Hipoclorito 750-800 ML', parametros: {
+                'altura_h': { min: 203.50, max: 205.50, unidad: 'mm' },
+                'ancho_hombro_sw': { min: 68.00, max: 69.00, unidad: 'mm' },
+                'profundidad_hombro_sd': { min: 68.00, max: 69.00, unidad: 'mm' },
+                'ancho_pie_hw': { min: 76.50, max: 77.50, unidad: 'mm' },
+                'profundidad_pie_hd': { min: 76.50, max: 77.50, unidad: 'mm' },
+                'brimful': { min: 783, max: 805, unidad: 'mL' }
+            }},
+            'HIPO-1000': { nombre: 'Hipoclorito 1000 ML', parametros: {
+                'altura_h': { min: 234.50, max: 236.50, unidad: 'mm' },
+                'ancho_hombro_sw': { min: 68.00, max: 69.00, unidad: 'mm' },
+                'profundidad_hombro_sd': { min: 68.00, max: 69.00, unidad: 'mm' },
+                'ancho_pie_hw': { min: 76.50, max: 77.50, unidad: 'mm' },
+                'profundidad_pie_hd': { min: 76.50, max: 77.50, unidad: 'mm' },
+                'brimful': { min: 1017, max: 1043, unidad: 'mL' }
+            }},
+            'HIPO-2000': { nombre: 'Hipoclorito 2000 ML', parametros: {
+                'altura_h': { min: 298.00, max: 300.00, unidad: 'mm' },
+                'ancho_hombro_sw': { min: 91.50, max: 92.50, unidad: 'mm' },
+                'profundidad_hombro_sd': { min: 68.00, max: 69.00, unidad: 'mm' },
+                'ancho_pie_hw': { min: 99.50, max: 100.50, unidad: 'mm' },
+                'profundidad_pie_hd': { min: 76.50, max: 77.50, unidad: 'mm' },
+                'brimful': { min: 2045, max: 2095, unidad: 'mL' }
+            }},
+            'HIPO-4L': { nombre: 'Hipoclorito 4L', parametros: {
+                'altura_h': { min: 307.50, max: 309.50, unidad: 'mm' },
+                'ancho_hombro_sw': { min: 135.00, max: 136.00, unidad: 'mm' },
+                'profundidad_hombro_sd': { min: 91.50, max: 92.50, unidad: 'mm' },
+                'ancho_pie_hw': { min: 143.00, max: 144.00, unidad: 'mm' },
+                'profundidad_pie_hd': { min: 99.50, max: 100.50, unidad: 'mm' },
+                'brimful': { min: 4080, max: 4180, unidad: 'mL' }
+            }},
+            'BIDON-10L': { nombre: 'Bidón PEAD 10L', parametros: {
+                'altura_h': { min: 360.00, max: 363.00, unidad: 'mm' },
+                'ancho_hombro_sw': { min: 181.00, max: 183.00, unidad: 'mm' },
+                'profundidad_hombro_sd': { min: 135.00, max: 137.00, unidad: 'mm' },
+                'ancho_pie_hw': { min: 189.00, max: 191.00, unidad: 'mm' },
+                'profundidad_pie_hd': { min: 143.00, max: 145.00, unidad: 'mm' },
+                'brimful': { min: 10200, max: 10400, unidad: 'mL' }
+            }}
+        };
+
+        // ============================================================
+        // HELPERS
+        // ============================================================
+        async function fetchData() {
+            const url = `${GOOGLE_SCRIPT_URL}?action=getAll`;
+            const response = await fetch(url, { redirect: 'follow' });
+            return response.json();
+        }
+
+        // Verifica si un valor está fuera de especificación
+        function checkOOS(envase, paramKey, value) {
+            const spec = ESPECIFICACIONES[envase];
+            if (!spec) return null;
+            
+            // Limpiar prefijos (arr_, proc_, validacion_, etc.)
+            const cleanKey = paramKey.replace(/^(arr_|proc_|validacion_|quincenal_|semanal_)/, '').replace(/_cav\d+$/, '');
+            const paramSpec = spec.parametros[cleanKey];
+            if (!paramSpec) return null;
+            
+            const num = parseFloat(value);
+            if (isNaN(num)) return null;
+            
+            return {
+                spec: paramSpec,
+                cleanKey,
+                value: num,
+                isOOS: num < paramSpec.min || num > paramSpec.max,
+                deviation: num < paramSpec.min ? paramSpec.min - num : num > paramSpec.max ? num - paramSpec.max : 0
+            };
+        }
+
+        // Extrae todas las mediciones individuales de un control con validación
+        function extraerMediciones(envase, mediciones) {
+            const resultados = [];
+            if (!mediciones) return resultados;
+
+            for (const [key, value] of Object.entries(mediciones)) {
+                if (value === '' || value === null || value === undefined) continue;
+                
+                // Manejar arrays (muestras múltiples LCC)
+                if (Array.isArray(value)) {
+                    value.forEach((v, idx) => {
+                        if (v === '' || v === null) return;
+                        const check = checkOOS(envase, key, v);
+                        if (check) {
+                            resultados.push({ key, muestra: idx + 1, ...check });
+                        }
+                    });
+                } else {
+                    const check = checkOOS(envase, key, value);
+                    if (check) resultados.push({ key, ...check });
+                }
+            }
+
+            return resultados;
+        }
+
+        // Formato amigable de nombre de parámetro
+        function formatearParam(key) {
+            return key
+                .replace(/^(arr_|proc_|validacion_|quincenal_|semanal_)/, '')
+                .replace(/_cav(\d)/, ' Cav$1')
+                .replace(/_/g, ' ')
+                .replace(/\b\w/g, l => l.toUpperCase());
+        }
+
+        function formatDate(d) {
+            if (!d) return '';
+            try {
+                const date = new Date(d);
+                return date.toLocaleDateString('es-UY') + ' ' + date.toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' });
+            } catch { return d; }
+        }
+
+        // Normaliza cualquier valor de fecha a "YYYY-MM-DD" en zona horaria local
+        function toFechaLocal(d) {
+            if (!d) return '';
+            try {
+                // Si ya es string en formato YYYY-MM-DD, devolverlo
+                if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+                const date = new Date(d);
+                if (isNaN(date.getTime())) return '';
+                const yyyy = date.getFullYear();
+                const mm = String(date.getMonth() + 1).padStart(2, '0');
+                const dd = String(date.getDate()).padStart(2, '0');
+                return `${yyyy}-${mm}-${dd}`;
+            } catch { return ''; }
+        }
+
+        // Hoy en formato YYYY-MM-DD zona horaria local
+        function hoyLocal() {
+            return toFechaLocal(new Date());
+        }
+
+        // ============================================================
+        // CHART COMPONENT
+        // ============================================================
+        function ChartCanvas({ config, height = 320 }) {
+            const canvasRef = useRef(null);
+            const chartRef = useRef(null);
+
+            useEffect(() => {
+                if (!canvasRef.current) return;
+                if (chartRef.current) chartRef.current.destroy();
+                
+                Chart.defaults.color = '#64748b';
+                Chart.defaults.borderColor = '#e2e8f0';
+                Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif';
+                
+                chartRef.current = new Chart(canvasRef.current, config);
+                
+                return () => {
+                    if (chartRef.current) chartRef.current.destroy();
+                };
+            }, [config]);
+
+            return <canvas ref={canvasRef} style={{maxHeight: `${height}px`}} />;
+        }
+
+        // Mini sparkline chart
+        function Sparkline({ data, color }) {
+            const canvasRef = useRef(null);
+            const chartRef = useRef(null);
+
+            useEffect(() => {
+                if (!canvasRef.current || !data || data.length === 0) return;
+                if (chartRef.current) chartRef.current.destroy();
+                
+                chartRef.current = new Chart(canvasRef.current, {
+                    type: 'line',
+                    data: {
+                        labels: data.map((_, i) => i),
+                        datasets: [{
+                            data: data,
+                            borderColor: color || '#3b82f6',
+                            backgroundColor: 'transparent',
+                            borderWidth: 1.5,
+                            pointRadius: 0,
+                            tension: 0.3
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                        scales: { x: { display: false }, y: { display: false } }
+                    }
+                });
+                
+                return () => { if (chartRef.current) chartRef.current.destroy(); };
+            }, [data, color]);
+
+            return <canvas ref={canvasRef} />;
+        }
+
+        // ============================================================
+        // APP
+        // ============================================================
+        function App() {
+            const [activeTab, setActiveTab] = useState('produccion');
+            const [ordenes, setOrdenes] = useState([]);
+            const [lcc, setLcc] = useState([]);
+            const [cargando, setCargando] = useState(true);
+            const [error, setError] = useState(null);
+            const [ultimaSync, setUltimaSync] = useState(null);
+
+            const cargarDatos = async () => {
+                try {
+                    setCargando(true); setError(null);
+                    const data = await fetchData();
+                    if (data.error) throw new Error(data.error);
+                    setOrdenes(data.ordenes || []);
+                    setLcc(data.lcc || []);
+                    setUltimaSync(new Date());
+                } catch (err) {
+                    console.error(err);
+                    setError(err.message);
+                } finally {
+                    setCargando(false);
+                }
+            };
+
+            useEffect(() => { cargarDatos(); }, []);
+
+            // Auto-refresh cada 2 minutos
+            useEffect(() => {
+                const t = setInterval(cargarDatos, 2 * 60 * 1000);
+                return () => clearInterval(t);
+            }, []);
+
+            return (
+                <div className="container">
+                    <div className="header">
+                        <div className="header-left">
+                            <div className="logo">VESSENA</div>
+                            <h1>Dashboard Control de Calidad</h1>
+                        </div>
+                        <div className="status-bar">
+                            {error ? (
+                                <span><span className="status-dot dot-error"></span>Sin conexión</span>
+                            ) : (
+                                <span><span className="status-dot dot-live"></span>En vivo</span>
+                            )}
+                            {ultimaSync && (
+                                <span style={{color: '#64748b'}}>
+                                    Última: {ultimaSync.toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                </span>
+                            )}
+                            <button className="btn-refresh" onClick={cargarDatos} disabled={cargando}>
+                                {cargando ? '⏳ Cargando...' : '🔄 Actualizar'}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="tabs">
+                        <button className={`tab ${activeTab === 'produccion' ? 'active' : ''}`}
+                            onClick={() => setActiveTab('produccion')}>
+                            📊 Producción Actual
+                        </button>
+                        <button className={`tab ${activeTab === 'historico' ? 'active' : ''}`}
+                            onClick={() => setActiveTab('historico')}>
+                            📈 Análisis Histórico
+                        </button>
+                    </div>
+
+                    {cargando && ordenes.length === 0 ? (
+                        <div className="loading">
+                            <div className="spinner"></div>
+                            <p>Conectando con Google Sheets...</p>
+                        </div>
+                    ) : error && ordenes.length === 0 ? (
+                        <div className="panel">
+                            <div className="empty-state">
+                                <div className="empty-state-icon">⚠️</div>
+                                <h3 style={{color: '#f87171', marginBottom: '8px'}}>Error de conexión</h3>
+                                <p>{error}</p>
+                            </div>
+                        </div>
+                    ) : activeTab === 'produccion' ? (
+                        <ErrorBoundary>
+                            <ProduccionActual ordenes={ordenes} lcc={lcc} />
+                        </ErrorBoundary>
+                    ) : (
+                        <ErrorBoundary>
+                            <AnalisisHistorico ordenes={ordenes} lcc={lcc} />
+                        </ErrorBoundary>
+                    )}
+                </div>
+            );
+        }
+
+        // ============================================================
+        // PESTAÑA 1: PRODUCCIÓN ACTUAL
+        // ============================================================
+        function ProduccionActual({ ordenes, lcc }) {
+            const hoy = hoyLocal();
+            
+            const stats = useMemo(() => {
+                const ordenesActivas = ordenes.filter(o => o.estado === 'activa');
+                
+                // Controles del día (soplado + LCC)
+                let controlesHoySoplado = 0, controlesHoyLCC = 0;
+                let totalMediciones = 0, medicionesOOS = 0;
+                const oosRecientes = [];
+                
+                ordenes.forEach(orden => {
+                    (orden.controles || []).forEach(ctrl => {
+                        if (toFechaLocal(ctrl.fecha) === hoy) controlesHoySoplado++;
+                        const meds = extraerMediciones(orden.envase, ctrl.mediciones);
+                        meds.forEach(m => {
+                            totalMediciones++;
+                            if (m.isOOS) {
+                                medicionesOOS++;
+                                oosRecientes.push({
+                                    envase: orden.envase,
+                                    orden: orden.numeroOrden,
+                                    operador: orden.operador,
+                                    fecha: ctrl.fecha,
+                                    hora: ctrl.hora,
+                                    timestamp: ctrl.timestamp,
+                                    tipo: ctrl.tipo,
+                                    ...m
+                                });
+                            }
+                        });
+                    });
+                });
+                
+                lcc.forEach(ctrl => {
+                    if (toFechaLocal(ctrl.fecha) === hoy) controlesHoyLCC++;
+                    const meds = extraerMediciones(ctrl.envase, ctrl.mediciones);
+                    meds.forEach(m => {
+                        totalMediciones++;
+                        if (m.isOOS) {
+                            medicionesOOS++;
+                            oosRecientes.push({
+                                envase: ctrl.envase,
+                                operador: ctrl.operador,
+                                fecha: ctrl.fecha,
+                                hora: ctrl.hora,
+                                timestamp: ctrl.timestamp,
+                                tipo: 'LCC ' + ctrl.tipo,
+                                ...m
+                            });
+                        }
+                    });
+                });
+                
+                const pctConforme = totalMediciones > 0 
+                    ? ((totalMediciones - medicionesOOS) / totalMediciones * 100).toFixed(1)
+                    : 100;
+                
+                // Estado por envase (de órdenes activas)
+                const porEnvase = {};
+                ordenesActivas.forEach(orden => {
+                    if (!porEnvase[orden.envase]) {
+                        porEnvase[orden.envase] = {
+                            envase: orden.envase,
+                            ordenes: 0,
+                            controles: 0,
+                            oos: 0,
+                            operadores: new Set()
+                        };
+                    }
+                    porEnvase[orden.envase].ordenes++;
+                    porEnvase[orden.envase].operadores.add(orden.operador);
+                    (orden.controles || []).forEach(ctrl => {
+                        porEnvase[orden.envase].controles++;
+                        const meds = extraerMediciones(orden.envase, ctrl.mediciones);
+                        porEnvase[orden.envase].oos += meds.filter(m => m.isOOS).length;
+                    });
+                });
+                
+                oosRecientes.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                
+                return {
+                    ordenesActivasCount: ordenesActivas.length,
+                    controlesHoy: controlesHoySoplado + controlesHoyLCC,
+                    controlesHoySoplado, controlesHoyLCC,
+                    medicionesOOS, pctConforme, totalMediciones,
+                    porEnvase: Object.values(porEnvase),
+                    oosRecientes: oosRecientes.slice(0, 10)
+                };
+            }, [ordenes, lcc]);
+
+            const claseEstado = stats.pctConforme >= 98 ? 'success' : stats.pctConforme >= 95 ? 'warning' : 'danger';
+
+            return (
+                <>
+                    <div className="kpi-grid">
+                        <div className="kpi-card info">
+                            <div className="kpi-label">Órdenes Activas</div>
+                            <div className="kpi-value">{stats.ordenesActivasCount}</div>
+                            <div className="kpi-subtext">en producción ahora</div>
+                        </div>
+                        <div className="kpi-card neutral">
+                            <div className="kpi-label">Controles Hoy</div>
+                            <div className="kpi-value">{stats.controlesHoy}</div>
+                            <div className="kpi-subtext">
+                                {stats.controlesHoySoplado} soplado · {stats.controlesHoyLCC} LCC
+                            </div>
+                        </div>
+                        <div className={`kpi-card ${claseEstado}`}>
+                            <div className="kpi-label">% Conforme</div>
+                            <div className="kpi-value">{stats.pctConforme}%</div>
+                            <div className="kpi-subtext">de {stats.totalMediciones} mediciones</div>
+                        </div>
+                        <div className={`kpi-card ${stats.medicionesOOS > 0 ? 'danger' : 'success'}`}>
+                            <div className="kpi-label">OOS Acumulados</div>
+                            <div className="kpi-value">{stats.medicionesOOS}</div>
+                            <div className="kpi-subtext">mediciones fuera de spec</div>
+                        </div>
+                    </div>
+
+                    <div className="panel">
+                        <div className="panel-header">
+                            <div>
+                                <div className="panel-title">🏭 Estado por Envase en Producción</div>
+                                <div className="panel-subtitle">Órdenes activas en este momento</div>
+                            </div>
+                        </div>
+                        {stats.porEnvase.length === 0 ? (
+                            <div className="empty-state">
+                                <div className="empty-state-icon">🌙</div>
+                                <p>No hay órdenes activas en este momento</p>
+                            </div>
+                        ) : (
+                            <div className="envases-grid">
+                                {stats.porEnvase.map(env => {
+                                    const pct = env.controles > 0 ? ((env.controles - env.oos) / env.controles * 100).toFixed(0) : 100;
+                                    const clase = env.oos > 0 ? 'has-oos' : env.controles < 2 ? 'warning' : 'success';
+                                    const badge = env.oos > 0 ? 'red' : env.controles < 2 ? 'yellow' : 'green';
+                                    const badgeText = env.oos > 0 ? `${env.oos} OOS` : env.controles < 2 ? 'Pocos ctrl.' : 'OK';
+                                    return (
+                                        <div key={env.envase} className={`envase-card ${clase}`}>
+                                            <div className={`envase-badge ${badge}`}>{badgeText}</div>
+                                            <div className="envase-name">{env.envase}</div>
+                                            <div className="envase-stats">
+                                                <strong>{env.ordenes}</strong> {env.ordenes === 1 ? 'orden' : 'órdenes'}<br/>
+                                                <strong>{env.controles}</strong> {env.controles === 1 ? 'control' : 'controles'}<br/>
+                                                <strong>{[...env.operadores].join(', ') || '—'}</strong>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="panel">
+                        <div className="panel-header">
+                            <div>
+                                <div className="panel-title">🚨 Alertas Recientes (OOS)</div>
+                                <div className="panel-subtitle">Últimas mediciones fuera de especificación</div>
+                            </div>
+                        </div>
+                        {stats.oosRecientes.length === 0 ? (
+                            <div className="empty-state">
+                                <div className="empty-state-icon">✅</div>
+                                <p>Sin alertas — todas las mediciones dentro de spec</p>
+                            </div>
+                        ) : (
+                            stats.oosRecientes.map((alert, i) => (
+                                <div key={i} className="alert-item">
+                                    <div className="alert-info">
+                                        <div className="alert-title">
+                                            {alert.envase} · {formatearParam(alert.key)}
+                                        </div>
+                                        <div className="alert-meta">
+                                            {alert.tipo} · {alert.operador || '—'} ·{' '}
+                                            {alert.muestra ? `Muestra ${alert.muestra} · ` : ''}
+                                            {formatDate(alert.timestamp)}
+                                        </div>
+                                    </div>
+                                    <div className="alert-value">
+                                        {alert.value} {alert.spec.unidad}
+                                        <div style={{fontSize: '10px', opacity: 0.8, marginTop: '2px', fontWeight: 'normal'}}>
+                                            spec: {alert.spec.min}-{alert.spec.max}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </>
+            );
+        }
+
+        // ============================================================
+        // PESTAÑA 2: ANÁLISIS HISTÓRICO
+        // ============================================================
+        function AnalisisHistorico({ ordenes, lcc }) {
+            const [filtroEnvase, setFiltroEnvase] = useState('todos');
+            const [filtroDias, setFiltroDias] = useState(30);
+            const [filtroParam, setFiltroParam] = useState('');
+
+            // Construir TODOS los controles (con o sin mediciones numéricas)
+            const controlesPlanos = useMemo(() => {
+                const out = [];
+                ordenes.forEach(orden => {
+                    (orden.controles || []).forEach(ctrl => {
+                        out.push({
+                            timestamp: ctrl.timestamp,
+                            fecha: toFechaLocal(ctrl.fecha) || toFechaLocal(ctrl.timestamp),
+                            hora: ctrl.hora,
+                            envase: orden.envase,
+                            operador: orden.operador,
+                            turno: orden.turno,
+                            tipo: ctrl.tipo,
+                            origen: 'soplado',
+                            mediciones: ctrl.mediciones || {},
+                            ordenNumero: orden.numeroOrden
+                        });
+                    });
+                });
+                lcc.forEach(ctrl => {
+                    out.push({
+                        timestamp: ctrl.timestamp,
+                        fecha: toFechaLocal(ctrl.fecha) || toFechaLocal(ctrl.timestamp),
+                        hora: ctrl.hora,
+                        envase: ctrl.envase,
+                        operador: ctrl.operador,
+                        turno: ctrl.turno,
+                        tipo: 'LCC ' + ctrl.tipo,
+                        origen: 'lcc',
+                        mediciones: ctrl.mediciones || {}
+                    });
+                });
+                return out.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+            }, [ordenes, lcc]);
+
+            // Construir registros expandidos (mediciones numéricas con spec)
+            const registros = useMemo(() => {
+                const out = [];
+                controlesPlanos.forEach(ctrl => {
+                    Object.entries(ctrl.mediciones).forEach(([key, value]) => {
+                        if (value === '' || value === null || value === undefined) return;
+                        
+                        const procesarValor = (v, muestra) => {
+                            const check = checkOOS(ctrl.envase, key, v);
+                            if (!check) return;
+                            out.push({
+                                timestamp: ctrl.timestamp, fecha: ctrl.fecha, hora: ctrl.hora,
+                                envase: ctrl.envase, operador: ctrl.operador,
+                                turno: ctrl.turno, tipo: ctrl.tipo, key, muestra,
+                                ...check
+                            });
+                        };
+                        
+                        if (Array.isArray(value)) {
+                            value.forEach((v, idx) => v !== '' && procesarValor(v, idx + 1));
+                        } else {
+                            procesarValor(value);
+                        }
+                    });
+                });
+                return out.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+            }, [controlesPlanos]);
+
+            // Filtrar por días y envase
+            const filtrarPorPeriodoEnvase = (items, getEnvase) => {
+                const ahora = new Date();
+                const limite = new Date(ahora.getTime() - filtroDias * 24 * 60 * 60 * 1000);
+                return items.filter(r => {
+                    if (new Date(r.timestamp) < limite) return false;
+                    if (filtroEnvase !== 'todos' && getEnvase(r) !== filtroEnvase) return false;
+                    return true;
+                });
+            };
+
+            const controlesFiltrados = useMemo(() => 
+                filtrarPorPeriodoEnvase(controlesPlanos, c => c.envase),
+            [controlesPlanos, filtroEnvase, filtroDias]);
+
+            const registrosFiltrados = useMemo(() => 
+                filtrarPorPeriodoEnvase(registros, r => r.envase),
+            [registros, filtroEnvase, filtroDias]);
+
+            // Envases disponibles (de TODO el universo, no solo numéricos)
+            const envasesDisponibles = useMemo(() => 
+                [...new Set(controlesPlanos.map(c => c.envase))].sort(),
+            [controlesPlanos]);
+
+            // Parámetros disponibles para tendencia
+            const paramsDisponibles = useMemo(() => {
+                const params = new Set(registrosFiltrados.map(r => r.cleanKey));
+                return [...params].sort();
+            }, [registrosFiltrados]);
+
+            useEffect(() => {
+                if (paramsDisponibles.length > 0 && !paramsDisponibles.includes(filtroParam)) {
+                    setFiltroParam(paramsDisponibles[0] || '');
+                }
+            }, [paramsDisponibles, filtroParam]);
+
+            // KPIs históricos
+            const kpis = useMemo(() => {
+                const totalControles = controlesFiltrados.length;
+                const total = registrosFiltrados.length;
+                const oos = registrosFiltrados.filter(r => r.isOOS).length;
+                const operadores = new Set(controlesFiltrados.map(r => r.operador).filter(Boolean));
+                const envases = new Set(controlesFiltrados.map(r => r.envase));
+                return {
+                    totalControles,
+                    total, oos,
+                    pctConforme: total > 0 ? ((total - oos) / total * 100).toFixed(1) : '—',
+                    operadores: operadores.size,
+                    envases: envases.size
+                };
+            }, [controlesFiltrados, registrosFiltrados]);
+
+            // Datos para gráfico de controles por día (con OOS si los hay)
+            const controlesPorDiaConfig = useMemo(() => {
+                const porDia = {};
+                controlesFiltrados.forEach(c => {
+                    if (!porDia[c.fecha]) porDia[c.fecha] = { ctrls: 0 };
+                    porDia[c.fecha].ctrls++;
+                });
+                // Agregar OOS por día
+                registrosFiltrados.forEach(r => {
+                    if (!porDia[r.fecha]) porDia[r.fecha] = { ctrls: 0, oos: 0 };
+                    if (r.isOOS) porDia[r.fecha].oos = (porDia[r.fecha].oos || 0) + 1;
+                });
+                const fechas = Object.keys(porDia).sort();
+                
+                return {
+                    type: 'bar',
+                    data: {
+                        labels: fechas,
+                        datasets: [
+                            {
+                                label: 'Controles realizados',
+                                data: fechas.map(f => porDia[f].ctrls),
+                                backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                                borderColor: '#3b82f6', borderWidth: 1,
+                                yAxisID: 'y'
+                            },
+                            {
+                                label: 'OOS detectados',
+                                data: fechas.map(f => porDia[f].oos || 0),
+                                backgroundColor: 'rgba(239, 68, 68, 0.7)',
+                                borderColor: '#ef4444', borderWidth: 1,
+                                type: 'line',
+                                yAxisID: 'y1',
+                                tension: 0.3,
+                                pointRadius: 4
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: { legend: { position: 'top' } },
+                        scales: {
+                            x: { grid: { color: 'rgba(226, 232, 240, 0.8)' } },
+                            y: {
+                                type: 'linear', position: 'left', beginAtZero: true,
+                                grid: { color: 'rgba(226, 232, 240, 0.8)' },
+                                title: { display: true, text: 'Controles' }
+                            },
+                            y1: {
+                                type: 'linear', position: 'right', beginAtZero: true,
+                                grid: { drawOnChartArea: false },
+                                title: { display: true, text: 'OOS' }
+                            }
+                        }
+                    }
+                };
+            }, [controlesFiltrados, registrosFiltrados]);
+
+            // Distribución por envase (controles realizados)
+            const distEnvaseConfig = useMemo(() => {
+                const porEnv = {};
+                controlesFiltrados.forEach(c => {
+                    if (!porEnv[c.envase]) porEnv[c.envase] = { total: 0 };
+                    porEnv[c.envase].total++;
+                });
+                const envs = Object.keys(porEnv).sort((a, b) => porEnv[b].total - porEnv[a].total);
+                
+                return {
+                    type: 'bar',
+                    data: {
+                        labels: envs,
+                        datasets: [{
+                            label: 'Controles realizados',
+                            data: envs.map(e => porEnv[e].total),
+                            backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                            borderColor: '#3b82f6',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { beginAtZero: true, grid: { color: 'rgba(226, 232, 240, 0.8)' } },
+                            y: { grid: { display: false } }
+                        }
+                    }
+                };
+            }, [controlesFiltrados]);
+
+            // Tendencia del parámetro seleccionado
+            const tendenciaConfig = useMemo(() => {
+                if (!filtroParam) return null;
+                const datos = registrosFiltrados
+                    .filter(r => r.cleanKey === filtroParam)
+                    .map(r => ({ 
+                        ts: new Date(r.timestamp), 
+                        valor: r.value, 
+                        isOOS: r.isOOS 
+                    }))
+                    .sort((a, b) => a.ts - b.ts);
+                
+                if (datos.length === 0) return null;
+                
+                // Etiquetas con fecha/hora corta
+                const labels = datos.map(d => {
+                    try {
+                        return d.ts.toLocaleDateString('es-UY', { day: '2-digit', month: '2-digit' }) +
+                               ' ' + d.ts.toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' });
+                    } catch { return ''; }
+                });
+                
+                const spec = ESPECIFICACIONES[filtroEnvase !== 'todos' ? filtroEnvase : envasesDisponibles[0]]?.parametros[filtroParam];
+                
+                const datasets = [{
+                    label: formatearParam(filtroParam),
+                    data: datos.map(d => d.valor),
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    pointBackgroundColor: datos.map(d => d.isOOS ? '#ef4444' : '#3b82f6'),
+                    pointRadius: 4, pointHoverRadius: 6,
+                    borderWidth: 2, tension: 0.2, fill: true
+                }];
+                
+                if (spec) {
+                    datasets.push({
+                        label: 'Mín',
+                        data: datos.map(() => spec.min),
+                        borderColor: '#ef4444', borderDash: [6, 4], pointRadius: 0,
+                        borderWidth: 1.5, fill: false
+                    });
+                    datasets.push({
+                        label: 'Máx',
+                        data: datos.map(() => spec.max),
+                        borderColor: '#ef4444', borderDash: [6, 4], pointRadius: 0,
+                        borderWidth: 1.5, fill: false
+                    });
+                }
+                
+                return {
+                    type: 'line',
+                    data: { labels, datasets },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: { 
+                            legend: { position: 'top' }
+                        },
+                        scales: {
+                            x: { 
+                                grid: { color: 'rgba(226, 232, 240, 0.8)' },
+                                ticks: { maxRotation: 45, minRotation: 0, autoSkip: true, maxTicksLimit: 10 }
+                            },
+                            y: { grid: { color: 'rgba(226, 232, 240, 0.8)' } }
+                        }
+                    }
+                };
+            }, [registrosFiltrados, filtroParam, filtroEnvase, envasesDisponibles, filtroDias]);
+
+            // Ranking de parámetros más problemáticos
+            const topProblematicos = useMemo(() => {
+                const porParam = {};
+                registrosFiltrados.forEach(r => {
+                    const k = r.envase + ' · ' + r.cleanKey;
+                    if (!porParam[k]) porParam[k] = { 
+                        envase: r.envase, param: r.cleanKey, total: 0, oos: 0,
+                        valores: [], unidad: r.spec.unidad
+                    };
+                    porParam[k].total++;
+                    porParam[k].valores.push(r.value);
+                    if (r.isOOS) porParam[k].oos++;
+                });
+                
+                return Object.values(porParam)
+                    .filter(p => p.oos > 0)
+                    .sort((a, b) => b.oos - a.oos)
+                    .slice(0, 8);
+            }, [registrosFiltrados]);
+
+            return (
+                <>
+                    <div className="panel" style={{background: '#fefce8', borderColor: '#fde047'}}>
+                        <div style={{display: 'flex', gap: '20px', flexWrap: 'wrap', fontSize: '13px', color: '#713f12'}}>
+                            <span><strong>🔍 Diagnóstico:</strong></span>
+                            <span>Órdenes recibidas: <strong>{ordenes.length}</strong></span>
+                            <span>Controles Soplado (embebidos): <strong>{ordenes.reduce((a, o) => a + (o.controles?.length || 0), 0)}</strong></span>
+                            <span>Controles LCC: <strong>{lcc.length}</strong></span>
+                            <span>Total registrados (todos los períodos): <strong>{controlesPlanos.length}</strong></span>
+                            <span>Después de filtros: <strong>{controlesFiltrados.length}</strong></span>
+                        </div>
+                    </div>
+
+                    <div className="panel">
+                        <div className="filters">
+                            <div className="filter-group">
+                                <div className="filter-label">Envase</div>
+                                <select className="filter-select" value={filtroEnvase} 
+                                    onChange={e => setFiltroEnvase(e.target.value)}>
+                                    <option value="todos">Todos</option>
+                                    {envasesDisponibles.map(e => <option key={e} value={e}>{e}</option>)}
+                                </select>
+                            </div>
+                            <div className="filter-group">
+                                <div className="filter-label">Período</div>
+                                <select className="filter-select" value={filtroDias}
+                                    onChange={e => setFiltroDias(Number(e.target.value))}>
+                                    <option value={1}>Últimas 24h</option>
+                                    <option value={7}>Última semana</option>
+                                    <option value={30}>Último mes</option>
+                                    <option value={90}>Últimos 3 meses</option>
+                                    <option value={365}>Último año</option>
+                                </select>
+                            </div>
+                            {paramsDisponibles.length > 0 && (
+                                <div className="filter-group">
+                                    <div className="filter-label">Parámetro (tendencia)</div>
+                                    <select className="filter-select" value={filtroParam}
+                                        onChange={e => setFiltroParam(e.target.value)}>
+                                        {paramsDisponibles.map(p => <option key={p} value={p}>{formatearParam(p)}</option>)}
+                                    </select>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="kpi-grid">
+                        <div className="kpi-card info">
+                            <div className="kpi-label">Controles Realizados</div>
+                            <div className="kpi-value">{kpis.totalControles}</div>
+                            <div className="kpi-subtext">en el período</div>
+                        </div>
+                        <div className="kpi-card neutral">
+                            <div className="kpi-label">Mediciones Numéricas</div>
+                            <div className="kpi-value">{kpis.total}</div>
+                            <div className="kpi-subtext">verificadas contra spec</div>
+                        </div>
+                        <div className={`kpi-card ${kpis.pctConforme === '—' ? 'neutral' : kpis.pctConforme >= 98 ? 'success' : kpis.pctConforme >= 95 ? 'warning' : 'danger'}`}>
+                            <div className="kpi-label">% Conformidad</div>
+                            <div className="kpi-value">{kpis.pctConforme}{kpis.pctConforme !== '—' && '%'}</div>
+                            <div className="kpi-subtext">
+                                {kpis.oos} OOS detectados
+                            </div>
+                        </div>
+                        <div className="kpi-card info">
+                            <div className="kpi-label">Envases / Operadores</div>
+                            <div className="kpi-value">{kpis.envases} / {kpis.operadores}</div>
+                            <div className="kpi-subtext">distintos en el período</div>
+                        </div>
+                    </div>
+
+                    {controlesFiltrados.length === 0 ? (
+                        <div className="panel">
+                            <div className="empty-state">
+                                <div className="empty-state-icon">📭</div>
+                                <p style={{fontSize: '15px', marginBottom: '8px'}}>
+                                    No hay controles en el período/envase seleccionado
+                                </p>
+                                <p style={{fontSize: '13px'}}>
+                                    Probá ampliar el período o cambiar el filtro de envase
+                                </p>
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="grid-2">
+                                <div className="panel">
+                                    <div className="panel-header">
+                                        <div>
+                                            <div className="panel-title">📊 Actividad Diaria</div>
+                                            <div className="panel-subtitle">Controles realizados y OOS detectados</div>
+                                        </div>
+                                    </div>
+                                    <div className="chart-container">
+                                        <ChartCanvas config={controlesPorDiaConfig} />
+                                    </div>
+                                </div>
+                                <div className="panel">
+                                    <div className="panel-header">
+                                        <div>
+                                            <div className="panel-title">🏷️ Controles por Envase</div>
+                                            <div className="panel-subtitle">Ranking del período</div>
+                                        </div>
+                                    </div>
+                                    <div className="chart-container">
+                                        <ChartCanvas config={distEnvaseConfig} />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {tendenciaConfig ? (
+                                <div className="panel">
+                                    <div className="panel-header">
+                                        <div>
+                                            <div className="panel-title">📈 Tendencia: {formatearParam(filtroParam)}</div>
+                                            <div className="panel-subtitle">
+                                                Valores en el tiempo · Línea roja = límites de especificación
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="chart-container large">
+                                        <ChartCanvas config={tendenciaConfig} height={380} />
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="panel">
+                                    <div className="empty-state">
+                                        <div className="empty-state-icon">📐</div>
+                                        <p style={{fontSize: '14px'}}>
+                                            Aún no hay mediciones numéricas verificables contra especificación
+                                        </p>
+                                        <p style={{fontSize: '12px', marginTop: '4px'}}>
+                                            Las tendencias aparecerán cuando se registren controles con valores como altura, peso, brimful, etc.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {topProblematicos.length > 0 && (
+                                <div className="panel">
+                                    <div className="panel-header">
+                                        <div>
+                                            <div className="panel-title">⚠️ Parámetros con Más OOS</div>
+                                            <div className="panel-subtitle">Top 8 con mayor cantidad de no conformes</div>
+                                        </div>
+                                    </div>
+                                    {topProblematicos.map((p, i) => {
+                                        const pct = (p.oos / p.total * 100).toFixed(1);
+                                        const colorVal = pct >= 5 ? 'val-bad' : pct >= 2 ? 'val-warn' : 'val-good';
+                                        return (
+                                            <div key={i} className="sparkline-row">
+                                                <div className="sparkline-info">
+                                                    <div className="sparkline-label">
+                                                        {p.envase} · {formatearParam(p.param)}
+                                                    </div>
+                                                    <div className="sparkline-meta">
+                                                        {p.oos} OOS de {p.total} mediciones
+                                                    </div>
+                                                </div>
+                                                <div className="sparkline-chart">
+                                                    <Sparkline data={p.valores} color="#ef4444" />
+                                                </div>
+                                                <div className={`sparkline-value ${colorVal}`}>
+                                                    {pct}%
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </>
+                    )}
+                </>
+            );
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
