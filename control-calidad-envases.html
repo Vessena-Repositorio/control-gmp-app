@@ -261,6 +261,35 @@
                     'brimful': { min: 1286, max: 1292, unidad: 'mL', nombre: 'Brimful' }
                 }
             },
+            // === PET sin specs cargadas (placeholders) ===
+            'PET-1100': {
+                nombre: 'PET 1.1 L', tipo: 'PET', codigo: 'pendiente',
+                parametros: {}
+            },
+            'PET-1350': {
+                nombre: 'PET 1.35 L', tipo: 'PET', codigo: 'pendiente',
+                parametros: {}
+            },
+            'PET-AXION-1250': {
+                nombre: 'PET AXION 1.25 L', tipo: 'PET', codigo: 'pendiente',
+                parametros: {}
+            },
+            'PET-600': {
+                nombre: 'PET 600 ML', tipo: 'PET', codigo: 'pendiente',
+                parametros: {}
+            },
+            'PET-640': {
+                nombre: 'PET 640 ML', tipo: 'PET', codigo: 'pendiente',
+                parametros: {}
+            },
+            'PET-250': {
+                nombre: 'PET 250 ML', tipo: 'PET', codigo: 'pendiente',
+                parametros: {}
+            },
+            'PET-600ESP': {
+                nombre: 'PET 600 ESP', tipo: 'PET', codigo: 'pendiente',
+                parametros: {}
+            },
             'HIPO-750': {
                 nombre: 'Hipoclorito 750-800 ML', tipo: 'PEAD', codigo: 'ESP-COM-225',
                 cavidades: 4,
@@ -1075,13 +1104,12 @@
                                                             
                                                             {spec.tipo !== 'PEAD' && (
                                                                 <div className="form-group" style={{marginBottom: '20px'}}>
-                                                                    <label>Peso de Preforma Correcto</label>
-                                                                    <select value={mediciones['peso_preforma'] || ''}
-                                                                        onChange={(e) => setMediciones({...mediciones, peso_preforma: e.target.value})}>
-                                                                        <option value="">Seleccione...</option>
-                                                                        <option value="ok">✓ OK</option>
-                                                                        <option value="no">✗ NO</option>
-                                                                    </select>
+                                                                    <label>Peso de Preforma (g)</label>
+                                                                    <input type="number" step="0.01"
+                                                                        value={mediciones['peso_preforma'] || ''}
+                                                                        onChange={(e) => setMediciones({...mediciones, peso_preforma: e.target.value})}
+                                                                        placeholder="Ej: 25.5"
+                                                                        style={{maxWidth: '200px'}} />
                                                                 </div>
                                                             )}
 
