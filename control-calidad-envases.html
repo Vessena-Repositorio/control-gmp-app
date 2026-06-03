@@ -321,7 +321,7 @@
         // =====================================================
         // CONFIGURACIÓN: Pegá tu URL de Google Apps Script acá
         // =====================================================
-        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbysLvLlh4s4HKj2jWiSGbcpBBq5BvemMWCWF6LS8_ReV6K3_GXTv35L0iUZWwBYqwCL/exec';
+        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby0Idz2-18NsukOhRqqrQrgHCpO7f4gX67kb-5gH0xA1DLxw7t39Yr37_PakYth5srj/exec';
         // =====================================================
 
         // Helper para llamadas a la API de Google Sheets
@@ -350,6 +350,8 @@
             
             // Estados Órdenes Soplado
             const [mostrarNuevaOrden, setMostrarNuevaOrden] = useState(false);
+            const [mostrarSelCampana, setMostrarSelCampana] = useState(false);
+            const [campanaSeleccionada, setCampanaSeleccionada] = useState(null);
             const [nuevaOrdenData, setNuevaOrdenData] = useState({
                 numeroOrden: '', envase: '', fecha: new Date().toISOString().split('T')[0],
                 operador: '', turno: ''
@@ -426,9 +428,13 @@
                     setMensaje({ tipo: 'warning', texto: 'Complete todos los campos obligatorios' });
                     return;
                 }
+                const id = Date.now();
+                // Si hay campaña seleccionada, usar su campaign_id; sino, esta orden inicia campaña nueva (id propio)
+                const campaign_id = campanaSeleccionada ? campanaSeleccionada.campaign_id : id;
                 const nuevaOrden = {
-                    id: Date.now(), ...nuevaOrdenData, estado: 'activa', controles: [],
-                    createdAt: new Date().toISOString()
+                    id, ...nuevaOrdenData, estado: 'activa', controles: [],
+                    createdAt: new Date().toISOString(),
+                    campaign_id
                 };
                 setGuardando(true);
                 guardarOrdenes([nuevaOrden, ...ordenesSoplado]);
@@ -443,12 +449,64 @@
                     }
                 }
                 setGuardando(false);
-                setMensaje({ tipo: 'success', texto: `✓ Orden ${nuevaOrdenData.numeroOrden} creada` });
+                const msgCampana = campanaSeleccionada 
+                    ? ` (continuación de campaña ${campanaSeleccionada.envase})`
+                    : ' (nueva campaña iniciada)';
+                setMensaje({ tipo: 'success', texto: `✓ Orden ${nuevaOrdenData.numeroOrden} creada${msgCampana}` });
                 setMostrarNuevaOrden(false);
+                setCampanaSeleccionada(null);
                 setNuevaOrdenData({
                     numeroOrden: '', envase: '', fecha: new Date().toISOString().split('T')[0],
                     operador: '', turno: ''
                 });
+            };
+
+            // Obtiene campañas activas (al menos 1 orden con estado='activa')
+            const obtenerCampanasActivas = () => {
+                const grupos = {};
+                ordenesSoplado.forEach(o => {
+                    const cid = o.campaign_id || o.id;
+                    if (!grupos[cid]) {
+                        grupos[cid] = {
+                            campaign_id: cid,
+                            envase: o.envase,
+                            ordenes: [],
+                            primeraFecha: o.fecha,
+                            tieneActiva: false
+                        };
+                    }
+                    grupos[cid].ordenes.push(o);
+                    if (o.estado === 'activa') grupos[cid].tieneActiva = true;
+                    // mantener la primera fecha (más antigua)
+                    if (new Date(o.fecha) < new Date(grupos[cid].primeraFecha)) {
+                        grupos[cid].primeraFecha = o.fecha;
+                    }
+                });
+                return Object.values(grupos).filter(g => g.tieneActiva);
+            };
+
+            const finalizarCampana = async (campaign_id) => {
+                if (!confirm('¿Finalizar la campaña? Todas las órdenes activas pasarán a estado "finalizada".')) return;
+                
+                // Actualizar localmente
+                const ordenesActualizadas = ordenesSoplado.map(o => {
+                    const cid = o.campaign_id || o.id;
+                    if (String(cid) === String(campaign_id) && o.estado === 'activa') {
+                        return { ...o, estado: 'finalizada' };
+                    }
+                    return o;
+                });
+                guardarOrdenes(ordenesActualizadas);
+                
+                // Sincronizar con Google Sheets
+                if (configurado) {
+                    try {
+                        await apiCall('finalizarCampana', null, { campaign_id });
+                    } catch (err) {
+                        console.error('Error finalizando campaña:', err);
+                    }
+                }
+                setMensaje({ tipo: 'success', texto: '✓ Campaña finalizada' });
             };
 
             const registrarControlSoplado = async () => {
@@ -601,6 +659,20 @@
                 return Math.floor((hoy - inicio) / (1000 * 60 * 60 * 24));
             };
 
+            // Normaliza cualquier fecha a formato YYYY-MM-DD legible
+            const formatearFecha = (d) => {
+                if (!d) return '—';
+                try {
+                    if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+                    const date = new Date(d);
+                    if (isNaN(date.getTime())) return '—';
+                    const yyyy = date.getFullYear();
+                    const mm = String(date.getMonth() + 1).padStart(2, '0');
+                    const dd = String(date.getDate()).padStart(2, '0');
+                    return `${yyyy}-${mm}-${dd}`;
+                } catch { return '—'; }
+            };
+
             return (
                 <div className="container">
                     <div className="header">
@@ -675,7 +747,7 @@
                                                 Registre controles de arranque y proceso cada 2 horas durante la producción
                                             </p>
                                             <div className="button-group" style={{borderTop: 'none', paddingTop: 0, marginTop: 0}}>
-                                                <button className="btn btn-primary" onClick={() => setMostrarNuevaOrden(true)}>
+                                                <button className="btn btn-primary" onClick={() => setMostrarSelCampana(true)}>
                                                     ➕ Crear Nueva Orden de Soplado
                                                 </button>
                                                 <button className="btn btn-success" onClick={() => {
@@ -692,9 +764,108 @@
                                         </div>
                                     )}
 
+                                    {/* MODAL: SELECCIÓN DE CAMPAÑA */}
+                                    {mostrarSelCampana && (
+                                        <div className="form-section">
+                                            <h2 className="section-title">¿Inicio de Campaña o Continuación?</h2>
+                                            <p style={{color: '#718096', marginBottom: '20px'}}>
+                                                Una campaña agrupa todas las órdenes consecutivas del mismo envase.
+                                                El control de arranque se hace al inicio de la campaña.
+                                            </p>
+
+                                            {(() => {
+                                                const campanasActivas = obtenerCampanasActivas();
+                                                return (
+                                                    <>
+                                                        <div style={{display: 'grid', gap: '12px', marginBottom: '20px'}}>
+                                                            <button className="btn btn-primary"
+                                                                style={{padding: '20px', fontSize: '15px', textAlign: 'left', justifyContent: 'flex-start'}}
+                                                                onClick={() => {
+                                                                    setCampanaSeleccionada(null);
+                                                                    setMostrarSelCampana(false);
+                                                                    setMostrarNuevaOrden(true);
+                                                                }}>
+                                                                <div>
+                                                                    <div style={{fontSize: '16px', fontWeight: '700', marginBottom: '4px'}}>
+                                                                        🆕 Iniciar Nueva Campaña
+                                                                    </div>
+                                                                    <div style={{fontSize: '13px', opacity: 0.9, fontWeight: 'normal'}}>
+                                                                        Para empezar la producción de un envase nuevo
+                                                                    </div>
+                                                                </div>
+                                                            </button>
+                                                        </div>
+
+                                                        {campanasActivas.length > 0 && (
+                                                            <>
+                                                                <h3 style={{marginBottom: '12px', color: '#2d3748', fontSize: '15px'}}>
+                                                                    O continuar una campaña activa:
+                                                                </h3>
+                                                                <div style={{display: 'grid', gap: '10px'}}>
+                                                                    {campanasActivas.map(camp => {
+                                                                        const spec = ESPECIFICACIONES[camp.envase];
+                                                                        const ordenesActivasCount = camp.ordenes.filter(o => o.estado === 'activa').length;
+                                                                        const totalControles = camp.ordenes.reduce((a, o) => a + (o.controles?.length || 0), 0);
+                                                                        const tieneArranque = camp.ordenes.some(o => 
+                                                                            (o.controles || []).some(c => c.tipo === 'arranque')
+                                                                        );
+                                                                        return (
+                                                                            <button key={camp.campaign_id} className="btn btn-secondary"
+                                                                                style={{padding: '15px', textAlign: 'left', justifyContent: 'flex-start',
+                                                                                    border: '2px solid #e2e8f0', background: '#f7fafc'}}
+                                                                                onClick={() => {
+                                                                                    setCampanaSeleccionada(camp);
+                                                                                    setNuevaOrdenData({
+                                                                                        ...nuevaOrdenData,
+                                                                                        envase: camp.envase
+                                                                                    });
+                                                                                    setMostrarSelCampana(false);
+                                                                                    setMostrarNuevaOrden(true);
+                                                                                }}>
+                                                                                <div style={{width: '100%'}}>
+                                                                                    <div style={{fontSize: '15px', fontWeight: '700', marginBottom: '4px', color: '#2d3748'}}>
+                                                                                        📦 {spec?.nombre || camp.envase}
+                                                                                    </div>
+                                                                                    <div style={{fontSize: '12px', color: '#718096', fontWeight: 'normal'}}>
+                                                                                        Iniciada: {formatearFecha(camp.primeraFecha)} ·{' '}
+                                                                                        {camp.ordenes.length} {camp.ordenes.length === 1 ? 'orden' : 'órdenes'} ·{' '}
+                                                                                        {ordenesActivasCount} activa{ordenesActivasCount !== 1 ? 's' : ''} ·{' '}
+                                                                                        {totalControles} controles{' '}
+                                                                                        {!tieneArranque && <span style={{color: '#e53e3e'}}>⚠️ sin arranque</span>}
+                                                                                    </div>
+                                                                                </div>
+                                                                            </button>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </>
+                                                        )}
+
+                                                        <div style={{marginTop: '20px', borderTop: '1px solid #e2e8f0', paddingTop: '15px'}}>
+                                                            <button className="btn btn-secondary"
+                                                                onClick={() => setMostrarSelCampana(false)}>
+                                                                Cancelar
+                                                            </button>
+                                                        </div>
+                                                    </>
+                                                );
+                                            })()}
+                                        </div>
+                                    )}
+
                                     {mostrarNuevaOrden && (
                                         <div className="form-section">
-                                            <h2 className="section-title">Nueva Orden de Soplado</h2>
+                                            <h2 className="section-title">
+                                                {campanaSeleccionada 
+                                                    ? `Nueva Orden en Campaña ${ESPECIFICACIONES[campanaSeleccionada.envase]?.nombre || campanaSeleccionada.envase}`
+                                                    : 'Nueva Campaña - Primera Orden'}
+                                            </h2>
+                                            {campanaSeleccionada && (
+                                                <div className="alert alert-info" style={{marginBottom: '15px'}}>
+                                                    ▶ Continuando campaña iniciada el {formatearFecha(campanaSeleccionada.primeraFecha)} ·{' '}
+                                                    {campanaSeleccionada.ordenes.length} órdenes anteriores
+                                                </div>
+                                            )}
                                             <div className="form-grid">
                                                 <div className="form-group">
                                                     <label>Número de Orden *</label>
@@ -703,9 +874,10 @@
                                                         placeholder="FAB-2L-2024-045" />
                                                 </div>
                                                 <div className="form-group">
-                                                    <label>Envase *</label>
+                                                    <label>Envase *{campanaSeleccionada && ' (fijo por campaña)'}</label>
                                                     <select value={nuevaOrdenData.envase}
-                                                        onChange={(e) => setNuevaOrdenData({...nuevaOrdenData, envase: e.target.value})}>
+                                                        onChange={(e) => setNuevaOrdenData({...nuevaOrdenData, envase: e.target.value})}
+                                                        disabled={!!campanaSeleccionada}>
                                                         <option value="">Seleccione...</option>
                                                         {Object.entries(ESPECIFICACIONES).map(([key, val]) => (
                                                             <option key={key} value={key}>{val.nombre}</option>
@@ -735,7 +907,10 @@
                                             </div>
                                             <div className="button-group">
                                                 <button className="btn btn-primary" onClick={crearNuevaOrden}>✓ Crear Orden</button>
-                                                <button className="btn btn-secondary" onClick={() => setMostrarNuevaOrden(false)}>Cancelar</button>
+                                                <button className="btn btn-secondary" onClick={() => {
+                                                    setMostrarNuevaOrden(false);
+                                                    setCampanaSeleccionada(null);
+                                                }}>Cancelar</button>
                                             </div>
                                         </div>
                                     )}
@@ -1276,16 +1451,158 @@
                                         </div>
                                     </div>
 
+                                    {/* FILTROS */}
+                                    <div style={{background: '#f7fafc', padding: '15px 20px', borderRadius: '12px',
+                                        marginBottom: '20px', display: 'flex', gap: '15px', flexWrap: 'wrap', alignItems: 'flex-end'}}>
+                                        <div style={{display: 'flex', flexDirection: 'column', gap: '4px'}}>
+                                            <label style={{fontSize: '11px', color: '#718096', fontWeight: '600', textTransform: 'uppercase'}}>
+                                                Estado
+                                            </label>
+                                            <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)}
+                                                style={{padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e0', minWidth: '160px'}}>
+                                                <option value="todas">Todas</option>
+                                                <option value="activa">🟢 Solo activas</option>
+                                                <option value="finalizada">✓ Solo finalizadas</option>
+                                            </select>
+                                        </div>
+                                        <div style={{display: 'flex', flexDirection: 'column', gap: '4px'}}>
+                                            <label style={{fontSize: '11px', color: '#718096', fontWeight: '600', textTransform: 'uppercase'}}>
+                                                Envase
+                                            </label>
+                                            <select value={filtroEnvase} onChange={(e) => setFiltroEnvase(e.target.value)}
+                                                style={{padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e0', minWidth: '180px'}}>
+                                                <option value="">Todos</option>
+                                                {Object.keys(ESPECIFICACIONES).map(env => (
+                                                    <option key={env} value={env}>{env}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div style={{display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minWidth: '200px'}}>
+                                            <label style={{fontSize: '11px', color: '#718096', fontWeight: '600', textTransform: 'uppercase'}}>
+                                                Buscar
+                                            </label>
+                                            <input type="text" value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
+                                                placeholder="Nº orden, operador..."
+                                                style={{padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e0'}} />
+                                        </div>
+                                        {(filtroEstado !== 'todas' || filtroEnvase || busqueda) && (
+                                            <button className="btn btn-secondary" onClick={() => {
+                                                setFiltroEstado('todas'); setFiltroEnvase(''); setBusqueda('');
+                                            }} style={{fontSize: '13px', padding: '8px 16px'}}>
+                                                ✕ Limpiar
+                                            </button>
+                                        )}
+                                    </div>
+
                                     {/* ÓRDENES DE SOPLADO */}
                                     <div className="form-section">
                                         <h2 className="section-title">🏭 Órdenes de Soplado</h2>
-                                        {ordenesSoplado.length === 0 ? (
-                                            <div className="empty-state">
-                                                <div className="empty-state-icon">📦</div>
-                                                <p>No hay órdenes de soplado</p>
-                                            </div>
-                                        ) : (
-                                            ordenesSoplado.map(orden => {
+                                        {(() => {
+                                            const ordenesFiltradas = ordenesSoplado.filter(orden => {
+                                                if (filtroEstado !== 'todas' && orden.estado !== filtroEstado) return false;
+                                                if (filtroEnvase && orden.envase !== filtroEnvase) return false;
+                                                if (busqueda) {
+                                                    const q = busqueda.toLowerCase();
+                                                    if (!String(orden.numeroOrden).toLowerCase().includes(q) &&
+                                                        !String(orden.operador || '').toLowerCase().includes(q)) return false;
+                                                }
+                                                return true;
+                                            });
+
+                                            if (ordenesSoplado.length === 0) {
+                                                return (
+                                                    <div className="empty-state">
+                                                        <div className="empty-state-icon">📦</div>
+                                                        <p>No hay órdenes de soplado</p>
+                                                    </div>
+                                                );
+                                            }
+                                            if (ordenesFiltradas.length === 0) {
+                                                return (
+                                                    <div className="empty-state">
+                                                        <div className="empty-state-icon">🔍</div>
+                                                        <p>No hay órdenes que coincidan con los filtros</p>
+                                                    </div>
+                                                );
+                                            }
+
+                                            // AGRUPAR POR CAMPAÑA
+                                            const grupos = {};
+                                            ordenesFiltradas.forEach(o => {
+                                                const cid = o.campaign_id || o.id;
+                                                if (!grupos[cid]) grupos[cid] = { campaign_id: cid, envase: o.envase, ordenes: [] };
+                                                grupos[cid].ordenes.push(o);
+                                            });
+                                            // Ordenar campañas: las activas primero, luego por fecha más reciente
+                                            const campanasOrdenadas = Object.values(grupos).sort((a, b) => {
+                                                const aActiva = a.ordenes.some(o => o.estado === 'activa');
+                                                const bActiva = b.ordenes.some(o => o.estado === 'activa');
+                                                if (aActiva !== bActiva) return bActiva - aActiva;
+                                                const aMax = Math.max(...a.ordenes.map(o => new Date(o.createdAt || o.fecha).getTime()));
+                                                const bMax = Math.max(...b.ordenes.map(o => new Date(o.createdAt || o.fecha).getTime()));
+                                                return bMax - aMax;
+                                            });
+
+                                            return campanasOrdenadas.map(campana => {
+                                                const specCamp = ESPECIFICACIONES[campana.envase];
+                                                const ordenesCamp = [...campana.ordenes].sort((a, b) => 
+                                                    new Date(a.createdAt || a.fecha) - new Date(b.createdAt || b.fecha)
+                                                );
+                                                const totalControles = ordenesCamp.reduce((a, o) => a + (o.controles?.length || 0), 0);
+                                                const totalArranques = ordenesCamp.reduce((a, o) => 
+                                                    a + (o.controles || []).filter(c => c.tipo === 'arranque').length, 0);
+                                                const totalProcesos = ordenesCamp.reduce((a, o) => 
+                                                    a + (o.controles || []).filter(c => c.tipo === 'proceso').length, 0);
+                                                const tieneActiva = ordenesCamp.some(o => o.estado === 'activa');
+                                                const fechaInicio = ordenesCamp[0]?.fecha;
+                                                const fechaUltima = ordenesCamp[ordenesCamp.length - 1]?.fecha;
+
+                                                return (
+                                                    <div key={campana.campaign_id} 
+                                                        style={{marginBottom: '25px', border: '2px solid #cbd5e0', 
+                                                            borderRadius: '12px', overflow: 'hidden',
+                                                            background: tieneActiva ? '#fff' : '#f7fafc'}}>
+                                                        
+                                                        {/* HEADER DE CAMPAÑA */}
+                                                        <div style={{padding: '18px 22px', 
+                                                            background: tieneActiva 
+                                                                ? 'linear-gradient(135deg, #667eea, #764ba2)' 
+                                                                : 'linear-gradient(135deg, #718096, #4a5568)',
+                                                            color: 'white'}}>
+                                                            <div style={{display: 'flex', justifyContent: 'space-between', 
+                                                                alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px'}}>
+                                                                <div>
+                                                                    <div style={{fontSize: '18px', fontWeight: '700', marginBottom: '6px'}}>
+                                                                        🎯 Campaña {specCamp?.nombre || campana.envase}
+                                                                        {' '}
+                                                                        {tieneActiva 
+                                                                            ? <span style={{background: '#48bb78', padding: '3px 10px', borderRadius: '12px', fontSize: '11px', marginLeft: '8px'}}>● ACTIVA</span>
+                                                                            : <span style={{background: '#a0aec0', padding: '3px 10px', borderRadius: '12px', fontSize: '11px', marginLeft: '8px'}}>FINALIZADA</span>
+                                                                        }
+                                                                    </div>
+                                                                    <div style={{fontSize: '13px', opacity: 0.95}}>
+                                                                        Iniciada: {formatearFecha(fechaInicio)} · Última orden: {formatearFecha(fechaUltima)}
+                                                                    </div>
+                                                                    <div style={{fontSize: '13px', opacity: 0.95, marginTop: '4px'}}>
+                                                                        {ordenesCamp.length} {ordenesCamp.length === 1 ? 'orden' : 'órdenes'} ·{' '}
+                                                                        {totalArranques} arranque{totalArranques !== 1 ? 's' : ''} ·{' '}
+                                                                        {totalProcesos} proceso{totalProcesos !== 1 ? 's' : ''}
+                                                                    </div>
+                                                                </div>
+                                                                {tieneActiva && (
+                                                                    <button className="btn"
+                                                                        style={{background: 'rgba(255,255,255,0.2)', color: 'white', 
+                                                                            border: '1px solid rgba(255,255,255,0.5)', fontSize: '13px', padding: '8px 16px'}}
+                                                                        onClick={() => finalizarCampana(campana.campaign_id)}>
+                                                                        🏁 Finalizar Campaña
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+
+                                                        {/* ÓRDENES DENTRO DE LA CAMPAÑA */}
+                                                        <div style={{padding: '15px'}}>
+                                            {ordenesCamp.map(orden => {
                                                 const spec = ESPECIFICACIONES[orden.envase];
                                                 const dias = calcularDiasActiva(orden.fecha);
                                                 const controlesArranque = orden.controles.filter(c => c.tipo === 'arranque');
@@ -1310,7 +1627,7 @@
 
                                                         <div className="orden-info">
                                                             <div className="orden-detail"><strong>Envase:</strong> {spec?.nombre}</div>
-                                                            <div className="orden-detail"><strong>Fecha:</strong> {orden.fecha}</div>
+                                                            <div className="orden-detail"><strong>Fecha:</strong> {formatearFecha(orden.fecha)}</div>
                                                             <div className="orden-detail"><strong>Operador:</strong> {orden.operador}</div>
                                                             <div className="orden-detail"><strong>Controles:</strong> {orden.controles.length}</div>
                                                         </div>
@@ -1324,7 +1641,7 @@
                                                                         onClick={() => setControlDetalle({control: c, orden, tipo: 'soplado'})}>
                                                                         <div className="control-info">
                                                                             <span className="control-hora">🚀 Arranque</span>
-                                                                            <span className="control-tipo">{c.fecha} - {c.hora}</span>
+                                                                            <span className="control-tipo">{formatearFecha(c.fecha)} - {c.hora}</span>
                                                                         </div>
                                                                         <div style={{color: '#667eea', fontSize: '12px'}}>Ver →</div>
                                                                     </div>
@@ -1335,7 +1652,7 @@
                                                                         onClick={() => setControlDetalle({control: c, orden, tipo: 'soplado'})}>
                                                                         <div className="control-info">
                                                                             <span className="control-hora">⏱️ {c.hora}</span>
-                                                                            <span className="control-tipo">{c.fecha}</span>
+                                                                            <span className="control-tipo">{formatearFecha(c.fecha)}</span>
                                                                         </div>
                                                                         <div style={{color: '#38a169', fontSize: '12px'}}>Ver →</div>
                                                                     </div>
@@ -1364,8 +1681,12 @@
                                                         </div>
                                                     </div>
                                                 );
-                                            })
-                                        )}
+                                            })}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            });
+                                        })()}
                                     </div>
 
                                     <div className="separator"></div>
@@ -1373,13 +1694,34 @@
                                     {/* CONTROLES LCC */}
                                     <div className="form-section">
                                         <h2 className="section-title">🔬 Controles LCC (Liberación de Cambio de Calidad)</h2>
-                                        {controlesLCC.length === 0 ? (
-                                            <div className="empty-state">
-                                                <div className="empty-state-icon">🔬</div>
-                                                <p>No hay controles LCC registrados</p>
-                                            </div>
-                                        ) : (
-                                            controlesLCC.map(control => {
+                                        {(() => {
+                                            const lccFiltrados = controlesLCC.filter(c => {
+                                                if (filtroEnvase && c.envase !== filtroEnvase) return false;
+                                                if (busqueda) {
+                                                    const q = busqueda.toLowerCase();
+                                                    if (!String(c.operador || '').toLowerCase().includes(q) &&
+                                                        !String(c.tipo || '').toLowerCase().includes(q)) return false;
+                                                }
+                                                return true;
+                                            });
+                                            
+                                            if (controlesLCC.length === 0) {
+                                                return (
+                                                    <div className="empty-state">
+                                                        <div className="empty-state-icon">🔬</div>
+                                                        <p>No hay controles LCC registrados</p>
+                                                    </div>
+                                                );
+                                            }
+                                            if (lccFiltrados.length === 0) {
+                                                return (
+                                                    <div className="empty-state">
+                                                        <div className="empty-state-icon">🔍</div>
+                                                        <p>No hay controles LCC que coincidan con los filtros</p>
+                                                    </div>
+                                                );
+                                            }
+                                            return lccFiltrados.map(control => {
                                                 const spec = ESPECIFICACIONES[control.envase];
                                                 const tipoLabel = 
                                                     control.tipo === 'validacion' ? '🔬 Validación' :
@@ -1397,7 +1739,7 @@
 
                                                         <div className="control-info-grid">
                                                             <div className="orden-detail"><strong>Envase:</strong> {spec?.nombre}</div>
-                                                            <div className="orden-detail"><strong>Fecha:</strong> {control.fecha}</div>
+                                                            <div className="orden-detail"><strong>Fecha:</strong> {formatearFecha(control.fecha)}</div>
                                                             <div className="orden-detail"><strong>Hora:</strong> {control.hora}</div>
                                                             <div className="orden-detail"><strong>Operador:</strong> {control.operador}</div>
                                                             {control.turno && (
@@ -1490,8 +1832,8 @@
                                                         </div>
                                                     </div>
                                                 );
-                                            })
-                                        )}
+                                            });
+                                        })()}
                                     </div>
                                 </>
                             )}
@@ -1518,7 +1860,7 @@
                                                 </div>
                                                 <div className="detalle-item">
                                                     <div className="detalle-label">Fecha</div>
-                                                    <div className="detalle-value">{controlDetalle.control.fecha}</div>
+                                                    <div className="detalle-value">{formatearFecha(controlDetalle.control.fecha)}</div>
                                                 </div>
                                                 <div className="detalle-item">
                                                     <div className="detalle-label">Hora</div>
