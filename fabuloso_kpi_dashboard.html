@@ -1,0 +1,1579 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KPI Dashboard — Fabuloso</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,sans-serif;background:#f1f3f5;color:#1a1f36}
+.hdr{background:linear-gradient(135deg,#1e293b,#334155);padding:24px 28px 0;color:#fff}
+.hdr h1{font-size:22px;font-weight:800;font-family:monospace;margin:4px 0 0}
+.hdr .s{font-size:12px;opacity:.7;margin-top:2px}
+.hdr .c{font-size:10px;letter-spacing:2px;text-transform:uppercase;opacity:.5}
+.top{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px}
+.fil{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.fil label{font-size:11px;opacity:.7}
+.fil input{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:6px;padding:6px 10px;font-size:12px}
+.fil button{background:rgba(255,255,255,.2);color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:11px;cursor:pointer;font-weight:600}
+input[type=date]::-webkit-calendar-picker-indicator{filter:invert(1)}
+.tabs{display:flex;gap:2px;margin-top:14px;flex-wrap:wrap}
+.tabs button{background:rgba(255,255,255,.1);color:rgba(255,255,255,.8);border:none;border-radius:6px 6px 0 0;padding:8px 16px;font-size:11px;font-weight:600;cursor:pointer}
+.tabs button.on{background:#f1f3f5;color:#1e293b}
+.mn{padding:18px 28px 32px;max-width:1260px;margin:0 auto}
+.cds{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:18px}
+.cd{background:#fff;border-radius:12px;padding:16px 20px;flex:1 1 160px;min-width:150;box-shadow:0 1px 6px rgba(0,0,0,.05);border-left:4px solid var(--c)}
+.cd .l{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:#8892a4;margin-bottom:5px}
+.cd .v{font-size:24px;font-weight:800;color:var(--c);font-family:monospace;line-height:1}
+.cd .u{font-size:10px;color:#8892a4;margin-top:4px}
+.bx{background:#fff;border-radius:12px;padding:20px;margin-bottom:16px;box-shadow:0 1px 6px rgba(0,0,0,.05)}
+.bx h3{margin:0 0 12px;font-family:monospace;font-size:14px}
+.cw{position:relative;width:100%}
+.sg{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.si{background:#f0fdf4;border-radius:8px;padding:12px;display:flex;align-items:center;gap:8px;border:1px solid #bbf7d0}
+.si .ic{width:28px;height:28px;border-radius:50%;background:#16a34a;color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0}
+.si .sl{font-size:9px;color:#666;font-weight:600}
+.si .sv{font-size:14px;font-weight:700;color:#16a34a}
+table{width:100%;border-collapse:collapse}
+th{padding:8px 10px;text-align:left;font-weight:700;border-bottom:2px solid #ddd;font-size:11px;background:#f1f3f5}
+td{padding:8px 10px;font-size:12px;border-bottom:1px solid #eee}
+.bg{color:#fff;padding:3px 8px;border-radius:16px;font-size:10px;font-weight:600;display:inline-block}
+.tp{display:none}.tp.on{display:block}
+.ft{text-align:center;padding:20px 0 0;font-size:10px;color:#999}
+.cg{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px}
+.ci{display:flex;align-items:center;gap:8px;padding:10px;border-radius:6px;background:#fafafa}
+.kd{padding:12px;background:#f8f9fb;border-radius:6px;border-left:3px solid #2563eb;margin-bottom:8px}
+.kd b{font-family:monospace;font-size:12px}
+.kd p{margin:3px 0 0;font-size:11px;color:#444;line-height:1.4}
+@media(max-width:600px){.hdr,.mn{padding-left:14px;padding-right:14px}}
+</style>
+</head>
+<body>
+<div class="hdr">
+<div class="top">
+<div><div class="c">Contract Manufacturing Quality</div><h1>KPI Dashboard — Fabuloso</h1><div class="s">Vessena S.A. · Cno Teniente Galeano 3160</div></div>
+<div class="fil"><label>Desde</label><input type="date" id="d1"><label>Hasta</label><input type="date" id="d2"><label>Producto</label><select id="prod" style="padding:6px;border-radius:4px"><option value="">Todos los productos</option></select><button id="btnf">Filtrar</button><button id="rst">Reset</button><button id="rfsh">↻ Actualizar</button><button id="xport" style="background:#16a34a">📥 Exportar Excel</button></div>
+</div>
+<div id="status" style="margin-top:10px;font-size:11px;padding:6px 12px;border-radius:6px;background:rgba(255,255,255,.1);display:inline-block">Iniciando...</div>
+<div class="tabs" id="tabs"></div>
+</div>
+<div class="mn">
+<div class="tp on" id="t0"></div>
+<div class="tp" id="t1"></div>
+<div class="tp" id="t2"></div>
+<div class="tp" id="t3"></div>
+<div class="tp" id="t4"></div>
+<div class="tp" id="t5"></div>
+<div class="tp" id="t6">
+
+<div class="bx" style="background:linear-gradient(135deg,#eff6ff,#dbeafe);border-left:4px solid #2563eb">
+<h3 style="color:#1e40af">📘 Guía de cálculo de Capacidad de Proceso (Cpk / Ppk)</h3>
+<p style="font-size:13px;line-height:1.6;color:#1e293b">Esta guía explica cómo se calculan cada uno de los indicadores estadísticos del reporte y qué significan. Las fórmulas siguen la metodología estándar <b>AIAG SPC</b> (Automotive Industry Action Group — Statistical Process Control) y la norma <b>ISO 22514</b>.</p>
+</div>
+
+<div class="bx">
+<h3 style="color:#0f766e">📊 Concepto general</h3>
+<p style="font-size:12px;line-height:1.7;margin-bottom:12px">El análisis de <b>Capacidad de Proceso</b> mide qué tan bien un proceso productivo cumple con las especificaciones (límites tolerables). Compara la <b>variabilidad real del proceso</b> con el <b>ancho de tolerancia</b> definido (USL − LSL).</p>
+<div class="cg">
+<div class="ci" style="background:#f0fdf4;border-left:3px solid #16a34a"><div><div style="font-size:10px;color:#666;font-weight:600">LSL</div><div style="font-size:11px"><b>Lower Specification Limit</b><br>Límite inferior aceptable</div></div></div>
+<div class="ci" style="background:#fef3c7;border-left:3px solid #d97706"><div><div style="font-size:10px;color:#666;font-weight:600">USL</div><div style="font-size:11px"><b>Upper Specification Limit</b><br>Límite superior aceptable</div></div></div>
+<div class="ci" style="background:#fee2e2;border-left:3px solid #dc2626"><div><div style="font-size:10px;color:#666;font-weight:600">Mean (x̄)</div><div style="font-size:11px"><b>Media de las muestras</b><br>Promedio aritmético</div></div></div>
+</div>
+</div>
+
+<div class="bx">
+<h3 style="color:#7c3aed">📐 Cálculo de las desviaciones estándar</h3>
+
+<div class="kd" style="border-left-color:#7c3aed">
+<b>Std overall (σ_overall) — Desviación estándar global</b>
+<p style="margin-top:8px"><b>Fórmula:</b> Es la desviación estándar muestral clásica, con denominador (n−1):</p>
+<div style="background:#1e293b;color:#a5f3fc;padding:10px;border-radius:6px;font-family:monospace;font-size:11px;margin:6px 0">σ_overall = √( Σ(xᵢ − x̄)² / (n − 1) )</div>
+<p><b>Qué representa:</b> La variabilidad <i>total</i> del proceso a lo largo del período medido. Incluye tanto la variación natural de corto plazo (entre muestras consecutivas) como la variación de largo plazo (drift, cambios de turno, materia prima, etc.).</p>
+<p><b>Se usa para calcular:</b> <span style="color:#7c3aed;font-weight:700">Ppk</span> (Process Performance Index).</p>
+</div>
+
+<div class="kd" style="border-left-color:#dc2626;background:#fef2f2">
+<b>Std within (σ_within) — Desviación estándar de corto plazo</b>
+<p style="margin-top:8px"><b>Fórmula:</b> Se calcula a partir del <b>Moving Range</b> (rango móvil) entre lotes consecutivos:</p>
+<div style="background:#1e293b;color:#fda4af;padding:10px;border-radius:6px;font-family:monospace;font-size:11px;margin:6px 0">
+MR_i = |x_(i+1) − x_i|<br>
+MR̄ = Σ MR_i / (n − 1)<br>
+σ_within = MR̄ / d2 &nbsp; &nbsp; (con d2 = 1.128 para subgrupos de tamaño 2)
+</div>
+<p><b>Qué representa:</b> La variabilidad <i>inherente</i> al proceso, considerando únicamente diferencias entre observaciones contiguas. Estima cómo se comporta el proceso "cuando está estable", sin las variaciones de largo plazo.</p>
+<p><b>Se usa para calcular:</b> <span style="color:#dc2626;font-weight:700">Cpk</span> (Process Capability Index).</p>
+</div>
+
+<div style="background:#fffbeb;border-left:3px solid #f59e0b;padding:12px;border-radius:6px;margin-top:12px">
+<b style="font-size:11px">💡 ¿Por qué dos desviaciones?</b>
+<p style="font-size:11px;margin-top:4px;line-height:1.5">Comparar las dos nos dice si el proceso es <b>estable</b> (σ_within ≈ σ_overall → buena estabilidad) o si hay <b>causas especiales de variación</b> a lo largo del tiempo (σ_overall &gt;&gt; σ_within → proceso inestable, hay drift o shifts).</p>
+</div>
+</div>
+
+<div class="bx">
+<h3 style="color:#16a34a">🎯 Índices de capacidad</h3>
+
+<div class="kd" style="border-left-color:#16a34a;background:#f0fdf4">
+<b>Ppk — Process Performance Index (Índice de desempeño)</b>
+<p style="margin-top:8px"><b>Fórmula:</b></p>
+<div style="background:#1e293b;color:#86efac;padding:10px;border-radius:6px;font-family:monospace;font-size:11px;margin:6px 0">Ppk = min[ (USL − x̄) / (3·σ_overall) , (x̄ − LSL) / (3·σ_overall) ]</div>
+<p><b>Qué mide:</b> El desempeño <b>real e histórico</b> del proceso. Toma en cuenta toda la variabilidad observada (corto + largo plazo). Es lo que la planta <i>está realmente haciendo</i>.</p>
+<p><b>Interpretación:</b></p>
+<ul style="margin:6px 0 0 18px;font-size:11px;line-height:1.6">
+<li><b>Ppk &lt; 1</b>: el proceso NO es capaz — produce piezas fuera de especificación.</li>
+<li><b>Ppk = 1</b>: marginalmente capaz — ~0.27% de defectos teóricos.</li>
+<li><b>Ppk ≥ 1.33</b>: capaz — &lt;0.0064% defectos teóricos (estándar industrial).</li>
+<li><b>Ppk ≥ 1.67</b>: muy capaz — referencia six-sigma.</li>
+</ul>
+</div>
+
+<div class="kd" style="border-left-color:#2563eb;background:#eff6ff">
+<b>Cpk — Process Capability Index (Índice de capacidad potencial)</b>
+<p style="margin-top:8px"><b>Fórmula:</b></p>
+<div style="background:#1e293b;color:#93c5fd;padding:10px;border-radius:6px;font-family:monospace;font-size:11px;margin:6px 0">Cpk = min[ (USL − x̄) / (3·σ_within) , (x̄ − LSL) / (3·σ_within) ]</div>
+<p><b>Qué mide:</b> La capacidad <b>potencial</b> del proceso, considerando solo la variación natural de corto plazo. Es lo que el proceso <i>podría lograr</i> si estuviera perfectamente estable.</p>
+<p><b>Interpretación:</b> mismos umbrales que Ppk (&lt;1 no capaz, ≥1.33 capaz, ≥1.67 muy capaz).</p>
+<p style="background:#dbeafe;padding:8px;border-radius:6px;margin-top:8px;font-size:11px"><b>Regla práctica:</b> Cpk ≥ Ppk siempre. Si son muy cercanos, el proceso es estable. Si Cpk es mucho mayor que Ppk, el proceso es capaz por naturaleza pero hay variación de largo plazo que lo perjudica.</p>
+</div>
+
+<div class="kd" style="border-left-color:#f59e0b;background:#fffbeb">
+<b>Cpk / Ppk — Ratio de estabilidad</b>
+<p style="margin-top:8px"><b>Fórmula:</b></p>
+<div style="background:#1e293b;color:#fde68a;padding:10px;border-radius:6px;font-family:monospace;font-size:11px;margin:6px 0">Ratio = Cpk / Ppk</div>
+<p><b>Qué mide:</b> Cuánto del potencial del proceso se está perdiendo por inestabilidad de largo plazo.</p>
+<p><b>Interpretación:</b></p>
+<ul style="margin:6px 0 0 18px;font-size:11px;line-height:1.6">
+<li><b>Ratio ≈ 1.0</b>: el proceso está <b>en control</b> — la variación de corto y largo plazo coinciden.</li>
+<li><b>Ratio &gt; 1.33</b>: hay <b>causas especiales</b> que están desestabilizando el proceso. Hay margen de mejora simplemente estabilizando, sin cambiar tecnología.</li>
+</ul>
+</div>
+</div>
+
+<div class="bx">
+<h3 style="color:#475569">🟢🟡🟠🔴 Clasificación por Corner (cuadrante)</h3>
+<p style="font-size:12px;line-height:1.6;margin-bottom:12px">Cada KRS (Peso, %Anionico, %GDA) se clasifica en uno de 4 cuadrantes combinando los dos criterios:</p>
+<table style="margin-top:8px">
+<thead><tr><th>Corner</th><th>Capable (Ppk ≥ 1)</th><th>In control (Cpk/Ppk &lt; 1.33)</th><th>Significado</th></tr></thead>
+<tbody>
+<tr><td><span class="bg" style="background:#16a34a">Green</span></td><td>Sí</td><td>Sí</td><td>Proceso capable Y estable. <b>Situación óptima.</b></td></tr>
+<tr><td><span class="bg" style="background:#eab308;color:#1a1a1a">Yellow</span></td><td>No</td><td>Sí</td><td>Estable pero no capaz. Necesita reducir variabilidad o ajustar especificaciones.</td></tr>
+<tr><td><span class="bg" style="background:#f97316">Orange</span></td><td>Sí</td><td>No</td><td>Capable pero inestable. Hay causas especiales que ocasionalmente sacan al proceso de control.</td></tr>
+<tr><td><span class="bg" style="background:#dc2626">Red</span></td><td>No</td><td>No</td><td>Ni capable ni estable. <b>Acción urgente.</b></td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="bx">
+<h3 style="color:#0891b2">🧮 Ejemplo numérico</h3>
+<p style="font-size:12px;line-height:1.6;margin-bottom:10px">Supongamos que medimos el peso promedio de 5 lotes consecutivos de Fabuloso 1L y obtenemos: <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px">1019, 1021, 1023, 1020, 1018</code> (LSL=1000, USL=1025).</p>
+
+<table>
+<thead><tr><th>Paso</th><th>Cálculo</th><th>Resultado</th></tr></thead>
+<tbody>
+<tr><td>Mean (x̄)</td><td>(1019 + 1021 + 1023 + 1020 + 1018) / 5</td><td><b>1020.2</b></td></tr>
+<tr><td>σ_overall</td><td>√(Σ(xᵢ−1020.2)² / 4)</td><td><b>1.92</b></td></tr>
+<tr><td>Moving Ranges</td><td>|1021−1019|, |1023−1021|, |1020−1023|, |1018−1020|</td><td>2, 2, 3, 2</td></tr>
+<tr><td>MR̄</td><td>(2 + 2 + 3 + 2) / 4</td><td><b>2.25</b></td></tr>
+<tr><td>σ_within</td><td>2.25 / 1.128</td><td><b>1.99</b></td></tr>
+<tr><td>USL − x̄</td><td>1025 − 1020.2</td><td>4.8</td></tr>
+<tr><td>x̄ − LSL</td><td>1020.2 − 1000</td><td>20.2</td></tr>
+<tr><td>min de los dos</td><td>min(4.8, 20.2)</td><td><b>4.8</b></td></tr>
+<tr><td><b>Ppk</b></td><td>4.8 / (3 × 1.92)</td><td><b style="color:#16a34a">0.83</b></td></tr>
+<tr><td><b>Cpk</b></td><td>4.8 / (3 × 1.99)</td><td><b style="color:#2563eb">0.80</b></td></tr>
+<tr><td><b>Cpk/Ppk</b></td><td>0.80 / 0.83</td><td><b style="color:#f59e0b">0.97</b></td></tr>
+</tbody>
+</table>
+
+<p style="font-size:12px;line-height:1.6;margin-top:12px"><b>Conclusión del ejemplo:</b> Ppk = 0.83 &lt; 1 → el proceso <b>no es capaz</b> (Yellow). Cpk/Ppk ≈ 1 → el proceso es <b>estable</b>. Diagnóstico: hay que reducir variabilidad (apretar tolerancia interna o mejorar precisión de máquina), no buscar causas especiales.</p>
+</div>
+
+<div class="bx" style="background:#f8fafc;border-left:4px solid #64748b">
+<h3 style="color:#475569">📚 Referencias</h3>
+<ul style="margin:6px 0 0 18px;font-size:11px;line-height:1.7">
+<li><b>AIAG SPC Manual</b>, 2nd Edition — Capítulo IV (Process Capability)</li>
+<li><b>ISO 22514-2</b>: Statistical methods in process management — Capability and performance — Process capability and performance of time-dependent process models</li>
+<li>Constante <b>d2 = 1.128</b> corresponde a Moving Range con tamaño de subgrupo n=2 (Wheeler, "Understanding Statistical Process Control")</li>
+</ul>
+</div>
+
+</div>
+<div class="ft">Vessena S.A. — KPIs Fabuloso</div>
+</div>
+<script>
+var R=[
+["Lavanda 2L","2025-12-29",19110,3185,39390,98.24,2025,.059,.98,7.25],
+["Lavanda 2L","2025-12-30",5118,853,10255,101.01,2024,.056,.98,7.23],
+["Pasion Frutas 2L","2025-12-30",11556,1926,24352,96,2023,.059,.92,7.3],
+["Pasion Frutas 2L","2025-12-31",14898,2483,30734,98.16,2025,.055,.97,7.2],
+["Pasion Frutas 2L","2026-01-02",20118,3353,41325,98.53,2024,.055,.94,7.16],
+["Pasion Frutas 2L","2026-01-05",1398,233,2589,109.29,2024,.056,.98,7.34],
+["Lavanda 2L","2026-01-05",18786,3131,39201,96.99,2024,.055,.93,7],
+["Lavanda 2L","2026-01-06",13128,2188,26799,99.15,2024,.056,.86,7.17],
+["Alt Cloro 2L","2026-01-06",6168,1028,13213,94.58,2026,.064,1.08,7.23],
+["Alt Cloro 2L","2026-01-07",18192,3032,37411,98.42,2024,.065,1.07,7.16],
+["Alt Cloro 2L","2026-01-08",12954,2159,26376,99.4,2024,.065,1.27,7.3],
+["Naturals Eucalipto 2L","2026-01-08",4104,684,9208,90.12,2022,.052,1,7.1],
+["Naturals Eucalipto 2L","2026-01-09",6378,1063,12792,100.97,2025,.053,.95,7.22],
+["Lavanda 1L","2026-01-12",13164,1097,14216,94.73,1023,.056,.89,7.2],
+["Lavanda 1L","2026-01-13",42108,3509,43837,98.07,1021,.055,.93,7.22],
+["Lavanda 1L","2026-01-14",13236,1103,13447,100.6,1022,.054,.96,7.24],
+["Alt Cloro 1L","2026-01-14",24504,2042,25842,96.81,1021,.065,1.12,7.16],
+["Alt Cloro 1L","2026-01-15",34332,2861,35253,99.43,1021,.067,1.15,7.12],
+["Alt Cloro 1L","2026-01-16",10332,861,10405,101.58,1023,.067,1.15,7.24],
+["Pasion Frutas 1L","2026-01-16",16512,1376,18020,93.92,1025,.055,.94,7.1],
+["Pasion Frutas 1L","2026-01-19",41736,3478,44736,95.63,1025,.054,.88,7.14],
+["Pasion Frutas 1L","2026-01-20",8472,706,8744,98.63,1018,.056,1,7.22],
+["Naranja 1L","2026-01-20",31464,2622,36242,88.55,1020,.055,.97,7.24],
+["Naranja 1L","2026-01-21",34188,2849,35258,99,1021,.055,.97,7.14],
+["Tulipanes Kiwi 1L","2026-01-21",1296,108,1807,73.87,1030,.06,.96,7.24],
+["Tulipanes Kiwi 1L","2026-01-22",32604,2717,33742,98.75,1022,.057,.84,7.22],
+["Tulipanes Kiwi 1L","2026-01-23",28488,2374,29470,98.5,1019,.058,.92,7.14],
+["Tulipanes Kiwi 1L","2026-01-24",6552,546,6481,103.02,1019,.057,.94,7.28],
+["Fresco Amanecer 1L","2026-01-24",19524,1627,20577,96.88,1021,.056,.89,7.16],
+["Fresco Amanecer 1L","2026-01-26",34572,2881,35740,98.67,1020,.056,.96,7.26],
+["Fresco Amanecer 1L","2026-01-27",9600,800,9683,101.32,1022,.057,.96,7.1],
+["Mar Fresco 1L","2026-01-27",19344,1612,20452,96.57,1021,.057,.95,7.26],
+["Mar Fresco 1L","2026-01-28",35220,2935,36464,98.47,1019.5,.056,.89,7.16],
+["Mar Fresco 1L","2026-01-29",14376,1198,14584,100.58,1020.4,.055,.93,7.2],
+["Lavanda 1L","2026-01-29",18744,1562,19795,96.66,1020.8,.059,.93,7.1],
+["Lavanda 1L","2026-01-30",28956,2413,29705,101.18,1038,.055,.96,7.24],
+["Alt Cloro 1L","2026-01-31",10428,869,11000,96.89,1022,.067,1.14,7.2],
+["Lavanda 2L","2026-02-02",3120,520,6987,90.38,2024,.057,.86,7.16],
+["Lavanda 2L","2026-02-03",19218,3203,39541,98.42,2025,.055,.97,7.23],
+["Lavanda 2L","2026-02-04",17658,2943,35972,99.31,2023,.06,.9,7.23],
+["Alt Cloro 2L","2026-02-05",19410,3235,40387,97.13,2021,.069,1.17,7.22],
+["Alt Cloro 2L","2026-02-06",20058,3343,41138,98.49,2020,.069,1.17,7.16],
+["Alt Cloro 2L","2026-02-07",594,99,975,122.82,2016,.07,1.17,7.2],
+["Pasion Frutas 2L","2026-02-07",13482,2247,28263,96.45,2022,.057,.97,7.16],
+["Pasion Frutas 2L","2026-02-09",1494,249,3065,98.71,2025,.057,.96,7.18],
+["Pasion Frutas 2L","2026-02-10",25110,4185,51172,99.17,2021,.057,.94,7.22],
+["Mar Fresco 2L","2026-02-11",22668,3778,46897,97.73,2022,.055,.96,7.11],
+["Mar Fresco 2L","2026-02-12",17484,2914,35603,99.3,2022,.054,.94,7.24],
+["Lavanda 2L","2026-02-13",20142,3357,41983,96.96,2021,.054,.97,7.2],
+["Lavanda 1L","2026-02-16",3936,328,4245,95.04,1025,.051,.91,7.22],
+["Lavanda 1L","2026-02-17",13968,1164,14272,100.02,1022,.051,.9,7.16],
+["Alt Cloro 1L","2026-02-17",21612,1801,22738,96.85,1019,.06,1.19,7.16],
+["Alt Cloro 1L","2026-02-18",10212,851,10262,101.6,1021,.06,1.18,7.21],
+["Pasion Frutas 1L","2026-02-18",17868,1489,19424,93.92,1021,.051,.86,7.12],
+["Pasion Frutas 1L","2026-02-19",13944,1162,13576,104.56,1018,.051,.86,7.21],
+["Naranja 1L","2026-02-19",14256,1188,15275,95.1,1019,.05,.9,7.24],
+["Naranja 1L","2026-02-20",17460,1455,17725,100.28,1018,.052,.97,7.24],
+["Lavanda 1L","2026-02-20",10044,837,10738,95.5,1021,.051,1.02,7.22],
+["Lavanda 1L","2026-02-21",15228,1269,15795,98.63,1023,.051,.92,7.16],
+["Lavanda 1L","2026-02-23",35652,2971,36851,98.68,1020,.05,.9,7.24],
+["Lavanda 1L","2026-02-24",2796,233,2616,109.02,1020,.051,.9,7.2],
+["Alt Cloro 1L","2026-02-24",30744,2562,32188,97.52,1021,.063,1.08,7.23],
+["Alt Cloro 1L","2026-02-25",27948,2329,28305,100.52,1018,.067,1.21,7.23],
+["Alt Cloro 1L","2026-02-26",37416,3118,38507,98.82,1017,.068,1.19,7.16],
+["Tulipanes Kiwi 1L","2026-02-26",4500,375,5081,90.51,1022,.052,.96,7.1],
+["Tulipanes Kiwi 1L","2026-02-27",27924,2327,28875,98.74,1021,.06,.93,7.16],
+["Tulipanes Kiwi 1L","2026-03-02",28332,2361,29279,98.6,1019,.058,1,7],
+["Tulipanes Kiwi 1L","2026-03-03",2892,241,2765,107,1023,.06,.89,7.11],
+["Pasion Frutas 1L","2026-03-03",31752,2646,32772,99.02,1022,.055,.95,7.2],
+["Pasion Frutas 1L","2026-03-04",32844,2737,33228,100.92,1021,.052,1.01,null],
+["Mar Fresco 1L","2026-03-05",40032,3336,41929,97.67,1023,.055,.9,7.16],
+["Mar Fresco 1L","2026-03-06",28932,2411,29571,99.6,1018,.054,.89,null],
+["Fresco Amanecer 1L","2026-03-07",25788,2149,26985,97.28,1018,.054,.97,null],
+["Fresco Amanecer 1L","2026-03-09",38040,3170,39015,99.26,1018,.054,.93,null],
+["Naranja 1L","2026-03-09",4968,414,5604,90.69,1023,.052,.86,null],
+["Naranja 1L","2026-03-10",44148,3679,45657,98.34,1017,.053,.92,null],
+["Naranja 1L","2026-03-11",14472,1206,14739,100.05,1019,.052,.97,null],
+["Lavanda 1L","2026-03-11",23244,1937,24452,96.58,1016,.051,.93,null],
+["Lavanda 1L","2026-03-12",41400,3450,42857,98.44,1019,.052,.98,null],
+["Lavanda 1L","2026-03-13",30240,2520,31323,98.47,1020,.053,.95,null],
+["Lavanda 2L","2026-03-16",18186,3031,37565,97.99,2024,.051,.82,7.12],
+["Lavanda 2L","2026-03-17",3486,581,6803,103.82,2026,.052,.84,7.2],
+["Alt Cloro 2L","2026-03-17",18546,3091,38636,97.25,2026,.064,1.1,7.16],
+["Alt Cloro 2L","2026-03-18",2664,444,5364,100.62,2026,.064,1.13,7.1],
+["Pasion Frutas 2L","2026-03-18",19260,3210,40082,97.21,2023,.052,.91,7.16],
+["Pasion Frutas 2L","2026-03-19",1944,324,3918,100.67,2029,.058,.86,7.2],
+["Mar Fresco 2L","2026-03-19",21438,3573,43244,100.39,2025,.058,.93,7.16],
+["Mar Fresco 2L","2026-03-20",15750,2625,32244,98.72,2021,.052,.98,7.24],
+["Alt Cloro 2L","2026-03-20",1746,291,4165,85.02,2028,.064,1.12,7.2],
+["Alt Cloro 2L","2026-03-21",13896,2316,28545,98.43,2022,.066,1.07,7.16],
+["Alt Cloro 2L","2026-03-23",21636,3606,44290,98.83,2023,.062,1.2,7.18],
+["Lavanda 2L","2026-03-24",26502,4417,54875,97.65,2022,.051,.88,7.24],
+["Lavanda 2L","2026-03-25",10830,1805,22125,99.02,2023,.051,.9,7.2],
+["Pasion Frutas 2L","2026-03-25",10782,1797,22674,96.06,2020,.05,.93,7.16],
+["Pasion Frutas 2L","2026-03-26",21168,3528,43458,98.54,2023,.051,.93,7.22],
+["Pasion Frutas 2L","2026-03-27",5394,899,10868,100.55,2026,.051,.86,7.18],
+["Naturals Eucalipto 2L","2026-03-27",10302,1717,22000,94.73,2023,.051,.97,7.18],
+["Alt Cloro 1L","2026-03-30",10416,868,12021,88.64,1023,.058,1.17,7.24],
+["Alt Cloro 1L","2026-03-31",36636,3053,37807,98.65,1018,.06,1.12,7.16]
+];
+
+var ALL=[];
+for(var i=0;i<R.length;i++){
+  var r=R[i];
+  ALL.push({desc:r[0],fecha:r[1],uE:r[2],caj:r[3],gK:r[4],rend:r[5],pesoP:r[6],gda:r[7],ani:r[8],ph:r[9]});
+}
+var COL=["#2563eb","#ea580c","#16a34a","#dc2626","#9333ea","#0369a1","#ca8a04","#0f766e","#be185d","#6d28d9","#0284c7","#d97706"];
+var TN=["Resumen","Produccion","Rendimiento","Calidad","Process Capability","Referencia","Guía"];
+var allF=[];for(var i=0;i<ALL.length;i++)allF.push(ALL[i].fecha);
+allF.sort();
+var minD=allF[0], maxD=allF[allF.length-1];
+var curTab=0;
+var myCharts=[];
+
+// === Google Sheets auto-fetch (gviz JSONP — works from file://) ===
+var SHEET_ID="1j5TkRMZbnR8v7vhPGGKiwJ3HnPErKFtM44BOyG02gk4";
+var SHEET_GID="0";
+
+function toNum(s){
+  if(s===null||s===undefined||s==="")return null;
+  if(typeof s==="number")return s;
+  s=String(s).trim().replace(/\s/g,"");
+  // If contains both "." and "," assume "." is thousands separator (es format)
+  if(s.indexOf(".")>=0&&s.indexOf(",")>=0)s=s.replace(/\./g,"").replace(",",".");
+  else if(s.indexOf(",")>=0)s=s.replace(",",".");
+  // Handle weird "0,0,56" -> take first two parts
+  var parts=s.split(".");
+  if(parts.length>2)s=parts[0]+"."+parts.slice(1).join("");
+  var n=parseFloat(s);
+  return isNaN(n)?null:n;
+}
+
+function toISODate(s){
+  if(!s)return null;
+  if(s instanceof Date)return s.toISOString().slice(0,10);
+  s=String(s).trim();
+  // gviz Date format: "Date(2026,3,28)" — month is 0-indexed
+  var d=s.match(/^Date\((\d+),(\d+),(\d+)/);
+  if(d)return d[1]+"-"+("0"+(parseInt(d[2])+1)).slice(-2)+"-"+("0"+d[3]).slice(-2);
+  // DD/MM/YYYY
+  var m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(m)return m[3]+"-"+("0"+m[2]).slice(-2)+"-"+("0"+m[1]).slice(-2);
+  if(/^\d{4}-\d{2}-\d{2}/.test(s))return s.slice(0,10);
+  return null;
+}
+
+window.__sheetCallback=function(resp){
+  var st=document.getElementById("status");
+  try{
+    if(!resp||!resp.table||!resp.table.rows)throw new Error("Respuesta inválida");
+
+    // Find column indices by header name (gviz may omit empty columns)
+    var cols=resp.table.cols||[];
+    var colMap={};
+    for(var k=0;k<cols.length;k++){
+      var lbl=(cols[k].label||"").toString().toLowerCase().replace(/\s+/g," ").trim();
+      colMap[lbl]=k;
+    }
+    function findCol(){
+      for(var i=0;i<arguments.length;i++){
+        var needle=arguments[i].toLowerCase();
+        for(var key in colMap){
+          if(key.indexOf(needle)>=0)return colMap[key];
+        }
+      }
+      return -1;
+    }
+    var iDesc=findCol("descripcion","descripción");
+    var iLote=findCol("lote");
+    var iFecha=findCol("fecha envasado","fecha");
+    var iCaj=findCol("cajas entregadas","cajas");
+    var iGK=findCol("granales","granel");
+    var iUE=findCol("unidades envasadas");
+    var iRend=findCol("rendimiento");
+    var iPeso=findCol("peso promedio");
+    var iGDA=findCol("gda");
+    var iAni=findCol("anionico","aniónico");
+    var iPH=findCol("ph");
+
+    // Debug log
+    console.log("Column mapping:",{desc:iDesc,lote:iLote,fecha:iFecha,caj:iCaj,gK:iGK,uE:iUE,rend:iRend,peso:iPeso,gda:iGDA,ani:iAni,ph:iPH});
+
+    if(iDesc<0||iFecha<0||iUE<0||iRend<0)throw new Error("No se encontraron columnas requeridas");
+
+    var rows=resp.table.rows;
+    var data=[];
+    for(var i=0;i<rows.length;i++){
+      var c=rows[i].c;
+      if(!c)continue;
+      function cell(idx){return idx>=0&&c[idx]&&c[idx].v!==null&&c[idx].v!==undefined?c[idx].v:null;}
+      var desc=cell(iDesc);
+      var fechaRaw=cell(iFecha);
+      if(!desc||!fechaRaw)continue;
+      desc=String(desc).trim();
+      var fecha=toISODate(fechaRaw);
+      if(!fecha)continue;
+      var lote=cell(iLote);
+      lote=lote?String(lote).trim():"";
+      var uE=toNum(cell(iUE));
+      var caj=toNum(cell(iCaj));
+      var gK=toNum(cell(iGK));
+      var rend=toNum(cell(iRend));
+      var pesoP=toNum(cell(iPeso));
+      var gda=toNum(cell(iGDA));
+      var ani=toNum(cell(iAni));
+      var ph=toNum(cell(iPH));
+      if(uE===null||rend===null)continue;
+      desc=desc.replace(/^Fabuloso\s+/i,"").replace(/Alternativa al Cloro/i,"Alt Cloro").replace(/Alternativa cloro/i,"Alt Cloro").replace(/Pasi[óo]n de Frutas/i,"Pasion Frutas").replace(/Tulipanes y kiwi/i,"Tulipanes Kiwi").replace(/Tulipanes y Kiwi/i,"Tulipanes Kiwi").replace(/Naturals Eucalipto/i,"Naturals Eucalipto").replace(/(\d)\s+L\b/gi,"$1L").replace(/\s+/g," ").trim();
+      data.push({desc:desc,lote:lote,fecha:fecha,uE:uE,caj:caj||0,gK:gK||0,rend:rend,pesoP:pesoP||0,gda:gda,ani:ani,ph:ph});
+    }
+    if(data.length===0)throw new Error("Sin datos válidos");
+    ALL=data;
+    var f=[];for(var i=0;i<ALL.length;i++)f.push(ALL[i].fecha);
+    f.sort();
+    minD=f[0];maxD=f[f.length-1];
+    var d1=document.getElementById("d1"),d2=document.getElementById("d2");
+    d1.value=minD;d2.value=maxD;
+    d1.min=minD;d1.max=maxD;d2.min=minD;d2.max=maxD;
+    st.innerHTML="✓ Conectado · "+ALL.length+" lotes ("+minD+" → "+maxD+")";
+    st.style.background="rgba(22,163,74,.3)";
+    populateProductFilter();
+    render();
+  }catch(e){
+    st.innerHTML="⚠ Error: "+e.message+" — usando caché";
+    st.style.background="rgba(220,38,38,.3)";
+    console.error(e);
+  }
+};
+
+function fetchSheet(){
+  var st=document.getElementById("status");
+  st.textContent="🔄 Cargando datos de Google Sheets...";
+  st.style.background="rgba(234,179,8,.25)";
+  var old=document.getElementById("gvizScript");
+  if(old)old.parentNode.removeChild(old);
+  var s=document.createElement("script");
+  s.id="gvizScript";
+  s.onerror=function(){
+    st.innerHTML="⚠ No se pudo conectar a Google Sheets — usando caché";
+    st.style.background="rgba(220,38,38,.3)";
+  };
+  s.src="https://docs.google.com/spreadsheets/d/"+SHEET_ID+"/gviz/tq?tqx=out:json;responseHandler:__sheetCallback&gid="+SHEET_GID+"&headers=1&t="+Date.now();
+  document.body.appendChild(s);
+}
+
+function avg(a){if(!a.length)return 0;var s=0;for(var i=0;i<a.length;i++)s+=a[i];return s/a.length;}
+function stdev(a){if(a.length<2)return 0;var m=avg(a);var s=0;for(var i=0;i<a.length;i++)s+=(a[i]-m)*(a[i]-m);return Math.sqrt(s/(a.length-1));}
+function fmtn(n){return n.toLocaleString();}
+
+function killCharts(){for(var i=0;i<myCharts.length;i++){try{myCharts[i].destroy();}catch(e){}}myCharts=[];}
+
+function card(t,v,u,c){
+  return '<div class="cd" style="--c:'+c+'"><div class="l">'+t+'</div><div class="v">'+v+'</div>'+(u?'<div class="u">'+u+'</div>':'')+'</div>';
+}
+
+function mk(id,cfg){
+  var el=document.getElementById(id);
+  if(!el)return;
+  var ch=new Chart(el.getContext("2d"),cfg);
+  myCharts.push(ch);
+}
+
+// === EXPORTAR A EXCEL — Réplica del KPI Report ===
+function calcCpk(vals,lsl,usl){
+  var n=vals.length;
+  if(n===0)return{n:0,mean:0,sdW:0,sdO:0,usl_m:0,m_lsl:0,min:0,ppk:0,cpk:0,ratio:0,capable:"No",inCtrl:"No",cnc:"NoNo",corner:"-"};
+  var m=avg(vals),s=stdev(vals);
+  var sw=0;
+  if(n>=2){var mr=0;for(var k=1;k<n;k++)mr+=Math.abs(vals[k]-vals[k-1]);mr=mr/(n-1);sw=mr/1.128;}
+  var usl_m=usl-m,m_lsl=m-lsl,min=Math.min(usl_m,m_lsl);
+  var ppk=s>0?Math.min((usl-m)/(3*s),(m-lsl)/(3*s)):0;
+  var cpk=sw>0?Math.min((usl-m)/(3*sw),(m-lsl)/(3*sw)):0;
+  var ratio=ppk!==0?cpk/ppk:0;
+  if(ppk<=0){ppk=0;cpk=0;ratio=0;}
+  var capable=ppk>=1?"Yes":"No";
+  var inCtrl=ratio>0&&ratio<1.33?"Yes":"No";
+  var cnc=capable+inCtrl;
+  var corner="Red";
+  if(capable==="Yes"&&inCtrl==="Yes")corner="Green";
+  else if(capable==="No"&&inCtrl==="Yes")corner="Yellow";
+  else if(capable==="Yes"&&inCtrl==="No")corner="Orange";
+  return{n:n,mean:m,sdW:sw,sdO:s,usl_m:usl_m,m_lsl:m_lsl,min:min,ppk:ppk,cpk:cpk,ratio:ratio,capable:capable,inCtrl:inCtrl,cnc:cnc,corner:corner};
+}
+
+function cornerFill(corner){
+  var map={"Green":"FF92D050","Yellow":"FFFFFF00","Orange":"FFFFC000","Red":"FFFF0000"};
+  return map[corner]||"FFFFFFFF";
+}
+
+function exportExcel(){
+  if(typeof ExcelJS==="undefined"){alert("ExcelJS no cargó. Verificá tu conexión a internet.");return;}
+  var st=document.getElementById("status");
+  st.textContent="📥 Generando Excel...";
+  st.style.background="rgba(234,179,8,.25)";
+
+  var d1v=document.getElementById("d1").value||minD;
+  var d2v=document.getElementById("d2").value||maxD;
+  var pSel=document.getElementById("prod");
+  var prodFilter=pSel?pSel.value:"";
+
+  // Helper: enumerate calendar months in range [d1, d2]
+  var monthsES=["ENERO","FEBRERO","MARZO","ABRIL","MAYO","JUNIO","JULIO","AGOSTO","SEPTIEMBRE","OCTUBRE","NOVIEMBRE","DICIEMBRE"];
+  function getMonthsInRange(d1,d2){
+    var p1=d1.split("-"),p2=d2.split("-");
+    var y=parseInt(p1[0]),m=parseInt(p1[1]);
+    var eY=parseInt(p2[0]),eM=parseInt(p2[1]);
+    var out=[];
+    while(y<eY||(y===eY&&m<=eM)){
+      var mm=(m<10?"0":"")+m;
+      var lastDay=new Date(y,m,0).getDate();
+      out.push({year:y,month:m,label:monthsES[m-1]+" "+y,startDate:y+"-"+mm+"-01",endDate:y+"-"+mm+"-"+(lastDay<10?"0":"")+lastDay});
+      m++;if(m>12){m=1;y++;}
+    }
+    return out;
+  }
+
+  // Helper: compute everything (filtered data, Cpk results, corner stats) for a given month range
+  function computeKPIsForData(dStart,dEnd){
+    var fd=ALL.filter(function(x){return x.fecha>=dStart&&x.fecha<=dEnd&&(!prodFilter||x.desc===prodFilter);});
+    var det1L=[],det2L=[],detStd=[],detCloro=[];
+    for(var i=0;i<fd.length;i++){
+      var d=fd[i];
+      if(d.desc.indexOf("2L")>=0)det2L.push(d);else det1L.push(d);
+      var isCloro=d.desc.toLowerCase().indexOf("alt cloro")>=0||d.desc.toLowerCase().indexOf("alternativa")>=0||d.desc.toLowerCase().indexOf("cloro")>=0;
+      if(isCloro)detCloro.push(d);else detStd.push(d);
+    }
+    var p1L=det1L.map(function(d){return d.pesoP;});
+    var p2L=det2L.map(function(d){return d.pesoP;});
+    var aniStd=detStd.filter(function(d){return d.ani!==null;}).map(function(d){return d.ani;});
+    var aniClo=detCloro.filter(function(d){return d.ani!==null;}).map(function(d){return d.ani;});
+    var gdaStd=detStd.filter(function(d){return d.gda!==null;}).map(function(d){return d.gda;});
+    var gdaClo=detCloro.filter(function(d){return d.gda!==null;}).map(function(d){return d.gda;});
+    var cas1L=det1L.reduce(function(s,d){return s+d.caj;},0);
+    var cas2L=det2L.reduce(function(s,d){return s+d.caj;},0);
+    var casStd=detStd.reduce(function(s,d){return s+d.caj;},0);
+    var casCloro=detCloro.reduce(function(s,d){return s+d.caj;},0);
+    var totalCas=cas1L+cas2L;
+    var totAI=casStd+casCloro;
+
+    var rPeso1=calcCpk(p1L,1000,1025);
+    var rPeso2=calcCpk(p2L,2000,2030);
+    var rAniStd=calcCpk(aniStd,0.82,1.12);
+    var rAniClo=calcCpk(aniClo,1.02,1.32);
+    var rGdaStd=calcCpk(gdaStd,0.04,0.06);
+    var rGdaClo=calcCpk(gdaClo,0.05,0.07);
+
+    // Corner % weighted by cases produced
+    var wW={Green:0,Yellow:0,Orange:0,Red:0};
+    if(cas1L>0&&totalCas>0)wW[rPeso1.corner]=(wW[rPeso1.corner]||0)+cas1L/totalCas;
+    if(cas2L>0&&totalCas>0)wW[rPeso2.corner]=(wW[rPeso2.corner]||0)+cas2L/totalCas;
+    var wAI={Green:0,Yellow:0,Orange:0,Red:0};
+    if(casStd>0&&totAI>0)wAI[rAniStd.corner]=(wAI[rAniStd.corner]||0)+casStd/totAI;
+    if(casCloro>0&&totAI>0)wAI[rAniClo.corner]=(wAI[rAniClo.corner]||0)+casCloro/totAI;
+    var wG={Green:0,Yellow:0,Orange:0,Red:0};
+    if(casStd>0&&totAI>0)wG[rGdaStd.corner]=(wG[rGdaStd.corner]||0)+casStd/totAI;
+    if(casCloro>0&&totAI>0)wG[rGdaClo.corner]=(wG[rGdaClo.corner]||0)+casCloro/totAI;
+
+    var pctYesYes=Math.round((wAI["Green"]+wG["Green"]+wW["Green"])/3*100);
+    var pctYesNo=Math.round((wAI["Yellow"]+wG["Yellow"]+wW["Yellow"])/3*100);
+    var pctNoYes=Math.round((wAI["Orange"]+wG["Orange"]+wW["Orange"])/3*100);
+    var pctNoNo=Math.round((wAI["Red"]+wG["Red"]+wW["Red"])/3*100);
+
+    return {fd:fd,det1L:det1L,det2L:det2L,detStd:detStd,detCloro:detCloro,
+      p1L:p1L,p2L:p2L,aniStd:aniStd,aniClo:aniClo,gdaStd:gdaStd,gdaClo:gdaClo,
+      cas1L:cas1L,cas2L:cas2L,casStd:casStd,casCloro:casCloro,totalCas:totalCas,totAI:totAI,
+      rPeso1:rPeso1,rPeso2:rPeso2,rAniStd:rAniStd,rAniClo:rAniClo,rGdaStd:rGdaStd,rGdaClo:rGdaClo,
+      wW:wW,wAI:wAI,wG:wG,pctYesYes:pctYesYes,pctYesNo:pctYesNo,pctNoYes:pctNoYes,pctNoNo:pctNoNo};
+  }
+
+  // Compute KPIs per month for scorecard, plus last-month data for detail sheets
+  var months=getMonthsInRange(d1v,d2v);
+  var monthlyData=months.map(function(m){
+    var k=computeKPIsForData(m.startDate,m.endDate);
+    k.label=m.label;k.year=m.year;k.month=m.month;
+    return k;
+  });
+  // Last-month dataset feeds Cpk-Ppk, KPI 11/12/13/14/15 detail sheets
+  var lastM=monthlyData[monthlyData.length-1];
+  var fd=lastM.fd;
+  var det1L=lastM.det1L,det2L=lastM.det2L,detStd=lastM.detStd,detCloro=lastM.detCloro;
+  var cas1L=lastM.cas1L,cas2L=lastM.cas2L,casStd=lastM.casStd,casCloro=lastM.casCloro,totalCas=lastM.totalCas,totAI=lastM.totAI;
+  var rPeso1=lastM.rPeso1,rPeso2=lastM.rPeso2,rAniStd=lastM.rAniStd,rAniClo=lastM.rAniClo,rGdaStd=lastM.rGdaStd,rGdaClo=lastM.rGdaClo;
+  var wW=lastM.wW,wAI=lastM.wAI,wG=lastM.wG;
+  var pctYesYes=lastM.pctYesYes,pctYesNo=lastM.pctYesNo,pctNoYes=lastM.pctNoYes,pctNoNo=lastM.pctNoNo;
+
+  var wb=new ExcelJS.Workbook();
+  wb.creator="Vessena S.A.";
+  wb.created=new Date();
+
+  // Common styles
+  var thinBorder={top:{style:"thin"},left:{style:"thin"},bottom:{style:"thin"},right:{style:"thin"}};
+  var headerFont={bold:true,color:{argb:"FFFFFFFF"}};
+  var headerFill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1F4E78"}};
+  var yellowFill={type:"pattern",pattern:"solid",fgColor:{argb:"FFFFFF00"}};
+  var purpleFill={type:"pattern",pattern:"solid",fgColor:{argb:"FF7030A0"}};
+  var redFill={type:"pattern",pattern:"solid",fgColor:{argb:"FFC00000"}};
+  var cyanFill={type:"pattern",pattern:"solid",fgColor:{argb:"FFB7DEE8"}};
+  var orangeFill={type:"pattern",pattern:"solid",fgColor:{argb:"FFFCD5B4"}};
+  var greenFill={type:"pattern",pattern:"solid",fgColor:{argb:"FFC4E0B4"}};
+  var pinkFill={type:"pattern",pattern:"solid",fgColor:{argb:"FFE4DFEC"}};
+
+  // ============ SHEET 1: CM KPI Extended Scope Scorecard ============
+  var ws1=wb.addWorksheet("CM KPI Extended Scope Scorecard");
+  ws1.getColumn(1).width=4;
+  ws1.getColumn(2).width=18;
+  ws1.getColumn(3).width=55;
+  for(var c=4;c<=30;c++)ws1.getColumn(c).width=8;
+
+  ws1.mergeCells("A2:C2");
+  var cell=ws1.getCell("A2");cell.value="Contract Manufacturing Quality KPI's";cell.font={bold:true,size:14,underline:true};
+  ws1.mergeCells("A3:C3");
+  ws1.getCell("A3").value="KPIs (Key Performance Indicators) are important measures to evaluate Quality performance and identify opportunities to benchmark best practices.  The following Global Quality KPIs have been identified in order to achieve a high level of quality in our products .(click on the titles below to see the KPI definitions). ";
+  ws1.getCell("A3").alignment={wrapText:true};
+
+  ws1.getCell("A4").value="CM Name:";ws1.getCell("A4").font={bold:true};
+  ws1.getCell("B4").value="Vessena S.A.";ws1.getCell("B4").alignment={horizontal:"left"};ws1.getCell("B4").border=thinBorder;
+  ws1.getCell("A5").value="CM Site Address:";ws1.getCell("A5").font={bold:true};
+  ws1.getCell("B5").value="Cno Teniente Galeano 3160";ws1.getCell("B5").alignment={horizontal:"left"};ws1.getCell("B5").border=thinBorder;
+  ws1.getCell("A6").value="Category:";ws1.getCell("A6").font={bold:true};
+  ws1.getCell("B6").value="Higiene del hogar";ws1.getCell("B6").alignment={horizontal:"left"};ws1.getCell("B6").border=thinBorder;
+  ws1.getCell("A7").value="Products:";ws1.getCell("A7").font={bold:true};
+  ws1.getCell("B7").value=prodFilter?("Limpiador Líquido Fabuloso – Filtrado: "+prodFilter):"Limpiador Líquido Fabuloso";ws1.getCell("B7").alignment={horizontal:"left"};ws1.getCell("B7").border=thinBorder;
+  if(prodFilter)ws1.getCell("B7").font={bold:true,color:{argb:"FFC00000"}};
+
+  // Header row
+  var hdrRow=9;
+  ws1.mergeCells("A9:A10");
+  var qc=ws1.getCell("A9");qc.value="Goal Alignment Pickets";qc.font={bold:true,color:{argb:"FFFFFFFF"},size:11};qc.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF4472C4"}};qc.alignment={vertical:"middle",horizontal:"center",wrapText:true};
+
+  ws1.mergeCells("B9:C10");
+  ws1.getCell("B9").value="Performance and Process Indicators";ws1.getCell("B9").font={bold:true};ws1.getCell("B9").alignment={horizontal:"center",vertical:"middle"};ws1.getCell("B9").fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFD9E1F2"}};
+
+  // Period / Month header: ONE COLUMN PER MONTH in range
+  // Column D = month[0], E = month[1], F = month[2], etc.
+  function colLetter(idx){
+    // idx is 1-based: 1=A, 26=Z, 27=AA, etc.
+    var s="";
+    while(idx>0){var r=(idx-1)%26;s=String.fromCharCode(65+r)+s;idx=Math.floor((idx-1)/26);}
+    return s;
+  }
+  var firstColIdx=4; // D
+  for(var mi=0;mi<monthlyData.length;mi++){
+    var col=colLetter(firstColIdx+mi);
+    ws1.mergeCells(col+"9:"+col+"10");
+    var hc=ws1.getCell(col+"9");
+    hc.value=monthlyData[mi].label;
+    hc.font={bold:true,color:{argb:"FFFFFFFF"}};
+    hc.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF4472C4"}};
+    hc.alignment={horizontal:"center",vertical:"middle",wrapText:true};
+    hc.border=thinBorder;
+    ws1.getColumn(firstColIdx+mi).width=14;
+  }
+  var periodName=monthlyData[monthlyData.length-1].label; // last month label, used in bottom sections
+
+  // KPI Rows
+  var kpiRows=[
+    [11,"11","Non-Conformances",null],
+    [12,"","KPI 11A: Non-conformance incidents (#)","nc"],
+    [13,"","KPI 11B: % Non conformance Vs Total Production (units)","ncPct"],
+    [14,"12","Notice of Deviations","dev"],
+    [15,"13","CAPA","capa"],
+    [16,"14","Microbiological Parameters",null],
+    [17,"","KPI 14A: Micro-Susceptibility Metrics","microTxt"],
+    [18,"","KPI 14B: MPI","mpi"],
+    [19,"17","Process Capability","procTxt"],
+  ];
+  // Per-month KPI values. KPIs not yet computed from data show 0 / placeholder text.
+  function kpiValue(kind,monthKpis){
+    if(kind===null||kind==="")return null;
+    if(kind==="nc")return 0;
+    if(kind==="ncPct")return 0;
+    if(kind==="dev")return 0;
+    if(kind==="capa")return 0;
+    if(kind==="microTxt")return "All samples without growth";
+    if(kind==="mpi")return 1;
+    if(kind==="procTxt")return "See table below";
+    return null;
+  }
+  for(var i=0;i<kpiRows.length;i++){
+    var r=kpiRows[i];
+    ws1.getCell("B"+r[0]).value=r[1];ws1.getCell("B"+r[0]).font={bold:true};
+    ws1.getCell("C"+r[0]).value=r[2];
+    if(r[2].indexOf&&r[2].indexOf("KPI")===0)ws1.getCell("C"+r[0]).alignment={indent:2};
+    else if(r[1])ws1.getCell("C"+r[0]).font={bold:true,underline:true,color:{argb:"FF0070C0"}};
+    // One value per month per row
+    for(var mi=0;mi<monthlyData.length;mi++){
+      var col=colLetter(firstColIdx+mi);
+      var val=kpiValue(r[3],monthlyData[mi]);
+      if(val!==null)ws1.getCell(col+r[0]).value=val;
+      ws1.getCell(col+r[0]).alignment={horizontal:"center"};
+      ws1.getCell(col+r[0]).border=thinBorder;
+    }
+  }
+
+  // Process Capability summary
+  var pcRow=22;
+  ws1.getCell("A"+pcRow).value="Process Capability";ws1.getCell("A"+pcRow).font={bold:true,color:{argb:"FFFFFFFF"}};ws1.getCell("A"+pcRow).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1F4E78"}};
+  ws1.mergeCells("A"+pcRow+":B"+pcRow);
+  ws1.getCell("C"+pcRow).value="Corner";ws1.getCell("C"+pcRow).font={bold:true,color:{argb:"FFFFFFFF"}};ws1.getCell("C"+pcRow).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1F4E78"}};ws1.getCell("C"+pcRow).alignment={horizontal:"center"};
+  ws1.getCell("D"+pcRow).value="% Cases Produced";ws1.mergeCells("D"+pcRow+":G"+pcRow);ws1.getCell("D"+pcRow).font={bold:true};ws1.getCell("D"+pcRow).alignment={horizontal:"center"};ws1.getCell("D"+pcRow).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFD9E1F2"}};
+
+  // Sub-header
+  pcRow++;
+  ws1.mergeCells("A"+pcRow+":B"+pcRow);
+  ws1.getCell("D"+pcRow).value="Weight";ws1.getCell("E"+pcRow).value="Active Ingredient";ws1.getCell("F"+pcRow).value="%GDA";ws1.getCell("G"+pcRow).value="Average";
+  for(var c=4;c<=7;c++){ws1.getRow(pcRow).getCell(c).font={bold:true};ws1.getRow(pcRow).getCell(c).alignment={horizontal:"center"};ws1.getRow(pcRow).getCell(c).border=thinBorder;}
+
+  // Corner % already computed in lastM (wW, wAI, wG, pct*)
+  var corners=["Green","Yellow","Orange","Red"];
+  var cornerLabels=["% capable & in control","% not capable but in control","% capable but not in control","% not capable and not in control"];
+  for(var i=0;i<corners.length;i++){
+    pcRow++;
+    ws1.mergeCells("A"+pcRow+":B"+pcRow);
+    ws1.getCell("A"+pcRow).value=cornerLabels[i];
+    ws1.getCell("C"+pcRow).value=corners[i];ws1.getCell("C"+pcRow).fill={type:"pattern",pattern:"solid",fgColor:{argb:cornerFill(corners[i])}};ws1.getCell("C"+pcRow).alignment={horizontal:"center"};ws1.getCell("C"+pcRow).font={bold:true};
+    var w=wW[corners[i]]||0,a=wAI[corners[i]]||0,g=wG[corners[i]]||0;
+    var avg=(w+a+g)/3;
+    ws1.getCell("D"+pcRow).value=Math.round(w*100)+"%";
+    ws1.getCell("E"+pcRow).value=Math.round(a*100)+"%";
+    ws1.getCell("F"+pcRow).value=Math.round(g*100)+"%";
+    ws1.getCell("G"+pcRow).value=Math.round(avg*100)+"%";
+    for(var c=1;c<=7;c++){ws1.getRow(pcRow).getCell(c).border=thinBorder;ws1.getRow(pcRow).getCell(c).alignment=ws1.getRow(pcRow).getCell(c).alignment||{};if(c>=4)ws1.getRow(pcRow).getCell(c).alignment.horizontal="center";}
+  }
+  // Total row 100%
+  pcRow++;
+  ws1.mergeCells("A"+pcRow+":C"+pcRow);
+  ws1.getCell("D"+pcRow).value="100%";ws1.getCell("E"+pcRow).value="100%";ws1.getCell("F"+pcRow).value="100%";ws1.getCell("G"+pcRow).value="100%";
+  for(var c=4;c<=7;c++){ws1.getRow(pcRow).getCell(c).font={bold:true};ws1.getRow(pcRow).getCell(c).alignment={horizontal:"center"};ws1.getRow(pcRow).getCell(c).border=thinBorder;}
+
+  // === 2x2 Performance/Control Matrix (fixed layout, dynamic %) ===
+  // pct* already computed in lastM
+
+  var mxR=22;
+  // Matrix position shifts right when many months: place after bottom block + 1 col gap.
+  // For single month, keeps original position at cols I-M (idx 9).
+  var mxStart=monthlyData.length>1?(4+4*monthlyData.length+1):9;
+  var mxC1=colLetter(mxStart);     // "Control" vertical label
+  var mxC2=colLetter(mxStart+1);   // "Cpk/Ppk < 1.33" vertical
+  var mxC3=colLetter(mxStart+2);   // Yes/No labels
+  var mxC4=colLetter(mxStart+3);   // First data cell column
+  var mxC5=colLetter(mxStart+4);   // Second data cell column
+
+  // "Control" vertical label on left
+  ws1.mergeCells(mxC1+mxR+":"+mxC1+(mxR+3));
+  ws1.getCell(mxC1+mxR).value="Control";
+  ws1.getCell(mxC1+mxR).font={bold:true,italic:true,color:{argb:"FF375623"}};
+  ws1.getCell(mxC1+mxR).alignment={textRotation:90,vertical:"middle",horizontal:"center"};
+  ws1.getCell(mxC1+mxR).border=thinBorder;
+  // "Cpk/Ppk < 1.33" subtitle
+  ws1.mergeCells(mxC2+mxR+":"+mxC2+(mxR+3));
+  ws1.getCell(mxC2+mxR).value="Cpk/Ppk < 1.33";
+  ws1.getCell(mxC2+mxR).font={italic:true,color:{argb:"FF375623"}};
+  ws1.getCell(mxC2+mxR).alignment={textRotation:90,vertical:"middle",horizontal:"center"};
+  // Yes row
+  ws1.getCell(mxC3+mxR).value="Yes";ws1.getCell(mxC3+mxR).font={italic:true};ws1.getCell(mxC3+mxR).alignment={horizontal:"right"};
+  // [Yellow] Yes-Control / No-Performance
+  ws1.getCell(mxC4+mxR).value=pctYesNo+"%";ws1.getCell(mxC4+mxR).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFFFFF00"}};ws1.getCell(mxC4+mxR).alignment={horizontal:"center",vertical:"middle"};ws1.getCell(mxC4+mxR).font={bold:true,size:14};ws1.getCell(mxC4+mxR).border=thinBorder;
+  // [Green] Yes-Control / Yes-Performance
+  ws1.getCell(mxC5+mxR).value=pctYesYes+"%";ws1.getCell(mxC5+mxR).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF92D050"}};ws1.getCell(mxC5+mxR).alignment={horizontal:"center",vertical:"middle"};ws1.getCell(mxC5+mxR).font={bold:true,size:14};ws1.getCell(mxC5+mxR).border=thinBorder;
+  // No row
+  ws1.getCell(mxC3+(mxR+1)).value="No";ws1.getCell(mxC3+(mxR+1)).font={italic:true};ws1.getCell(mxC3+(mxR+1)).alignment={horizontal:"right"};
+  // [Red] No-Control / No-Performance
+  ws1.getCell(mxC4+(mxR+1)).value=pctNoNo+"%";ws1.getCell(mxC4+(mxR+1)).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFFF0000"}};ws1.getCell(mxC4+(mxR+1)).alignment={horizontal:"center",vertical:"middle"};ws1.getCell(mxC4+(mxR+1)).font={bold:true,size:14,color:{argb:"FFFFFFFF"}};ws1.getCell(mxC4+(mxR+1)).border=thinBorder;
+  // [Orange] No-Control / Yes-Performance
+  ws1.getCell(mxC5+(mxR+1)).value=pctNoYes+"%";ws1.getCell(mxC5+(mxR+1)).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFFFC000"}};ws1.getCell(mxC5+(mxR+1)).alignment={horizontal:"center",vertical:"middle"};ws1.getCell(mxC5+(mxR+1)).font={bold:true,size:14};ws1.getCell(mxC5+(mxR+1)).border=thinBorder;
+  // Axis labels bottom
+  ws1.getCell(mxC4+(mxR+2)).value="No";ws1.getCell(mxC4+(mxR+2)).alignment={horizontal:"center"};ws1.getCell(mxC4+(mxR+2)).font={italic:true};
+  ws1.getCell(mxC5+(mxR+2)).value="Yes";ws1.getCell(mxC5+(mxR+2)).alignment={horizontal:"center"};ws1.getCell(mxC5+(mxR+2)).font={italic:true};
+  ws1.mergeCells(mxC4+(mxR+3)+":"+mxC5+(mxR+3));
+  ws1.getCell(mxC4+(mxR+3)).value="PPK > 1";ws1.getCell(mxC4+(mxR+3)).alignment={horizontal:"center"};ws1.getCell(mxC4+(mxR+3)).font={italic:true,color:{argb:"FF375623"}};
+  ws1.mergeCells(mxC4+(mxR+4)+":"+mxC5+(mxR+4));
+  ws1.getCell(mxC4+(mxR+4)).value="Performance";ws1.getCell(mxC4+(mxR+4)).alignment={horizontal:"center"};ws1.getCell(mxC4+(mxR+4)).font={italic:true,bold:true,color:{argb:"FF375623"}};
+
+  // Column widths for the matrix (dynamic position)
+  ws1.getColumn(mxStart).width=4;ws1.getColumn(mxStart+1).width=14;ws1.getColumn(mxStart+2).width=5;ws1.getColumn(mxStart+3).width=10;ws1.getColumn(mxStart+4).width=10;
+  ws1.getRow(mxR).height=30;ws1.getRow(mxR+1).height=30;
+
+  // === Performance and Process Indicators table (multi-month: 4 colored cells per month) ===
+  var perfRow=pcRow+3;
+  // Year row (uses last month's year, not first)
+  ws1.mergeCells("A"+perfRow+":C"+perfRow);
+  ws1.getCell("D"+perfRow).value="Year:";ws1.getCell("D"+perfRow).alignment={horizontal:"right"};ws1.getCell("D"+perfRow).font={bold:true};
+  ws1.getCell("E"+perfRow).value=lastM.year;ws1.getCell("E"+perfRow).alignment={horizontal:"center"};ws1.getCell("E"+perfRow).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFFFFFFF"}};ws1.getCell("E"+perfRow).border=thinBorder;
+  perfRow++;
+
+  // Header row: label + one merged 4-col block per month with the month label
+  ws1.mergeCells("A"+perfRow+":C"+perfRow);
+  ws1.getCell("A"+perfRow).value="Performance and Process Indicators";ws1.getCell("A"+perfRow).font={bold:true,color:{argb:"FFFFFFFF"}};ws1.getCell("A"+perfRow).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1F4E78"}};ws1.getCell("A"+perfRow).alignment={horizontal:"center"};
+  for(var mi=0;mi<monthlyData.length;mi++){
+    var c1=colLetter(4+mi*4),c4=colLetter(4+mi*4+3);
+    ws1.mergeCells(c1+perfRow+":"+c4+perfRow);
+    var mh=ws1.getCell(c1+perfRow);
+    mh.value=monthlyData[mi].label;
+    mh.font={bold:true,color:{argb:"FFFFFFFF"}};
+    mh.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1F4E78"}};
+    mh.alignment={horizontal:"center"};
+    mh.border=thinBorder;
+  }
+  perfRow++;
+
+  // Sub-header: 4 colored cells (Green, Yellow, Orange, Red) per month
+  ws1.mergeCells("A"+perfRow+":C"+perfRow);
+  ws1.getCell("A"+perfRow).value="Process capability (Ppk and Cpk/Ppk )";ws1.getCell("A"+perfRow).font={bold:true,color:{argb:"FF0070C0"}};ws1.getCell("A"+perfRow).border=thinBorder;
+  var cornerColors=["FF92D050","FFFFFF00","FFFFC000","FFFF0000"]; // Green, Yellow, Orange, Red
+  for(var mi=0;mi<monthlyData.length;mi++){
+    for(var ci=0;ci<4;ci++){
+      var col=colLetter(4+mi*4+ci);
+      var c=ws1.getCell(col+perfRow);
+      c.value="%";c.fill={type:"pattern",pattern:"solid",fgColor:{argb:cornerColors[ci]}};c.alignment={horizontal:"center"};
+      c.font=ci===3?{bold:true,color:{argb:"FFFFFFFF"}}:{bold:true};
+      c.border=thinBorder;
+    }
+  }
+
+  // 4 indicator rows, each with 4 cells per month
+  function indicatorValuesForMonth(rowIdx,m){
+    if(rowIdx===0)return ["% Average of all KRS",m.pctYesYes,m.pctYesNo,m.pctNoYes,m.pctNoNo];
+    if(rowIdx===1)return ["% Weight*",Math.round((m.wW.Green||0)*100),Math.round((m.wW.Yellow||0)*100),Math.round((m.wW.Orange||0)*100),Math.round((m.wW.Red||0)*100)];
+    if(rowIdx===2)return ["%GDA",Math.round((m.wG.Green||0)*100),Math.round((m.wG.Yellow||0)*100),Math.round((m.wG.Orange||0)*100),Math.round((m.wG.Red||0)*100)];
+    if(rowIdx===3)return ["% Active Ingredient*",Math.round((m.wAI.Green||0)*100),Math.round((m.wAI.Yellow||0)*100),Math.round((m.wAI.Orange||0)*100),Math.round((m.wAI.Red||0)*100)];
+  }
+  for(var i=0;i<4;i++){
+    perfRow++;
+    ws1.mergeCells("A"+perfRow+":C"+perfRow);
+    ws1.getCell("A"+perfRow).value=indicatorValuesForMonth(i,monthlyData[0])[0];
+    ws1.getCell("A"+perfRow).font={color:{argb:"FF0070C0"}};
+    ws1.getCell("A"+perfRow).border=thinBorder;
+    for(var mi=0;mi<monthlyData.length;mi++){
+      var vals=indicatorValuesForMonth(i,monthlyData[mi]);
+      for(var ci=0;ci<4;ci++){
+        var col=colLetter(4+mi*4+ci);
+        var c=ws1.getCell(col+perfRow);
+        c.value=vals[ci+1]+"%";
+        c.alignment={horizontal:"center"};
+        c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFE7DDCC"}};
+        c.border=thinBorder;
+      }
+    }
+  }
+
+  // ============ SHEET 2: KPI 11 Non-Conformances ============
+  var ws2=wb.addWorksheet("KPI 11");
+  ws2.getColumn(2).width=15;ws2.getColumn(3).width=15;ws2.getColumn(4).width=20;ws2.getColumn(5).width=15;ws2.getColumn(6).width=10;ws2.getColumn(7).width=15;ws2.getColumn(8).width=15;
+  ws2.mergeCells("C2:J2");ws2.getCell("C2").value="KPI 11. Non Conformances";ws2.getCell("C2").font={bold:true,size:14,underline:true};ws2.getCell("C2").alignment={horizontal:"center"};
+  ws2.getCell("B5").value="Definition";ws2.getCell("B5").font={bold:true,underline:true};
+  ws2.mergeCells("C5:J5");ws2.getCell("C5").value="Produced cases NOT according to specs and standards identified in the production site.";
+  ws2.getCell("B7").value="Calculation";ws2.getCell("B7").font={bold:true,underline:true};
+  ws2.getCell("C8").value="A) Number of Non-conformance incidents / month";ws2.getCell("G8").value=0;ws2.getCell("G8").alignment={horizontal:"center"};ws2.getCell("G8").fill=greenFill;
+  ws2.getCell("C11").value="B) % Non conformace Vs";ws2.getCell("C12").value="total production";ws2.getCell("F11").value="=";ws2.getCell("G11").value=0;ws2.getCell("G12").value=totalCas;ws2.getCell("G12").alignment={horizontal:"center"};ws2.getCell("G12").fill=greenFill;ws2.getCell("J11").value=0;ws2.getCell("J11").alignment={horizontal:"center"};ws2.getCell("J11").font={bold:true};
+
+  // ============ SHEET 3: KPI 12 ============
+  var ws3=wb.addWorksheet("KPI 12");
+  ws3.getColumn(2).width=12;ws3.getColumn(3).width=60;
+  ws3.mergeCells("C2:L2");ws3.getCell("C2").value="KPI 12. Notice of Deviations";ws3.getCell("C2").font={bold:true,size:14,underline:true};ws3.getCell("C2").alignment={horizontal:"center"};
+  ws3.getCell("B5").value="Definition";ws3.getCell("B5").font={bold:true,underline:true};
+  ws3.getCell("C6").value="Formalized process to accept and document the approval to release for sale a non-conformance finished";
+  ws3.getCell("C7").value="product or a OOS raw material or packaging material.";
+  ws3.getCell("C8").value="A Notice of Deviation must be completed and approved by the appropriate personnel.";
+  ws3.getCell("C9").value="Notice of Deviation is also used for planned deviations.";
+  ws3.getCell("C10").value="Products that are confirmed as OOS for an active ingredient will not be released. These products";
+  ws3.getCell("C11").value="must be scrapped.";
+  ws3.getCell("B13").value="Calculation";ws3.getCell("B13").font={bold:true,underline:true};
+  ws3.getCell("C14").value=0;ws3.getCell("C14").fill=greenFill;ws3.getCell("C14").alignment={horizontal:"center"};
+
+  // ============ SHEET 4: KPI 13 ============
+  var ws4=wb.addWorksheet("KPI 13");
+  ws4.getColumn(2).width=12;ws4.getColumn(3).width=60;
+  ws4.mergeCells("C2:L2");ws4.getCell("C2").value="KPI 13. Corrective & Preventive Actions (CAPA)";ws4.getCell("C2").font={bold:true,size:14,underline:true};ws4.getCell("C2").alignment={horizontal:"center"};
+  ws4.getCell("B4").value="Definition";ws4.getCell("B4").font={bold:true,underline:true};
+  var kpi13Text=["Corrective actions identify and eliminate existing quality problems in products, processes,","or systems whereas preventive actions anticipate problems and prevent them from occurring.","","A CAPA record can be initiated as an outcome of an investigation, OOS, Deviation, NCR, Complaint","Audit finding, Annual Product review, management/ plant performance review, process capability","trend analysis or any other quality issue.","Ensure that issues affecting quality are identified & captured, root causes are identified & corrective","& preventive actions are implemented in a timely manner.","Collect and provide data for effectiveness verification."];
+  for(var i=0;i<kpi13Text.length;i++)ws4.getCell("C"+(5+i)).value=kpi13Text[i];
+  ws4.getCell("B16").value="Guidance";ws4.getCell("B16").font={bold:true,underline:true};
+  ws4.getCell("C16").value="CM QStd-030 Corrective and Preventive Action";
+  ws4.getCell("B18").value="Calculation";ws4.getCell("B18").font={bold:true,underline:true};
+  ws4.getCell("C19").value=0;ws4.getCell("C19").fill=greenFill;ws4.getCell("C19").alignment={horizontal:"center"};
+
+  // ============ SHEET 5: KPI 14 Micro-Susceptibility ============
+  var ws5=wb.addWorksheet("KPI 14");
+  ws5.getColumn(1).width=15;ws5.getColumn(2).width=12;ws5.getColumn(3).width=30;ws5.getColumn(4).width=14;
+  for(var c=5;c<=13;c++)ws5.getColumn(c).width=5;
+  ws5.mergeCells("A2:L2");ws5.getCell("A2").value="KPI 14. Micro-Susceptibility Metrics";ws5.getCell("A2").font={bold:true,size:14,underline:true};ws5.getCell("A2").alignment={horizontal:"center"};
+  ws5.getCell("A5").value="Definition";ws5.getCell("A5").font={bold:true,underline:true};
+  ws5.getCell("D6").value="A tool which tracks and trends finished product microbiological data for micro sensitive products only.";
+  ws5.getCell("A7").value="Required data per product";ws5.getCell("A7").font={bold:true,underline:true};
+
+  // Year / Month fields (auto-filled from LAST month of period)
+  var lastM_ym=lastM.year+"-"+(lastM.month<10?"0":"")+lastM.month;
+  var ym1=lastM_ym.split("-"),ym2=ym1.slice();
+  ws5.getCell("B9").value="Year:";ws5.getCell("B9").font={bold:true};
+  ws5.getCell("C9").value=lastM.year;ws5.getCell("C9").alignment={horizontal:"center"};ws5.getCell("C9").border=thinBorder;
+  ws5.getCell("B11").value="Month:";ws5.getCell("B11").font={bold:true};
+  ws5.getCell("C11").value=monthsES[lastM.month-1];
+  ws5.getCell("C11").alignment={horizontal:"center"};ws5.getCell("C11").border=thinBorder;
+
+  // Headers - row 13 (top) and row 14 (sub-headers)
+  ws5.getCell("B13").value="B#";ws5.getCell("C13").value="SKU Code";ws5.getCell("D13").value="Product";ws5.getCell("E13").value="Lote";
+  ws5.mergeCells("F13:N13");ws5.getCell("F13").value="# of Samples*";ws5.getCell("F13").alignment={horizontal:"center"};ws5.getCell("F13").font={bold:true,color:{argb:"FFFFFFFF"}};ws5.getCell("F13").fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1F4E78"}};
+  for(var c=2;c<=5;c++){ws5.getRow(13).getCell(c).font={bold:true};ws5.getRow(13).getCell(c).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFD9E1F2"}};ws5.getRow(13).getCell(c).border=thinBorder;ws5.getRow(13).getCell(c).alignment={horizontal:"center"};}
+  ws5.getCell("B14").value="B#";ws5.getCell("B14").font={bold:true};ws5.getCell("B14").alignment={horizontal:"center"};ws5.getCell("B14").border=thinBorder;
+  var samples=["a.","b.","c.","d.","e.","f.","g.","h.","i."];
+  for(var i=0;i<samples.length;i++){
+    var col=String.fromCharCode(70+i); // F=70
+    ws5.getCell(col+"14").value=samples[i];
+    ws5.getCell(col+"14").font={bold:true};ws5.getCell(col+"14").alignment={horizontal:"center"};ws5.getCell(col+"14").border=thinBorder;ws5.getCell(col+"14").fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFD9E1F2"}};
+  }
+
+  // SKU mapping for B#
+  var BMAP={"61011874":"B02987910003","61011880":"B02987910003","61011875":"B02987920000","61011881":"B02987920000","61011876":"B02987930000","61011882":"B02987930000","61011878":"B02987940002","61011883":"B02987960002","61037780":"B02902010001","61037781":"B02902010001","61011877":"B02988130001","61011879":"B02987950004","61017909":"B02987950004"};
+  // Full product names for KPI 14 / Cpk sheets (matches model)
+  var FULLNAME={"61011874":"Fabuloso Lavanda 1L","61011880":"Fabuloso Lavanda 2L","61011875":"Fabuloso Mar Fresco 1L","61011881":"Fabuloso Mar Fresco 2L","61011876":"Fabuloso Pasión de Frutas 1L","61011882":"Fabuloso Pasión de Frutas 2L","61011878":"Fabuloso Naranja 1L","61011883":"Fabuloso Tulipanes y Kiwi 1L","61037780":"Fabuloso Naturals Eucalipto 1L","61037781":"Fabuloso Naturals Eucalipto 2L","61011877":"Fabuloso Fresco Amanecer 1L","61011879":"Fabuloso Alt. Cloro 1L","61017909":"Fabuloso Alt. Cloro 2L"};
+  function descToSKU(desc){
+    var d=desc.toLowerCase();
+    if(d.indexOf("lavanda 1l")>=0)return"61011874";if(d.indexOf("lavanda 2l")>=0)return"61011880";
+    if(d.indexOf("mar fresco 1l")>=0)return"61011875";if(d.indexOf("mar fresco 2l")>=0)return"61011881";
+    if(d.indexOf("pasion frutas 1l")>=0||d.indexOf("pasión de frutas 1l")>=0)return"61011876";
+    if(d.indexOf("pasion frutas 2l")>=0||d.indexOf("pasión de frutas 2l")>=0)return"61011882";
+    if(d.indexOf("naranja")>=0)return"61011878";if(d.indexOf("tulipanes")>=0)return"61011883";
+    if(d.indexOf("eucalipto 1l")>=0)return"61037780";if(d.indexOf("eucalipto 2l")>=0)return"61037781";
+    if(d.indexOf("fresco amanecer")>=0)return"61011877";
+    if(d.indexOf("alt cloro 1l")>=0)return"61011879";if(d.indexOf("alt cloro 2l")>=0||d.indexOf("alternativa cloro 2l")>=0)return"61017909";
+    return"";
+  }
+  function fullName(sku,fallback){return FULLNAME[sku]||fallback;}
+
+  var sortedFd=fd.slice().sort(function(a,b){return a.fecha.localeCompare(b.fecha);});
+  for(var i=0;i<sortedFd.length;i++){
+    var d=sortedFd[i];var sku=descToSKU(d.desc);
+    var rowNum=15+i;
+    ws5.getCell("B"+rowNum).value=BMAP[sku]||"";
+    ws5.getCell("C"+rowNum).value=sku;
+    ws5.getCell("D"+rowNum).value=fullName(sku,d.desc);
+    ws5.getCell("E"+rowNum).value=d.lote||"";
+    ws5.getCell("F"+rowNum).value=1;ws5.getCell("G"+rowNum).value=1;
+    for(var c=8;c<=14;c++)ws5.getRow(rowNum).getCell(c).value=0;
+    for(var c=2;c<=14;c++){ws5.getRow(rowNum).getCell(c).border=thinBorder;if(c>=6)ws5.getRow(rowNum).getCell(c).alignment={horizontal:"center"};}
+  }
+  // Sample description
+  var sd=15+sortedFd.length+2;
+  ws5.getCell("A"+sd).value="* Fill the table with the number of samples, according to the following description:";ws5.getCell("A"+sd).font={italic:true};
+  var sampleDesc=[["a.","Total Number of Samples Tested (assume conventional plate method)"],["b.","Number of Samples with No Growth (plate or enrichment)"],["c.","Number of Samples with Growth in Enrichment Only but not Gram negatives or S. aureus"],["d.","Number of Sample with Growth on Plate but <= 500 cfu/g and not Gram negatives or S. aureus"],["e.","Number of Samples on First Test with Growth >500 cfu/g or Gram negatives or S. aureus"],["","If samples need to go to re-test:"],["f.","Number of Samples to go to re-test"],["g.","Number of Samples on re-test with no growth"],["h.","Number of Samples on re-test with Growth on Plate but <= 500 cfu/g and not Gram negatives or S. aureus"],["i.","Number of Samples on re-test with Growth >500 cfu/g or Gram negatives or S. aureus"]];
+  for(var i=0;i<sampleDesc.length;i++){
+    ws5.getCell("B"+(sd+1+i)).value=sampleDesc[i][0];ws5.getCell("C"+(sd+1+i)).value=sampleDesc[i][1];
+    if(sampleDesc[i][1].indexOf("If")===0)ws5.getCell("C"+(sd+1+i)).font={bold:true};
+  }
+
+  // ============ SHEET 6: KPI 15 MPI ============
+  var ws6=wb.addWorksheet("KPI 15 MPI");
+  ws6.getColumn(1).width=4;ws6.getColumn(2).width=50;ws6.getColumn(3).width=15;
+  ws6.mergeCells("B2:F2");ws6.getCell("B2").value="MPI";ws6.getCell("B2").font={bold:true,size:14,underline:true};ws6.getCell("B2").alignment={horizontal:"center"};
+  ws6.getCell("B6").value="MPI= FACTOR DE CELSIS + Nº DE MICRO INCIDENTES + MSI + % CON BICARGA + % DE MUESTRAS CON CRECIMIENTO LUEGO DE RETESTEO";ws6.getCell("B6").font={bold:true};
+  var mpiData=[["FACTOR DE CELSIS",1],["Nº DE MICRO INCIDENTES",0],["MSI",0],["% CON BICARGA",0],["% DE MUESTRAS CON CRECIMIENTO LUEGO DE RETESTEO",0]];
+  for(var i=0;i<mpiData.length;i++){
+    var r=8+i;
+    ws6.getCell("B"+r).value=mpiData[i][0];ws6.getCell("B"+r).fill=cyanFill;ws6.getCell("B"+r).border=thinBorder;
+    ws6.getCell("C"+r).value=mpiData[i][1];ws6.getCell("C"+r).alignment={horizontal:"right"};ws6.getCell("C"+r).border=thinBorder;
+  }
+  ws6.getCell("B15").value="MPI";ws6.getCell("B15").fill=cyanFill;ws6.getCell("B15").alignment={horizontal:"center"};ws6.getCell("B15").font={bold:true};ws6.getCell("B15").border=thinBorder;
+  ws6.getCell("C15").value=1;ws6.getCell("C15").fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFB7DEE8"}};ws6.getCell("C15").alignment={horizontal:"center"};ws6.getCell("C15").font={bold:true};ws6.getCell("C15").border=thinBorder;
+
+  // ============ SHEET 7: Cpk-Ppk Working Sheet ============
+  var ws7=wb.addWorksheet("Cpk-Ppk Working sheet");
+  ws7.getColumn(1).width=12;ws7.getColumn(2).width=35;ws7.getColumn(3).width=12;ws7.getColumn(4).width=15;ws7.getColumn(5).width=15;
+  for(var c=6;c<=20;c++)ws7.getColumn(c).width=10;
+
+  ws7.mergeCells("B1:F1");ws7.getCell("B1").value="KPI 17. Process Capability  Working Sheet";ws7.getCell("B1").font={bold:true,size:14,underline:true};
+  ws7.getCell("B2").value="Use this sheet to enter your data and get your ( Ppk and Cpk/Ppk )";ws7.getCell("B2").font={color:{argb:"FF0070C0"}};
+  ws7.getCell("B3").value="Ideally, n≥100 samples are required for capability analysis. When n<100, process capability indices are less reliable.";ws7.getCell("B3").font={italic:true,color:{argb:"FF0070C0"}};
+  ws7.getCell("B4").value="You have to fill columns B to N";ws7.getCell("B4").font={bold:true,italic:true};
+
+  // Year / Month fields (auto-filled from period)
+  ws7.getCell("B5").value="Year:";ws7.getCell("B5").font={bold:true};
+  ws7.getCell("C5").value=parseInt(ym1[0]);ws7.getCell("C5").alignment={horizontal:"center"};ws7.getCell("C5").border=thinBorder;ws7.getCell("C5").fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFE7E6E6"}};
+  ws7.getCell("E5").value="Month:";ws7.getCell("E5").font={bold:true};
+  ws7.getCell("F5").value=monthsES[lastM.month-1];
+  ws7.getCell("F5").alignment={horizontal:"center"};ws7.getCell("F5").border=thinBorder;ws7.getCell("F5").fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFE7E6E6"}};
+
+  ws7.getCell("B6").value="Insert more rows as required.";ws7.getCell("B6").font={italic:true,size:9,color:{argb:"FF808080"}};
+
+  // Helper: render a sub-block of data rows (one LSL/USL group) within a combined KRS section
+  function renderSubBlock(ws,startRow,krsName,details,lsl,usl,result){
+    var sorted=details.slice().sort(function(a,b){return a.fecha.localeCompare(b.fecha);});
+    if(sorted.length===0)return startRow;
+    var totalCajas=0;for(var i=0;i<sorted.length;i++)totalCajas+=sorted[i].caj;
+
+    var firstDataRow=startRow;
+    var endRow=firstDataRow+sorted.length-1;
+
+    for(var i=0;i<sorted.length;i++){
+      var d=sorted[i];var sku=descToSKU(d.desc);
+      var rr=firstDataRow+i;
+      ws.getCell("A"+rr).value=sku;ws.getCell("A"+rr).fill=pinkFill;
+      ws.getCell("B"+rr).value=fullName(sku,d.desc);ws.getCell("B"+rr).fill=pinkFill;
+      ws.getCell("D"+rr).value=d.lote||"";ws.getCell("D"+rr).fill=pinkFill;
+      ws.getCell("E"+rr).value=krsName;ws.getCell("E"+rr).fill=orangeFill;ws.getCell("E"+rr).alignment={horizontal:"center"};
+      for(var c=1;c<=5;c++)ws.getRow(rr).getCell(c).border=thinBorder;
+    }
+
+    // Merge calculated cells across the sub-block
+    ws.mergeCells("C"+firstDataRow+":C"+endRow);
+    ws.getCell("C"+firstDataRow).value=totalCajas;ws.getCell("C"+firstDataRow).alignment={horizontal:"center",vertical:"middle"};ws.getCell("C"+firstDataRow).font={bold:true};ws.getCell("C"+firstDataRow).fill=pinkFill;ws.getCell("C"+firstDataRow).border=thinBorder;
+    ws.mergeCells("F"+firstDataRow+":F"+endRow);ws.getCell("F"+firstDataRow).value=lsl;ws.getCell("F"+firstDataRow).fill=greenFill;ws.getCell("F"+firstDataRow).alignment={horizontal:"center",vertical:"middle"};ws.getCell("F"+firstDataRow).border=thinBorder;
+    ws.mergeCells("G"+firstDataRow+":G"+endRow);ws.getCell("G"+firstDataRow).value=usl;ws.getCell("G"+firstDataRow).fill=greenFill;ws.getCell("G"+firstDataRow).alignment={horizontal:"center",vertical:"middle"};ws.getCell("G"+firstDataRow).border=thinBorder;
+    ws.mergeCells("H"+firstDataRow+":H"+endRow);ws.getCell("H"+firstDataRow).value=parseFloat(result.mean.toFixed(2));ws.getCell("H"+firstDataRow).fill=yellowFill;ws.getCell("H"+firstDataRow).alignment={horizontal:"center",vertical:"middle"};ws.getCell("H"+firstDataRow).border=thinBorder;ws.getCell("H"+firstDataRow).font={bold:true};
+    ws.mergeCells("I"+firstDataRow+":I"+endRow);ws.getCell("I"+firstDataRow).value=parseFloat(result.sdW.toFixed(4));ws.getCell("I"+firstDataRow).fill=purpleFill;ws.getCell("I"+firstDataRow).font={color:{argb:"FFFFFFFF"},bold:true};ws.getCell("I"+firstDataRow).alignment={horizontal:"center",vertical:"middle"};ws.getCell("I"+firstDataRow).border=thinBorder;
+    ws.mergeCells("J"+firstDataRow+":J"+endRow);ws.getCell("J"+firstDataRow).value=parseFloat(result.sdO.toFixed(4));ws.getCell("J"+firstDataRow).fill=redFill;ws.getCell("J"+firstDataRow).font={color:{argb:"FFFFFFFF"},bold:true};ws.getCell("J"+firstDataRow).alignment={horizontal:"center",vertical:"middle"};ws.getCell("J"+firstDataRow).border=thinBorder;
+    ws.mergeCells("K"+firstDataRow+":K"+endRow);ws.getCell("K"+firstDataRow).value=parseFloat(result.usl_m.toFixed(4));ws.getCell("K"+firstDataRow).fill=cyanFill;ws.getCell("K"+firstDataRow).alignment={horizontal:"center",vertical:"middle"};ws.getCell("K"+firstDataRow).border=thinBorder;
+    ws.mergeCells("L"+firstDataRow+":L"+endRow);ws.getCell("L"+firstDataRow).value=parseFloat(result.m_lsl.toFixed(4));ws.getCell("L"+firstDataRow).fill=cyanFill;ws.getCell("L"+firstDataRow).alignment={horizontal:"center",vertical:"middle"};ws.getCell("L"+firstDataRow).border=thinBorder;
+    ws.mergeCells("M"+firstDataRow+":M"+endRow);ws.getCell("M"+firstDataRow).value=parseFloat(result.min.toFixed(4));ws.getCell("M"+firstDataRow).fill=cyanFill;ws.getCell("M"+firstDataRow).alignment={horizontal:"center",vertical:"middle"};ws.getCell("M"+firstDataRow).border=thinBorder;
+    ws.mergeCells("N"+firstDataRow+":N"+endRow);ws.getCell("N"+firstDataRow).value=parseFloat(result.ppk.toFixed(3));ws.getCell("N"+firstDataRow).fill=orangeFill;ws.getCell("N"+firstDataRow).alignment={horizontal:"center",vertical:"middle"};ws.getCell("N"+firstDataRow).border=thinBorder;ws.getCell("N"+firstDataRow).font={bold:true};
+    ws.mergeCells("O"+firstDataRow+":O"+endRow);ws.getCell("O"+firstDataRow).value=parseFloat(result.cpk.toFixed(3));ws.getCell("O"+firstDataRow).fill=orangeFill;ws.getCell("O"+firstDataRow).alignment={horizontal:"center",vertical:"middle"};ws.getCell("O"+firstDataRow).border=thinBorder;
+    ws.mergeCells("P"+firstDataRow+":P"+endRow);ws.getCell("P"+firstDataRow).value=parseFloat(result.ratio.toFixed(3));ws.getCell("P"+firstDataRow).fill=orangeFill;ws.getCell("P"+firstDataRow).alignment={horizontal:"center",vertical:"middle"};ws.getCell("P"+firstDataRow).border=thinBorder;
+    ws.mergeCells("Q"+firstDataRow+":Q"+endRow);ws.getCell("Q"+firstDataRow).value=result.capable;ws.getCell("Q"+firstDataRow).alignment={horizontal:"center",vertical:"middle"};ws.getCell("Q"+firstDataRow).border=thinBorder;
+    ws.mergeCells("R"+firstDataRow+":R"+endRow);ws.getCell("R"+firstDataRow).value=result.inCtrl;ws.getCell("R"+firstDataRow).alignment={horizontal:"center",vertical:"middle"};ws.getCell("R"+firstDataRow).border=thinBorder;
+    ws.mergeCells("S"+firstDataRow+":S"+endRow);ws.getCell("S"+firstDataRow).value=result.cnc;ws.getCell("S"+firstDataRow).alignment={horizontal:"center",vertical:"middle"};ws.getCell("S"+firstDataRow).border=thinBorder;
+    ws.mergeCells("T"+firstDataRow+":T"+endRow);ws.getCell("T"+firstDataRow).value=result.corner;ws.getCell("T"+firstDataRow).fill={type:"pattern",pattern:"solid",fgColor:{argb:cornerFill(result.corner)}};ws.getCell("T"+firstDataRow).alignment={horizontal:"center",vertical:"middle"};ws.getCell("T"+firstDataRow).font={bold:true};ws.getCell("T"+firstDataRow).border=thinBorder;
+
+    return endRow+1;
+  }
+
+  // Build a combined KRS section with one or more sub-blocks (different LSL/USL families sharing the same KRS name)
+  function buildCombinedKrs(ws,startRow,krsName,subGroups){
+    // KRS title row
+    ws.getCell("A"+startRow).value="KRS:";ws.getCell("A"+startRow).font={bold:true};
+    ws.getCell("B"+startRow).value=krsName;ws.getCell("B"+startRow).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFE7E6E6"}};ws.getCell("B"+startRow).font={bold:true};
+
+    var hr=startRow+2;
+    // Fixed/Calculated headers
+    ws.mergeCells("F"+(hr-1)+":H"+(hr-1));ws.getCell("F"+(hr-1)).value="Fixed data";ws.getCell("F"+(hr-1)).alignment={horizontal:"center"};ws.getCell("F"+(hr-1)).font={bold:true,italic:true};
+    ws.mergeCells("I"+(hr-1)+":P"+(hr-1));ws.getCell("I"+(hr-1)).value="Calculated data from sampling";ws.getCell("I"+(hr-1)).alignment={horizontal:"center"};ws.getCell("I"+(hr-1)).font={bold:true,italic:true};
+
+    // Column headers
+    var headers=["SKU #","Product","Production (Cases)","Lot #","KRS","LSL","USL","Mean","Std dev (within)","Std dev (overall)","USL-Mean","Mean-LSL","Min","Ppk>=1","Cpk > 1.33","Cpk/Ppk < 1.33","Capable","In ctrl","Ctrl & Capable","Corner"];
+    for(var i=0;i<headers.length;i++){
+      var col=String.fromCharCode(65+i);
+      var c=ws.getCell(col+hr);
+      c.value=headers[i];c.font={bold:true,color:{argb:"FFFFFFFF"}};c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1F4E78"}};c.alignment={horizontal:"center",wrapText:true,vertical:"middle"};c.border=thinBorder;
+    }
+
+    var curRow=hr+1;
+    for(var sg=0;sg<subGroups.length;sg++){
+      var s=subGroups[sg];
+      // Red divider strip BEFORE sub-blocks 2..n (between sub-groups)
+      if(sg>0){
+        for(var c=1;c<=20;c++){
+          ws.getRow(curRow).getCell(c).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFFF0000"}};
+          ws.getRow(curRow).getCell(c).border=thinBorder;
+        }
+        ws.getRow(curRow).height=8;
+        curRow++;
+      }
+      curRow=renderSubBlock(ws,curRow,krsName,s.details,s.lsl,s.usl,s.result);
+    }
+    return curRow+2;
+  }
+
+  var nextRow=8;
+  // Peso promedio: 1L + 2L combined
+  nextRow=buildCombinedKrs(ws7,nextRow,"Peso promedio",[
+    {details:det1L,lsl:1000,usl:1025,result:rPeso1},
+    {details:det2L,lsl:2000,usl:2030,result:rPeso2}
+  ]);
+  // %Anionico: standard + Alt Cloro combined
+  nextRow=buildCombinedKrs(ws7,nextRow,"%Anionico",[
+    {details:detStd.filter(function(d){return d.ani!==null;}),lsl:0.82,usl:1.12,result:rAniStd},
+    {details:detCloro.filter(function(d){return d.ani!==null;}),lsl:1.02,usl:1.32,result:rAniClo}
+  ]);
+  // %GDA: standard + Alt Cloro combined
+  nextRow=buildCombinedKrs(ws7,nextRow,"%GDA",[
+    {details:detStd.filter(function(d){return d.gda!==null;}),lsl:0.04,usl:0.06,result:rGdaStd},
+    {details:detCloro.filter(function(d){return d.gda!==null;}),lsl:0.05,usl:0.07,result:rGdaClo}
+  ]);
+
+  // ===== Summary table at bottom of Cpk sheet (matches model rows 159-165) =====
+  var sumRow=nextRow+1;
+  ws7.getCell("G"+sumRow).value="% Cases Produced";ws7.getCell("G"+sumRow).font={bold:true};ws7.getCell("G"+sumRow).alignment={horizontal:"center"};
+  ws7.mergeCells("G"+sumRow+":J"+sumRow);
+  sumRow++;
+  ws7.getCell("B"+sumRow).value="Process Capability";ws7.getCell("B"+sumRow).font={bold:true,color:{argb:"FFFFFFFF"}};ws7.getCell("B"+sumRow).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1F4E78"}};ws7.getCell("B"+sumRow).alignment={horizontal:"center"};ws7.getCell("B"+sumRow).border=thinBorder;
+  ws7.mergeCells("B"+sumRow+":E"+sumRow);
+  ws7.getCell("F"+sumRow).value="Corner";ws7.getCell("F"+sumRow).font={bold:true,color:{argb:"FFFFFFFF"}};ws7.getCell("F"+sumRow).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1F4E78"}};ws7.getCell("F"+sumRow).alignment={horizontal:"center"};ws7.getCell("F"+sumRow).border=thinBorder;
+  ws7.getCell("G"+sumRow).value="Weight";ws7.getCell("H"+sumRow).value="Active Ingredient";ws7.getCell("I"+sumRow).value="%GDA";ws7.getCell("J"+sumRow).value="Average";
+  for(var c=7;c<=10;c++){ws7.getRow(sumRow).getCell(c).font={bold:true};ws7.getRow(sumRow).getCell(c).alignment={horizontal:"center"};ws7.getRow(sumRow).getCell(c).border=thinBorder;ws7.getRow(sumRow).getCell(c).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFD9E1F2"}};}
+
+  var cornersC=["Green","Yellow","Orange","Red"];
+  var cornerLabelsC=[" % capable & in control"," % not capable but in control"," % capable but not in control"," % not capable and not in control"];
+  for(var i=0;i<cornersC.length;i++){
+    sumRow++;
+    ws7.mergeCells("B"+sumRow+":E"+sumRow);
+    ws7.getCell("B"+sumRow).value=cornerLabelsC[i];ws7.getCell("B"+sumRow).border=thinBorder;
+    ws7.getCell("F"+sumRow).value=cornersC[i];ws7.getCell("F"+sumRow).fill={type:"pattern",pattern:"solid",fgColor:{argb:cornerFill(cornersC[i])}};ws7.getCell("F"+sumRow).alignment={horizontal:"center"};ws7.getCell("F"+sumRow).font={bold:true};ws7.getCell("F"+sumRow).border=thinBorder;
+    var w=wW[cornersC[i]]||0,a=wAI[cornersC[i]]||0,g=wG[cornersC[i]]||0;
+    var avg=(w+a+g)/3;
+    ws7.getCell("G"+sumRow).value=Math.round(w*100)+"%";ws7.getCell("G"+sumRow).alignment={horizontal:"center"};ws7.getCell("G"+sumRow).border=thinBorder;
+    ws7.getCell("H"+sumRow).value=Math.round(a*100)+"%";ws7.getCell("H"+sumRow).alignment={horizontal:"center"};ws7.getCell("H"+sumRow).border=thinBorder;
+    ws7.getCell("I"+sumRow).value=Math.round(g*100)+"%";ws7.getCell("I"+sumRow).alignment={horizontal:"center"};ws7.getCell("I"+sumRow).border=thinBorder;
+    ws7.getCell("J"+sumRow).value=Math.round(avg*100)+"%";ws7.getCell("J"+sumRow).alignment={horizontal:"center"};ws7.getCell("J"+sumRow).border=thinBorder;
+  }
+  // Totals row
+  sumRow++;
+  ws7.mergeCells("B"+sumRow+":F"+sumRow);
+  ws7.getCell("G"+sumRow).value="100%";ws7.getCell("H"+sumRow).value="100%";ws7.getCell("I"+sumRow).value="100%";ws7.getCell("J"+sumRow).value="100%";
+  for(var c=7;c<=10;c++){ws7.getRow(sumRow).getCell(c).font={bold:true};ws7.getRow(sumRow).getCell(c).alignment={horizontal:"center"};ws7.getRow(sumRow).getCell(c).border=thinBorder;}
+
+  // Performance indicators block (matches model rows 173-179)
+  sumRow+=3;
+  ws7.getCell("F"+sumRow).value="Year:";ws7.getCell("F"+sumRow).alignment={horizontal:"right"};ws7.getCell("F"+sumRow).font={bold:true};
+  ws7.getCell("G"+sumRow).value=parseInt(d1v.split("-")[0]);ws7.getCell("G"+sumRow).alignment={horizontal:"center"};ws7.getCell("G"+sumRow).border=thinBorder;
+  sumRow+=2;
+  ws7.getCell("B"+sumRow).value="Performance and Process Indicators";ws7.getCell("B"+sumRow).font={bold:true,color:{argb:"FFFFFFFF"}};ws7.getCell("B"+sumRow).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1F4E78"}};ws7.getCell("B"+sumRow).alignment={horizontal:"center"};ws7.getCell("B"+sumRow).border=thinBorder;
+  ws7.mergeCells("B"+sumRow+":E"+sumRow);
+  ws7.mergeCells("F"+sumRow+":J"+sumRow);
+  ws7.getCell("F"+sumRow).value=periodName;ws7.getCell("F"+sumRow).font={bold:true,color:{argb:"FFFFFFFF"}};ws7.getCell("F"+sumRow).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1F4E78"}};ws7.getCell("F"+sumRow).alignment={horizontal:"center"};
+  sumRow++;
+  ws7.mergeCells("B"+sumRow+":E"+sumRow);
+  ws7.getCell("B"+sumRow).value="Process capability (Ppk and Cpk/Ppk )";ws7.getCell("B"+sumRow).font={bold:true,color:{argb:"FF0070C0"}};ws7.getCell("B"+sumRow).border=thinBorder;
+  ws7.getCell("G"+sumRow).value="%";ws7.getCell("G"+sumRow).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF92D050"}};ws7.getCell("G"+sumRow).alignment={horizontal:"center"};ws7.getCell("G"+sumRow).font={bold:true};ws7.getCell("G"+sumRow).border=thinBorder;
+  ws7.getCell("H"+sumRow).value="%";ws7.getCell("H"+sumRow).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFFFFF00"}};ws7.getCell("H"+sumRow).alignment={horizontal:"center"};ws7.getCell("H"+sumRow).font={bold:true};ws7.getCell("H"+sumRow).border=thinBorder;
+  ws7.getCell("I"+sumRow).value="%";ws7.getCell("I"+sumRow).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFFFC000"}};ws7.getCell("I"+sumRow).alignment={horizontal:"center"};ws7.getCell("I"+sumRow).font={bold:true};ws7.getCell("I"+sumRow).border=thinBorder;
+  ws7.getCell("J"+sumRow).value="%";ws7.getCell("J"+sumRow).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFFF0000"}};ws7.getCell("J"+sumRow).alignment={horizontal:"center"};ws7.getCell("J"+sumRow).font={bold:true,color:{argb:"FFFFFFFF"}};ws7.getCell("J"+sumRow).border=thinBorder;
+
+  var indicatorsC=[
+    [" % Average of all KRS",pctYesYes,pctYesNo,pctNoYes,pctNoNo],
+    ["  % Weight",Math.round((wW["Green"]||0)*100),Math.round((wW["Yellow"]||0)*100),Math.round((wW["Orange"]||0)*100),Math.round((wW["Red"]||0)*100)],
+    ["  % GDA",Math.round((wG["Green"]||0)*100),Math.round((wG["Yellow"]||0)*100),Math.round((wG["Orange"]||0)*100),Math.round((wG["Red"]||0)*100)],
+    ["  % Active Ingredient",Math.round((wAI["Green"]||0)*100),Math.round((wAI["Yellow"]||0)*100),Math.round((wAI["Orange"]||0)*100),Math.round((wAI["Red"]||0)*100)]
+  ];
+  for(var i=0;i<indicatorsC.length;i++){
+    sumRow++;
+    ws7.mergeCells("B"+sumRow+":E"+sumRow);
+    ws7.getCell("B"+sumRow).value=indicatorsC[i][0];ws7.getCell("B"+sumRow).font={color:{argb:"FF0070C0"}};ws7.getCell("B"+sumRow).border=thinBorder;
+    ws7.getCell("G"+sumRow).value=indicatorsC[i][1]+"%";ws7.getCell("G"+sumRow).alignment={horizontal:"center"};ws7.getCell("G"+sumRow).border=thinBorder;
+    ws7.getCell("H"+sumRow).value=indicatorsC[i][2]+"%";ws7.getCell("H"+sumRow).alignment={horizontal:"center"};ws7.getCell("H"+sumRow).border=thinBorder;
+    ws7.getCell("I"+sumRow).value=indicatorsC[i][3]+"%";ws7.getCell("I"+sumRow).alignment={horizontal:"center"};ws7.getCell("I"+sumRow).border=thinBorder;
+    ws7.getCell("J"+sumRow).value=indicatorsC[i][4]+"%";ws7.getCell("J"+sumRow).alignment={horizontal:"center"};ws7.getCell("J"+sumRow).border=thinBorder;
+  }
+
+  // ===== 2x2 Performance/Control matrix =====
+  // pctYesYes=Green, pctYesNo=Yellow, pctNoYes=Orange, pctNoNo=Red
+  sumRow+=3;
+  ws7.getCell("D"+sumRow).value="Performance";ws7.getCell("D"+sumRow).font={bold:true,size:12,color:{argb:"FF1F4E78"}};ws7.getCell("D"+sumRow).alignment={horizontal:"center"};
+  ws7.mergeCells("D"+sumRow+":G"+sumRow);
+  sumRow++;
+  // Header row with axis labels for PPK > 1
+  ws7.getCell("C"+sumRow).value="";
+  ws7.getCell("D"+sumRow).value="No";ws7.getCell("D"+sumRow).font={bold:true,italic:true};ws7.getCell("D"+sumRow).alignment={horizontal:"center"};
+  ws7.getCell("E"+sumRow).value="Yes";ws7.getCell("E"+sumRow).font={bold:true,italic:true};ws7.getCell("E"+sumRow).alignment={horizontal:"center"};
+  ws7.getCell("F"+sumRow).value="PPK > 1";ws7.getCell("F"+sumRow).font={bold:true,italic:true};
+  sumRow++;
+  // Top row: Cpk/Ppk < 1.33 = Yes  (top-left=Yellow, top-right=Green)
+  ws7.getCell("C"+sumRow).value="Yes";ws7.getCell("C"+sumRow).font={bold:true,italic:true};ws7.getCell("C"+sumRow).alignment={horizontal:"right"};
+  ws7.getCell("D"+sumRow).value=pctYesNo+"%";ws7.getCell("D"+sumRow).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFFFFF00"}};ws7.getCell("D"+sumRow).alignment={horizontal:"center",vertical:"middle"};ws7.getCell("D"+sumRow).font={bold:true,size:14};ws7.getCell("D"+sumRow).border=thinBorder;
+  ws7.getCell("E"+sumRow).value=pctYesYes+"%";ws7.getCell("E"+sumRow).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF92D050"}};ws7.getCell("E"+sumRow).alignment={horizontal:"center",vertical:"middle"};ws7.getCell("E"+sumRow).font={bold:true,size:14};ws7.getCell("E"+sumRow).border=thinBorder;
+  ws7.mergeCells("F"+sumRow+":F"+(sumRow+1));
+  ws7.getCell("F"+sumRow).value="Cpk/Ppk\n< 1.33";ws7.getCell("F"+sumRow).font={bold:true,italic:true};ws7.getCell("F"+sumRow).alignment={horizontal:"center",vertical:"middle",wrapText:true};
+  ws7.getRow(sumRow).height=24;
+  sumRow++;
+  // Bottom row: Cpk/Ppk < 1.33 = No  (bottom-left=Red, bottom-right=Orange)
+  ws7.getCell("C"+sumRow).value="No";ws7.getCell("C"+sumRow).font={bold:true,italic:true};ws7.getCell("C"+sumRow).alignment={horizontal:"right"};
+  ws7.getCell("D"+sumRow).value=pctNoNo+"%";ws7.getCell("D"+sumRow).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFFF0000"}};ws7.getCell("D"+sumRow).alignment={horizontal:"center",vertical:"middle"};ws7.getCell("D"+sumRow).font={bold:true,size:14,color:{argb:"FFFFFFFF"}};ws7.getCell("D"+sumRow).border=thinBorder;
+  ws7.getCell("E"+sumRow).value=pctNoYes+"%";ws7.getCell("E"+sumRow).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFFFC000"}};ws7.getCell("E"+sumRow).alignment={horizontal:"center",vertical:"middle"};ws7.getCell("E"+sumRow).font={bold:true,size:14};ws7.getCell("E"+sumRow).border=thinBorder;
+  ws7.getRow(sumRow).height=24;
+
+  // ============ SHEET 8: B NUMBER ============
+  var ws8=wb.addWorksheet("B NUMBER");
+  ws8.getColumn(1).width=14;ws8.getColumn(2).width=18;ws8.getColumn(3).width=40;
+  ws8.getCell("A1").value="SKU #";ws8.getCell("B1").value="B#";ws8.getCell("C1").value="Product";
+  for(var c=1;c<=3;c++){ws8.getRow(1).getCell(c).font={bold:true,color:{argb:"FFFFFFFF"}};ws8.getRow(1).getCell(c).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1F4E78"}};ws8.getRow(1).getCell(c).alignment={horizontal:"center"};ws8.getRow(1).getCell(c).border=thinBorder;}
+  var SKUS=[["61011874","B02987910003","Fabuloso Lavanda 1L"],["61011880","B02987910003","Fabuloso Lavanda 2L"],["61011875","B02987920000","Fabuloso Mar Fresco 1L"],["61011881","B02987920000","Fabuloso Mar Fresco 2L"],["61011876","B02987930000","Fabuloso Pasión de Frutas 1L"],["61011882","B02987930000","Fabuloso Pasión de Frutas 2L"],["61011878","B02987940002","Fabuloso Naranja 1L"],["61011883","B02987960002","Fabuloso Tulipanes y Kiwi 1L"],["61037780","B02902010001","Fabuloso Naturals Eucalipto 1L"],["61037781","B02902010001","Fabuloso Naturals Eucalipto 2L"],["61011877","B02988130001","Fabuloso Fresco Amanecer 1L"],["61011879","B02987950004","Fabuloso Alt. Cloro 1L"],["61017909","B02987950004","Fabuloso Alt. Cloro 2L"]];
+  for(var i=0;i<SKUS.length;i++){
+    var r=2+i;
+    ws8.getCell("A"+r).value=SKUS[i][0];ws8.getCell("B"+r).value=SKUS[i][1];ws8.getCell("C"+r).value=SKUS[i][2];
+    for(var c=1;c<=3;c++)ws8.getRow(r).getCell(c).border=thinBorder;
+  }
+
+  // Generate file
+  wb.xlsx.writeBuffer().then(function(buffer){
+    var blob=new Blob([buffer],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    var fnameSuffix=prodFilter?"_"+prodFilter.replace(/[^a-zA-Z0-9]+/g,"-"):"";
+    var fname="KPI_Fabuloso"+fnameSuffix+"_"+d1v+"_a_"+d2v+".xlsx";
+    if(typeof saveAs!=="undefined")saveAs(blob,fname);
+    else{
+      var link=document.createElement("a");link.href=URL.createObjectURL(blob);link.download=fname;link.click();
+    }
+    st.innerHTML="✓ Excel generado: "+fname;
+    st.style.background="rgba(22,163,74,.3)";
+  }).catch(function(e){
+    st.innerHTML="⚠ Error al generar Excel: "+e.message;
+    st.style.background="rgba(220,38,38,.3)";
+    console.error(e);
+  });
+}
+
+function go(){
+  var el1=document.getElementById("d1");
+  var el2=document.getElementById("d2");
+  el1.value=minD;
+  el2.value=maxD;
+  el1.addEventListener("change",render);
+  el1.addEventListener("input",render);
+  el2.addEventListener("change",render);
+  el2.addEventListener("input",render);
+  document.getElementById("rst").addEventListener("click",function(){el1.value=minD;el2.value=maxD;var sp=document.getElementById("prod");if(sp)sp.value="";render();});
+  document.getElementById("btnf").addEventListener("click",render);
+  document.getElementById("rfsh").addEventListener("click",fetchSheet);
+  document.getElementById("xport").addEventListener("click",exportExcel);
+  // Product filter listener (dropdown is populated by populateProductFilter after data loads)
+  var pSel=document.getElementById("prod");
+  if(pSel){pSel.addEventListener("change",render);}
+  var tb=document.getElementById("tabs");
+  for(var i=0;i<TN.length;i++){
+    var b=document.createElement("button");
+    b.textContent=TN[i];
+    b.setAttribute("data-i",i);
+    b.onclick=function(){curTab=parseInt(this.getAttribute("data-i"));render();};
+    if(i===0)b.className="on";
+    tb.appendChild(b);
+  }
+  populateProductFilter();
+  render();
+  // Attempt auto-fetch from Google Sheets
+  fetchSheet();
+}
+
+// Build dropdown options from unique product descriptions in ALL
+function populateProductFilter(){
+  var sel=document.getElementById("prod");
+  if(!sel)return;
+  var current=sel.value;
+  var uniq={};
+  for(var i=0;i<ALL.length;i++){if(ALL[i].desc)uniq[ALL[i].desc]=true;}
+  var names=Object.keys(uniq).sort();
+  sel.innerHTML='<option value="">Todos los productos</option>';
+  for(var i=0;i<names.length;i++){
+    var opt=document.createElement("option");
+    opt.value=names[i];opt.textContent=names[i];
+    sel.appendChild(opt);
+  }
+  // Preserve current selection if still valid
+  if(current&&uniq[current])sel.value=current;
+}
+
+function render(){
+  var d1v=document.getElementById("d1").value||minD;
+  var d2v=document.getElementById("d2").value||maxD;
+  var pSel=document.getElementById("prod");
+  var pv=pSel?pSel.value:"";
+  var fd=[];
+  for(var i=0;i<ALL.length;i++){
+    var f=ALL[i].fecha;
+    if(f>=d1v&&f<=d2v&&(!pv||ALL[i].desc===pv))fd.push(ALL[i]);
+  }
+  if(fd.length===0)fd=ALL.slice();
+  killCharts();
+
+  // update tabs
+  var btns=document.getElementById("tabs").children;
+  for(var i=0;i<btns.length;i++)btns[i].className=(i===curTab?"on":"");
+  var panels=document.querySelectorAll(".tp");
+  for(var i=0;i<panels.length;i++)panels[i].className=(i===curTab?"tp on":"tp");
+
+  // stats
+  var tu=0,tc=0,tg=0,rr=[],phs=[];
+  for(var i=0;i<fd.length;i++){tu+=fd[i].uE;tc+=fd[i].caj;tg+=fd[i].gK;rr.push(fd[i].rend);if(fd[i].ph!==null)phs.push(fd[i].ph);}
+  var ar=avg(rr);
+  var nl=fd.length;
+  var lis=0;for(var i=0;i<fd.length;i++){if(fd[i].rend>=97&&fd[i].rend<=103)lis++;}
+  var pis=nl?(lis/nl*100):0;
+  var aph=avg(phs);
+
+  // by month (all data)
+  var mm={};
+  for(var i=0;i<ALL.length;i++){var k=ALL[i].fecha.substring(0,7);if(!mm[k])mm[k]=0;mm[k]+=ALL[i].uE;}
+  var mks=Object.keys(mm).sort();
+  var mvs=[];for(var i=0;i<mks.length;i++)mvs.push(mm[mks[i]]);
+
+  // by product
+  var bp={};
+  for(var i=0;i<fd.length;i++){var n=fd[i].desc;if(!bp[n])bp[n]={u:0,r:[]};bp[n].u+=fd[i].uE;bp[n].r.push(fd[i].rend);}
+  var pnames=[],punits=[],pavg=[];
+  var entries=[];for(var k in bp)entries.push([k,bp[k]]);
+  entries.sort(function(a,b){return b[1].u-a[1].u;});
+  for(var i=0;i<entries.length;i++){pnames.push(entries[i][0]);punits.push(entries[i][1].u);pavg.push(avg(entries[i][1].r));}
+
+  // TAB 0
+  if(curTab===0){
+    var sc=[["KPI 11A: No Conformidades","0"],["KPI 11B: % NC vs Prod.","0%"],["KPI 12: Desvios","0"],["KPI 13: CAPA","0"],["KPI 14: Microbiologia","Sin crecimiento"],["KPI 15: MPI","1"]];
+    var h='<div class="cds">'+card("Unidades Envasadas",fmtn(tu),nl+" lotes","#2563eb")+card("Cajas Entregadas",fmtn(tc),(tg/1000).toFixed(1)+" ton","#16a34a")+card("Rendimiento",ar.toFixed(1)+"%","Meta: 97-103%",ar>=97&&ar<=103?"#16a34a":"#dc2626")+card("Lotes en Spec",pis.toFixed(0)+"%",lis+"/"+nl,pis>=85?"#16a34a":"#dc2626")+card("pH Promedio",aph.toFixed(2),"6.5-8.0","#9333ea")+'</div>';
+    h+='<div class="bx"><h3>KPI Scorecard</h3><div class="sg">';
+    for(var i=0;i<sc.length;i++)h+='<div class="si"><div class="ic">&#10003;</div><div><div class="sl">'+sc[i][0]+'</div><div class="sv">'+sc[i][1]+'</div></div></div>';
+    h+='</div></div>';
+    h+='<div class="bx"><h3>Produccion Mensual</h3><div class="cw" style="height:260px"><canvas id="ch0"></canvas></div></div>';
+    document.getElementById("t0").innerHTML=h;
+    setTimeout(function(){mk("ch0",{type:"bar",data:{labels:mks,datasets:[{label:"Unidades",data:mvs,backgroundColor:"#2563eb",borderRadius:5}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:function(v){return(v/1000|0)+"k"}}}}}});},30);
+  }
+
+  // TAB 1
+  if(curTab===1){
+    var h='<div class="bx"><h3>Produccion por Producto</h3><div class="cw" style="height:380px"><canvas id="ch1a"></canvas></div></div>';
+    h+='<div class="bx"><h3>Distribucion</h3><div class="cw" style="height:320px"><canvas id="ch1b"></canvas></div></div>';
+    document.getElementById("t1").innerHTML=h;
+    var cols=[];for(var i=0;i<pnames.length;i++)cols.push(COL[i%COL.length]);
+    setTimeout(function(){
+      mk("ch1a",{type:"bar",data:{labels:pnames,datasets:[{label:"Unidades",data:punits,backgroundColor:cols,borderRadius:4}]},options:{indexAxis:"y",responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{callback:function(v){return(v/1000|0)+"k"}}}}}});
+      mk("ch1b",{type:"doughnut",data:{labels:pnames,datasets:[{data:punits,backgroundColor:cols}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"right",labels:{font:{size:10}}}}}});
+    },30);
+  }
+
+  // TAB 2
+  if(curTab===2){
+    var best=rr.length?Math.max.apply(null,rr).toFixed(1):"--";
+    var worst=rr.length?Math.min.apply(null,rr).toFixed(1):"--";
+    var h='<div class="cds">'+card("Promedio",ar.toFixed(1)+"%","97-103%",ar>=97&&ar<=103?"#16a34a":"#dc2626")+card("Fuera de Spec",nl-lis,"de "+nl,"#dc2626")+card("Mejor",best+"%","","#16a34a")+card("Peor",worst+"%","","#dc2626")+'</div>';
+    h+='<div class="bx"><h3>Rendimiento por Lote</h3><div class="cw" style="height:300px"><canvas id="ch2a"></canvas></div></div>';
+    h+='<div class="bx"><h3>Rendimiento Promedio por Producto</h3><div class="cw" style="height:280px"><canvas id="ch2b"></canvas></div></div>';
+    document.getElementById("t2").innerHTML=h;
+    var sdata=[];var scol=[];
+    for(var i=0;i<fd.length;i++){sdata.push({x:i,y:fd[i].rend,lote:fd[i].lote||"",desc:fd[i].desc,fecha:fd[i].fecha});scol.push(fd[i].rend>=97&&fd[i].rend<=103?"#16a34a":"#dc2626");}
+    var pcol=[];for(var i=0;i<pavg.length;i++)pcol.push(pavg[i]>=97&&pavg[i]<=103?"#16a34a":"#ea580c");
+    setTimeout(function(){
+      mk("ch2a",{type:"scatter",data:{datasets:[{label:"Rend %",data:sdata,pointBackgroundColor:scol,pointRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:function(ctx){var d=ctx.raw;return [d.desc,"Lote: "+d.lote,"Fecha: "+d.fecha,"Rend: "+d.y.toFixed(2)+"%"];}}}},scales:{y:{min:70,max:125}}}});
+      mk("ch2b",{type:"bar",data:{labels:pnames,datasets:[{label:"% Rend",data:pavg,backgroundColor:pcol,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{min:85,max:110}}}});
+    },30);
+  }
+
+  // TAB 3
+  if(curTab===3){
+    var agda=avg(fd.map(function(d){return d.gda}));
+    var aani=avg(fd.map(function(d){return d.ani}));
+    var h='<div class="cds">'+card("GDA Prom.",agda.toFixed(4),"Std 0.04-0.06 | AC 0.05-0.07","#2563eb")+card("Anionico Prom.",aani.toFixed(3),"Std 0.82-1.12 | AC 1.02-1.32","#ea580c")+card("pH Prom.",aph.toFixed(2),"6.5-8.0","#9333ea")+card("Microbiologia","Sin crecimiento","","#16a34a")+'</div>';
+    h+='<div class="bx"><h3>GDA (%) — Standard vs Alt.Cloro</h3><div class="cw" style="height:280px"><canvas id="ch3a"></canvas></div></div>';
+    h+='<div class="bx"><h3>Aniónico (%) — Standard vs Alt.Cloro</h3><div class="cw" style="height:280px"><canvas id="ch3b"></canvas></div></div>';
+    h+='<div class="bx"><h3>pH</h3><div class="cw" style="height:220px"><canvas id="ch3c"></canvas></div></div>';
+    document.getElementById("t3").innerHTML=h;
+    // Separate Standard and Alt Cloro
+    var stdG=[],cloG=[],stdA=[],cloA=[];
+    for(var i=0;i<fd.length;i++){
+      var d=fd[i];
+      var isClo=d.desc.toLowerCase().indexOf("cloro")>=0||d.desc.toLowerCase().indexOf("alternativa")>=0;
+      if(isClo){
+        cloG.push({x:i,y:d.gda});
+        cloA.push({x:i,y:d.ani});
+      }else{
+        stdG.push({x:i,y:d.gda});
+        stdA.push({x:i,y:d.ani});
+      }
+    }
+    var maxLen=fd.length;
+    var plbl=[],ppv=[];
+    for(var i=0;i<fd.length;i++){if(fd[i].ph!==null){plbl.push(plbl.length);ppv.push(fd[i].ph);}}
+
+    setTimeout(function(){
+      function dualLine(id,stdData,cloData,lslStd,uslStd,lslClo,uslClo,mn,mx){
+        var len=maxLen;
+        mk(id,{
+          type:"line",
+          data:{
+            labels:Array.from({length:len},function(_,i){return i;}),
+            datasets:[
+              {label:"Standard",data:stdData,borderColor:"#2563eb",backgroundColor:"#2563eb",pointRadius:3,showLine:false,parsing:false},
+              {label:"Alt. Cloro",data:cloData,borderColor:"#ea580c",backgroundColor:"#ea580c",pointRadius:3,showLine:false,parsing:false},
+              {label:"LSL Std",data:new Array(len).fill(lslStd),borderColor:"#2563eb",borderDash:[5,3],pointRadius:0,borderWidth:1.5,fill:false},
+              {label:"USL Std",data:new Array(len).fill(uslStd),borderColor:"#2563eb",borderDash:[5,3],pointRadius:0,borderWidth:1.5,fill:false},
+              {label:"LSL AC",data:new Array(len).fill(lslClo),borderColor:"#ea580c",borderDash:[2,2],pointRadius:0,borderWidth:1.5,fill:false},
+              {label:"USL AC",data:new Array(len).fill(uslClo),borderColor:"#ea580c",borderDash:[2,2],pointRadius:0,borderWidth:1.5,fill:false}
+            ]
+          },
+          options:{
+            responsive:true,maintainAspectRatio:false,
+            plugins:{legend:{display:true,position:"bottom",labels:{font:{size:10},boxWidth:14}}},
+            scales:{x:{type:"linear",position:"bottom",ticks:{display:false}},y:{min:mn,max:mx}}
+          }
+        });
+      }
+      // GDA: Std 0.04-0.06, Alt Cloro 0.05-0.07
+      dualLine("ch3a",stdG,cloG,0.04,0.06,0.05,0.07,0.03,0.08);
+      // Anionico: Std 0.82-1.12, Alt Cloro 1.02-1.32
+      dualLine("ch3b",stdA,cloA,0.82,1.12,1.02,1.32,0.7,1.4);
+      // pH: same for all
+      mk("ch3c",{type:"line",data:{labels:plbl,datasets:[
+        {label:"pH",data:ppv,borderColor:"#9333ea",pointRadius:1.5,tension:.1,borderWidth:2,fill:false},
+        {label:"LSL",data:new Array(ppv.length).fill(6.5),borderColor:"#dc2626",borderDash:[5,3],pointRadius:0,borderWidth:1,fill:false},
+        {label:"USL",data:new Array(ppv.length).fill(8),borderColor:"#dc2626",borderDash:[5,3],pointRadius:0,borderWidth:1,fill:false}
+      ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{min:6.8,max:7.5}}}});
+    },30);
+  }
+
+  // TAB 4
+  if(curTab===4){
+    // Helper: compute Ppk (overall) and Cpk (within, via moving range)
+    function cpkCalc(vals,lsl,usl){
+      var n=vals.length;
+      var m=avg(vals),s=stdev(vals);
+      // Std dev within = MR-bar / d2 (d2 = 1.128 for moving range size 2)
+      var sw=null;
+      if(n>=2){
+        var mr=0;
+        for(var k=1;k<n;k++)mr+=Math.abs(vals[k]-vals[k-1]);
+        mr=mr/(n-1);
+        sw=mr/1.128;
+      }
+      var ppk=null,cpk=null;
+      if(s>0){var pu=(usl-m)/(3*s),pl=(m-lsl)/(3*s);ppk=Math.min(pu,pl);}
+      if(sw&&sw>0){var cu=(usl-m)/(3*sw),cl=(m-lsl)/(3*sw);cpk=Math.min(cu,cl);}
+      var ratio=(cpk!==null&&ppk!==null&&ppk!==0)?cpk/ppk:null;
+      // Capable: Ppk >= 1 ; In ctrl: Cpk/Ppk < 1.33
+      var capable=ppk!==null&&ppk>=1;
+      var inCtrl=ratio!==null&&Math.abs(ratio)<1.33;
+      var co="#94a3b8",lb="N/A",corner="N/A";
+      if(ppk!==null){
+        if(capable&&inCtrl){co="#16a34a";lb="Green";corner="Green";}
+        else if(!capable&&inCtrl){co="#ca8a04";lb="Yellow";corner="Yellow";}
+        else if(capable&&!inCtrl){co="#ea580c";lb="Orange";corner="Orange";}
+        else{co="#dc2626";lb="Red";corner="Red";}
+      }
+      return{
+        n:n,lsl:lsl,usl:usl,
+        mn:m.toFixed(2),
+        sd:s.toFixed(4),
+        sw:sw!==null?sw.toFixed(4):"N/A",
+        ppk:ppk!==null?ppk.toFixed(3):"N/A",
+        cpk:cpk!==null?cpk.toFixed(3):"N/A",
+        ratio:ratio!==null?ratio.toFixed(3):"N/A",
+        co:co,lb:lb,corner:corner
+      };
+    }
+
+    // --- PESO PROMEDIO: grouped by 1L and 2L ---
+    var p1L=[],p2L=[],cas1L=0,cas2L=0,det1L=[],det2L=[];
+    for(var i=0;i<fd.length;i++){
+      var d=fd[i];
+      if(d.desc.indexOf("2L")>=0){p2L.push(d.pesoP);cas2L+=d.caj;det2L.push(d);}
+      else{p1L.push(d.pesoP);cas1L+=d.caj;det1L.push(d);}
+    }
+    var peso1=cpkCalc(p1L,1000,1025);
+    var peso2=cpkCalc(p2L,2000,2030);
+
+    // --- Split products: Alt.Cloro vs Standard ---
+    var aniStd=[],aniCloro=[],gdaStd=[],gdaCloro=[],casStd=0,casCloro=0,detStd=[],detCloro=[];
+    for(var i=0;i<fd.length;i++){
+      var d=fd[i];
+      var isCloro=d.desc.toLowerCase().indexOf("alt cloro")>=0||d.desc.toLowerCase().indexOf("alternativa")>=0||d.desc.toLowerCase().indexOf("cloro")>=0;
+      if(isCloro){
+        if(d.ani!==null)aniCloro.push(d.ani);
+        if(d.gda!==null)gdaCloro.push(d.gda);
+        casCloro+=d.caj;
+        detCloro.push(d);
+      }else{
+        if(d.ani!==null)aniStd.push(d.ani);
+        if(d.gda!==null)gdaStd.push(d.gda);
+        casStd+=d.caj;
+        detStd.push(d);
+      }
+    }
+    var aniStdR=cpkCalc(aniStd,0.82,1.12);
+    var aniCloroR=cpkCalc(aniCloro,1.02,1.32);
+    var gdaStdR=cpkCalc(gdaStd,0.04,0.06);
+    var gdaCloroR=cpkCalc(gdaCloro,0.05,0.07);
+
+    // --- Summary: % Cases by corner for each KRS ---
+    var totalCas=cas1L+cas2L;
+    var totalAni=casStd+casCloro;
+    // Weight corners (weighted by cases 1L/2L)
+    var wCorners={Green:0,Yellow:0,Orange:0,Red:0};
+    if(cas1L>0)wCorners[peso1.corner]=(wCorners[peso1.corner]||0)+cas1L/totalCas;
+    if(cas2L>0)wCorners[peso2.corner]=(wCorners[peso2.corner]||0)+cas2L/totalCas;
+    // Active Ingredient corners (weighted by cases Std/Cloro)
+    var aiCorners={Green:0,Yellow:0,Orange:0,Red:0};
+    if(casStd>0)aiCorners[aniStdR.corner]=(aiCorners[aniStdR.corner]||0)+casStd/totalAni;
+    if(casCloro>0)aiCorners[aniCloroR.corner]=(aiCorners[aniCloroR.corner]||0)+casCloro/totalAni;
+    // GDA corners (weighted by cases Std/Cloro)
+    var gdCorners={Green:0,Yellow:0,Orange:0,Red:0};
+    if(casStd>0)gdCorners[gdaStdR.corner]=(gdCorners[gdaStdR.corner]||0)+casStd/totalAni;
+    if(casCloro>0)gdCorners[gdaCloroR.corner]=(gdCorners[gdaCloroR.corner]||0)+casCloro/totalAni;
+    // Average
+    var avgCorners={Green:0,Yellow:0,Orange:0,Red:0};
+    var keys=["Green","Yellow","Orange","Red"];
+    for(var j=0;j<keys.length;j++){
+      avgCorners[keys[j]]=((wCorners[keys[j]]||0)+(aiCorners[keys[j]]||0)+(gdCorners[keys[j]]||0))/3;
+    }
+
+    function krsTable(title,rows){
+      var h='<div class="bx"><h3>KRS: '+title+'</h3><div style="overflow-x:auto"><table><thead><tr><th>Grupo</th><th>n</th><th>LSL</th><th>USL</th><th>Media</th><th>Std Overall</th><th>Std Within</th><th>Ppk</th><th>Cpk</th><th>Cpk/Ppk</th><th>Corner</th></tr></thead><tbody>';
+      for(var i=0;i<rows.length;i++){var r=rows[i];h+='<tr><td style="font-weight:600">'+r.nm+'</td><td>'+r.n+'</td><td>'+r.lsl+'</td><td>'+r.usl+'</td><td>'+r.mn+'</td><td>'+r.sd+'</td><td>'+r.sw+'</td><td style="font-weight:700">'+r.ppk+'</td><td>'+r.cpk+'</td><td>'+r.ratio+'</td><td><span class="bg" style="background:'+r.co+'">'+r.lb+'</span></td></tr>';}
+      h+='</tbody></table></div></div>';
+      return h;
+    }
+
+    var h='<div class="bx"><h3>KPI 17 - Process Capability</h3><p style="margin:0 0 12px;font-size:11px;color:#666">Ppk &ge; 1.33 = Green | Ppk &ge; 1 = Yellow | Ppk &lt; 1 = Red | n &ge; 100 recomendado</p></div>';
+
+    function lotesTable(title,details,field,unit,lsl,usl){
+      if(!details||details.length===0)return "";
+      var rows='';
+      for(var i=0;i<details.length;i++){
+        var d=details[i];
+        var v=d[field];
+        var inSpec=(v!==null&&v>=lsl&&v<=usl);
+        var clr=v===null?"#94a3b8":(inSpec?"#16a34a":"#dc2626");
+        var vStr=v===null?"-":(typeof v==="number"?v.toFixed(field==="pesoP"?1:4):v);
+        rows+='<tr><td style="font-family:monospace;font-size:11px">'+(d.lote||"-")+'</td><td style="font-size:11px">'+d.desc+'</td><td style="font-size:11px">'+d.fecha+'</td><td style="font-size:11px">'+fmtn(d.caj)+'</td><td style="font-weight:600;color:'+clr+';font-size:11px">'+vStr+' '+unit+'</td></tr>';
+      }
+      return '<div class="bx" style="margin-top:-10px"><details><summary style="cursor:pointer;font-weight:600;font-size:12px;color:#2563eb;padding:6px 0">▸ Ver '+details.length+' lotes de '+title+'</summary><div style="margin-top:8px;overflow-x:auto;max-height:400px;overflow-y:auto"><table><thead><tr><th>Lote</th><th>Producto</th><th>Fecha</th><th>Cajas</th><th>'+title+' (LSL '+lsl+' - USL '+usl+')</th></tr></thead><tbody>'+rows+'</tbody></table></div></details></div>';
+    }
+
+    // Peso table
+    peso1.nm="Productos 1L ("+fmtn(cas1L)+" cajas)";
+    peso2.nm="Productos 2L ("+fmtn(cas2L)+" cajas)";
+    h+=krsTable("Peso Promedio",[peso1,peso2]);
+    h+=lotesTable("Peso 1L",det1L,"pesoP","g",1000,1025);
+    h+=lotesTable("Peso 2L",det2L,"pesoP","g",2000,2030);
+
+    // Anionico table (Standard + Alt Cloro)
+    aniStdR.nm="Standard ("+fmtn(casStd)+" cajas)";
+    aniCloroR.nm="Alt. Cloro ("+fmtn(casCloro)+" cajas)";
+    h+=krsTable("%Anionico (Active Ingredient)",[aniStdR,aniCloroR]);
+    h+=lotesTable("%Aniónico Std",detStd,"ani","%",0.82,1.12);
+    h+=lotesTable("%Aniónico Alt.Cloro",detCloro,"ani","%",1.02,1.32);
+
+    // GDA table (Standard + Alt Cloro)
+    gdaStdR.nm="Standard ("+fmtn(casStd)+" cajas)";
+    gdaCloroR.nm="Alt. Cloro ("+fmtn(casCloro)+" cajas)";
+    h+=krsTable("%GDA",[gdaStdR,gdaCloroR]);
+    h+=lotesTable("%GDA Std",detStd,"gda","%",0.04,0.06);
+    h+=lotesTable("%GDA Alt.Cloro",detCloro,"gda","%",0.05,0.07);
+
+    // Summary corners table
+    h+='<div class="bx"><h3>Resumen Process Capability - % Cases Produced</h3><div style="overflow-x:auto"><table><thead><tr><th>Process Capability</th><th>Corner</th><th>Weight</th><th>Active Ingredient</th><th>%GDA</th><th>Average</th></tr></thead><tbody>';
+    var cdata=[
+      ["% capable &amp; in control","Green","#16a34a"],
+      ["% not capable but in control","Yellow","#ca8a04"],
+      ["% capable but not in control","Orange","#ea580c"],
+      ["% not capable and not in control","Red","#dc2626"]
+    ];
+    for(var i=0;i<cdata.length;i++){
+      var ck=cdata[i][1];
+      h+='<tr><td style="font-size:11px">'+cdata[i][0]+'</td><td><span class="bg" style="background:'+cdata[i][2]+'">'+ck+'</span></td>';
+      h+='<td style="text-align:center">'+(((wCorners[ck]||0)*100).toFixed(0))+'%</td>';
+      h+='<td style="text-align:center">'+(((aiCorners[ck]||0)*100).toFixed(0))+'%</td>';
+      h+='<td style="text-align:center">'+(((gdCorners[ck]||0)*100).toFixed(0))+'%</td>';
+      h+='<td style="text-align:center;font-weight:700">'+(((avgCorners[ck]||0)*100).toFixed(0))+'%</td></tr>';
+    }
+    h+='<tr style="font-weight:700;border-top:2px solid #333"><td>Total</td><td></td><td style="text-align:center">100%</td><td style="text-align:center">100%</td><td style="text-align:center">100%</td><td style="text-align:center">100%</td></tr>';
+    h+='</tbody></table></div></div>';
+
+    // Corners reference
+    h+='<div class="bx"><h3>Interpretacion Corners</h3><div class="cg">';
+    var corners=[["#16a34a","Green","Capaz y En Control"],["#ca8a04","Yellow","No capaz, En Control"],["#ea580c","Orange","Capaz, No En Control"],["#dc2626","Red","No capaz y No En Control"]];
+    for(var i=0;i<corners.length;i++){var c=corners[i];h+='<div class="ci" style="border:2px solid '+c[0]+'"><div style="width:20px;height:20px;border-radius:4px;background:'+c[0]+';flex-shrink:0"></div><div><div style="font-weight:700;font-size:11px">'+c[1]+'</div><div style="font-size:10px;color:#666">'+c[2]+'</div></div></div>';}
+    h+='</div></div>';
+    document.getElementById("t4").innerHTML=h;
+  }
+
+  // TAB 5
+  if(curTab===5){
+    var SKU=[["61011874","B02987910003","Fabuloso Lavanda 1L"],["61011880","B02987910003","Fabuloso Lavanda 2L"],["61011875","B02987920000","Fabuloso Mar Fresco 1L"],["61011881","B02987920000","Fabuloso Mar Fresco 2L"],["61011876","B02987930000","Fabuloso Pasion de Frutas 1L"],["61011882","B02987930000","Fabuloso Pasion de Frutas 2L"],["61011878","B02987940002","Fabuloso Naranja 1L"],["61011883","B02987960002","Fabuloso Tulipanes y Kiwi 1L"],["61037780","B02902010001","Fabuloso Naturals Eucalipto 1L"],["61037781","B02902010001","Fabuloso Naturals Eucalipto 2L"],["61011877","B02988130001","Fabuloso Fresco Amanecer 1L"],["61011879","B02987950004","Fabuloso Alt. Cloro 1L"],["61017909","B02987950004","Fabuloso Alt. Cloro 2L"]];
+    var h='<div class="bx"><h3>Tabla SKU - B Numbers</h3><table><thead><tr><th>SKU</th><th>B#</th><th>Descripcion</th></tr></thead><tbody>';
+    for(var i=0;i<SKU.length;i++){var r=SKU[i];h+='<tr style="background:'+(i%2?"#fafbfc":"#fff")+'"><td style="font-family:monospace;font-weight:600">'+r[0]+'</td><td style="font-family:monospace">'+r[1]+'</td><td>'+r[2]+'</td></tr>';}
+    h+='</tbody></table></div>';
+    h+='<div class="bx"><h3>Limites de Especificacion</h3><table><thead><tr><th>Parametro</th><th>1L LSL</th><th>1L USL</th><th>2L LSL</th><th>2L USL</th></tr></thead><tbody>';
+    var sp=[["Peso (g)",1000,1025,2000,2030],["pH",6.5,8,6.5,8],["GDA (%)",0.04,0.07,0.04,0.07],["Anionico Std",0.82,1.12,0.82,1.12],["Anionico Cloro",1.02,1.32,1.02,1.32]];
+    for(var i=0;i<sp.length;i++){var r=sp[i];h+='<tr><td style="font-weight:600">'+r[0]+'</td><td>'+r[1]+'</td><td>'+r[2]+'</td><td>'+r[3]+'</td><td>'+r[4]+'</td></tr>';}
+    h+='</tbody></table></div>';
+    var kd=[["KPI 11","Non-Conformances","Casos producidos fuera de specs. A) # incidentes/mes. B) % NC vs produccion total."],["KPI 12","Notice of Deviations","Proceso formalizado para aceptar y documentar liberacion de producto no conforme o materia prima OOS."],["KPI 13","CAPA","Acciones correctivas y preventivas. Identifica problemas, causas raiz e implementa acciones."],["KPI 14","Micro-Susceptibility","Rastrea datos microbiologicos de producto terminado."],["KPI 15","MPI","Factor Celsis + Micro Incidentes + MSI + % Bicarga + % Muestras con crecimiento post-retesteo."],["KPI 17","Process Capability","Ppk y Cpk/Ppk. n>=100 recomendado. Corners: Green/Yellow/Orange/Red."]];
+    h+='<div class="bx"><h3>Definiciones KPI</h3>';
+    for(var i=0;i<kd.length;i++)h+='<div class="kd"><b>'+kd[i][0]+': '+kd[i][1]+'</b><p>'+kd[i][2]+'</p></div>';
+    h+='</div>';
+    document.getElementById("t5").innerHTML=h;
+  }
+}
+
+document.addEventListener("DOMContentLoaded",go);
+</script>
+</body>
+</html>
