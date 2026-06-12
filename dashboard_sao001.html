@@ -963,6 +963,146 @@
   ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 5px; }
   ::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
 
+  /* ========= OOS ACCEPTANCE ========= */
+  .oos-acceptance {
+    margin-top: 8px;
+    padding: 12px 14px;
+    border-radius: var(--r-md);
+    font-family: var(--sans);
+    font-size: 12px;
+  }
+  .oos-accepted {
+    background: var(--ok-tint);
+    border: 1px solid var(--ok);
+    color: var(--text-0);
+  }
+  .oos-accepted-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-weight: 700;
+    color: var(--ok);
+    font-size: 11px;
+    margin-bottom: 6px;
+  }
+  .oos-accepted-detail {
+    font-size: 11.5px;
+    color: var(--text-1);
+    line-height: 1.5;
+  }
+  .oos-accepted-detail strong {
+    color: var(--text-0);
+    font-weight: 600;
+  }
+  .oos-accept-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: white;
+    border: 1px dashed var(--border-strong);
+    color: var(--text-1);
+    padding: 5px 12px;
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: var(--r-sm);
+    transition: all 0.15s;
+    margin-top: 6px;
+  }
+  .oos-accept-btn:hover {
+    border-color: var(--ok);
+    color: var(--ok);
+    background: var(--ok-tint);
+  }
+  .oos-revert-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: transparent;
+    border: none;
+    color: var(--text-3);
+    padding: 3px 8px;
+    font-family: var(--sans);
+    font-size: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-left: 8px;
+    transition: all 0.15s;
+  }
+  .oos-revert-btn:hover { color: var(--crit); }
+  .oos-form {
+    margin-top: 8px;
+    padding: 14px 16px;
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+  }
+  .oos-form-title {
+    font-weight: 700;
+    font-size: 12px;
+    color: var(--text-0);
+    margin-bottom: 10px;
+  }
+  .oos-form label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-2);
+    margin-bottom: 4px;
+    margin-top: 8px;
+  }
+  .oos-form label:first-of-type { margin-top: 0; }
+  .oos-form textarea {
+    width: 100%;
+    min-height: 50px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: var(--sans);
+    font-size: 12px;
+    color: var(--text-0);
+    background: white;
+    resize: vertical;
+    line-height: 1.5;
+  }
+  .oos-form textarea:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-tint);
+  }
+  .oos-form-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .oos-form-save {
+    background: linear-gradient(135deg, var(--ok) 0%, #34d399 100%);
+    color: white;
+    border: none;
+    padding: 6px 16px;
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.15s;
+  }
+  .oos-form-save:hover { box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35); }
+  .oos-form-cancel {
+    background: white;
+    color: var(--text-2);
+    border: 1px solid var(--border);
+    padding: 6px 16px;
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.15s;
+  }
+  .oos-form-cancel:hover { border-color: var(--text-3); }
+
   /* ========= PRINT ========= */
   @media print {
     .topbar, .conn-panel, .tabs, #btn-print-report, #btn-download-report { display: none; }
@@ -1029,6 +1169,10 @@
   <input type="date" id="fecha-hasta" class="conn-input" style="width:150px;font-size:12px;padding:6px 10px;">
   <button class="btn btn-primary" id="btn-filtrar-fechas" style="font-size:12px;padding:6px 14px;">Filtrar</button>
   <button class="btn" id="btn-limpiar-fechas" style="font-size:12px;padding:6px 14px;">Limpiar</button>
+  <span style="font-size:11px;color:var(--text-3);margin-left:4px;">|</span>
+  <button class="btn" data-fase-preset="1" style="font-size:11px;padding:4px 10px;">Fase 1</button>
+  <button class="btn" data-fase-preset="2" style="font-size:11px;padding:4px 10px;">Fase 2</button>
+  <button class="btn" data-fase-preset="3" style="font-size:11px;padding:4px 10px;">Fase 3</button>
   <span id="fecha-info" style="font-size:11px;color:var(--text-3);margin-left:8px;"></span>
 </div>
 
@@ -1053,7 +1197,7 @@
       <div class="kpi-card"><div class="kpi-label">Días ejecutados</div><div class="kpi-value" id="kpi-dias">0 / 10</div><div class="kpi-sub" id="kpi-dias-sub">0% completado</div></div>
       <div class="kpi-card"><div class="kpi-label">Muestras cargadas</div><div class="kpi-value" id="kpi-muestras">0</div><div class="kpi-sub" id="kpi-muestras-sub">Fase actual</div></div>
       <div class="kpi-card"><div class="kpi-label">Cumplimiento</div><div class="kpi-value" id="kpi-cumpl">—</div><div class="kpi-sub" id="kpi-cumpl-sub">Resultados conformes</div></div>
-      <div class="kpi-card"><div class="kpi-label">Excursiones</div><div class="kpi-value" id="kpi-exc">0</div><div class="kpi-sub" id="kpi-exc-sub">OOS + Alertas</div></div>
+      <div class="kpi-card"><div class="kpi-label">Excursiones OOS</div><div class="kpi-value" id="kpi-exc">0</div><div class="kpi-sub" id="kpi-exc-sub">Solo OOS</div></div>
     </div>
 
     <div class="row-2">
@@ -1144,6 +1288,8 @@
       <span class="filter-label">Filtrar:</span>
       <button class="chip active" data-exc-filter="all">Todas</button>
       <button class="chip" data-exc-filter="crit">Solo OOS</button>
+      <button class="chip" data-exc-filter="unresolved">OOS sin resolver</button>
+      <button class="chip" data-exc-filter="accepted">OOS aceptados</button>
       <button class="chip" data-exc-filter="warn">Solo Alertas</button>
     </div>
     <div class="section">
@@ -1266,7 +1412,7 @@
 
 <div class="footer">
   <div>VESSENA S.A. · Documento Controlado · Dashboard generado a partir de PPQ-H2O-001 v2.0 y REG-SOP-LCC-095-A v5.0</div>
-  <div id="footer-version">Build 2026.05.27 · v2.1 — Specs REG-SOP-LCC-095-A v5.0</div>
+  <div id="footer-version">Build 2026.06.12 · v2.2 — Specs REG-SOP-LCC-095-A v5.0 · OOS Acceptance Workflow</div>
 </div>
 
 <script>
@@ -1305,9 +1451,9 @@ const SPECS = {
     'Conductividad':     { unit:'µS/cm', tipo:'info', freq:'D' },
   },
   'TM6': {
-    // TM6: tanque ozonizado — Ozono spec 0.2-0.4 mg/L (rango), alerta <0.2, OOS <0.1
+    // TM6: tanque ozonizado — Ozono rango 0.2-0.4 mg/L (ambos inclusive = conforme), alerta <0.2, OOS <0.1
     'Aerobios Totales':  { unit:'ufc/mL', spec:100, alerta:25, oos:100, tipo:'lt', freq:'D', dataUnit100mL:true },
-    'Ozono libre':       { unit:'mg/L', specMin:0.1, specMax:0.4, alertaMin:0.2, tipo:'range', freq:'D' },
+    'Ozono libre':       { unit:'mg/L', specMin:0.2, specMax:0.4, oosMin:0.1, alertaMin:0.2, tipo:'range', freq:'D' },
   },
   'TM7': {
     // TM7: loop caliente entrada — Ozono <0.1, LOD=0.1
@@ -1334,9 +1480,9 @@ const SPECS = {
     'Ozono libre':       { unit:'mg/L', spec:0.1, oos:0.1, tipo:'lt', lod:0.1, freq:'D' },
   },
   'TM11':{
-    // TM11: retorno loop inyección ozono — Ozono spec 0.2-0.4 mg/L (rango), alerta <0.2, OOS <0.1
+    // TM11: retorno loop inyección ozono — Ozono rango 0.2-0.4 mg/L (ambos inclusive = conforme), alerta <0.2, OOS <0.1
     'Aerobios Totales':  { unit:'ufc/mL', spec:100, alerta:25, oos:100, tipo:'lt', freq:'D', dataUnit100mL:true },
-    'Ozono libre':       { unit:'mg/L', specMin:0.1, specMax:0.4, alertaMin:0.2, tipo:'range', freq:'D' },
+    'Ozono libre':       { unit:'mg/L', specMin:0.2, specMax:0.4, oosMin:0.1, alertaMin:0.2, tipo:'range', freq:'D' },
   },
 };
 
@@ -1403,6 +1549,7 @@ const STATE = {
   filteredSamples: [], // samples filtered by date range
   excursions: [],
   faseActual: 1,
+  faseNombre: 'Validación Prospectiva',
   fechaInicio: null,
   fechaFin: null,
   fechaDesde: null,   // date filter: from
@@ -1415,6 +1562,38 @@ const STATE = {
 
 function saveUrl(url) { try { window.name = 'sao001:' + url; } catch(e){} }
 function loadUrl() { try { return (window.name || '').startsWith('sao001:') ? window.name.slice(8) : ''; } catch(e){ return ''; } }
+
+/* =========================================================================
+   OOS ACCEPTANCE — localStorage persistence
+   ========================================================================= */
+function getOosKey(exc) {
+  return 'sao001_oos:' + exc.fecha.toISOString().slice(0,10) + ':' + exc.punto + ':' + exc.parametro;
+}
+function getOosAcceptance(exc) {
+  try {
+    const data = localStorage.getItem(getOosKey(exc));
+    return data ? JSON.parse(data) : null;
+  } catch(e) { return null; }
+}
+function setOosAcceptance(exc, justificacion, accionCorrectiva) {
+  try {
+    localStorage.setItem(getOosKey(exc), JSON.stringify({
+      accepted: true,
+      justificacion: justificacion,
+      accionCorrectiva: accionCorrectiva,
+      fechaAceptacion: new Date().toISOString(),
+    }));
+  } catch(e) { console.warn('Error saving OOS acceptance:', e); }
+}
+function removeOosAcceptance(exc) {
+  try { localStorage.removeItem(getOosKey(exc)); } catch(e) {}
+}
+function countUnresolvedOos() {
+  return STATE.excursions.filter(e => e.nivel === 'crit' && !getOosAcceptance(e)).length;
+}
+function countAcceptedOos() {
+  return STATE.excursions.filter(e => e.nivel === 'crit' && getOosAcceptance(e)).length;
+}
 
 /* =========================================================================
    UTILS
@@ -1507,9 +1686,14 @@ function evaluar(valorParsed, spec) {
     return { status: 'ok' };
   }
   if (spec.tipo === 'range') {
-    if (spec.specMin !== undefined && v < spec.specMin) return { status: 'crit', detail: `${v} < ${spec.specMin} (OOS)` };
+    // OOS por debajo del piso duro (oosMin) — ej: ozono TM6/TM11 < 0.1
+    if (spec.oosMin !== undefined && v < spec.oosMin) return { status: 'crit', detail: `${v} < ${spec.oosMin} (OOS)` };
+    // OOS por encima del techo
     if (spec.specMax !== undefined && v > spec.specMax) return { status: 'crit', detail: `${v} > ${spec.specMax} (OOS)` };
+    // Alerta por debajo del rango conforme (pero encima del OOS)
     if (spec.alertaMin !== undefined && v < spec.alertaMin) return { status: 'warn', detail: `${v} < ${spec.alertaMin} (Alerta)` };
+    // Si no hay oosMin, usar specMin como límite OOS (backward compatible)
+    if (spec.oosMin === undefined && spec.specMin !== undefined && v < spec.specMin) return { status: 'crit', detail: `${v} < ${spec.specMin} (OOS)` };
     return { status: 'ok' };
   }
   return { status: 'pending' };
@@ -1564,6 +1748,10 @@ async function fetchCsv(url) {
     }
   } catch (e) {
     console.warn('Fetch directo falló:', e.message);
+    // Si estamos en un sandbox (iframe sin permisos), dar aviso claro
+    if (e.message === 'Failed to fetch' || e.name === 'TypeError') {
+      console.warn('Posible entorno sandboxed — descargá el HTML y abrilo en el navegador.');
+    }
   }
 
   // Estrategia 2: si falla directo, probar proxies CORS (para URLs de Google Sheets)
@@ -1582,15 +1770,18 @@ async function fetchCsv(url) {
   }
 
   let lastErr;
+  let allFailed = true;
   for (const proxy of proxies) {
     for (const baseUrl of urls) {
       const proxyUrl = proxy.fmt(baseUrl + (baseUrl.includes('?') ? '&' : '?') + cb);
       if (statusEl) statusEl.textContent = 'Probando ' + proxy.name + '…';
       try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 10000);
-        const resp = await fetch(proxyUrl, { signal: controller.signal, cache: 'no-store' });
-        clearTimeout(timeout);
+        // Promise.race para timeout (evita error de AbortSignal no clonable en proxies)
+        const timeoutPromise = new Promise(function(_, reject) {
+          setTimeout(function() { reject(new Error('Timeout ' + proxy.name)); }, 10000);
+        });
+        const fetchPromise = fetch(proxyUrl, { cache: 'no-store' });
+        const resp = await Promise.race([fetchPromise, timeoutPromise]);
         if (!resp.ok) { lastErr = new Error('HTTP ' + resp.status); continue; }
         const text = await resp.text();
         const trimmed = text.trim();
@@ -1602,6 +1793,12 @@ async function fetchCsv(url) {
         lastErr = new Error(e.message + ' (' + proxy.name + ')');
       }
     }
+  }
+
+  // Mensaje de error mejorado
+  const isSandbox = (lastErr && lastErr.message.includes('Failed to fetch'));
+  if (isSandbox) {
+    throw new Error('No se pudo conectar — si estás viendo esto en una vista previa, descargá el archivo y abrilo directamente en Chrome');
   }
   throw lastErr || new Error('No se pudo cargar — verificá la URL o usá "CSV local"');
 }
@@ -1642,16 +1839,52 @@ function normalize(rows) {
   return samples;
 }
 
+// Fases definidas con rangos fijos de fechas
+const FASES_CONFIG = [
+  { fase: 1, nombre: 'Validación Prospectiva',            inicio: new Date(2026, 4, 18), fin: new Date(2026, 4, 29), diasTotales: 10 },
+  { fase: 2, nombre: 'Validación Concurrente Primaria',   inicio: new Date(2026, 5, 1),  fin: new Date(2026, 5, 12), diasTotales: 10 },
+  { fase: 3, nombre: 'Validación Concurrente Secundaria', inicio: new Date(2026, 5, 15), fin: new Date(2026, 11, 4), diasTotales: 120 },
+];
+
 function detectarFase(samples) {
-  if (!samples.length) return { fase: 1, inicio: null, fin: null, dias: 0, diasTotales: 10 };
-  const fasesCargadas = [...new Set(samples.map(s => s.fase))].sort((a,b)=>b-a);
-  const faseActual = fasesCargadas[0];
-  const samplesFase = samples.filter(s => s.fase === faseActual);
-  const fechas = samplesFase.map(s => s.fecha.getTime());
+  if (!samples.length) return { fase: 1, nombre: FASES_CONFIG[0].nombre, inicio: null, fin: null, dias: 0, diasTotales: 10 };
+
+  // Determinar la fase según las fechas de las muestras
+  const fechas = samples.map(s => s.fecha.getTime());
+  const minFecha = new Date(Math.min(...fechas));
+  const maxFecha = new Date(Math.max(...fechas));
+
+  // Buscar la fase que mejor se ajusta a los datos cargados
+  let faseDetectada = FASES_CONFIG[0];
+  for (const fc of FASES_CONFIG) {
+    // Si la mayoría de las muestras caen dentro de este rango, es esta fase
+    const samplesEnFase = samples.filter(s => s.fecha >= fc.inicio && s.fecha <= new Date(fc.fin.getTime() + 86400000));
+    if (samplesEnFase.length > samples.length * 0.3) {
+      faseDetectada = fc;
+    }
+  }
+
+  // Si el rango seleccionado cae exactamente en una fase, usar esa
+  for (const fc of FASES_CONFIG) {
+    const faseEnd = new Date(fc.fin.getTime() + 86400000); // incluir último día
+    if (minFecha >= fc.inicio && maxFecha <= faseEnd) {
+      faseDetectada = fc;
+      break;
+    }
+  }
+
+  const diasUnicos = new Set(samples.map(s => s.fecha.toDateString())).size;
   const inicio = new Date(Math.min(...fechas));
   const fin = new Date(Math.max(...fechas));
-  const diasUnicos = new Set(samplesFase.map(s => s.fecha.toDateString())).size;
-  return { fase: faseActual, inicio, fin, dias: diasUnicos, diasTotales: 10 };
+
+  return {
+    fase: faseDetectada.fase,
+    nombre: faseDetectada.nombre,
+    inicio,
+    fin,
+    dias: diasUnicos,
+    diasTotales: faseDetectada.diasTotales,
+  };
 }
 
 function detectarExcursiones(samples) {
@@ -1724,14 +1957,14 @@ function render() {
 
 function updateBadges() {
   const badge = document.getElementById('badge-excursiones');
-  const crit = STATE.excursions.filter(e => e.nivel === 'crit').length;
-  const warn = STATE.excursions.filter(e => e.nivel === 'warn').length;
-  badge.textContent = STATE.excursions.length;
-  badge.className = 'tab-badge' + (crit > 0 ? ' crit' : warn > 0 ? ' warn' : ' ok');
+  const oosTotal = STATE.excursions.filter(e => e.nivel === 'crit').length;
+  const unresolved = countUnresolvedOos();
+  badge.textContent = oosTotal;
+  badge.className = 'tab-badge' + (unresolved > 0 ? ' crit' : oosTotal > 0 ? ' warn' : ' ok');
 }
 
 function statusesOfFase() {
-  const samplesF = STATE.filteredSamples.filter(s => s.fase === STATE.faseActual);
+  const samplesF = STATE.filteredSamples;
   let ok = 0, warn = 0, crit = 0, lod = 0, info = 0, na = 0, pending = 0;
   samplesF.forEach(s => {
     Object.keys(s.valores).forEach(p => {
@@ -1752,10 +1985,11 @@ function statusesOfFase() {
 function renderKpis() {
   const fi = detectarFase(STATE.filteredSamples);
   STATE.faseActual = fi.fase;
+  STATE.faseNombre = fi.nombre;
   STATE.fechaInicio = fi.inicio;
   STATE.fechaFin = fi.fin;
 
-  const samplesF = STATE.filteredSamples.filter(s => s.fase === fi.fase);
+  const samplesF = STATE.filteredSamples;
   const st = statusesOfFase();
   const conformes = st.ok + st.lod;
   const cumpl = st.total > 0 ? Math.round(conformes * 100 / st.total) : 0;
@@ -1764,13 +1998,17 @@ function renderKpis() {
   const $stSub = document.getElementById('kpi-status-sub');
   const $card = $st.closest('.kpi-card');
   $card.className = 'kpi-card';
-  if (st.crit > 0) { $st.textContent = 'CRÍTICO'; $st.className = 'kpi-value crit'; $card.classList.add('crit'); $stSub.textContent = `${st.crit} OOS activos`; }
+  const unresolvedOos = countUnresolvedOos();
+  const acceptedOos = countAcceptedOos();
+  const totalOos = unresolvedOos + acceptedOos;
+  if (unresolvedOos > 0) { $st.textContent = 'CRÍTICO'; $st.className = 'kpi-value crit'; $card.classList.add('crit'); $stSub.textContent = `${unresolvedOos} OOS sin resolver`; }
+  else if (totalOos > 0 && unresolvedOos === 0) { $st.textContent = 'CONFORME'; $st.className = 'kpi-value ok'; $card.classList.add('ok'); $stSub.textContent = `${totalOos} OOS aceptados`; }
   else if (st.warn > 0) { $st.textContent = 'ALERTA'; $st.className = 'kpi-value warn'; $card.classList.add('warn'); $stSub.textContent = `${st.warn} alertas activas`; }
   else if (samplesF.length > 0) { $st.textContent = 'CONFORME'; $st.className = 'kpi-value ok'; $card.classList.add('ok'); $stSub.textContent = 'Sin excursiones'; }
   else { $st.textContent = '—'; $st.className = 'kpi-value'; $stSub.textContent = 'Sin datos cargados'; }
 
   document.getElementById('kpi-fase').textContent = 'Fase ' + fi.fase;
-  document.getElementById('kpi-fase-sub').textContent = fi.fase === 1 ? 'Validación Prospectiva' : fi.fase === 2 ? 'Validación Concurrente' : 'CPV Estacional';
+  document.getElementById('kpi-fase-sub').textContent = fi.nombre;
   document.getElementById('kpi-dias').textContent = `${fi.dias} / ${fi.diasTotales}`;
   document.getElementById('kpi-dias-sub').textContent = `${Math.round(fi.dias*100/fi.diasTotales)}% completado`;
   document.getElementById('kpi-muestras').textContent = samplesF.length;
@@ -1782,9 +2020,11 @@ function renderKpis() {
   document.getElementById('kpi-cumpl-sub').textContent = `${conformes} / ${st.total} conformes${st.lod > 0 ? ' (incl. ' + st.lod + ' LOD)' : ''}`;
 
   const $ex = document.getElementById('kpi-exc');
-  $ex.textContent = STATE.excursions.length;
-  $ex.className = 'kpi-value' + (st.crit > 0 ? ' crit' : st.warn > 0 ? ' warn' : ' ok');
-  document.getElementById('kpi-exc-sub').textContent = `${st.crit} OOS · ${st.warn} Alertas`;
+  const oosTotal = STATE.excursions.filter(e => e.nivel === 'crit').length;
+  const unresolvedForKpi = countUnresolvedOos();
+  $ex.textContent = oosTotal;
+  $ex.className = 'kpi-value' + (unresolvedForKpi > 0 ? ' crit' : oosTotal > 0 ? ' ok' : ' ok');
+  document.getElementById('kpi-exc-sub').textContent = unresolvedForKpi > 0 ? `${unresolvedForKpi} sin resolver · ${countAcceptedOos()} aceptados` : oosTotal > 0 ? `${oosTotal} OOS aceptados` : 'Sin OOS';
 }
 
 function renderDonut() {
@@ -1899,24 +2139,132 @@ function renderOverviewExc() {
   cont.innerHTML = renderExcTable(recientes);
 }
 
-function renderExcTable(list) {
+function renderExcTable(list, options) {
+  const showAcceptance = options && options.showAcceptance;
   if (!list.length) return '<div class="empty-state-desc" style="text-align:center;padding:20px;">Sin excursiones.</div>';
-  return `<div class="table-wrap"><table class="data-table">
-    <thead><tr>
-      <th>Fecha</th><th>Punto</th><th>Sistema</th><th>Parámetro</th>
-      <th>Valor</th><th>Especificación</th><th>Nivel</th><th>Detalle</th>
-    </tr></thead><tbody>
-    ${list.map(e => `<tr>
-      <td>${fmtFecha(e.fecha)}</td>
-      <td><strong style="color:var(--text-0);">${e.punto}</strong> <span style="color:var(--text-3);font-size:10px;">${getPuntoLabel(e.punto)}</span></td>
-      <td><span class="tag tag-primary">${e.sistema}</span></td>
-      <td>${e.parametro}</td>
-      <td><strong style="color:${e.nivel==='crit'?'var(--crit)':'var(--warn)'};">${e.valor}</strong></td>
-      <td style="color:var(--text-2);">${e.spec}</td>
-      <td><span class="tag tag-${e.nivel === 'crit' ? 'crit' : 'warn'}">${e.nivel === 'crit' ? 'OOS' : 'Alerta'}</span></td>
-      <td style="color:var(--text-1);font-size:11px;">${e.detalle}</td>
-    </tr>`).join('')}
-    </tbody></table></div>`;
+  return '<div class="table-wrap"><table class="data-table">' +
+    '<thead><tr>' +
+      '<th>Fecha</th><th>Punto</th><th>Sistema</th><th>Parámetro</th>' +
+      '<th>Valor</th><th>Especificación</th><th>Nivel</th><th>Detalle</th>' +
+      (showAcceptance ? '<th style="min-width:260px;">Disposición OOS</th>' : '') +
+    '</tr></thead><tbody>' +
+    list.map(function(e, idx) {
+      var acceptance = e.nivel === 'crit' ? getOosAcceptance(e) : null;
+      var excId = 'exc-' + idx;
+      var row = '<tr>' +
+        '<td>' + fmtFecha(e.fecha) + '</td>' +
+        '<td><strong style="color:var(--text-0);">' + e.punto + '</strong> <span style="color:var(--text-3);font-size:10px;">' + getPuntoLabel(e.punto) + '</span></td>' +
+        '<td><span class="tag tag-primary">' + e.sistema + '</span></td>' +
+        '<td>' + e.parametro + '</td>' +
+        '<td><strong style="color:' + (e.nivel==='crit'?'var(--crit)':'var(--warn)') + ';">' + e.valor + '</strong></td>' +
+        '<td style="color:var(--text-2);">' + e.spec + '</td>' +
+        '<td><span class="tag tag-' + (e.nivel === 'crit' ? 'crit' : 'warn') + '">' + (e.nivel === 'crit' ? 'OOS' : 'Alerta') + '</span>' +
+          (e.nivel === 'crit' && acceptance ? ' <span class="tag tag-ok">ACEPTADO</span>' : '') + '</td>' +
+        '<td style="color:var(--text-1);font-size:11px;">' + e.detalle + '</td>';
+
+      if (showAcceptance && e.nivel === 'crit') {
+        if (acceptance) {
+          row += '<td>' +
+            '<div class="oos-acceptance oos-accepted">' +
+              '<div class="oos-accepted-label">✓ OOS Aceptado / Justificado</div>' +
+              '<div class="oos-accepted-detail">' +
+                '<strong>Justificación:</strong> ' + (acceptance.justificacion || '(sin detalle)') + '<br>' +
+                '<strong>Acción correctiva:</strong> ' + (acceptance.accionCorrectiva || '(sin detalle)') + '<br>' +
+                '<span style="font-size:10px;color:var(--text-3);">Aceptado: ' + new Date(acceptance.fechaAceptacion).toLocaleDateString('es-UY') + ' ' + new Date(acceptance.fechaAceptacion).toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'}) + '</span>' +
+              '</div>' +
+              '<button class="oos-revert-btn" data-exc-revert="' + idx + '">✕ Revertir aceptación</button>' +
+            '</div></td>';
+        } else {
+          row += '<td>' +
+            '<div id="' + excId + '-display">' +
+              '<button class="oos-accept-btn" data-exc-accept="' + idx + '">☐ Aceptar / Justificar OOS</button>' +
+            '</div>' +
+            '<div id="' + excId + '-form" style="display:none;" class="oos-form">' +
+              '<div class="oos-form-title">Aceptar OOS — ' + e.punto + ' · ' + e.parametro + ' (' + fmtFecha(e.fecha) + ')</div>' +
+              '<label>Justificación / Causa raíz:</label>' +
+              '<textarea id="' + excId + '-justif" placeholder="Describir la causa raíz identificada y la justificación para aceptar el OOS..."></textarea>' +
+              '<label>Acción correctiva implementada:</label>' +
+              '<textarea id="' + excId + '-accion" placeholder="Describir la acción correctiva y/o preventiva aplicada..."></textarea>' +
+              '<div class="oos-form-actions">' +
+                '<button class="oos-form-save" data-exc-save="' + idx + '">✓ Confirmar aceptación</button>' +
+                '<button class="oos-form-cancel" data-exc-cancel="' + idx + '">Cancelar</button>' +
+              '</div>' +
+            '</div></td>';
+        }
+      } else if (showAcceptance && e.nivel !== 'crit') {
+        row += '<td style="color:var(--text-3);font-size:11px;font-style:italic;">N/A (solo OOS)</td>';
+      }
+      row += '</tr>';
+      return row;
+    }).join('') +
+    '</tbody></table></div>';
+}
+
+function setupExcAcceptanceHandlers() {
+  document.querySelectorAll('[data-exc-accept]').forEach(function(btn) {
+    btn.onclick = function() {
+      var idx = btn.dataset.excAccept;
+      document.getElementById('exc-' + idx + '-display').style.display = 'none';
+      document.getElementById('exc-' + idx + '-form').style.display = 'block';
+    };
+  });
+  document.querySelectorAll('[data-exc-cancel]').forEach(function(btn) {
+    btn.onclick = function() {
+      var idx = btn.dataset.excCancel;
+      document.getElementById('exc-' + idx + '-display').style.display = 'block';
+      document.getElementById('exc-' + idx + '-form').style.display = 'none';
+    };
+  });
+  document.querySelectorAll('[data-exc-save]').forEach(function(btn) {
+    btn.onclick = function() {
+      var idx = parseInt(btn.dataset.excSave);
+      var list = STATE.excursions;
+      if (STATE.excFilter === 'crit') list = list.filter(function(e) { return e.nivel === 'crit'; });
+      else if (STATE.excFilter === 'warn') list = list.filter(function(e) { return e.nivel === 'warn'; });
+      else if (STATE.excFilter === 'unresolved') list = list.filter(function(e) { return e.nivel === 'crit' && !getOosAcceptance(e); });
+      else if (STATE.excFilter === 'accepted') list = list.filter(function(e) { return e.nivel === 'crit' && getOosAcceptance(e); });
+      var exc = list[idx];
+      if (!exc) return;
+      var justif = document.getElementById('exc-' + idx + '-justif').value.trim();
+      var accion = document.getElementById('exc-' + idx + '-accion').value.trim();
+      if (!justif) { alert('Ingresá una justificación antes de aceptar el OOS.'); return; }
+      setOosAcceptance(exc, justif, accion);
+      renderExcursiones();
+      renderKpis();
+      renderOverviewExc();
+      updateBadges();
+    };
+  });
+  document.querySelectorAll('[data-exc-revert]').forEach(function(btn) {
+    btn.onclick = function() {
+      var idx = parseInt(btn.dataset.excRevert);
+      var list = STATE.excursions;
+      if (STATE.excFilter === 'crit') list = list.filter(function(e) { return e.nivel === 'crit'; });
+      else if (STATE.excFilter === 'warn') list = list.filter(function(e) { return e.nivel === 'warn'; });
+      else if (STATE.excFilter === 'unresolved') list = list.filter(function(e) { return e.nivel === 'crit' && !getOosAcceptance(e); });
+      else if (STATE.excFilter === 'accepted') list = list.filter(function(e) { return e.nivel === 'crit' && getOosAcceptance(e); });
+      var exc = list[idx];
+      if (!exc) return;
+      if (confirm('¿Revertir la aceptación de este OOS?\n' + exc.punto + ' · ' + exc.parametro + ' · ' + fmtFecha(exc.fecha))) {
+        removeOosAcceptance(exc);
+        renderExcursiones();
+        renderKpis();
+        renderOverviewExc();
+        updateBadges();
+      }
+    };
+  });
+}
+
+function renderExcursiones() {
+  const cont = document.getElementById('excursiones-container');
+  let list = STATE.excursions;
+  if (STATE.excFilter === 'crit') list = list.filter(e => e.nivel === 'crit');
+  else if (STATE.excFilter === 'warn') list = list.filter(e => e.nivel === 'warn');
+  else if (STATE.excFilter === 'unresolved') list = list.filter(e => e.nivel === 'crit' && !getOosAcceptance(e));
+  else if (STATE.excFilter === 'accepted') list = list.filter(e => e.nivel === 'crit' && getOosAcceptance(e));
+  cont.innerHTML = renderExcTable(list, { showAcceptance: true });
+  setupExcAcceptanceHandlers();
 }
 
 function renderSemaforo() {
@@ -1926,7 +2274,7 @@ function renderSemaforo() {
     return;
   }
   const ultimas = {};
-  STATE.filteredSamples.filter(s => s.fase === STATE.faseActual).forEach(s => {
+  STATE.filteredSamples.forEach(s => {
     if (!ultimas[s.punto]) ultimas[s.punto] = {};
     Object.keys(s.valores).forEach(p => {
       const prev = ultimas[s.punto][p];
@@ -1967,14 +2315,6 @@ function renderSemaforo() {
   });
   html += '</tbody></table>';
   cont.innerHTML = html;
-}
-
-function renderExcursiones() {
-  const cont = document.getElementById('excursiones-container');
-  let list = STATE.excursions;
-  if (STATE.excFilter === 'crit') list = list.filter(e => e.nivel === 'crit');
-  if (STATE.excFilter === 'warn') list = list.filter(e => e.nivel === 'warn');
-  cont.innerHTML = renderExcTable(list);
 }
 
 function renderTendencias() {
@@ -2041,6 +2381,7 @@ function renderTendencias() {
     if (spec.specMin !== undefined) parts.push('min' + spec.specMin);
     if (spec.specMax !== undefined) parts.push('max' + spec.specMax);
     if (spec.oos !== undefined) parts.push('oos' + spec.oos);
+    if (spec.oosMin !== undefined) parts.push('oosMin' + spec.oosMin);
     if (spec.alerta !== undefined) parts.push('a' + spec.alerta);
     return parts.join('_');
   }
@@ -2107,6 +2448,7 @@ function renderTendencias() {
     if (spec.oos !== undefined) datasets.push(refLine('OOS (' + spec.oos + ' ' + spec.unit + ')', spec.oos, '#ef4444', [6, 3]));
     if (spec.specMax !== undefined) datasets.push(refLine('Max (' + spec.specMax + ')', spec.specMax, '#ef4444', [6, 3]));
     if (spec.specMin !== undefined) datasets.push(refLine('Min (' + spec.specMin + ')', spec.specMin, '#3b82f6', [6, 3]));
+    if (spec.oosMin !== undefined) datasets.push(refLine('OOS Min (' + spec.oosMin + ')', spec.oosMin, '#ef4444', [6, 3]));
     if (spec.lod !== undefined) datasets.push(refLine('LOD', spec.lod, '#10b981', [2, 2]));
 
     const ctx = document.getElementById('chart-group-' + gi);
@@ -2236,30 +2578,34 @@ function renderHeatmap() {
   const cont = document.getElementById('heatmap-container');
   if (!STATE.filteredSamples.length) { cont.innerHTML = '<div class="empty-state-desc" style="padding:20px;">Sin datos.</div>'; return; }
 
-  // Días únicos ordenados
-  const samplesF = STATE.filteredSamples.filter(s => s.fase === STATE.faseActual);
+  // Días únicos ordenados — TODOS los del rango filtrado
+  const samplesF = STATE.filteredSamples;
   const diasUnicos = [...new Set(samplesF.map(s => s.fecha.toDateString()))]
-    .sort((a,b)=> new Date(a)-new Date(b))
-    .slice(0, 10);
+    .sort((a,b)=> new Date(a)-new Date(b));
+  const numDias = diasUnicos.length;
+
+  // Tamaño de celda adaptativo
+  const cellSize = numDias > 30 ? 28 : numDias > 15 ? 36 : 44;
+  const fontSize = numDias > 30 ? '8px' : numDias > 15 ? '9px' : '10px';
 
   // Cabecera
-  let html = '<div class="heatmap">';
-  html += '<div class="heatmap-row"><div class="heatmap-header" style="text-align:left;padding-left:8px;">PUNTO</div>';
-  for (let i = 0; i < 10; i++) {
-    const fecha = diasUnicos[i] ? new Date(diasUnicos[i]) : null;
-    html += `<div class="heatmap-header">${fecha ? fmtFechaCorta(fecha) : `D${i+1}`}</div>`;
+  let html = '<div class="heatmap" style="overflow-x:auto;">';
+  html += '<div class="heatmap-row"><div class="heatmap-header" style="text-align:left;padding-left:8px;min-width:100px;">PUNTO</div>';
+  for (let i = 0; i < numDias; i++) {
+    const fecha = new Date(diasUnicos[i]);
+    html += `<div class="heatmap-header" style="min-width:${cellSize}px;font-size:${fontSize};">${fmtFechaCorta(fecha)}</div>`;
   }
   html += '</div>';
 
   PUNTOS_ORDER.forEach(punto => {
     const spec = (SPECS[punto]||{})[STATE.activeHeatmapParam];
     if (!spec) return;
-    html += `<div class="heatmap-row"><div class="heatmap-point">${punto}<div style="font-size:9px;color:var(--text-3);font-weight:400;">${getPuntoLabel(punto)}</div></div>`;
-    for (let i = 0; i < 10; i++) {
+    html += `<div class="heatmap-row"><div class="heatmap-point" style="min-width:100px;">${punto}<div style="font-size:9px;color:var(--text-3);font-weight:400;">${getPuntoLabel(punto)}</div></div>`;
+    for (let i = 0; i < numDias; i++) {
       const fecha = diasUnicos[i];
-      if (!fecha) { html += '<div class="heatmap-cell empty" title="Sin día"></div>'; continue; }
+      if (!fecha) { html += `<div class="heatmap-cell empty" style="min-width:${cellSize}px;height:${cellSize}px;" title="Sin día"></div>`; continue; }
       const sampleDia = samplesF.find(s => s.punto === punto && s.fecha.toDateString() === fecha);
-      if (!sampleDia) { html += '<div class="heatmap-cell empty" title="Sin muestra"></div>'; continue; }
+      if (!sampleDia) { html += `<div class="heatmap-cell empty" style="min-width:${cellSize}px;height:${cellSize}px;" title="Sin muestra"></div>`; continue; }
       const valor = sampleDia.valores[STATE.activeHeatmapParam];
       const ev = evaluar(valor.parsed, spec);
       let cls = 'empty';
@@ -2268,7 +2614,7 @@ function renderHeatmap() {
       else if (ev.status === 'crit') cls = 'crit';
       else if (ev.status === 'info') cls = 'ok';
       const title = `${punto} · ${fmtFecha(new Date(fecha))}\n${STATE.activeHeatmapParam}: ${valor.raw}\nSpec: ${formatSpec(spec)}${ev.detail ? '\n' + ev.detail : ''}`;
-      html += `<div class="heatmap-cell ${cls}" title="${title}"></div>`;
+      html += `<div class="heatmap-cell ${cls}" style="min-width:${cellSize}px;height:${cellSize}px;" title="${title}"></div>`;
     }
     html += '</div>';
   });
@@ -2277,26 +2623,32 @@ function renderHeatmap() {
 }
 
 function renderAvance() {
-  const samplesF = STATE.filteredSamples.filter(s => s.fase === STATE.faseActual);
+  const samplesF = STATE.filteredSamples;
+  const fi = detectarFase(samplesF);
+  const diasTarget = fi.diasTotales;
   const diasUnicos = [...new Set(samplesF.map(s => s.fecha.toDateString()))]
     .sort((a,b)=> new Date(a)-new Date(b));
   const diasEjec = diasUnicos.length;
-  const pct = Math.round(diasEjec * 100 / 10);
+  const pct = Math.round(diasEjec * 100 / diasTarget);
+
+  // Update section title
+  const titleEl = document.querySelector('#panel-avance .section-title span');
+  if (titleEl) titleEl.textContent = 'Progreso global Fase ' + fi.fase + ' · ' + fi.nombre + ' (' + diasTarget + ' días hábiles)';
 
   const fp = document.getElementById('fase-progress');
   fp.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-      <div style="font-family:var(--mono);font-size:14px;font-weight:700;"><span style="color:var(--primary);font-size:24px;">${diasEjec}</span> <span style="color:var(--text-3);">/ 10</span> días hábiles</div>
+      <div style="font-family:var(--mono);font-size:14px;font-weight:700;"><span style="color:var(--primary);font-size:24px;">${diasEjec}</span> <span style="color:var(--text-3);">/ ${diasTarget}</span> días hábiles</div>
       <div style="font-family:var(--mono);font-size:13px;color:var(--text-2);font-weight:600;">${pct}% completado</div>
     </div>
     <div class="progress-bar"><div class="progress-fill ${pct < 30 ? 'crit' : pct < 70 ? 'warn' : 'ok'}" style="width:${Math.min(pct,100)}%;"></div></div>
     <div style="margin-top:16px;display:flex;gap:24px;font-family:var(--mono);font-size:12px;color:var(--text-2);">
       <div>Inicio: <strong style="color:var(--text-0);">${STATE.fechaInicio ? fmtFecha(STATE.fechaInicio) : '—'}</strong></div>
       <div>Último día: <strong style="color:var(--text-0);">${STATE.fechaFin ? fmtFecha(STATE.fechaFin) : '—'}</strong></div>
-      <div>Restantes: <strong style="color:var(--primary);">${Math.max(0, 10 - diasEjec)}</strong> días</div>
+      <div>Restantes: <strong style="color:var(--primary);">${Math.max(0, diasTarget - diasEjec)}</strong> días</div>
     </div>
     <div class="day-grid">
-      ${Array.from({length: 10}, (_, i) => {
+      ${Array.from({length: Math.min(diasTarget, 20)}, (_, i) => {
         const done = i < diasEjec;
         const fecha = diasUnicos[i] ? fmtFechaCorta(new Date(diasUnicos[i])) : '';
         return `<div class="day-cell ${done ? 'done' : ''}" title="${diasUnicos[i] || 'Pendiente'}">
@@ -2374,20 +2726,29 @@ function renderDatos() {
 
 function renderReporte() {
   const cont = document.getElementById('reporte-container');
-  const samplesF = STATE.filteredSamples.filter(s => s.fase === STATE.faseActual);
+  const samplesF = STATE.filteredSamples;
   const diasUnicos = [...new Set(samplesF.map(s => s.fecha.toDateString()))];
   const crit = STATE.excursions.filter(e => e.nivel === 'crit');
   const warn = STATE.excursions.filter(e => e.nivel === 'warn');
+  const unresolvedHtml = crit.filter(e => !getOosAcceptance(e));
+  const acceptedHtml = crit.filter(e => getOosAcceptance(e));
   const st = statusesOfFase();
   const conformes = st.ok + st.lod;
   const pctC = st.total > 0 ? Math.round(conformes*100/st.total) : 0;
   const fechaHoy = fmtFecha(new Date());
 
-  const conclusion = crit.length === 0 && warn.length === 0
-    ? 'Los resultados parciales evaluados a la fecha de corte no presentan excursiones a nivel de alerta ni de acción. El sistema opera dentro de los parámetros especificados en ESP-MP-001 v2.0.'
-    : crit.length === 0
-    ? `Se han identificado ${warn.length} excursión(es) a nivel de alerta, sin OOS. Conforme a QMIC 0030-12 sec. 8.C, se procedió a notificación al Water Team y revisión de parámetros del proceso. La validación continúa sin reinicio.`
-    : `Se han identificado ${crit.length} excursión(es) de acción (OOS) y ${warn.length} alerta(s). Se requiere LIR/MIR conforme a QMIC 0030-12 Table D, sanitización del loop afectado, RCA y CAPA dentro de 24 h. Evaluar si corresponde reinicio de fase conforme a sección 5.2 del PPQ-H2O-001.`;
+  let conclusion;
+  if (crit.length === 0 && warn.length === 0) {
+    conclusion = 'Los resultados parciales evaluados a la fecha de corte no presentan excursiones a nivel de alerta ni de acción. El sistema opera dentro de los parámetros especificados en ESP-MP-001 v2.0.';
+  } else if (crit.length === 0) {
+    conclusion = `Se han identificado ${warn.length} excursión(es) a nivel de alerta, sin OOS. Conforme a QMIC 0030-12 sec. 8.C, se procedió a notificación al Water Team y revisión de parámetros del proceso. La validación continúa sin reinicio.`;
+  } else if (unresolvedHtml.length === 0 && acceptedHtml.length > 0) {
+    conclusion = `Se identificaron ${crit.length} excursión(es) OOS y ${warn.length} alerta(s). La totalidad de los OOS han sido justificados y aceptados conforme a SOP-AC-036. Las acciones correctivas se documentan en la sección de excursiones. El sistema se considera controlado con nivel de riesgo Bajo a Medio.`;
+  } else {
+    conclusion = `Se han identificado ${crit.length} excursión(es) de acción (OOS) y ${warn.length} alerta(s).` +
+      (acceptedHtml.length > 0 ? ` De los ${crit.length} OOS, ${acceptedHtml.length} han sido aceptados y ${unresolvedHtml.length} permanecen sin resolver.` : '') +
+      ` Se requiere LIR/MIR conforme a QMIC 0030-12 Table D, sanitización del loop afectado, RCA y CAPA dentro de 24 h. Evaluar si corresponde reinicio de fase conforme a sección 5.2 del PPQ-H2O-001.`;
+  }
 
   cont.innerHTML = `
     <div class="resumen-grid">
@@ -2404,7 +2765,7 @@ function renderReporte() {
         </div>
 
         <h3>1. Objetivo</h3>
-        <p>Documentar el avance parcial de la ejecución de la Fase ${STATE.faseActual} (${STATE.faseActual === 1 ? 'Validación Prospectiva' : STATE.faseActual === 2 ? 'Validación Concurrente' : 'CPV Estacional'}) de la re-calificación de performance del sistema SAO-001, conforme al protocolo PPQ-H2O-001 v2.0 y al Plan Maestro de Validación PMV-H2O-001.</p>
+        <p>Documentar el avance parcial de la ejecución de la Fase ${STATE.faseActual} (${STATE.faseNombre}) de la re-calificación de performance del sistema SAO-001, conforme al protocolo PPQ-H2O-001 v2.0 y al Plan Maestro de Validación PMV-H2O-001.</p>
 
         <h3>2. Alcance</h3>
         <p>Evaluación de resultados de muestreo y ensayo de los ${samplesF.length} registros cargados hasta la fecha de corte, contra las especificaciones definidas en ESP-MP-001 v2.0 y el certificado de análisis REG-SOP-LCC-095-A v5.0, considerando los niveles de alerta y acción del Plan de Muestreo (Sección 11.2 del PPQ-H2O-001 v2.0).</p>
@@ -2438,6 +2799,7 @@ function renderReporte() {
 
         ${(crit.length + warn.length) > 0 ? `
         <h3>6. Detalle de excursiones</h3>
+        ${unresolvedHtml.length === 0 && acceptedHtml.length > 0 ? '<p style="color:var(--ok);font-weight:600;margin-bottom:8px;">✓ Todos los OOS han sido justificados y aceptados.</p>' : unresolvedHtml.length > 0 ? '<p style="color:var(--crit);font-weight:600;margin-bottom:8px;">⚠ ' + unresolvedHtml.length + ' OOS sin resolver de ' + crit.length + ' total.</p>' : ''}
         ${renderExcTable(STATE.excursions.slice(0, 20))}
         ${STATE.excursions.length > 20 ? '<p style="margin-top:8px;font-size:11px;color:var(--text-2);">Mostrando 20 de ' + STATE.excursions.length + ' excursiones. Lista completa en panel "Excursiones".</p>' : ''}
         ` : ''}
@@ -2449,6 +2811,7 @@ function renderReporte() {
         <ul>
           <li>Continuar el muestreo conforme al plan hasta completar los 10 días hábiles de la fase.</li>
           <li>Mantener actualizado el REG-PPQ-H2O-001-H (Muestreo y ensayo) con los datos crudos del sistema de carga.</li>
+          ${unresolvedHtml.length > 0 ? '<li>Completar la justificación y aceptación de los ' + unresolvedHtml.length + ' OOS pendientes en el panel de Excursiones.</li>' : ''}
           ${(crit.length + warn.length) > 0 ? '<li>Documentar cada NC en REG-PPQ-H2O-001-B y sus CAPA en REG-PPQ-H2O-001-C conforme a SOP-AC-036.</li>' : ''}
           <li>Formalizar los hallazgos H-001, H-002 y H-003 como cambios menores al protocolo / certificado de análisis.</li>
           <li>Al cierre de fase, emitir REG-PPQ-H2O-001-I (Análisis de tendencias) y proceder a revisión intermedia antes de Fase ${STATE.faseActual + 1}.</li>
@@ -2461,7 +2824,7 @@ function renderReporte() {
       </div>
       <div>
         <div class="kpi-card" style="margin-bottom:10px;${pctC<90?'border-color:var(--crit);':pctC<98?'border-color:var(--warn);':'border-color:var(--ok);'}"><div class="kpi-label">Cumplimiento</div><div class="kpi-value ${pctC < 90 ? 'crit' : pctC < 98 ? 'warn' : 'ok'}">${st.total > 0 ? pctC + '%' : '—'}</div><div class="kpi-sub">${conformes}/${st.total} conformes</div></div>
-        <div class="kpi-card" style="margin-bottom:10px;${crit.length>0?'border-color:var(--crit);':''}"><div class="kpi-label">OOS</div><div class="kpi-value ${crit.length > 0 ? 'crit' : 'ok'}">${crit.length}</div></div>
+        <div class="kpi-card" style="margin-bottom:10px;${unresolvedHtml.length>0?'border-color:var(--crit);':crit.length>0?'border-color:var(--ok);':''}"><div class="kpi-label">OOS</div><div class="kpi-value ${unresolvedHtml.length > 0 ? 'crit' : crit.length > 0 ? 'ok' : 'ok'}">${crit.length}</div><div class="kpi-sub">${unresolvedHtml.length > 0 ? unresolvedHtml.length + ' sin resolver' : acceptedHtml.length > 0 ? 'todos aceptados' : 'sin OOS'}</div></div>
         <div class="kpi-card" style="margin-bottom:10px;${warn.length>0?'border-color:var(--warn);':''}"><div class="kpi-label">Alertas</div><div class="kpi-value ${warn.length > 0 ? 'warn' : 'ok'}">${warn.length}</div></div>
         <div class="kpi-card"><div class="kpi-label">Avance</div><div class="kpi-value primary">${diasUnicos.length}/10</div><div class="kpi-sub">días hábiles</div></div>
       </div>
@@ -2511,6 +2874,7 @@ function applyDateFilter() {
   STATE.excursions = detectarExcursiones(filtered);
   const fi = detectarFase(filtered);
   STATE.faseActual = fi.fase;
+  STATE.faseNombre = fi.nombre;
   STATE.fechaInicio = fi.inicio;
   STATE.fechaFin = fi.fin;
 
@@ -2603,6 +2967,26 @@ document.getElementById('btn-limpiar-fechas').onclick = () => {
   destroyCharts();
   applyDateFilter();
 };
+
+// Phase preset buttons
+document.querySelectorAll('[data-fase-preset]').forEach(btn => {
+  btn.onclick = () => {
+    const faseNum = parseInt(btn.dataset.fasePreset);
+    const fc = FASES_CONFIG.find(f => f.fase === faseNum);
+    if (!fc) return;
+    const desde = fc.inicio.toISOString().slice(0, 10);
+    const hasta = fc.fin.toISOString().slice(0, 10);
+    document.getElementById('fecha-desde').value = desde;
+    document.getElementById('fecha-hasta').value = hasta;
+    STATE.fechaDesde = new Date(desde + 'T00:00:00');
+    STATE.fechaHasta = new Date(hasta + 'T00:00:00');
+    destroyCharts();
+    applyDateFilter();
+    // Highlight active button
+    document.querySelectorAll('[data-fase-preset]').forEach(b => b.classList.remove('btn-primary'));
+    btn.classList.add('btn-primary');
+  };
+});
 
 document.querySelectorAll('[data-exc-filter]').forEach(b => {
   b.onclick = () => {
@@ -2762,7 +3146,7 @@ document.getElementById('btn-download-docx').onclick = async function() {
     const diasSet = new Set(); samples.forEach(s => diasSet.add(s.fecha.toDateString()));
     const diasMuestreo = diasSet.size;
     const hoy = new Date().toLocaleDateString('es-UY');
-    const faseNombre = STATE.faseActual === 1 ? 'Validación Prospectiva' : 'Validación Concurrente Secundaria';
+    const faseNombre = STATE.faseNombre;
 
     const children = [];
 
@@ -2897,11 +3281,13 @@ document.getElementById('btn-download-docx').onclick = async function() {
       'Conforme', 'No surgen no conformidades'
     ).forEach(el => children.push(el));
 
+    const docxUnresolved = crit.filter(function(e) { return !getOosAcceptance(e); });
+    const docxAccepted = crit.filter(function(e) { return getOosAcceptance(e); });
     registroBox('REG-PPQ-H2O-001-H — Muestreo y ensayo',
       'Evaluar el desempeño del sistema mediante muestreo y ensayo de los parámetros relevantes.',
       'Los datos de cada fase se encuentran completos. Las intervenciones de mantenimiento son consistentes con los procedimientos.',
-      crit.length > 0 ? 'Ver no conformidades en Sección 7' : 'Conforme',
-      crit.length > 0 ? crit.length + ' no conformidades — ver Sección 7' : 'No surgen no conformidades'
+      docxUnresolved.length > 0 ? 'Ver no conformidades en Sección 7 (' + docxUnresolved.length + ' OOS sin resolver)' : docxAccepted.length > 0 ? 'Conforme — ' + docxAccepted.length + ' OOS aceptados (ver Sección 7)' : 'Conforme',
+      docxUnresolved.length > 0 ? docxUnresolved.length + ' no conformidades sin resolver — ver Sección 7' : docxAccepted.length > 0 ? docxAccepted.length + ' OOS justificados y aceptados — ver Sección 7' : 'No surgen no conformidades'
     ).forEach(el => children.push(el));
 
     registroBox('REG-PPQ-H2O-001-I — Análisis de tendencias y conclusiones',
@@ -2917,6 +3303,10 @@ document.getElementById('btn-download-docx').onclick = async function() {
     children.push(p([run('Evaluaciones totales: ', { bold: true }), run(String(totalEvals))]));
     children.push(p([run('Conformes: ', { bold: true }), run(conformes + ' (' + pctConf + '%)')]));
     children.push(p([run('Excursiones OOS: ', { bold: true, color: crit.length > 0 ? 'CC0000' : undefined }), run(String(crit.length), { color: crit.length > 0 ? 'CC0000' : undefined })]));
+    if (docxAccepted.length > 0 || docxUnresolved.length > 0) {
+      children.push(p([run('  — OOS aceptados/justificados: ', { bold: true, color: '228B22' }), run(String(docxAccepted.length), { color: '228B22' })]));
+      children.push(p([run('  — OOS sin resolver: ', { bold: true, color: docxUnresolved.length > 0 ? 'CC0000' : undefined }), run(String(docxUnresolved.length), { color: docxUnresolved.length > 0 ? 'CC0000' : undefined })]));
+    }
     children.push(p([run('Alertas: ', { bold: true, color: warn.length > 0 ? 'CC7700' : undefined }), run(String(warn.length), { color: warn.length > 0 ? 'CC7700' : undefined })]));
 
     // 6.3 Especificaciones por punto de muestreo
@@ -2936,7 +3326,8 @@ document.getElementById('btn-download-docx').onclick = async function() {
       if (spec.oos !== undefined) return '>= ' + spec.oos + ' ' + (spec.unit || '');
       if (spec.tipo === 'range') {
         let parts = [];
-        if (spec.specMin !== undefined) parts.push('< ' + spec.specMin);
+        if (spec.oosMin !== undefined) parts.push('< ' + spec.oosMin);
+        else if (spec.specMin !== undefined) parts.push('< ' + spec.specMin);
         if (spec.specMax !== undefined) parts.push('> ' + spec.specMax);
         return parts.join(' o ') + ' ' + (spec.unit || '');
       }
@@ -3042,7 +3433,8 @@ document.getElementById('btn-download-docx').onclick = async function() {
           if (spec.oos !== undefined) datasets.push(refLine('OOS', spec.oos, '#ef4444', [6,3]));
           if (spec.specMax !== undefined) datasets.push(refLine('Max', spec.specMax, '#ef4444', [6,3]));
           if (spec.specMin !== undefined) datasets.push(refLine('Min', spec.specMin, '#3b82f6', [6,3]));
-          if (spec.alertaMin !== undefined) datasets.push(refLine('Alerta Min', spec.alertaMin, '#f59e0b', [5,5]));
+          if (spec.oosMin !== undefined) datasets.push(refLine('OOS Min', spec.oosMin, '#ef4444', [6,3]));
+          if (spec.alertaMin !== undefined && spec.alertaMin !== spec.specMin) datasets.push(refLine('Alerta Min', spec.alertaMin, '#f59e0b', [5,5]));
           if (spec.lod !== undefined) datasets.push(refLine('LOD', spec.lod, '#10b981', [2,2]));
 
           const tmpChart = new Chart(offCanvas, {
@@ -3088,20 +3480,36 @@ document.getElementById('btn-download-docx').onclick = async function() {
     if (excursions.length === 0) {
       children.push(p('Durante la ejecución del protocolo de calificación de la performance del Sistema de Tratamiento de Agua Ablandada y Ozonizada Fría y Caliente no surgieron no conformidades.'));
     } else {
+      const unresolvedDocx = excursions.filter(function(e) { return e.nivel === 'crit' && !getOosAcceptance(e); });
+      const acceptedDocx = excursions.filter(function(e) { return e.nivel === 'crit' && getOosAcceptance(e); });
+      const alertasDocx = excursions.filter(function(e) { return e.nivel === 'warn'; });
+
+      if (unresolvedDocx.length > 0) {
+        children.push(p('Se registraron ' + unresolvedDocx.length + ' excursión(es) OOS sin resolver durante la ejecución del protocolo:'));
+      } else if (acceptedDocx.length > 0) {
+        children.push(p('Se registraron ' + acceptedDocx.length + ' excursión(es) OOS, todas justificadas y aceptadas conforme al procedimiento de gestión de no conformidades:'));
+      }
+      if (alertasDocx.length > 0 && crit.length === 0) {
+        children.push(p('Se registraron ' + alertasDocx.length + ' excursión(es) a nivel de alerta. Las alertas no constituyen no conformidades.'));
+      }
+
+      children.push(p(''));
       children.push(p('En suma, durante la ejecución del protocolo de calificación de la performance del Sistema de Tratamiento de Agua Ablandada y Ozonizada Fría y Caliente surgieron las siguientes excursiones:'));
-      const eW = [450, 2200, 800, 2200, 900, 1200, 1610];
+      const eW = [450, 1800, 700, 1800, 900, 1200, 900, 1610];
       children.push(new Table({ width: { size: TW, type: WidthType.DXA }, columnWidths: eW, rows: [
-        hdrRow(['N° NC', 'Detalle', 'Crítica / No crítica', 'Acción correctiva propuesta', 'Status', 'Comentarios', 'Fecha'], eW),
+        hdrRow(['N° NC', 'Detalle', 'Crítica / No crítica', 'Acción correctiva', 'Status', 'Justificación', 'Aceptación', 'Fecha'], eW),
         ...excursions.map((e, i) => {
           const nivel = e.nivel === 'crit' ? 'OOS' : 'Alerta';
           const detalle = 'El día ' + e.fecha.toLocaleDateString('es-UY') + ' se detectó un resultado ' + nivel + ' en el punto ' + e.punto + ' para ' + e.parametro + '. Valor: ' + e.valor + '. ' + (e.detalle || '');
+          const acceptance = e.nivel === 'crit' ? getOosAcceptance(e) : null;
           return dRow([
             String(i + 1).padStart(3, '0'),
             detalle,
             e.nivel === 'crit' ? 'Crítica' : 'No crítica',
-            '', // acción correctiva en blanco
-            '', // status en blanco
-            '', // comentarios en blanco
+            acceptance ? acceptance.accionCorrectiva || '' : '',
+            acceptance ? 'Aceptado' : e.nivel === 'crit' ? 'Pendiente' : 'N/A (Alerta)',
+            acceptance ? acceptance.justificacion || '' : '',
+            acceptance ? new Date(acceptance.fechaAceptacion).toLocaleDateString('es-UY') : '',
             e.fecha.toLocaleDateString('es-UY'),
           ], eW);
         }),
@@ -3117,6 +3525,8 @@ document.getElementById('btn-download-docx').onclick = async function() {
     // ═══ 8. CONCLUSIONES ═══
     children.push(new Paragraph({ children: [new PageBreak()] }));
     children.push(heading1('9. CONCLUSIONES'));
+    const unresolvedCrit = crit.filter(function(e) { return !getOosAcceptance(e); });
+    const acceptedCrit = crit.filter(function(e) { return getOosAcceptance(e); });
     if (crit.length === 0 && warn.length === 0) {
       // Sin excursiones
       children.push(p('Habiéndose ejecutado la Fase ' + STATE.faseActual + ' (' + faseNombre + ') del protocolo PPQ-H2O-001 v2.0, con un total de ' + totalEvals + ' evaluaciones contra especificación de las cuales ' + conformes + ' resultaron conformes (' + pctConf + '%), no surgieron no conformidades ni excursiones de ningún tipo.'));
@@ -3125,9 +3535,17 @@ document.getElementById('btn-download-docx').onclick = async function() {
       // Solo alertas, sin OOS
       children.push(p('Habiéndose ejecutado la Fase ' + STATE.faseActual + ' (' + faseNombre + ') del protocolo PPQ-H2O-001 v2.0, con un total de ' + totalEvals + ' evaluaciones contra especificación, no surgieron no conformidades críticas (OOS). Se registraron ' + warn.length + ' excursión(es) a nivel de alerta (ver Sección 7).'));
       children.push(p('Las excursiones a nivel de alerta no constituyen no conformidades pero indican la necesidad de monitoreo reforzado. Se concluye que el sistema SAO-001 se encuentra controlado durante el período evaluado, con nivel de riesgo Bajo a Medio.'));
-    } else {
-      // Con OOS
+    } else if (unresolvedCrit.length === 0 && acceptedCrit.length > 0) {
+      // Todos los OOS aceptados/justificados
       children.push(p('Habiéndose ejecutado la Fase ' + STATE.faseActual + ' (' + faseNombre + ') del protocolo PPQ-H2O-001 v2.0, con un total de ' + totalEvals + ' evaluaciones contra especificación, se registraron ' + crit.length + ' excursiones fuera de especificación (OOS) y ' + warn.length + ' alertas. Las no conformidades se detallan en la Sección 7.'));
+      children.push(p('La totalidad de las excursiones OOS han sido justificadas y aceptadas conforme al procedimiento de gestión de no conformidades (SOP-AC-036). Las acciones correctivas implementadas y las justificaciones correspondientes se documentan en la tabla de la Sección 7.'));
+      children.push(p('Se concluye que el sistema SAO-001 se encuentra controlado durante el período evaluado, considerando que las desviaciones fueron investigadas, corregidas y documentadas. Se entiende que el sistema presenta un nivel de riesgo Bajo a Medio.'));
+    } else {
+      // Con OOS sin resolver
+      children.push(p('Habiéndose ejecutado la Fase ' + STATE.faseActual + ' (' + faseNombre + ') del protocolo PPQ-H2O-001 v2.0, con un total de ' + totalEvals + ' evaluaciones contra especificación, se registraron ' + crit.length + ' excursiones fuera de especificación (OOS) y ' + warn.length + ' alertas. Las no conformidades se detallan en la Sección 7.'));
+      if (acceptedCrit.length > 0) {
+        children.push(p('De las ' + crit.length + ' excursiones OOS, ' + acceptedCrit.length + ' han sido aceptadas/justificadas y ' + unresolvedCrit.length + ' permanecen sin resolver.'));
+      }
       children.push(p('Se deberán completar las acciones correctivas correspondientes, realizar el análisis de causa raíz (RCA) y evaluar el impacto antes de proceder a la siguiente fase.'));
     }
     children.push(p('Se recomienda: proceder con la Fase ' + (STATE.faseActual + 1) + ' conforme al cronograma; formalizar los hallazgos H-001, H-002 y H-003 como cambios menores; continuar con el monitoreo según plan de muestreo establecido.'));
