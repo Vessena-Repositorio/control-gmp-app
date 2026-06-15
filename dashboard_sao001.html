@@ -508,6 +508,7 @@
   }
   .cell-ok { background: var(--ok-tint); color: var(--ok); font-weight: 700; }
   .cell-warn { background: var(--warn-tint); color: var(--warn); font-weight: 700; }
+  .cell-accion { background: #fff7ed; color: #ea580c; font-weight: 700; }
   .cell-crit { background: var(--crit-tint); color: var(--crit); font-weight: 700; }
   .cell-pending { background: var(--bg-soft); color: var(--text-3); font-style: italic; }
   .cell-na { background: white; color: var(--text-4); }
@@ -568,6 +569,7 @@
   }
   .tag-crit { background: var(--crit-soft); color: var(--crit); }
   .tag-warn { background: var(--warn-soft); color: var(--warn); }
+  .tag-accion { background: #fff7ed; color: #ea580c; font-weight: 700; }
   .tag-ok { background: var(--ok-soft); color: var(--ok); }
   .tag-info { background: var(--info-soft); color: var(--info); }
   .tag-primary { background: var(--primary-soft); color: var(--primary-dark); }
@@ -768,6 +770,7 @@
   .heatmap-cell:hover { transform: scale(1.15); z-index: 5; box-shadow: var(--shadow-md); }
   .heatmap-cell.ok { background: var(--ok); border-color: var(--ok); }
   .heatmap-cell.warn { background: var(--warn); border-color: var(--warn); }
+  .heatmap-cell.accion { background: #f97316; border-color: #f97316; }
   .heatmap-cell.crit { background: var(--crit); border-color: var(--crit); }
   .heatmap-cell.mixed { background: linear-gradient(135deg, var(--ok) 0%, var(--ok) 50%, var(--warn) 50%, var(--warn) 100%); }
   .heatmap-cell.empty { background: white; border-style: dashed; }
@@ -962,6 +965,28 @@
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 5px; }
   ::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+
+  /* ========= P&ID DIAGRAM ========= */
+  .pid-point { cursor: pointer; transition: transform 0.15s; transform-box: fill-box; transform-origin: center; }
+  .pid-point:hover { transform: scale(1.1); }
+  .pid-summary-card {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: var(--r-md);
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .pid-summary-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
 
   /* ========= OOS ACCEPTANCE ========= */
   .oos-acceptance {
@@ -1173,6 +1198,11 @@
   <button class="btn" data-fase-preset="1" style="font-size:11px;padding:4px 10px;">Fase 1</button>
   <button class="btn" data-fase-preset="2" style="font-size:11px;padding:4px 10px;">Fase 2</button>
   <button class="btn" data-fase-preset="3" style="font-size:11px;padding:4px 10px;">Fase 3</button>
+  <span style="font-size:11px;color:var(--text-3);margin-left:4px;">|</span>
+  <button class="btn btn-primary" data-sistema-filter="all" style="font-size:11px;padding:4px 10px;" id="sf-all">Todos</button>
+  <button class="btn" data-sistema-filter="fria" style="font-size:11px;padding:4px 10px;" id="sf-fria">💧 Agua Fría</button>
+  <button class="btn" data-sistema-filter="caliente" style="font-size:11px;padding:4px 10px;" id="sf-caliente">🔥 Agua Caliente</button>
+  <button class="btn" data-sistema-filter="pretrat" style="font-size:11px;padding:4px 10px;" id="sf-pretrat">Pre-trat.</button>
   <span id="fecha-info" style="font-size:11px;color:var(--text-3);margin-left:8px;"></span>
 </div>
 
@@ -1184,6 +1214,7 @@
   <button class="tab" data-panel="heatmap">Mapa de calor</button>
   <button class="tab" data-panel="avance">Avance de fase</button>
   <button class="tab" data-panel="datos">Datos crudos</button>
+  <button class="tab" data-panel="pid">P&amp;ID Sistema</button>
   <button class="tab" data-panel="reporte">Reporte ejecutivo</button>
 </div>
 
@@ -1288,6 +1319,7 @@
       <span class="filter-label">Filtrar:</span>
       <button class="chip active" data-exc-filter="all">Todas</button>
       <button class="chip" data-exc-filter="crit">Solo OOS</button>
+      <button class="chip" data-exc-filter="accion">Solo Acción</button>
       <button class="chip" data-exc-filter="unresolved">OOS sin resolver</button>
       <button class="chip" data-exc-filter="accepted">OOS aceptados</button>
       <button class="chip" data-exc-filter="warn">Solo Alertas</button>
@@ -1398,6 +1430,15 @@
     </div>
   </div>
 
+  <!-- ============== PANEL: P&ID SISTEMA ============== -->
+  <div class="panel" id="panel-pid">
+    <div class="section">
+      <div class="section-title"><span>Diagrama P&amp;ID — Estado de puntos de muestreo</span></div>
+      <div id="pid-summary" style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;"></div>
+      <div id="pid-container" style="overflow-x:auto;"></div>
+    </div>
+  </div>
+
   <!-- ============== PANEL: REPORTE ============== -->
   <div class="panel" id="panel-reporte">
     <div style="display:flex;gap:8px;margin-bottom:16px;justify-content:flex-end;">
@@ -1412,7 +1453,7 @@
 
 <div class="footer">
   <div>VESSENA S.A. · Documento Controlado · Dashboard generado a partir de PPQ-H2O-001 v2.0 y REG-SOP-LCC-095-A v5.0</div>
-  <div id="footer-version">Build 2026.06.12 · v2.2 — Specs REG-SOP-LCC-095-A v5.0 · OOS Acceptance Workflow</div>
+  <div id="footer-version">Build 2026.06.15 · v2.6 — DOCX separado por loop · 3 niveles (Alerta/Acción/OOS)</div>
 </div>
 
 <script>
@@ -1452,57 +1493,72 @@ const SPECS = {
   },
   'TM6': {
     // TM6: tanque ozonizado — Ozono rango 0.2-0.4 mg/L (ambos inclusive = conforme), alerta <0.2, OOS <0.1
-    'Aerobios Totales':  { unit:'ufc/mL', spec:100, alerta:25, oos:100, tipo:'lt', freq:'D', dataUnit100mL:true },
+    'Aerobios Totales':  { unit:'ufc/mL', spec:100, alerta:1, accion:25, oos:100, tipo:'lt', freq:'D', dataUnit100mL:true },
     'Ozono libre':       { unit:'mg/L', specMin:0.2, specMax:0.4, oosMin:0.1, alertaMin:0.2, tipo:'range', freq:'D' },
   },
   'TM7': {
     // TM7: loop caliente entrada — Ozono <0.1, LOD=0.1
-    'Aerobios Totales':  { unit:'ufc/mL', spec:100, alerta:25, oos:100, tipo:'lt', freq:'D', dataUnit100mL:true },
+    'Aerobios Totales':  { unit:'ufc/mL', spec:100, alerta:1, accion:25, oos:100, tipo:'lt', freq:'D', dataUnit100mL:true },
     'Ozono libre':       { unit:'mg/L', spec:0.1, oos:0.1, tipo:'lt', lod:0.1, freq:'D' },
   },
   'TM8': {
-    'Aerobios Totales':  { unit:'ufc/mL', spec:100, alerta:25, oos:100, tipo:'lt', freq:'D', dataUnit100mL:true },
+    'Aerobios Totales':  { unit:'ufc/mL', spec:100, alerta:1, accion:25, oos:100, tipo:'lt', freq:'D', dataUnit100mL:true },
     'Ozono libre':       { unit:'mg/L', spec:0.1, oos:0.1, tipo:'lt', lod:0.1, freq:'D' },
     'Cloro Total':       { unit:'mg/L', spec:0.5, oos:0.5, tipo:'lt', freq:'D' },
     'Dureza Total':      { unit:'mg/L CaCO3', spec:10, alerta:9, oos:10, tipo:'lt', freq:'D' },
     'Conductividad':     { unit:'µS/cm', tipo:'info', freq:'D' },
   },
   'TM9': {
-    'Aerobios Totales':  { unit:'ufc/mL', spec:100, alerta:25, oos:100, tipo:'lt', freq:'D', dataUnit100mL:true },
+    'Aerobios Totales':  { unit:'ufc/mL', spec:100, alerta:1, accion:25, oos:100, tipo:'lt', freq:'D', dataUnit100mL:true },
     'Ozono libre':       { unit:'mg/L', spec:0.1, oos:0.1, tipo:'lt', lod:0.1, freq:'D' },
     'Cloro Total':       { unit:'mg/L', spec:0.5, oos:0.5, tipo:'lt', freq:'D' },
     'Dureza Total':      { unit:'mg/L CaCO3', spec:10, alerta:9, oos:10, tipo:'lt', freq:'D' },
     'Conductividad':     { unit:'µS/cm', tipo:'info', freq:'D' },
   },
   'TM10':{
-    'Aerobios Totales':  { unit:'ufc/mL', spec:100, alerta:25, oos:100, tipo:'lt', freq:'D', dataUnit100mL:true },
+    'Aerobios Totales':  { unit:'ufc/mL', spec:100, alerta:1, accion:25, oos:100, tipo:'lt', freq:'D', dataUnit100mL:true },
     'Conductividad':     { unit:'µS/cm', tipo:'info', freq:'D' },
     'Ozono libre':       { unit:'mg/L', spec:0.1, oos:0.1, tipo:'lt', lod:0.1, freq:'D' },
   },
   'TM11':{
     // TM11: retorno loop inyección ozono — Ozono rango 0.2-0.4 mg/L (ambos inclusive = conforme), alerta <0.2, OOS <0.1
-    'Aerobios Totales':  { unit:'ufc/mL', spec:100, alerta:25, oos:100, tipo:'lt', freq:'D', dataUnit100mL:true },
+    'Aerobios Totales':  { unit:'ufc/mL', spec:100, alerta:1, accion:25, oos:100, tipo:'lt', freq:'D', dataUnit100mL:true },
     'Ozono libre':       { unit:'mg/L', specMin:0.2, specMax:0.4, oosMin:0.1, alertaMin:0.2, tipo:'range', freq:'D' },
   },
 };
 
 // POU 1-8: agua fría, ozono <0.1 (LOD=0.1)
+// Aerobios: alerta 1 ufc/mL (100 ufc/100mL), OOS 25 ufc/mL (2500 ufc/100mL), spec 100 ufc/mL (10000 ufc/100mL)
 ['POU1','POU2','POU3','POU4','POU5','POU6','POU7','POU8'].forEach(p => {
   SPECS[p] = {
-    'Aerobios Totales': { unit:'ufc/mL', spec:100, alerta:25, oos:100, tipo:'lt', freq:'D', dataUnit100mL:true },
+    'Aerobios Totales': { unit:'ufc/mL', spec:100, alerta:1, accion:25, oos:100, tipo:'lt', freq:'D', dataUnit100mL:true },
     'Ozono libre':      { unit:'mg/L', spec:0.1, oos:0.1, tipo:'lt', lod:0.1, freq:'D' },
   };
 });
 // POU 10-14: agua caliente, ozono <0.1 (TODOS los POUs tienen spec <0.1 conforme REG v5.0)
+// Aerobios: alerta 1 ufc/mL (100 ufc/100mL), OOS 25 ufc/mL (2500 ufc/100mL), spec 100 ufc/mL (10000 ufc/100mL)
 ['POU10','POU11','POU12','POU13','POU14'].forEach(p => {
   SPECS[p] = {
-    'Aerobios Totales': { unit:'ufc/mL', spec:100, alerta:25, oos:100, tipo:'lt', freq:'D', dataUnit100mL:true },
+    'Aerobios Totales': { unit:'ufc/mL', spec:100, alerta:1, accion:25, oos:100, tipo:'lt', freq:'D', dataUnit100mL:true },
     'Ozono libre':      { unit:'mg/L', spec:0.1, oos:0.1, tipo:'lt', lod:0.1, freq:'D' },
   };
 });
 
 const PUNTOS_ORDER = ['P1','TM1','TM2','TM4','TM5','TM6','TM7','TM8','TM9','TM10','TM11',
   'POU1','POU2','POU3','POU4','POU5','POU6','POU7','POU8','POU10','POU11','POU12','POU13','POU14'];
+
+const SISTEMA_PUNTOS = {
+  'all':       null,
+  'fria':      ['TM6','TM8','TM11','POU1','POU2','POU3','POU4','POU5','POU6','POU7','POU8'],
+  'caliente':  ['TM7','TM9','TM10','POU10','POU11','POU12','POU13','POU14'],
+  'pretrat':   ['P1','TM1','TM2','TM4','TM5'],
+};
+
+function getFilteredPuntos() {
+  const sistPuntos = SISTEMA_PUNTOS[STATE.sistemaFilter];
+  if (!sistPuntos) return PUNTOS_ORDER;
+  return PUNTOS_ORDER.filter(p => sistPuntos.includes(p));
+}
 
 const COL_MAP = {
   punto: 0, comentarios: 1, sistema: 2, fecha: 3, fase: 4,
@@ -1526,8 +1582,8 @@ const PARAM_COLS = [
 const PUNTO_LABELS = {
   'P1':'Pozo','TM1':'Pozo clorado','TM2':'Entrada OSE',
   'TM4':'Post ablandadores','TM5':'Post metabisulfito',
-  'TM6':'Tq ozonizada','TM7':'Loop cal. entrada','TM8':'Retorno loop frío',
-  'TM9':'Retorno loop cal.','TM10':'Tq caliente','TM11':'Retorno loop O₃',
+  'TM6':'Salida tq ozonizado','TM7':'Salida tq caliente','TM8':'Retorno loop frío',
+  'TM9':'Retorno tq caliente','TM10':'POU tq caliente','TM11':'Retorno loop O₃',
 };
 
 const SISTEMA_COLOR = {
@@ -1558,6 +1614,7 @@ const STATE = {
   activeParam: 'Ozono libre',
   activeHeatmapParam: 'Ozono libre',
   excFilter: 'all',
+  sistemaFilter: 'all',   // filter by water system: all, fria, caliente, pretrat, ozon
 };
 
 function saveUrl(url) { try { window.name = 'sao001:' + url; } catch(e){} }
@@ -1678,6 +1735,7 @@ function evaluar(valorParsed, spec) {
 
   if (spec.tipo === 'lt') {
     if (spec.oos !== undefined && v >= spec.oos) return { status: 'crit', detail: `${spec.dataUnit100mL ? rawV + ' ufc/100mL = ' + v + ' ufc/mL' : v} ≥ ${spec.oos} (OOS)` };
+    if (spec.accion !== undefined && v >= spec.accion) return { status: 'accion', detail: `${spec.dataUnit100mL ? rawV + ' ufc/100mL = ' + v + ' ufc/mL' : v} ≥ ${spec.accion} (Acción)` };
     if (spec.alerta !== undefined && v > spec.alerta) return { status: 'warn', detail: `${spec.dataUnit100mL ? rawV + ' ufc/100mL = ' + v + ' ufc/mL' : v} > ${spec.alerta} (Alerta)` };
     return { status: 'ok' };
   }
@@ -1895,7 +1953,7 @@ function detectarExcursiones(samples) {
       const spec = specs[param];
       if (!spec) return;
       const ev = evaluar(s.valores[param].parsed, spec);
-      if (ev.status === 'warn' || ev.status === 'crit') {
+      if (ev.status === 'warn' || ev.status === 'accion' || ev.status === 'crit') {
         exc.push({
           fecha: s.fecha, punto: s.punto, sistema: s.sistema,
           parametro: param, valor: s.valores[param].raw,
@@ -1951,6 +2009,7 @@ function render() {
   renderHeatmap();
   renderAvance();
   renderDatos();
+  renderPID();
   renderReporte();
   updateBadges();
 }
@@ -1965,7 +2024,7 @@ function updateBadges() {
 
 function statusesOfFase() {
   const samplesF = STATE.filteredSamples;
-  let ok = 0, warn = 0, crit = 0, lod = 0, info = 0, na = 0, pending = 0;
+  let ok = 0, warn = 0, accion = 0, crit = 0, lod = 0, info = 0, na = 0, pending = 0;
   samplesF.forEach(s => {
     Object.keys(s.valores).forEach(p => {
       const spec = (SPECS[s.punto]||{})[p];
@@ -1973,13 +2032,14 @@ function statusesOfFase() {
       if (ev.status === 'ok') ok++;
       else if (ev.status === 'lod') lod++;
       else if (ev.status === 'warn') warn++;
+      else if (ev.status === 'accion') accion++;
       else if (ev.status === 'crit') crit++;
       else if (ev.status === 'info') info++;
       else if (ev.status === 'na') na++;
       else if (ev.status === 'pending') pending++;
     });
   });
-  return { ok, warn, crit, lod, info, na, pending, total: ok+warn+crit+lod };
+  return { ok, warn, accion, crit, lod, info, na, pending, total: ok+warn+accion+crit+lod };
 }
 
 function renderKpis() {
@@ -2029,9 +2089,9 @@ function renderKpis() {
 
 function renderDonut() {
   const st = statusesOfFase();
-  const data = [st.ok, st.lod, st.warn, st.crit];
-  const labels = ['Conforme', 'Conforme (LOD)', 'Alerta', 'OOS'];
-  const colors = ['#10b981', '#34d399', '#f59e0b', '#ef4444'];
+  const data = [st.ok, st.lod, st.warn, st.accion, st.crit];
+  const labels = ['Conforme', 'Conforme (LOD)', 'Alerta', 'Acción', 'OOS'];
+  const colors = ['#10b981', '#34d399', '#f59e0b', '#f97316', '#ef4444'];
 
   const ctx = document.getElementById('chart-donut-cumpl');
   const hasData = data.some(d => d > 0);
@@ -2090,8 +2150,9 @@ function renderSistemasChart() {
   const bySistema = {};
   STATE.excursions.forEach(e => {
     const s = e.sistema || 'Desconocido';
-    if (!bySistema[s]) bySistema[s] = { crit: 0, warn: 0 };
-    bySistema[s][e.nivel]++;
+    if (!bySistema[s]) bySistema[s] = { crit: 0, accion: 0, warn: 0 };
+    if (e.nivel === 'accion') bySistema[s].accion++;
+    else bySistema[s][e.nivel]++;
   });
   const sistemas = Object.keys(bySistema);
 
@@ -2111,6 +2172,7 @@ function renderSistemasChart() {
       labels: sistemas,
       datasets: [
         { label: 'OOS', data: sistemas.map(s => bySistema[s].crit), backgroundColor: '#ef4444', borderRadius: 4 },
+        { label: 'Acción', data: sistemas.map(s => bySistema[s].accion), backgroundColor: '#f97316', borderRadius: 4 },
         { label: 'Alertas', data: sistemas.map(s => bySistema[s].warn), backgroundColor: '#f59e0b', borderRadius: 4 },
       ],
     },
@@ -2156,9 +2218,9 @@ function renderExcTable(list, options) {
         '<td><strong style="color:var(--text-0);">' + e.punto + '</strong> <span style="color:var(--text-3);font-size:10px;">' + getPuntoLabel(e.punto) + '</span></td>' +
         '<td><span class="tag tag-primary">' + e.sistema + '</span></td>' +
         '<td>' + e.parametro + '</td>' +
-        '<td><strong style="color:' + (e.nivel==='crit'?'var(--crit)':'var(--warn)') + ';">' + e.valor + '</strong></td>' +
+        '<td><strong style="color:' + (e.nivel==='crit'?'var(--crit)':e.nivel==='accion'?'#ea580c':'var(--warn)') + ';">' + e.valor + '</strong></td>' +
         '<td style="color:var(--text-2);">' + e.spec + '</td>' +
-        '<td><span class="tag tag-' + (e.nivel === 'crit' ? 'crit' : 'warn') + '">' + (e.nivel === 'crit' ? 'OOS' : 'Alerta') + '</span>' +
+        '<td><span class="tag tag-' + (e.nivel === 'crit' ? 'crit' : e.nivel === 'accion' ? 'accion' : 'warn') + '">' + (e.nivel === 'crit' ? 'OOS' : e.nivel === 'accion' ? 'Acción' : 'Alerta') + '</span>' +
           (e.nivel === 'crit' && acceptance ? ' <span class="tag tag-ok">ACEPTADO</span>' : '') + '</td>' +
         '<td style="color:var(--text-1);font-size:11px;">' + e.detalle + '</td>';
 
@@ -2220,6 +2282,7 @@ function setupExcAcceptanceHandlers() {
       var idx = parseInt(btn.dataset.excSave);
       var list = STATE.excursions;
       if (STATE.excFilter === 'crit') list = list.filter(function(e) { return e.nivel === 'crit'; });
+      else if (STATE.excFilter === 'accion') list = list.filter(function(e) { return e.nivel === 'accion'; });
       else if (STATE.excFilter === 'warn') list = list.filter(function(e) { return e.nivel === 'warn'; });
       else if (STATE.excFilter === 'unresolved') list = list.filter(function(e) { return e.nivel === 'crit' && !getOosAcceptance(e); });
       else if (STATE.excFilter === 'accepted') list = list.filter(function(e) { return e.nivel === 'crit' && getOosAcceptance(e); });
@@ -2240,6 +2303,7 @@ function setupExcAcceptanceHandlers() {
       var idx = parseInt(btn.dataset.excRevert);
       var list = STATE.excursions;
       if (STATE.excFilter === 'crit') list = list.filter(function(e) { return e.nivel === 'crit'; });
+      else if (STATE.excFilter === 'accion') list = list.filter(function(e) { return e.nivel === 'accion'; });
       else if (STATE.excFilter === 'warn') list = list.filter(function(e) { return e.nivel === 'warn'; });
       else if (STATE.excFilter === 'unresolved') list = list.filter(function(e) { return e.nivel === 'crit' && !getOosAcceptance(e); });
       else if (STATE.excFilter === 'accepted') list = list.filter(function(e) { return e.nivel === 'crit' && getOosAcceptance(e); });
@@ -2260,6 +2324,7 @@ function renderExcursiones() {
   const cont = document.getElementById('excursiones-container');
   let list = STATE.excursions;
   if (STATE.excFilter === 'crit') list = list.filter(e => e.nivel === 'crit');
+  else if (STATE.excFilter === 'accion') list = list.filter(e => e.nivel === 'accion');
   else if (STATE.excFilter === 'warn') list = list.filter(e => e.nivel === 'warn');
   else if (STATE.excFilter === 'unresolved') list = list.filter(e => e.nivel === 'crit' && !getOosAcceptance(e));
   else if (STATE.excFilter === 'accepted') list = list.filter(e => e.nivel === 'crit' && getOosAcceptance(e));
@@ -2287,7 +2352,7 @@ function renderSemaforo() {
   params.forEach(p => html += `<th>${p}</th>`);
   html += '</tr></thead><tbody>';
 
-  PUNTOS_ORDER.forEach(punto => {
+  getFilteredPuntos().forEach(punto => {
     const specs = SPECS[punto];
     if (!specs) return;
     const u = ultimas[punto] || {};
@@ -2301,6 +2366,7 @@ function renderSemaforo() {
       const cls = ev.status === 'ok' ? 'cell-ok' :
                   ev.status === 'lod' ? 'cell-lod' :
                   ev.status === 'warn' ? 'cell-warn' :
+                  ev.status === 'accion' ? 'cell-accion' :
                   ev.status === 'crit' ? 'cell-crit' :
                   ev.status === 'info' ? 'cell-info' :
                   ev.status === 'na' ? 'cell-na' : 'cell-pending';
@@ -2335,7 +2401,7 @@ function renderTendencias() {
   }
 
   // Agrupar puntos por spec key (misma spec = mismo gráfico)
-  const puntosConDato = PUNTOS_ORDER.filter(p => {
+  const puntosConDato = getFilteredPuntos().filter(p => {
     const spec = (SPECS[p]||{})[STATE.activeParam];
     if (!spec) return false;
     return STATE.filteredSamples.some(s => s.punto === p && s.valores[STATE.activeParam]?.parsed.kind === 'num');
@@ -2445,6 +2511,7 @@ function renderTendencias() {
     }
 
     if (spec.alerta !== undefined) datasets.push(refLine('Alerta (' + spec.alerta + ' ' + spec.unit + ')', spec.alerta, '#f59e0b', [5, 5]));
+    if (spec.accion !== undefined) datasets.push(refLine('Acción (' + spec.accion + ' ' + spec.unit + ')', spec.accion, '#f97316', [8, 4]));
     if (spec.oos !== undefined) datasets.push(refLine('OOS (' + spec.oos + ' ' + spec.unit + ')', spec.oos, '#ef4444', [6, 3]));
     if (spec.specMax !== undefined) datasets.push(refLine('Max (' + spec.specMax + ')', spec.specMax, '#ef4444', [6, 3]));
     if (spec.specMin !== undefined) datasets.push(refLine('Min (' + spec.specMin + ')', spec.specMin, '#3b82f6', [6, 3]));
@@ -2477,7 +2544,7 @@ function renderTendencias() {
 function renderBoxPlot() {
   // Box plot manual usando barras (Chart.js no tiene boxplot nativo)
   const param = STATE.activeParam;
-  const puntos = PUNTOS_ORDER.filter(p => {
+  const puntos = getFilteredPuntos().filter(p => {
     const spec = (SPECS[p]||{})[param];
     if (!spec) return false;
     return STATE.filteredSamples.some(s => s.punto === p && s.valores[param]?.parsed.kind === 'num');
@@ -2537,7 +2604,7 @@ function renderBoxPlot() {
 function renderStatsTable() {
   const param = STATE.activeParam;
   const $cont = document.getElementById('stats-table');
-  const puntos = PUNTOS_ORDER.filter(p => {
+  const puntos = getFilteredPuntos().filter(p => {
     const spec = (SPECS[p]||{})[param];
     if (!spec) return false;
     return STATE.filteredSamples.some(s => s.punto === p && s.valores[param]?.parsed.kind === 'num');
@@ -2597,7 +2664,7 @@ function renderHeatmap() {
   }
   html += '</div>';
 
-  PUNTOS_ORDER.forEach(punto => {
+  getFilteredPuntos().forEach(punto => {
     const spec = (SPECS[punto]||{})[STATE.activeHeatmapParam];
     if (!spec) return;
     html += `<div class="heatmap-row"><div class="heatmap-point" style="min-width:100px;">${punto}<div style="font-size:9px;color:var(--text-3);font-weight:400;">${getPuntoLabel(punto)}</div></div>`;
@@ -2611,6 +2678,7 @@ function renderHeatmap() {
       let cls = 'empty';
       if (ev.status === 'ok' || ev.status === 'lod') cls = 'ok';
       else if (ev.status === 'warn') cls = 'warn';
+      else if (ev.status === 'accion') cls = 'accion';
       else if (ev.status === 'crit') cls = 'crit';
       else if (ev.status === 'info') cls = 'ok';
       const title = `${punto} · ${fmtFecha(new Date(fecha))}\n${STATE.activeHeatmapParam}: ${valor.raw}\nSpec: ${formatSpec(spec)}${ev.detail ? '\n' + ev.detail : ''}`;
@@ -2661,7 +2729,7 @@ function renderAvance() {
 
   const cc = document.getElementById('completitud-container');
   let html = '<table class="data-table"><thead><tr><th>Punto</th><th>Frecuencia</th><th>Esperadas</th><th>Cargadas</th><th>% Completitud</th></tr></thead><tbody>';
-  PUNTOS_ORDER.forEach(p => {
+  getFilteredPuntos().forEach(p => {
     const specs = SPECS[p];
     if (!specs) return;
     const freqs = Object.values(specs).map(s => s.freq).filter(f => f);
@@ -2724,6 +2792,285 @@ function renderDatos() {
   cont.innerHTML = html;
 }
 
+
+function renderPID() {
+  var cont = document.getElementById('pid-container');
+  var summ = document.getElementById('pid-summary');
+  var samplesF = STATE.filteredSamples;
+
+  function calcStatus(punto) {
+    var ps = samplesF.filter(function(s) { return s.punto === punto; });
+    var oos = 0, accion = 0, warn = 0, total = 0;
+    ps.forEach(function(s) {
+      var specs = SPECS[punto];
+      if (!specs) return;
+      Object.keys(s.valores).forEach(function(param) {
+        var spec = specs[param];
+        if (!spec) return;
+        var val = s.valores[param];
+        if (val && val.parsed !== null) {
+          var ev = evaluar(val.parsed, spec);
+          total++;
+          if (ev.status === 'crit') oos++;
+          else if (ev.status === 'accion') accion++;
+          else if (ev.status === 'warn') warn++;
+        }
+      });
+    });
+    return { oos: oos, accion: accion, warn: warn, total: total, muestras: ps.length };
+  }
+
+  function getColor(st) {
+    if (st.oos > 0) return '#ef4444';
+    if (st.accion > 0) return '#f97316';
+    if (st.warn >= 3) return '#f59e0b';
+    if (st.total > 0) return '#10b981';
+    return '#cbd5e1';
+  }
+  function getStroke(st) {
+    if (st.oos > 0) return '#b91c1c';
+    if (st.accion > 0) return '#c2410c';
+    if (st.warn >= 3) return '#b45309';
+    if (st.total > 0) return '#047857';
+    return '#94a3b8';
+  }
+  function getSymbol(st) {
+    if (st.oos > 0) return '✕';
+    if (st.accion > 0) return '!';
+    if (st.warn >= 3) return '⚠';
+    if (st.total > 0) return '✓';
+    return '—';
+  }
+  function getStatusLabel(st) {
+    if (st.oos > 0) return 'OOS (' + st.oos + ')';
+    if (st.accion > 0) return st.accion + ' acción';
+    if (st.warn >= 3) return st.warn + ' alertas';
+    if (st.total > 0) return 'Conforme';
+    return 'Sin datos';
+  }
+
+  var allPoints = ['TM6','TM8','TM11','POU1','POU2','POU3','POU4','POU5','POU6','POU7','POU8',
+    'TM7','TM9','TM10','POU10','POU11','POU12','POU13','POU14'];
+
+  var statuses = {};
+  var counts = { crit: 0, accion: 0, warn: 0, ok: 0, nodata: 0 };
+  allPoints.forEach(function(p) {
+    var st = calcStatus(p);
+    statuses[p] = st;
+    if (st.oos > 0) counts.crit++;
+    else if (st.accion > 0) counts.accion++;
+    else if (st.warn >= 3) counts.warn++;
+    else if (st.total > 0) counts.ok++;
+    else counts.nodata++;
+  });
+
+  // Summary cards
+  summ.innerHTML =
+    '<div class="pid-summary-card"><div class="pid-summary-dot" style="background:#ef4444;"></div>' + counts.crit + ' con OOS</div>' +
+    '<div class="pid-summary-card"><div class="pid-summary-dot" style="background:#f97316;"></div>' + counts.accion + ' con Acción</div>' +
+    '<div class="pid-summary-card"><div class="pid-summary-dot" style="background:#f59e0b;"></div>' + counts.warn + ' con 3+ alertas</div>' +
+    '<div class="pid-summary-card"><div class="pid-summary-dot" style="background:#10b981;"></div>' + counts.ok + ' conformes</div>' +
+    '<div class="pid-summary-card"><div class="pid-summary-dot" style="background:#cbd5e1;"></div>' + counts.nodata + ' sin datos</div>';
+
+  function ind(punto, x, y, labelBelow) {
+    var st = statuses[punto] || { oos:0, warn:0, total:0, muestras:0 };
+    var color = getColor(st);
+    var stroke = getStroke(st);
+    var sym = getSymbol(st);
+    var tip = punto + ' · ' + (PUNTO_LABELS[punto] || getPuntoLabel(punto)) +
+      '\nMuestras: ' + st.muestras +
+      '\nEvaluaciones: ' + st.total +
+      '\nOOS: ' + st.oos + '  Alertas: ' + st.warn +
+      '\nEstado: ' + getStatusLabel(st);
+    var below = labelBelow !== false;
+    var ly = below ? y + 32 : y - 26;
+    return '<g class="pid-point">' +
+      '<circle cx="' + x + '" cy="' + y + '" r="20" fill="' + color + '" stroke="' + stroke + '" stroke-width="2.5" opacity="0.92"/>' +
+      '<circle cx="' + x + '" cy="' + y + '" r="20" fill="none" stroke="white" stroke-width="0.8" opacity="0.35"/>' +
+      '<text x="' + x + '" y="' + (y+4) + '" text-anchor="middle" fill="white" font-size="11" font-weight="800" font-family="system-ui,sans-serif">' + sym + '</text>' +
+      '<text x="' + x + '" y="' + ly + '" text-anchor="middle" fill="#1e293b" font-size="11" font-weight="700" font-family="system-ui,sans-serif">' + punto + '</text>' +
+      '<title>' + tip + '</title>' +
+      '</g>';
+  }
+
+  // Pipe colors
+  var pBlue = '#3b82f6';
+  var pRed = '#ef4444';
+  var pGray = '#94a3b8';
+  var pw = '3'; // pipe width
+  var pwThin = '2';
+
+  // Arrow marker defs
+  var defs = '<defs>' +
+    '<marker id="pid-arr-blue" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="' + pBlue + '"/></marker>' +
+    '<marker id="pid-arr-red" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="' + pRed + '"/></marker>' +
+    '<filter id="pid-shadow"><feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.12"/></filter>' +
+    '</defs>';
+
+  // Helper: equipment box
+  function eqBox(x, y, w, h, label1, label2, rx) {
+    return '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="' + (rx||8) + '" fill="#f1f5f9" stroke="#64748b" stroke-width="1.5" filter="url(#pid-shadow)"/>' +
+      '<text x="' + (x+w/2) + '" y="' + (y+h/2 - (label2 ? 4 : 0)) + '" text-anchor="middle" fill="#334155" font-size="11" font-weight="700" font-family="system-ui,sans-serif">' + label1 + '</text>' +
+      (label2 ? '<text x="' + (x+w/2) + '" y="' + (y+h/2+12) + '" text-anchor="middle" fill="#64748b" font-size="10" font-weight="600" font-family="system-ui,sans-serif">' + label2 + '</text>' : '');
+  }
+
+  // Helper: tank shape (rounded rect with top cap)
+  function tank(cx, ty, w, h, label1, label2) {
+    var x = cx - w/2;
+    return '<rect x="' + x + '" y="' + ty + '" width="' + w + '" height="' + h + '" rx="12" fill="#e2e8f0" stroke="#64748b" stroke-width="1.8" filter="url(#pid-shadow)"/>' +
+      '<rect x="' + (cx - w*0.25) + '" y="' + (ty-12) + '" width="' + (w*0.5) + '" height="' + 14 + '" rx="4" fill="#cbd5e1" stroke="#64748b" stroke-width="1.2"/>' +
+      '<text x="' + cx + '" y="' + (ty+h/2-6) + '" text-anchor="middle" fill="#1e293b" font-size="12" font-weight="700" font-family="system-ui,sans-serif">' + label1 + '</text>' +
+      '<text x="' + cx + '" y="' + (ty+h/2+10) + '" text-anchor="middle" fill="#475569" font-size="11" font-weight="600" font-family="system-ui,sans-serif">' + label2 + '</text>';
+  }
+
+  // Helper: pipe line
+  function pipe(pts, color, marker, dashed) {
+    return '<polyline points="' + pts + '" fill="none" stroke="' + color + '" stroke-width="' + pw + '"' +
+      (dashed ? ' stroke-dasharray="8,5"' : '') +
+      (marker ? ' marker-end="url(#' + marker + ')"' : '') + '/>';
+  }
+  function pipeT(pts, color) {
+    return '<polyline points="' + pts + '" fill="none" stroke="' + color + '" stroke-width="' + pwThin + '"/>';
+  }
+
+  // ===================== AGUA FRÍA =====================
+  // Positions
+  var fTitle = '<text x="700" y="30" text-anchor="middle" fill="#0f172a" font-size="17" font-weight="800" font-family="system-ui,sans-serif" letter-spacing="1">LOOP DE AGUA FRÍA OZONIZADA</text>';
+
+  // Separator line
+  var sep = '<line x1="30" y1="478" x2="1370" y2="478" stroke="#e2e8f0" stroke-width="2" stroke-dasharray="6,4"/>';
+
+  // O3 generator
+  var fO3 = eqBox(50, 90, 105, 46, 'O₃', 'Generador', 6);
+  // Tank 20,000L — centered at 345
+  var fTank = tank(345, 58, 150, 175, 'TANQUE', '20.000 L');
+  // UV
+  var fUV = eqBox(440, 268, 76, 52, 'UV', 'Lámpara', 6);
+
+  // Pipes agua fría
+  // O3 → Tank
+  var fPipe1 = pipe('155,113 270,113', pBlue, 'pid-arr-blue');
+  // Tank → TM6 (outlet right)
+  var fPipe2 = pipe('420,170 460,170', pBlue, 'pid-arr-blue');
+  // TM6 → UV
+  var fPipe3 = pipe('478,190 478,268', pBlue, 'pid-arr-blue');
+  // UV → distribution vertical
+  var fPipe4 = pipe('478,320 478,355', pBlue, 'pid-arr-blue');
+  // Distribution horizontal
+  var fPipe5 = pipe('150,355 1260,355', pBlue);
+
+  // POU positions
+  var fPouX = [150, 300, 450, 600, 750, 900, 1080, 1230];
+  var fPouNames = ['POU1','POU2','POU3','POU4','POU5','POU6','POU7','POU8'];
+  var fPouTypes = ['Reactor','Reactor','Reactor','Reactor','Reactor','Reactor','Lavadero','Lavadero'];
+  // POU T-connections
+  var fPouPipes = '';
+  fPouX.forEach(function(px) {
+    fPouPipes += pipeT(px + ',355 ' + px + ',388', pBlue);
+  });
+  // POU indicators
+  var fPouInds = '';
+  fPouX.forEach(function(px, i) {
+    fPouInds += ind(fPouNames[i], px, 410, true);
+  });
+  // POU type labels
+  var fPouLabels = '';
+  fPouX.forEach(function(px, i) {
+    fPouLabels += '<text x="' + px + '" y="456" text-anchor="middle" fill="#94a3b8" font-size="9" font-style="italic" font-family="system-ui,sans-serif">' + fPouTypes[i] + '</text>';
+  });
+
+  // Return pipe: from right distribution up → TM8 → left → tank
+  var fReturn1 = pipe('1260,355 1280,355 1280,88', pBlue, '', true);
+  var fReturn2 = pipe('1260,88 420,88 420,58', pBlue, 'pid-arr-blue', true);
+
+  // Ozone loop: tank left → TM11 → up → O3
+  var fO3Loop1 = pipe('270,200 140,200', pBlue, '', true);
+  var fO3Loop2 = pipe('90,200 50,200 50,136', pBlue, 'pid-arr-blue', true);
+  // Ozone loop label
+  var fO3Label = '<text x="190" y="195" text-anchor="middle" fill="#3b82f6" font-size="9" font-weight="600" font-family="system-ui,sans-serif">LOOP O₃</text>';
+
+  // TM indicators agua fría
+  var fTM6 = ind('TM6', 478, 170, false);
+  var fTM8 = ind('TM8', 1280, 88, false);
+  var fTM11 = ind('TM11', 110, 200, true);
+
+  // ===================== AGUA CALIENTE =====================
+  var cTitle = '<text x="700" y="518" text-anchor="middle" fill="#0f172a" font-size="17" font-weight="800" font-family="system-ui,sans-serif" letter-spacing="1">LOOP DE AGUA CALIENTE</text>';
+
+  // Tank 3,000L — centered at 150
+  var cTank = tank(150, 558, 130, 155, 'TANQUE', '3.000 L');
+  // TM7 (outlet top right of tank)
+  var cPipe1 = pipe('215,575 250,575', pRed, 'pid-arr-red');
+  // Supply line: TM7 → right
+  var cPipe2 = pipe('290,575 1260,575', pRed, 'pid-arr-red');
+
+  // POU positions caliente
+  var cPouX = [420, 600, 780, 960, 1160];
+  var cPouNames = ['POU10','POU11','POU12','POU13','POU14'];
+  var cPouTypes = ['Bacha lavado','Bacha lavado','Tanque 100L','Tanque 100L','Bacha lavado'];
+  // POU T-connections
+  var cPouPipes = '';
+  cPouX.forEach(function(px) {
+    cPouPipes += pipeT(px + ',575 ' + px + ',720', pRed);
+    cPouPipes += pipeT(px + ',760 ' + px + ',850', pRed);
+  });
+  // Return pipe
+  var cReturn1 = pipe('1280,595 1280,850', pRed, '', true);
+  var cReturn2 = pipe('1260,850 170,850', pRed, '', true);
+  var cReturn3 = pipe('170,850 170,780', pRed, 'pid-arr-red', true);
+  // Return label
+  var cRetLabel = '<text x="700" y="870" text-anchor="middle" fill="#ef4444" font-size="9" font-weight="600" font-family="system-ui,sans-serif" opacity="0.7">← RETORNO →</text>';
+
+  // POU indicators
+  var cPouInds = '';
+  cPouX.forEach(function(px, i) {
+    cPouInds += ind(cPouNames[i], px, 740, true);
+  });
+  // POU type labels
+  var cPouLabels = '';
+  cPouX.forEach(function(px, i) {
+    cPouLabels += '<text x="' + px + '" y="786" text-anchor="middle" fill="#94a3b8" font-size="9" font-style="italic" font-family="system-ui,sans-serif">' + cPouTypes[i] + '</text>';
+  });
+
+  // TM indicators caliente
+  var cTM7 = ind('TM7', 270, 575, false);
+  var cTM9 = ind('TM9', 1280, 575, false);
+  var cTM10 = ind('TM10', 150, 760, true);
+
+  // ===================== LEGEND =====================
+  var legend =
+    '<rect x="30" y="893" width="370" height="36" rx="6" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>' +
+    '<circle cx="55" cy="911" r="8" fill="#10b981"/><text x="70" y="915" fill="#334155" font-size="10" font-family="system-ui,sans-serif">Conforme</text>' +
+    '<circle cx="155" cy="911" r="8" fill="#f59e0b"/><text x="170" y="915" fill="#334155" font-size="10" font-family="system-ui,sans-serif">3+ Alertas</text>' +
+    '<circle cx="260" cy="911" r="8" fill="#ef4444"/><text x="275" y="915" fill="#334155" font-size="10" font-family="system-ui,sans-serif">OOS</text>' +
+    '<circle cx="330" cy="911" r="8" fill="#cbd5e1"/><text x="345" y="915" fill="#334155" font-size="10" font-family="system-ui,sans-serif">Sin datos</text>';
+
+  // ===================== ASSEMBLE SVG =====================
+  var svg = '<svg viewBox="0 0 1400 935" xmlns="http://www.w3.org/2000/svg" style="width:100%;background:white;border-radius:12px;border:1px solid #e2e8f0;">' +
+    defs +
+    '<!-- AGUA FRÍA -->' +
+    fTitle +
+    fO3 + fTank + fUV +
+    fPipe1 + fPipe2 + fPipe3 + fPipe4 + fPipe5 +
+    fReturn1 + fReturn2 +
+    fO3Loop1 + fO3Loop2 + fO3Label +
+    fPouPipes + fPouInds + fPouLabels +
+    fTM6 + fTM8 + fTM11 +
+    sep +
+    '<!-- AGUA CALIENTE -->' +
+    cTitle +
+    cTank +
+    cPipe1 + cPipe2 +
+    cReturn1 + cReturn2 + cReturn3 + cRetLabel +
+    cPouPipes + cPouInds + cPouLabels +
+    cTM7 + cTM9 + cTM10 +
+    legend +
+    '</svg>';
+
+  cont.innerHTML = svg;
+}
+
+
 function renderReporte() {
   const cont = document.getElementById('reporte-container');
   const samplesF = STATE.filteredSamples;
@@ -2737,18 +3084,155 @@ function renderReporte() {
   const pctC = st.total > 0 ? Math.round(conformes*100/st.total) : 0;
   const fechaHoy = fmtFecha(new Date());
 
+  // ——— Loop stats helper ———
+  function loopData(puntosArr) {
+    var ls = samplesF.filter(function(s) { return puntosArr.includes(s.punto); });
+    var ld = [...new Set(ls.map(function(s) { return s.fecha.toDateString(); }))].length;
+    var le = STATE.excursions.filter(function(e) { return puntosArr.includes(e.punto); });
+    var lc = le.filter(function(e) { return e.nivel === 'crit'; });
+    var lw = le.filter(function(e) { return e.nivel === 'warn'; });
+    var lok = 0, llod = 0, lwn = 0, lcr = 0, ltot = 0;
+    ls.forEach(function(s) {
+      var specs = SPECS[s.punto]; if (!specs) return;
+      PARAM_COLS.forEach(function(p) {
+        var spec = specs[p.label]; if (!spec) return;
+        var val = s.valores[p.label]; if (!val || val.parsed === null) return;
+        var ev = evaluar(val.parsed, spec); ltot++;
+        if (ev.status === 'ok') lok++; else if (ev.status === 'lod') llod++;
+        else if (ev.status === 'warn') lwn++; else if (ev.status === 'crit') lcr++;
+      });
+    });
+    var conf = lok + llod;
+    return { samples: ls.length, dias: ld, exc: le, critExc: lc, warnExc: lw,
+      ok: lok, lod: llod, warn: lwn, crit: lcr, total: ltot, conformes: conf,
+      pct: ltot > 0 ? Math.round(conf*100/ltot) : 0 };
+  }
+
+  // ——— Point status for P&ID ———
+  function calcPt(punto) {
+    var ps = samplesF.filter(function(s) { return s.punto === punto; });
+    var oos = 0, acc = 0, wrn = 0, tot = 0;
+    ps.forEach(function(s) {
+      var specs = SPECS[punto]; if (!specs) return;
+      Object.keys(s.valores).forEach(function(param) {
+        var spec = specs[param]; if (!spec) return;
+        var val = s.valores[param]; if (val && val.parsed !== null) {
+          var ev = evaluar(val.parsed, spec); tot++;
+          if (ev.status === 'crit') oos++; else if (ev.status === 'accion') acc++; else if (ev.status === 'warn') wrn++;
+        }
+      });
+    });
+    return { oos: oos, accion: acc, warn: wrn, total: tot };
+  }
+  function ptColor(s) { return s.oos > 0 ? '#ef4444' : s.accion > 0 ? '#f97316' : s.warn >= 3 ? '#f59e0b' : s.total > 0 ? '#10b981' : '#cbd5e1'; }
+  function ptStroke(s) { return s.oos > 0 ? '#b91c1c' : s.accion > 0 ? '#c2410c' : s.warn >= 3 ? '#b45309' : s.total > 0 ? '#047857' : '#94a3b8'; }
+  function ptSym(s) { return s.oos > 0 ? '✕' : s.accion > 0 ? '!' : s.warn >= 3 ? '⚠' : s.total > 0 ? '✓' : '—'; }
+  function pidInd(punto, x, y) {
+    var s = calcPt(punto);
+    return '<g><circle cx="'+x+'" cy="'+y+'" r="14" fill="'+ptColor(s)+'" stroke="'+ptStroke(s)+'" stroke-width="2"/>' +
+      '<text x="'+x+'" y="'+(y+4)+'" text-anchor="middle" fill="white" font-size="9" font-weight="800" font-family="system-ui">'+ptSym(s)+'</text>' +
+      '<text x="'+x+'" y="'+(y+28)+'" text-anchor="middle" fill="#334155" font-size="9" font-weight="700" font-family="system-ui">'+punto+'</text></g>';
+  }
+  function eqB(x,y,w,h,t1,t2) {
+    return '<rect x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" rx="6" fill="#f1f5f9" stroke="#64748b" stroke-width="1.2"/>' +
+      '<text x="'+(x+w/2)+'" y="'+(y+h/2-(t2?3:0))+'" text-anchor="middle" fill="#334155" font-size="9" font-weight="700" font-family="system-ui">'+t1+'</text>' +
+      (t2 ? '<text x="'+(x+w/2)+'" y="'+(y+h/2+10)+'" text-anchor="middle" fill="#64748b" font-size="8" font-family="system-ui">'+t2+'</text>' : '');
+  }
+  function tnk(cx,y,w,h,t1,t2) {
+    return '<rect x="'+(cx-w/2)+'" y="'+y+'" width="'+w+'" height="'+h+'" rx="8" fill="#e2e8f0" stroke="#64748b" stroke-width="1.5"/>' +
+      '<rect x="'+(cx-w*0.2)+'" y="'+(y-8)+'" width="'+(w*0.4)+'" height="10" rx="3" fill="#cbd5e1" stroke="#64748b" stroke-width="1"/>' +
+      '<text x="'+cx+'" y="'+(y+h/2-4)+'" text-anchor="middle" fill="#1e293b" font-size="10" font-weight="700" font-family="system-ui">'+t1+'</text>' +
+      '<text x="'+cx+'" y="'+(y+h/2+9)+'" text-anchor="middle" fill="#475569" font-size="9" font-family="system-ui">'+t2+'</text>';
+  }
+  function ln(pts,c,d) { return '<polyline points="'+pts+'" fill="none" stroke="'+c+'" stroke-width="2"'+(d?' stroke-dasharray="6,4"':'')+'/>';}
+  function lnT(pts,c) { return '<polyline points="'+pts+'" fill="none" stroke="'+c+'" stroke-width="1.5"/>';}
+
+  // ——— Agua Fría P&ID SVG ———
+  var svgFria = '<svg viewBox="0 0 860 290" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:860px;background:white;border:1px solid #e2e8f0;border-radius:8px;margin:8px 0 12px;">' +
+    '<text x="430" y="18" text-anchor="middle" fill="#0f172a" font-size="11" font-weight="800" font-family="system-ui" letter-spacing="0.5">LOOP DE AGUA FRÍA OZONIZADA</text>' +
+    eqB(25,55,75,32,'O₃','Generador') + tnk(200,35,110,95,'TANQUE','20.000 L') +
+    eqB(290,145,55,38,'UV','Lámpara') +
+    ln('100,71 145,71', '#3b82f6') + ln('255,82 290,82', '#3b82f6') +
+    pidInd('TM6', 310, 82) +
+    ln('317,96 317,145', '#3b82f6') +
+    ln('317,183 317,210', '#3b82f6') +
+    ln('80,210 820,210', '#3b82f6') +
+    ln('820,210 820,50 255,50 255,35', '#3b82f6', true) +
+    pidInd('TM8', 820, 50) +
+    ln('145,100 80,100 80,145 25,145 25,87', '#3b82f6', true) +
+    '<text x="105" y="118" text-anchor="middle" fill="#3b82f6" font-size="7" font-family="system-ui">LOOP O₃</text>' +
+    pidInd('TM11', 80, 145);
+
+  var fpx = [80, 185, 290, 395, 500, 605, 720, 820];
+  var fpn = ['POU1','POU2','POU3','POU4','POU5','POU6','POU7','POU8'];
+  fpx.forEach(function(x) { svgFria += lnT(x+',210 '+x+',230', '#3b82f6'); });
+  fpx.forEach(function(x, i) { svgFria += pidInd(fpn[i], x, 246); });
+  svgFria += '</svg>';
+
+  // ——— Agua Caliente P&ID SVG ———
+  var svgCal = '<svg viewBox="0 0 860 260" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:860px;background:white;border:1px solid #e2e8f0;border-radius:8px;margin:8px 0 12px;">' +
+    '<text x="430" y="18" text-anchor="middle" fill="#0f172a" font-size="11" font-weight="800" font-family="system-ui" letter-spacing="0.5">LOOP DE AGUA CALIENTE</text>' +
+    tnk(90,35,105,95,'TANQUE','3.000 L') +
+    ln('142,70 170,70', '#ef4444') +
+    pidInd('TM7', 195, 70) +
+    ln('215,70 810,70', '#ef4444') +
+    pidInd('TM9', 810, 70) +
+    ln('810,84 810,230 105,230 105,175', '#ef4444', true) +
+    pidInd('TM10', 105, 170);
+
+  var cpx = [280, 415, 550, 685, 780];
+  var cpn = ['POU10','POU11','POU12','POU13','POU14'];
+  cpx.forEach(function(x) { svgCal += lnT(x+',70 '+x+',100', '#ef4444'); svgCal += lnT(x+',140 '+x+',230', '#ef4444'); });
+  cpx.forEach(function(x, i) { svgCal += pidInd(cpn[i], x, 118); });
+  svgCal += '</svg>';
+
+  // ——— Loop data ———
+  var friaP = SISTEMA_PUNTOS['fria'];
+  var calP = SISTEMA_PUNTOS['caliente'];
+  var dF = loopData(friaP);
+  var dC = loopData(calP);
+
+  // ——— Loop stats HTML helper ———
+  function loopStatsHtml(d, name) {
+    return '<p>' +
+      '• Muestras cargadas: <strong>' + d.samples + '</strong><br>' +
+      '• Días de muestreo: <strong>' + d.dias + '</strong><br>' +
+      '• Evaluaciones contra especificación: <strong>' + d.total + '</strong><br>' +
+      '• Conformes: <strong>' + d.conformes + ' (' + d.pct + '%)</strong>' + (d.lod > 0 ? ' (incluye ' + d.lod + ' por LOD)' : '') + '<br>' +
+      '• Alertas: <strong style="color:var(--warn);">' + d.warnExc.length + '</strong><br>' +
+      '• OOS: <strong style="color:var(--crit);">' + d.critExc.length + '</strong>' +
+      '</p>';
+  }
+
+  // ——— Loop excursion section HTML ———
+  function loopExcHtml(d) {
+    if (d.exc.length === 0) return '<p style="color:var(--ok);font-weight:600;">✓ Sin excursiones en este loop.</p>';
+    return renderExcTable(d.exc.slice(0, 15));
+  }
+
+  // ——— KPI mini card ———
+  function miniKpi(label, value, sub, borderColor) {
+    return '<div class="kpi-card" style="margin-bottom:8px;padding:10px 14px;' + (borderColor ? 'border-color:'+borderColor+';' : '') + '">' +
+      '<div class="kpi-label" style="font-size:10px;">' + label + '</div>' +
+      '<div class="kpi-value" style="font-size:22px;">' + value + '</div>' +
+      (sub ? '<div class="kpi-sub" style="font-size:10px;">' + sub + '</div>' : '') + '</div>';
+  }
+
+  // ——— Conclusion ———
   let conclusion;
   if (crit.length === 0 && warn.length === 0) {
-    conclusion = 'Los resultados parciales evaluados a la fecha de corte no presentan excursiones a nivel de alerta ni de acción. El sistema opera dentro de los parámetros especificados en ESP-MP-001 v2.0.';
+    conclusion = 'Los resultados parciales evaluados a la fecha de corte no presentan excursiones a nivel de alerta ni de acción. Ambos loops operan dentro de los parámetros especificados.';
   } else if (crit.length === 0) {
-    conclusion = `Se han identificado ${warn.length} excursión(es) a nivel de alerta, sin OOS. Conforme a QMIC 0030-12 sec. 8.C, se procedió a notificación al Water Team y revisión de parámetros del proceso. La validación continúa sin reinicio.`;
+    conclusion = 'Se han identificado ' + warn.length + ' excursión(es) a nivel de alerta, sin OOS. La validación continúa sin reinicio.';
   } else if (unresolvedHtml.length === 0 && acceptedHtml.length > 0) {
-    conclusion = `Se identificaron ${crit.length} excursión(es) OOS y ${warn.length} alerta(s). La totalidad de los OOS han sido justificados y aceptados conforme a SOP-AC-036. Las acciones correctivas se documentan en la sección de excursiones. El sistema se considera controlado con nivel de riesgo Bajo a Medio.`;
+    conclusion = 'Se registraron ' + crit.length + ' OOS (Agua Fría: ' + dF.critExc.length + ', Agua Caliente: ' + dC.critExc.length + '). Todos fueron justificados y aceptados conforme a SOP-AC-036.';
   } else {
-    conclusion = `Se han identificado ${crit.length} excursión(es) de acción (OOS) y ${warn.length} alerta(s).` +
-      (acceptedHtml.length > 0 ? ` De los ${crit.length} OOS, ${acceptedHtml.length} han sido aceptados y ${unresolvedHtml.length} permanecen sin resolver.` : '') +
-      ` Se requiere LIR/MIR conforme a QMIC 0030-12 Table D, sanitización del loop afectado, RCA y CAPA dentro de 24 h. Evaluar si corresponde reinicio de fase conforme a sección 5.2 del PPQ-H2O-001.`;
+    conclusion = 'Se registraron ' + crit.length + ' OOS (Agua Fría: ' + dF.critExc.length + ', Agua Caliente: ' + dC.critExc.length + ') y ' + warn.length + ' alertas.' +
+      (acceptedHtml.length > 0 ? ' ' + acceptedHtml.length + ' aceptados, ' + unresolvedHtml.length + ' sin resolver.' : '') +
+      ' Se requiere completar RCA y CAPA dentro de 24 h.';
   }
+
+  var secNum = 4;
 
   cont.innerHTML = `
     <div class="resumen-grid">
@@ -2756,77 +3240,97 @@ function renderReporte() {
         <h3>Identificación del documento</h3>
         <div class="meta-info">
           <strong>Reporte parcial de avance — Fase ${STATE.faseActual}</strong><br>
-          Protocolo de referencia: PPQ-H2O-001 v2.0<br>
-          Control de cambio: CC-2026-004<br>
-          Sistema: SAO-001 — Tratamiento de Agua Ablandada y Ozonizada Fría y Caliente<br>
-          Fecha de corte: ${fechaHoy}<br>
-          Período cubierto: ${STATE.fechaInicio ? fmtFecha(STATE.fechaInicio) : '—'} al ${STATE.fechaFin ? fmtFecha(STATE.fechaFin) : '—'}<br>
-          Días de muestreo ejecutados: ${diasUnicos.length} de 10
+          Protocolo: PPQ-H2O-001 v2.0 · CC-2026-004<br>
+          Sistema: SAO-001 — Agua Ablandada y Ozonizada Fría y Caliente<br>
+          Fecha de corte: ${fechaHoy} · Período: ${STATE.fechaInicio ? fmtFecha(STATE.fechaInicio) : '—'} al ${STATE.fechaFin ? fmtFecha(STATE.fechaFin) : '—'}<br>
+          Días de muestreo: ${diasUnicos.length} de 10
         </div>
 
         <h3>1. Objetivo</h3>
-        <p>Documentar el avance parcial de la ejecución de la Fase ${STATE.faseActual} (${STATE.faseNombre}) de la re-calificación de performance del sistema SAO-001, conforme al protocolo PPQ-H2O-001 v2.0 y al Plan Maestro de Validación PMV-H2O-001.</p>
+        <p>Documentar el avance parcial de la Fase ${STATE.faseActual} (${STATE.faseNombre}) de la re-calificación de performance del sistema SAO-001, conforme al protocolo PPQ-H2O-001 v2.0.</p>
 
         <h3>2. Alcance</h3>
-        <p>Evaluación de resultados de muestreo y ensayo de los ${samplesF.length} registros cargados hasta la fecha de corte, contra las especificaciones definidas en ESP-MP-001 v2.0 y el certificado de análisis REG-SOP-LCC-095-A v5.0, considerando los niveles de alerta y acción del Plan de Muestreo (Sección 11.2 del PPQ-H2O-001 v2.0).</p>
+        <p>Evaluación de ${samplesF.length} registros contra especificaciones ESP-MP-001 v2.0 y REG-SOP-LCC-095-A v5.0, desglosados por subsistema: Loop de Agua Fría Ozonizada (${dF.samples} muestras, ${friaP.length} puntos) y Loop de Agua Caliente (${dC.samples} muestras, ${calP.length} puntos).</p>
 
         <h3>3. Marco regulatorio</h3>
-        <p>FDA Process Validation Guidance (2011); EudraLex Vol. 4 Anexo 15 (2015); WHO TRS 1033 Annex 3; Health Canada GUI-0029 v5; ISPE Baseline Guide Vol. 4, 3rd ed.; ICH Q9 (Quality Risk Management). Procedimiento de muestreo conforme a SOP-LCC-095 y benchmark QMIC 0030-12 (Sampling and Monitoring of Water Systems).</p>
+        <p>FDA Process Validation Guidance (2011); EudraLex Vol. 4 Anexo 15; WHO TRS 1033 Annex 3; ISPE Baseline Guide Vol. 4; ICH Q9. Muestreo conforme a SOP-LCC-095 y benchmark QMIC 0030-12.</p>
 
-        <h3>4. Resultados de avance</h3>
-        <p>
-          • Muestras cargadas en la fase: <strong>${samplesF.length}</strong><br>
-          • Días únicos de muestreo: <strong>${diasUnicos.length}</strong><br>
-          • Resultados evaluados (excluye N/A e Informativos): <strong>${st.total}</strong><br>
-          • Resultados conformes: <strong>${st.ok}</strong>${st.lod > 0 ? ` + <strong>${st.lod}</strong> conformes por LOD` : ''} = <strong>${conformes} (${pctC}%)</strong><br>
-          • Excursiones a nivel de alerta: <strong style="color:var(--warn);">${warn.length}</strong><br>
-          • Excursiones a nivel de acción (OOS): <strong style="color:var(--crit);">${crit.length}</strong>
-        </p>
-
-        <h3>5. Notas interpretativas</h3>
-        <div class="nota-hallazgo">
-          <strong>Hallazgo H-001 · Especificación de Ozono libre (TM6 / TM11) — Rango 0.2-0.4 mg/L</strong>
-          El certificado REG-SOP-LCC-095-A v5.0 define la especificación de Ozono libre para TM6 (post-tratamiento tanque agua ozonizada) y TM11 (retorno loop inyección ozono) como un rango de 0.2-0.4 mg/L, con nivel de alerta &lt;0.2 mg/L y nivel OOS &lt;0.1 mg/L. Esta especificación de rango garantiza la efectividad del proceso de ozonización manteniendo un residual adecuado sin exceder la capacidad del sistema de destrucción UV. El dashboard evalúa contra estos criterios conforme al documento aprobado.
-        </div>
-        <div class="nota-hallazgo">
-          <strong>Hallazgo H-002 · Interpretación del límite de detección de Ozono libre</strong>
-          El método analítico utilizado para Ozono libre tiene un límite de detección (LOD) de 0.1 mg/L. Los resultados reportados con valor exacto de 0.1 mg/L se interpretan como "no detectable" (&lt;LOD), equivalente a ausencia de ozono residual, y por tanto conformes a la especificación de los puntos TM7, TM8, TM9, TM10 y POU 1-14. Se recomienda al laboratorio reportar estos resultados con el prefijo "&lt;0.1" para mayor claridad de trazabilidad ALCOA+ y se sugiere documentar esta convención en una revisión del SOP-LCC-095.
-        </div>
-        <div class="nota-hallazgo">
-          <strong>Hallazgo H-003 · Conversión de unidades de Aerobios Totales</strong>
-          La especificación del REG-SOP-LCC-095-A v5.0 define los límites de Aerobios Totales en ufc/mL. Los datos ingresados en la planilla operativa de campo se registran en ufc/100 mL (conforme al método de ensayo por filtración por membrana). El dashboard aplica un factor de conversión ÷100 al dato crudo antes de evaluar contra la especificación. Ejemplo: un resultado de 2500 ufc/100 mL equivale a 25 ufc/mL, conforme a spec &lt;100 ufc/mL. Los gráficos de tendencia muestran los datos en su unidad original (ufc/100 mL) con las líneas de referencia escaladas proporcionalmente.
+        <!-- ═══════════ LOOP AGUA FRÍA ═══════════ -->
+        <div style="margin-top:24px;padding:16px 0;border-top:3px solid #3b82f6;">
+          <h3 style="color:#1d4ed8;">4. Loop de Agua Fría Ozonizada</h3>
+          <p style="font-size:11px;color:var(--text-2);">Puntos: TM6 (salida tanque), TM8 (retorno), TM11 (loop O₃), POU1–POU6 (Reactores), POU7–POU8 (Lavaderos). Tanque 20.000 L con ozonización y lámpara UV.</p>
+          <h4>4.1 Diagrama P&amp;ID — Estado de puntos</h4>
+          ${svgFria}
+          <h4>4.2 Resultados de avance</h4>
+          ${loopStatsHtml(dF, 'Agua Fría')}
+          ${dF.exc.length > 0 ? '<h4>4.3 Excursiones — Agua Fría</h4>' + loopExcHtml(dF) : ''}
         </div>
 
-        ${(crit.length + warn.length) > 0 ? `
-        <h3>6. Detalle de excursiones</h3>
-        ${unresolvedHtml.length === 0 && acceptedHtml.length > 0 ? '<p style="color:var(--ok);font-weight:600;margin-bottom:8px;">✓ Todos los OOS han sido justificados y aceptados.</p>' : unresolvedHtml.length > 0 ? '<p style="color:var(--crit);font-weight:600;margin-bottom:8px;">⚠ ' + unresolvedHtml.length + ' OOS sin resolver de ' + crit.length + ' total.</p>' : ''}
-        ${renderExcTable(STATE.excursions.slice(0, 20))}
-        ${STATE.excursions.length > 20 ? '<p style="margin-top:8px;font-size:11px;color:var(--text-2);">Mostrando 20 de ' + STATE.excursions.length + ' excursiones. Lista completa en panel "Excursiones".</p>' : ''}
-        ` : ''}
+        <!-- ═══════════ LOOP AGUA CALIENTE ═══════════ -->
+        <div style="margin-top:24px;padding:16px 0;border-top:3px solid #ef4444;">
+          <h3 style="color:#dc2626;">5. Loop de Agua Caliente</h3>
+          <p style="font-size:11px;color:var(--text-2);">Puntos: TM7 (salida tanque), TM9 (retorno), TM10 (POU tanque), POU10–POU11 (Bachas), POU12–POU13 (Tanques 100L), POU14 (Bacha). Tanque 3.000 L, sistema cerrado.</p>
+          <h4>5.1 Diagrama P&amp;ID — Estado de puntos</h4>
+          ${svgCal}
+          <h4>5.2 Resultados de avance</h4>
+          ${loopStatsHtml(dC, 'Agua Caliente')}
+          ${dC.exc.length > 0 ? '<h4>5.3 Excursiones — Agua Caliente</h4>' + loopExcHtml(dC) : ''}
+        </div>
 
-        <h3>${(crit.length + warn.length) > 0 ? '7' : '6'}. Conclusión parcial</h3>
-        <p>${conclusion}</p>
+        <!-- ═══════════ CONSOLIDADO ═══════════ -->
+        <div style="margin-top:24px;padding-top:16px;border-top:2px solid var(--border);">
+          <h3>6. Resumen consolidado</h3>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+            <div style="flex:1;min-width:200px;padding:12px;background:#eff6ff;border-radius:8px;border-left:4px solid #3b82f6;">
+              <strong style="color:#1d4ed8;">Agua Fría</strong><br>
+              <span style="font-size:12px;">Cumplimiento: <strong>${dF.pct}%</strong> · OOS: <strong style="color:${dF.critExc.length>0?'var(--crit)':'inherit'};">${dF.critExc.length}</strong> · Alertas: <strong style="color:${dF.warnExc.length>0?'var(--warn)':'inherit'};">${dF.warnExc.length}</strong></span>
+            </div>
+            <div style="flex:1;min-width:200px;padding:12px;background:#fef2f2;border-radius:8px;border-left:4px solid #ef4444;">
+              <strong style="color:#dc2626;">Agua Caliente</strong><br>
+              <span style="font-size:12px;">Cumplimiento: <strong>${dC.pct}%</strong> · OOS: <strong style="color:${dC.critExc.length>0?'var(--crit)':'inherit'};">${dC.critExc.length}</strong> · Alertas: <strong style="color:${dC.warnExc.length>0?'var(--warn)':'inherit'};">${dC.warnExc.length}</strong></span>
+            </div>
+          </div>
 
-        <h3>${(crit.length + warn.length) > 0 ? '8' : '7'}. Próximos pasos</h3>
-        <ul>
-          <li>Continuar el muestreo conforme al plan hasta completar los 10 días hábiles de la fase.</li>
-          <li>Mantener actualizado el REG-PPQ-H2O-001-H (Muestreo y ensayo) con los datos crudos del sistema de carga.</li>
-          ${unresolvedHtml.length > 0 ? '<li>Completar la justificación y aceptación de los ' + unresolvedHtml.length + ' OOS pendientes en el panel de Excursiones.</li>' : ''}
-          ${(crit.length + warn.length) > 0 ? '<li>Documentar cada NC en REG-PPQ-H2O-001-B y sus CAPA en REG-PPQ-H2O-001-C conforme a SOP-AC-036.</li>' : ''}
-          <li>Formalizar los hallazgos H-001, H-002 y H-003 como cambios menores al protocolo / certificado de análisis.</li>
-          <li>Al cierre de fase, emitir REG-PPQ-H2O-001-I (Análisis de tendencias) y proceder a revisión intermedia antes de Fase ${STATE.faseActual + 1}.</li>
-        </ul>
+          <h3>7. Notas interpretativas</h3>
+          <div class="nota-hallazgo">
+            <strong>H-001 · Ozono libre TM6/TM11 — Rango 0.2-0.4 mg/L</strong>
+            Especificación de rango conforme a REG-SOP-LCC-095-A v5.0. Alerta &lt;0.2, OOS &lt;0.1.
+          </div>
+          <div class="nota-hallazgo">
+            <strong>H-002 · LOD Ozono libre = 0.1 mg/L</strong>
+            Resultados = 0.1 mg/L se interpretan como &lt;LOD (ausencia de ozono residual), conformes en puntos TM7-TM10 y POU.
+          </div>
+          <div class="nota-hallazgo">
+            <strong>H-003 · Conversión Aerobios Totales</strong>
+            Datos en ufc/100 mL (filtración por membrana) ÷100 → ufc/mL para evaluación. Alerta ≥100 ufc/100mL (1 ufc/mL), OOS ≥2500 (25 ufc/mL), Spec &lt;10000 (100 ufc/mL).
+          </div>
 
-        <h3>${(crit.length + warn.length) > 0 ? '9' : '8'}. Trazabilidad</h3>
-        <p style="font-size:12px;color:var(--text-2);">
-          Datos extraídos de REG-SOP-LCC-095-B v5.0 (Registro de resultados de análisis Sistema de agua). Especificaciones evaluadas conforme a PPQ-H2O-001 v2.0 Sección 11.2 (Plan de Muestreo) y REG-SOP-LCC-095-A v5.0 (Certificado de Análisis diario, Mayo 2026). Los datos de Aerobios Totales se registran en ufc/100 mL (método de filtración por membrana) y se convierten a ufc/mL (÷100) para evaluación contra las especificaciones del REG-SOP-LCC-095-A v5.0. Los valores Min/Max embebidos en la planilla operativa son informativos para el operador y no se utilizan para evaluación de cumplimiento — la evaluación se realiza contra los documentos aprobados.
-        </p>
+          <h3>8. Conclusión parcial</h3>
+          <p>${conclusion}</p>
+
+          <h3>9. Próximos pasos</h3>
+          <ul>
+            <li>Completar los 10 días hábiles de muestreo de la fase.</li>
+            <li>Mantener actualizado REG-PPQ-H2O-001-H con datos crudos.</li>
+            ${unresolvedHtml.length > 0 ? '<li>Completar justificación de los ' + unresolvedHtml.length + ' OOS pendientes.</li>' : ''}
+            ${(crit.length + warn.length) > 0 ? '<li>Documentar NC en REG-PPQ-H2O-001-B y CAPA en REG-PPQ-H2O-001-C.</li>' : ''}
+            <li>Formalizar hallazgos H-001 a H-003 como cambios menores.</li>
+            <li>Al cierre, emitir REG-PPQ-H2O-001-I y revisión antes de Fase ${STATE.faseActual + 1}.</li>
+          </ul>
+
+          <h3>10. Trazabilidad</h3>
+          <p style="font-size:11px;color:var(--text-2);">
+            Datos: REG-SOP-LCC-095-B v5.0. Specs: PPQ-H2O-001 v2.0 §11.2 + REG-SOP-LCC-095-A v5.0. Aerobios en ufc/100 mL convertidos a ufc/mL (÷100). Benchmark QMIC 0030-12.
+          </p>
+        </div>
       </div>
       <div>
-        <div class="kpi-card" style="margin-bottom:10px;${pctC<90?'border-color:var(--crit);':pctC<98?'border-color:var(--warn);':'border-color:var(--ok);'}"><div class="kpi-label">Cumplimiento</div><div class="kpi-value ${pctC < 90 ? 'crit' : pctC < 98 ? 'warn' : 'ok'}">${st.total > 0 ? pctC + '%' : '—'}</div><div class="kpi-sub">${conformes}/${st.total} conformes</div></div>
-        <div class="kpi-card" style="margin-bottom:10px;${unresolvedHtml.length>0?'border-color:var(--crit);':crit.length>0?'border-color:var(--ok);':''}"><div class="kpi-label">OOS</div><div class="kpi-value ${unresolvedHtml.length > 0 ? 'crit' : crit.length > 0 ? 'ok' : 'ok'}">${crit.length}</div><div class="kpi-sub">${unresolvedHtml.length > 0 ? unresolvedHtml.length + ' sin resolver' : acceptedHtml.length > 0 ? 'todos aceptados' : 'sin OOS'}</div></div>
-        <div class="kpi-card" style="margin-bottom:10px;${warn.length>0?'border-color:var(--warn);':''}"><div class="kpi-label">Alertas</div><div class="kpi-value ${warn.length > 0 ? 'warn' : 'ok'}">${warn.length}</div></div>
-        <div class="kpi-card"><div class="kpi-label">Avance</div><div class="kpi-value primary">${diasUnicos.length}/10</div><div class="kpi-sub">días hábiles</div></div>
+        ${miniKpi('Global', st.total > 0 ? pctC + '%' : '—', conformes+'/'+st.total, pctC<90?'var(--crit)':pctC<98?'var(--warn)':'var(--ok)')}
+        ${miniKpi('💧 A. Fría', dF.total > 0 ? dF.pct+'%' : '—', dF.conformes+'/'+dF.total, dF.pct<90?'var(--crit)':dF.pct<98?'var(--warn)':'var(--ok)')}
+        ${miniKpi('🔥 A. Caliente', dC.total > 0 ? dC.pct+'%' : '—', dC.conformes+'/'+dC.total, dC.pct<90?'var(--crit)':dC.pct<98?'var(--warn)':'var(--ok)')}
+        ${miniKpi('OOS', crit.length, unresolvedHtml.length > 0 ? unresolvedHtml.length + ' sin resolver' : acceptedHtml.length > 0 ? 'aceptados' : 'sin OOS', unresolvedHtml.length>0?'var(--crit)':crit.length>0?'var(--ok)':'')}
+        ${miniKpi('Alertas', warn.length, 'Fría:'+dF.warnExc.length+' Cal:'+dC.warnExc.length, warn.length>0?'var(--warn)':'')}
+        ${miniKpi('Avance', diasUnicos.length+'/10', 'días hábiles', '')}
       </div>
     </div>
   `;
@@ -2870,6 +3374,11 @@ function applyDateFilter() {
     hasta.setHours(23, 59, 59, 999);
     filtered = filtered.filter(s => s.fecha <= hasta);
   }
+  // Apply sistema filter
+  const sistPuntos = SISTEMA_PUNTOS[STATE.sistemaFilter];
+  if (sistPuntos) {
+    filtered = filtered.filter(s => sistPuntos.includes(s.punto));
+  }
   STATE.filteredSamples = filtered;
   STATE.excursions = detectarExcursiones(filtered);
   const fi = detectarFase(filtered);
@@ -2881,8 +3390,13 @@ function applyDateFilter() {
   // Update date info label
   const info = document.getElementById('fecha-info');
   if (info) {
-    if (STATE.fechaDesde || STATE.fechaHasta) {
-      info.textContent = 'Mostrando ' + filtered.length + ' de ' + STATE.samples.length + ' muestras';
+    const sistemaLabels = { 'all':'', 'fria':'Agua Fría', 'caliente':'Agua Caliente', 'pretrat':'Pre-tratamiento' };
+    const sistLabel = sistemaLabels[STATE.sistemaFilter] || '';
+    if (STATE.fechaDesde || STATE.fechaHasta || STATE.sistemaFilter !== 'all') {
+      const parts = [];
+      if (filtered.length !== STATE.samples.length) parts.push(filtered.length + ' de ' + STATE.samples.length + ' muestras');
+      if (sistLabel) parts.push('Sistema: ' + sistLabel);
+      info.textContent = parts.join(' · ') || '';
       info.style.color = '#0891b2';
     } else {
       info.textContent = '';
@@ -2962,8 +3476,13 @@ document.getElementById('btn-filtrar-fechas').onclick = () => {
 document.getElementById('btn-limpiar-fechas').onclick = () => {
   STATE.fechaDesde = null;
   STATE.fechaHasta = null;
+  STATE.sistemaFilter = 'all';
   document.getElementById('fecha-desde').value = '';
   document.getElementById('fecha-hasta').value = '';
+  document.querySelectorAll('[data-fase-preset]').forEach(b => b.classList.remove('btn-primary'));
+  document.querySelectorAll('[data-sistema-filter]').forEach(b => {
+    b.classList.toggle('btn-primary', b.dataset.sistemaFilter === 'all');
+  });
   destroyCharts();
   applyDateFilter();
 };
@@ -2985,6 +3504,18 @@ document.querySelectorAll('[data-fase-preset]').forEach(btn => {
     // Highlight active button
     document.querySelectorAll('[data-fase-preset]').forEach(b => b.classList.remove('btn-primary'));
     btn.classList.add('btn-primary');
+  };
+});
+
+// Sistema filter handlers (agua fría / caliente / etc.)
+document.querySelectorAll('[data-sistema-filter]').forEach(btn => {
+  btn.onclick = () => {
+    STATE.sistemaFilter = btn.dataset.sistemaFilter;
+    document.querySelectorAll('[data-sistema-filter]').forEach(b => {
+      b.classList.toggle('btn-primary', b.dataset.sistemaFilter === STATE.sistemaFilter);
+    });
+    destroyCharts();
+    applyDateFilter();
   };
 });
 
@@ -3136,11 +3667,28 @@ document.getElementById('btn-download-docx').onclick = async function() {
     const samples = STATE.filteredSamples;
     const excursions = STATE.excursions;
     const crit = excursions.filter(e => e.nivel === 'crit');
+    const accionExc = excursions.filter(e => e.nivel === 'accion');
     const warn = excursions.filter(e => e.nivel === 'warn');
     let totalEvals = 0;
     samples.forEach(s => { Object.keys(s.valores).forEach(param => { const sp = SPECS[s.punto]?.[param]; if (sp && sp.tipo !== 'info') totalEvals++; }); });
-    const conformes = totalEvals - crit.length - warn.length;
+    const conformes = totalEvals - crit.length - accionExc.length - warn.length;
     const pctConf = totalEvals > 0 ? ((conformes / totalEvals) * 100).toFixed(1) : '0.0';
+
+    // Loop data helper
+    function calcLoop(puntosArr) {
+      var ls = samples.filter(function(s) { return puntosArr.includes(s.punto); });
+      var le = excursions.filter(function(e) { return puntosArr.includes(e.punto); });
+      var lc = le.filter(function(e) { return e.nivel === 'crit'; });
+      var la = le.filter(function(e) { return e.nivel === 'accion'; });
+      var lw = le.filter(function(e) { return e.nivel === 'warn'; });
+      var ltot = 0;
+      ls.forEach(function(s) { Object.keys(s.valores).forEach(function(param) { var sp = (SPECS[s.punto]||{})[param]; if (sp && sp.tipo !== 'info') ltot++; }); });
+      var lconf = ltot - lc.length - la.length - lw.length;
+      var lpct = ltot > 0 ? ((lconf / ltot) * 100).toFixed(1) : '0.0';
+      return { samples: ls.length, exc: le, crit: lc, accion: la, warn: lw, total: ltot, conformes: lconf, pct: lpct };
+    }
+    const loopFria = calcLoop(SISTEMA_PUNTOS['fria']);
+    const loopCal = calcLoop(SISTEMA_PUNTOS['caliente']);
     const fechaInicio = STATE.fechaInicio ? STATE.fechaInicio.toLocaleDateString('es-UY') : '—';
     const fechaFin = STATE.fechaFin ? STATE.fechaFin.toLocaleDateString('es-UY') : '—';
     const diasSet = new Set(); samples.forEach(s => diasSet.add(s.fecha.toDateString()));
@@ -3297,28 +3845,166 @@ document.getElementById('btn-download-docx').onclick = async function() {
     ).forEach(el => children.push(el));
 
     // 5.2 Resumen cuantitativo
-    children.push(heading2('6.2 Resumen cuantitativo'));
+    children.push(heading2('6.2 Resumen cuantitativo global'));
     children.push(p([run('Muestras cargadas: ', { bold: true }), run(String(samples.length))]));
     children.push(p([run('Días de muestreo: ', { bold: true }), run(String(diasMuestreo))]));
     children.push(p([run('Evaluaciones totales: ', { bold: true }), run(String(totalEvals))]));
     children.push(p([run('Conformes: ', { bold: true }), run(conformes + ' (' + pctConf + '%)')]));
-    children.push(p([run('Excursiones OOS: ', { bold: true, color: crit.length > 0 ? 'CC0000' : undefined }), run(String(crit.length), { color: crit.length > 0 ? 'CC0000' : undefined })]));
+    children.push(p([run('Excursiones OOS (≥100 ufc/mL): ', { bold: true, color: crit.length > 0 ? 'CC0000' : undefined }), run(String(crit.length), { color: crit.length > 0 ? 'CC0000' : undefined })]));
     if (docxAccepted.length > 0 || docxUnresolved.length > 0) {
       children.push(p([run('  — OOS aceptados/justificados: ', { bold: true, color: '228B22' }), run(String(docxAccepted.length), { color: '228B22' })]));
       children.push(p([run('  — OOS sin resolver: ', { bold: true, color: docxUnresolved.length > 0 ? 'CC0000' : undefined }), run(String(docxUnresolved.length), { color: docxUnresolved.length > 0 ? 'CC0000' : undefined })]));
     }
-    children.push(p([run('Alertas: ', { bold: true, color: warn.length > 0 ? 'CC7700' : undefined }), run(String(warn.length), { color: warn.length > 0 ? 'CC7700' : undefined })]));
+    children.push(p([run('Excursiones Acción (≥25 ufc/mL): ', { bold: true, color: accionExc.length > 0 ? 'EA580C' : undefined }), run(String(accionExc.length), { color: accionExc.length > 0 ? 'EA580C' : undefined })]));
+    children.push(p([run('Alertas (>1 ufc/mL): ', { bold: true, color: warn.length > 0 ? 'CC7700' : undefined }), run(String(warn.length), { color: warn.length > 0 ? 'CC7700' : undefined })]));
+
+    // 6.2.1 Desglose por loop
+    children.push(heading2('6.2.1 Loop de Agua Fría Ozonizada'));
+    children.push(p('Puntos: TM6, TM8, TM11, POU1–POU8 (Tanque 20.000 L, O₃ + UV)'));
+    children.push(p([run('Muestras: ', { bold: true }), run(String(loopFria.samples) + '  ·  '),
+      run('Evaluaciones: ', { bold: true }), run(String(loopFria.total) + '  ·  '),
+      run('Conformes: ', { bold: true }), run(loopFria.conformes + ' (' + loopFria.pct + '%)')]));
+    children.push(p([run('OOS: ', { bold: true, color: loopFria.crit.length > 0 ? 'CC0000' : undefined }), run(String(loopFria.crit.length) + '  ·  '),
+      run('Acción: ', { bold: true, color: loopFria.accion.length > 0 ? 'EA580C' : undefined }), run(String(loopFria.accion.length) + '  ·  '),
+      run('Alertas: ', { bold: true, color: loopFria.warn.length > 0 ? 'CC7700' : undefined }), run(String(loopFria.warn.length))]));
+
+    children.push(heading2('6.2.2 Loop de Agua Caliente'));
+    children.push(p('Puntos: TM7, TM9, TM10, POU10–POU14 (Tanque 3.000 L, sistema cerrado)'));
+    children.push(p([run('Muestras: ', { bold: true }), run(String(loopCal.samples) + '  ·  '),
+      run('Evaluaciones: ', { bold: true }), run(String(loopCal.total) + '  ·  '),
+      run('Conformes: ', { bold: true }), run(loopCal.conformes + ' (' + loopCal.pct + '%)')]));
+    children.push(p([run('OOS: ', { bold: true, color: loopCal.crit.length > 0 ? 'CC0000' : undefined }), run(String(loopCal.crit.length) + '  ·  '),
+      run('Acción: ', { bold: true, color: loopCal.accion.length > 0 ? 'EA580C' : undefined }), run(String(loopCal.accion.length) + '  ·  '),
+      run('Alertas: ', { bold: true, color: loopCal.warn.length > 0 ? 'CC7700' : undefined }), run(String(loopCal.warn.length))]));
+
+    // ═══ P&ID DIAGRAMS AS PNG ═══
+    const { ImageRun } = D;
+
+    function docxPtStatus(punto) {
+      var ps = samples.filter(function(s) { return s.punto === punto; });
+      var oos = 0, acc = 0, wrn = 0, tot = 0;
+      ps.forEach(function(s) {
+        var sp = SPECS[punto]; if (!sp) return;
+        Object.keys(s.valores).forEach(function(par) {
+          var spec = sp[par]; if (!spec) return;
+          var val = s.valores[par]; if (val && val.parsed !== null) {
+            var ev = evaluar(val.parsed, spec); tot++;
+            if (ev.status === 'crit') oos++; else if (ev.status === 'accion') acc++; else if (ev.status === 'warn') wrn++;
+          }
+        });
+      });
+      return { oos: oos, accion: acc, warn: wrn, total: tot };
+    }
+    function dxColor(s) { return s.oos > 0 ? '#ef4444' : s.accion > 0 ? '#f97316' : s.warn >= 3 ? '#f59e0b' : s.total > 0 ? '#10b981' : '#cbd5e1'; }
+    function dxStroke(s) { return s.oos > 0 ? '#b91c1c' : s.accion > 0 ? '#c2410c' : s.warn >= 3 ? '#b45309' : s.total > 0 ? '#047857' : '#94a3b8'; }
+    function dxSym(s) { return s.oos > 0 ? '✕' : s.accion > 0 ? '!' : s.warn >= 3 ? '⚠' : s.total > 0 ? '✓' : '—'; }
+    function dxInd(pt, x, y) {
+      var s = docxPtStatus(pt);
+      return '<g><circle cx="'+x+'" cy="'+y+'" r="14" fill="'+dxColor(s)+'" stroke="'+dxStroke(s)+'" stroke-width="2"/>' +
+        '<text x="'+x+'" y="'+(y+4)+'" text-anchor="middle" fill="white" font-size="9" font-weight="800" font-family="Arial,sans-serif">'+dxSym(s)+'</text>' +
+        '<text x="'+x+'" y="'+(y+28)+'" text-anchor="middle" fill="#334155" font-size="9" font-weight="700" font-family="Arial,sans-serif">'+pt+'</text></g>';
+    }
+    function dxEq(x,y,w,h,t1,t2) {
+      return '<rect x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" rx="6" fill="#f1f5f9" stroke="#64748b" stroke-width="1.2"/>' +
+        '<text x="'+(x+w/2)+'" y="'+(y+h/2-(t2?3:0))+'" text-anchor="middle" fill="#334155" font-size="9" font-weight="700" font-family="Arial,sans-serif">'+t1+'</text>' +
+        (t2 ? '<text x="'+(x+w/2)+'" y="'+(y+h/2+10)+'" text-anchor="middle" fill="#64748b" font-size="8" font-family="Arial,sans-serif">'+t2+'</text>' : '');
+    }
+    function dxTnk(cx,y,w,h,t1,t2) {
+      return '<rect x="'+(cx-w/2)+'" y="'+y+'" width="'+w+'" height="'+h+'" rx="8" fill="#e2e8f0" stroke="#64748b" stroke-width="1.5"/>' +
+        '<rect x="'+(cx-w*0.2)+'" y="'+(y-8)+'" width="'+(w*0.4)+'" height="10" rx="3" fill="#cbd5e1" stroke="#64748b" stroke-width="1"/>' +
+        '<text x="'+cx+'" y="'+(y+h/2-4)+'" text-anchor="middle" fill="#1e293b" font-size="10" font-weight="700" font-family="Arial,sans-serif">'+t1+'</text>' +
+        '<text x="'+cx+'" y="'+(y+h/2+9)+'" text-anchor="middle" fill="#475569" font-size="9" font-family="Arial,sans-serif">'+t2+'</text>';
+    }
+    function dxLn(pts,c,d) { return '<polyline points="'+pts+'" fill="none" stroke="'+c+'" stroke-width="2"'+(d?' stroke-dasharray="6,4"':'')+'/>';}
+    function dxLnT(pts,c) { return '<polyline points="'+pts+'" fill="none" stroke="'+c+'" stroke-width="1.5"/>';}
+
+    // SVG Agua Fría
+    var dxSvgFria = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 290" width="860" height="290" style="background:white;">' +
+      '<rect width="860" height="290" fill="white"/>' +
+      '<text x="430" y="18" text-anchor="middle" fill="#0f172a" font-size="11" font-weight="800" font-family="Arial,sans-serif" letter-spacing="0.5">LOOP DE AGUA FRÍA OZONIZADA</text>' +
+      dxEq(25,55,75,32,'O₃','Generador') + dxTnk(200,35,110,95,'TANQUE','20.000 L') + dxEq(290,145,55,38,'UV','Lámpara') +
+      dxLn('100,71 145,71','#3b82f6') + dxLn('255,82 290,82','#3b82f6') + dxInd('TM6',310,82) +
+      dxLn('317,96 317,145','#3b82f6') + dxLn('317,183 317,210','#3b82f6') + dxLn('80,210 820,210','#3b82f6') +
+      dxLn('820,210 820,50 255,50 255,35','#3b82f6',true) + dxInd('TM8',820,50) +
+      dxLn('145,100 80,100 80,145 25,145 25,87','#3b82f6',true) +
+      '<text x="105" y="118" text-anchor="middle" fill="#3b82f6" font-size="7" font-family="Arial,sans-serif">LOOP O₃</text>' +
+      dxInd('TM11',80,145);
+    [80,185,290,395,500,605,720,820].forEach(function(x) { dxSvgFria += dxLnT(x+',210 '+x+',230','#3b82f6'); });
+    ['POU1','POU2','POU3','POU4','POU5','POU6','POU7','POU8'].forEach(function(n,i) { dxSvgFria += dxInd(n,[80,185,290,395,500,605,720,820][i],246); });
+    dxSvgFria += '<rect x="30" y="275" width="300" height="12" rx="3" fill="#f8fafc" stroke="#e2e8f0" stroke-width="0.5"/>' +
+      '<circle cx="45" cy="281" r="4" fill="#10b981"/><text x="55" y="284" fill="#334155" font-size="6" font-family="Arial,sans-serif">OK</text>' +
+      '<circle cx="85" cy="281" r="4" fill="#f59e0b"/><text x="95" y="284" fill="#334155" font-size="6" font-family="Arial,sans-serif">3+Alerta</text>' +
+      '<circle cx="145" cy="281" r="4" fill="#f97316"/><text x="155" y="284" fill="#334155" font-size="6" font-family="Arial,sans-serif">Acción</text>' +
+      '<circle cx="200" cy="281" r="4" fill="#ef4444"/><text x="210" y="284" fill="#334155" font-size="6" font-family="Arial,sans-serif">OOS</text>' +
+      '<circle cx="245" cy="281" r="4" fill="#cbd5e1"/><text x="255" y="284" fill="#334155" font-size="6" font-family="Arial,sans-serif">Sin datos</text>';
+    dxSvgFria += '</svg>';
+
+    // SVG Agua Caliente
+    var dxSvgCal = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 260" width="860" height="260" style="background:white;">' +
+      '<rect width="860" height="260" fill="white"/>' +
+      '<text x="430" y="18" text-anchor="middle" fill="#0f172a" font-size="11" font-weight="800" font-family="Arial,sans-serif" letter-spacing="0.5">LOOP DE AGUA CALIENTE</text>' +
+      dxTnk(90,35,105,95,'TANQUE','3.000 L') +
+      dxLn('142,70 170,70','#ef4444') + dxInd('TM7',195,70) + dxLn('215,70 810,70','#ef4444') +
+      dxInd('TM9',810,70) + dxLn('810,84 810,230 105,230 105,175','#ef4444',true) + dxInd('TM10',105,170);
+    [280,415,550,685,780].forEach(function(x) { dxSvgCal += dxLnT(x+',70 '+x+',100','#ef4444'); dxSvgCal += dxLnT(x+',140 '+x+',230','#ef4444'); });
+    ['POU10','POU11','POU12','POU13','POU14'].forEach(function(n,i) { dxSvgCal += dxInd(n,[280,415,550,685,780][i],118); });
+    dxSvgCal += '</svg>';
+
+    // SVG to PNG converter
+    async function svgToImageRun(svgStr, w, h, docW, docH) {
+      return new Promise(function(resolve, reject) {
+        var blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var img = new Image();
+        img.onload = function() {
+          var canvas = document.createElement('canvas');
+          canvas.width = w * 2; canvas.height = h * 2;
+          var ctx = canvas.getContext('2d');
+          ctx.fillStyle = 'white'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          URL.revokeObjectURL(url);
+          var dataUrl = canvas.toDataURL('image/png');
+          var base64 = dataUrl.split(',')[1];
+          var binary = atob(base64);
+          var bytes = new Uint8Array(binary.length);
+          for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          resolve(new ImageRun({ data: bytes.buffer, transformation: { width: docW, height: docH }, type: 'png' }));
+        };
+        img.onerror = function() { reject(new Error('SVG render failed')); };
+        img.src = url;
+      });
+    }
+
+    // Generate and insert P&ID images
+    try {
+      var imgFria = await svgToImageRun(dxSvgFria, 860, 290, 560, 189);
+      children.splice(children.length, 0,
+        heading2('6.2.3 Diagrama P&ID — Agua Fría Ozonizada'),
+        new Paragraph({ alignment: AlignmentType.CENTER, children: [imgFria] })
+      );
+    } catch(e) { console.warn('Error P&ID Fría:', e); children.push(p('(Error generando diagrama P&ID Agua Fría)', { italics: true, color: '999999' })); }
+
+    try {
+      var imgCal = await svgToImageRun(dxSvgCal, 860, 260, 560, 169);
+      children.push(heading2('6.2.4 Diagrama P&ID — Agua Caliente'));
+      children.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [imgCal] }));
+    } catch(e) { console.warn('Error P&ID Caliente:', e); children.push(p('(Error generando diagrama P&ID Agua Caliente)', { italics: true, color: '999999' })); }
 
     // 6.3 Especificaciones por punto de muestreo
     children.push(new Paragraph({ children: [new PageBreak()] }));
     children.push(heading2('6.3 Plan de muestreo y especificaciones'));
     children.push(p('A continuación se detallan los puntos de muestreo, los parámetros evaluados, sus especificaciones y niveles de alerta y acción conforme a REG-SOP-LCC-095-A v5.0 y PPQ-H2O-001 v2.0.'));
 
-    const spW = [1100, 1700, 1700, 1700, 1700, 1460];
+    const spW = [1000, 1500, 1400, 1300, 1300, 1400, 1460];
     function formatAlert(spec) {
       if (!spec || spec.tipo === 'info') return '—';
       if (spec.alerta !== undefined) return '> ' + spec.alerta + ' ' + (spec.unit || '');
       if (spec.alertaMin !== undefined) return '< ' + spec.alertaMin + ' ' + (spec.unit || '');
+      return '—';
+    }
+    function formatAccion(spec) {
+      if (!spec || spec.tipo === 'info') return '—';
+      if (spec.accion !== undefined) return '>= ' + spec.accion + ' ' + (spec.unit || '');
       return '—';
     }
     function formatOOS(spec) {
@@ -3346,7 +4032,7 @@ document.getElementById('btn-download-docx').onclick = async function() {
       const puntoLabel = PUNTO_LABELS[punto] || punto;
       children.push(p(punto + ' — ' + puntoLabel, { bold: true, size: 22, before: 200 }));
       children.push(new Table({ width: { size: TW, type: WidthType.DXA }, columnWidths: spW, rows: [
-        hdrRow(['Punto', 'Parámetro', 'Especificación', 'Nivel de Alerta', 'Nivel de Acción (OOS)', 'Frecuencia'], spW),
+        hdrRow(['Punto', 'Parámetro', 'Especificación', 'Alerta', 'Acción', 'OOS', 'Frecuencia'], spW),
         ...allParams.map((par, i) => {
           const spec = SPECS[punto][par];
           return dRow([
@@ -3354,6 +4040,7 @@ document.getElementById('btn-download-docx').onclick = async function() {
             par,
             formatSpec(spec),
             formatAlert(spec),
+            formatAccion(spec),
             formatOOS(spec),
             formatFreq(spec),
           ], spW);
@@ -3361,12 +4048,11 @@ document.getElementById('btn-download-docx').onclick = async function() {
       ]}));
     });
 
-    // 6.4 Gráficos de tendencia — auto-generados para todos los parámetros
+    // 6.4 Gráficos de tendencia — separados por loop
     children.push(new Paragraph({ children: [new PageBreak()] }));
     children.push(heading2('6.4 Gráficos de tendencia'));
-    children.push(p('Los siguientes gráficos fueron generados a partir de los datos del período evaluado. Cada gráfico agrupa todos los puntos de muestreo con la misma especificación, incluyendo las líneas de alerta y acción según corresponda.', { size: 20, italics: true }));
+    children.push(p('Los siguientes gráficos fueron generados a partir de los datos del período evaluado, separados por subsistema. Cada gráfico incluye las líneas de alerta (amarillo), acción (naranja) y OOS (rojo).', { size: 20, italics: true }));
 
-    const { ImageRun } = D;
     const CHART_COLORS = ['#0891b2','#e11d48','#7c3aed','#059669','#d97706','#2563eb','#dc2626','#0d9488','#7c2d12','#6366f1','#be185d','#15803d','#ea580c','#4f46e5'];
 
     function specKey(spec) {
@@ -3377,28 +4063,43 @@ document.getElementById('btn-download-docx').onclick = async function() {
       if (spec.specMax !== undefined) parts.push('max' + spec.specMax);
       if (spec.oos !== undefined) parts.push('oos' + spec.oos);
       if (spec.alerta !== undefined) parts.push('a' + spec.alerta);
+      if (spec.accion !== undefined) parts.push('ac' + spec.accion);
       return parts.join('_');
     }
 
-    // Para cada parámetro, agrupar puntos por spec y generar un gráfico offscreen
     const allParams = PARAM_COLS.map(pc => pc.label);
-    for (const paramName of allParams) {
-      // Agrupar puntos con datos por spec
-      const groups = {};
-      PUNTOS_ORDER.forEach(punto => {
-        const spec = (SPECS[punto] || {})[paramName];
-        if (!spec || spec.tipo === 'info') return;
-        const key = specKey(spec);
-        if (!key) return;
-        const hasData = samples.some(s => s.punto === punto && s.valores[paramName]?.parsed?.kind === 'num');
-        if (!hasData) return;
-        if (!groups[key]) groups[key] = { spec, puntos: [] };
-        groups[key].puntos.push(punto);
-      });
+    const loopDefs = [
+      { name: 'Loop de Agua Fría Ozonizada', puntos: SISTEMA_PUNTOS['fria'] },
+      { name: 'Loop de Agua Caliente', puntos: SISTEMA_PUNTOS['caliente'] },
+      { name: 'Pre-tratamiento', puntos: SISTEMA_PUNTOS['pretrat'] },
+    ];
 
-      if (Object.keys(groups).length === 0) continue;
+    for (const loopDef of loopDefs) {
+      let loopHasCharts = false;
 
-      for (const [key, group] of Object.entries(groups)) {
+      for (const paramName of allParams) {
+        const groups = {};
+        loopDef.puntos.forEach(punto => {
+          const spec = (SPECS[punto] || {})[paramName];
+          if (!spec || spec.tipo === 'info') return;
+          const key = specKey(spec);
+          if (!key) return;
+          const hasData = samples.some(s => s.punto === punto && s.valores[paramName]?.parsed?.kind === 'num');
+          if (!hasData) return;
+          if (!groups[key]) groups[key] = { spec, puntos: [] };
+          groups[key].puntos.push(punto);
+        });
+
+        if (Object.keys(groups).length === 0) continue;
+
+        // Add loop header on first chart
+        if (!loopHasCharts) {
+          children.push(new Paragraph({ children: [new PageBreak()] }));
+          children.push(heading2('6.4.' + (loopDefs.indexOf(loopDef)+1) + ' ' + loopDef.name));
+          loopHasCharts = true;
+        }
+
+        for (const [key, group] of Object.entries(groups)) {
         const spec = group.spec;
         const scaleFactor = spec.dataUnit100mL ? 100 : 1;
         const chartUnit = spec.dataUnit100mL ? 'ufc/100mL' : (spec.unit || '');
@@ -3430,6 +4131,7 @@ document.getElementById('btn-download-docx').onclick = async function() {
             return { label, data: [{x: xMin, y: val * scaleFactor}, {x: xMax, y: val * scaleFactor}], borderColor: color, borderWidth: 1.5, borderDash: dash, pointRadius: 0, fill: false };
           }
           if (spec.alerta !== undefined) datasets.push(refLine('Alerta', spec.alerta, '#f59e0b', [5,5]));
+          if (spec.accion !== undefined) datasets.push(refLine('Acción', spec.accion, '#f97316', [8,4]));
           if (spec.oos !== undefined) datasets.push(refLine('OOS', spec.oos, '#ef4444', [6,3]));
           if (spec.specMax !== undefined) datasets.push(refLine('Max', spec.specMax, '#ef4444', [6,3]));
           if (spec.specMin !== undefined) datasets.push(refLine('Min', spec.specMin, '#3b82f6', [6,3]));
@@ -3471,78 +4173,96 @@ document.getElementById('btn-download-docx').onclick = async function() {
           children.push(p('(Error generando gráfico)', { italics: true, color: '999999' }));
         }
         document.body.removeChild(offCanvas);
+        }
       }
-    }
+    } // end loopDef
 
     // ═══ 6. EXCURSIONES / NC ═══
     children.push(new Paragraph({ children: [new PageBreak()] }));
     children.push(heading1('7. DETALLE DE EXCURSIONES Y NO CONFORMIDADES'));
     if (excursions.length === 0) {
-      children.push(p('Durante la ejecución del protocolo de calificación de la performance del Sistema de Tratamiento de Agua Ablandada y Ozonizada Fría y Caliente no surgieron no conformidades.'));
+      children.push(p('Durante la ejecución del protocolo no surgieron excursiones de ningún nivel (alerta, acción u OOS) en ninguno de los dos loops.'));
     } else {
       const unresolvedDocx = excursions.filter(function(e) { return e.nivel === 'crit' && !getOosAcceptance(e); });
       const acceptedDocx = excursions.filter(function(e) { return e.nivel === 'crit' && getOosAcceptance(e); });
-      const alertasDocx = excursions.filter(function(e) { return e.nivel === 'warn'; });
 
+      children.push(p('Se registraron ' + excursions.length + ' excursiones totales durante el período evaluado: ' + crit.length + ' OOS (≥100 ufc/mL), ' + accionExc.length + ' Acción (≥25 ufc/mL), ' + warn.length + ' Alerta (>1 ufc/mL).'));
       if (unresolvedDocx.length > 0) {
-        children.push(p('Se registraron ' + unresolvedDocx.length + ' excursión(es) OOS sin resolver durante la ejecución del protocolo:'));
+        children.push(p(unresolvedDocx.length + ' OOS sin resolver. ' + acceptedDocx.length + ' OOS aceptados.', { bold: true, color: 'CC0000' }));
       } else if (acceptedDocx.length > 0) {
-        children.push(p('Se registraron ' + acceptedDocx.length + ' excursión(es) OOS, todas justificadas y aceptadas conforme al procedimiento de gestión de no conformidades:'));
-      }
-      if (alertasDocx.length > 0 && crit.length === 0) {
-        children.push(p('Se registraron ' + alertasDocx.length + ' excursión(es) a nivel de alerta. Las alertas no constituyen no conformidades.'));
+        children.push(p('Todos los OOS han sido justificados y aceptados conforme a SOP-AC-036.', { color: '228B22' }));
       }
 
-      children.push(p(''));
-      children.push(p('En suma, durante la ejecución del protocolo de calificación de la performance del Sistema de Tratamiento de Agua Ablandada y Ozonizada Fría y Caliente surgieron las siguientes excursiones:'));
-      const eW = [450, 1800, 700, 1800, 900, 1200, 900, 1610];
-      children.push(new Table({ width: { size: TW, type: WidthType.DXA }, columnWidths: eW, rows: [
-        hdrRow(['N° NC', 'Detalle', 'Crítica / No crítica', 'Acción correctiva', 'Status', 'Justificación', 'Aceptación', 'Fecha'], eW),
-        ...excursions.map((e, i) => {
-          const nivel = e.nivel === 'crit' ? 'OOS' : 'Alerta';
-          const detalle = 'El día ' + e.fecha.toLocaleDateString('es-UY') + ' se detectó un resultado ' + nivel + ' en el punto ' + e.punto + ' para ' + e.parametro + '. Valor: ' + e.valor + '. ' + (e.detalle || '');
-          const acceptance = e.nivel === 'crit' ? getOosAcceptance(e) : null;
-          return dRow([
-            String(i + 1).padStart(3, '0'),
-            detalle,
-            e.nivel === 'crit' ? 'Crítica' : 'No crítica',
-            acceptance ? acceptance.accionCorrectiva || '' : '',
-            acceptance ? 'Aceptado' : e.nivel === 'crit' ? 'Pendiente' : 'N/A (Alerta)',
-            acceptance ? acceptance.justificacion || '' : '',
-            acceptance ? new Date(acceptance.fechaAceptacion).toLocaleDateString('es-UY') : '',
-            e.fecha.toLocaleDateString('es-UY'),
-          ], eW);
-        }),
-      ]}));
+      const eW = [400, 1600, 600, 700, 1600, 800, 1100, 800, 1360];
+
+      // 7.1 Loop Agua Fría
+      children.push(heading2('7.1 Excursiones — Loop de Agua Fría Ozonizada'));
+      if (loopFria.exc.length === 0) {
+        children.push(p('Sin excursiones en el loop de agua fría durante el período evaluado.'));
+      } else {
+        children.push(p('OOS: ' + loopFria.crit.length + '  ·  Acción: ' + loopFria.accion.length + '  ·  Alertas: ' + loopFria.warn.length));
+        children.push(new Table({ width: { size: TW, type: WidthType.DXA }, columnWidths: eW, rows: [
+          hdrRow(['N°', 'Detalle', 'Nivel', 'Punto', 'Acción correctiva', 'Status', 'Justificación', 'Aceptac.', 'Fecha'], eW),
+          ...loopFria.exc.map((e, i) => {
+            var nivel = e.nivel === 'crit' ? 'OOS' : e.nivel === 'accion' ? 'Acción' : 'Alerta';
+            var detalle = fmtFecha(e.fecha) + ': ' + nivel + ' en ' + e.parametro + '. Valor: ' + e.valor + '. ' + (e.detalle || '');
+            var acceptance = e.nivel === 'crit' ? getOosAcceptance(e) : null;
+            return dRow([String(i+1), detalle, nivel, e.punto,
+              acceptance ? acceptance.accionCorrectiva || '' : '',
+              acceptance ? 'Aceptado' : e.nivel === 'crit' ? 'Pendiente' : 'N/A',
+              acceptance ? acceptance.justificacion || '' : '',
+              acceptance ? new Date(acceptance.fechaAceptacion).toLocaleDateString('es-UY') : '',
+              e.fecha.toLocaleDateString('es-UY')], eW);
+          }),
+        ]}));
+      }
+
+      // 7.2 Loop Agua Caliente
+      children.push(heading2('7.2 Excursiones — Loop de Agua Caliente'));
+      if (loopCal.exc.length === 0) {
+        children.push(p('Sin excursiones en el loop de agua caliente durante el período evaluado.'));
+      } else {
+        children.push(p('OOS: ' + loopCal.crit.length + '  ·  Acción: ' + loopCal.accion.length + '  ·  Alertas: ' + loopCal.warn.length));
+        children.push(new Table({ width: { size: TW, type: WidthType.DXA }, columnWidths: eW, rows: [
+          hdrRow(['N°', 'Detalle', 'Nivel', 'Punto', 'Acción correctiva', 'Status', 'Justificación', 'Aceptac.', 'Fecha'], eW),
+          ...loopCal.exc.map((e, i) => {
+            var nivel = e.nivel === 'crit' ? 'OOS' : e.nivel === 'accion' ? 'Acción' : 'Alerta';
+            var detalle = fmtFecha(e.fecha) + ': ' + nivel + ' en ' + e.parametro + '. Valor: ' + e.valor + '. ' + (e.detalle || '');
+            var acceptance = e.nivel === 'crit' ? getOosAcceptance(e) : null;
+            return dRow([String(i+1), detalle, nivel, e.punto,
+              acceptance ? acceptance.accionCorrectiva || '' : '',
+              acceptance ? 'Aceptado' : e.nivel === 'crit' ? 'Pendiente' : 'N/A',
+              acceptance ? acceptance.justificacion || '' : '',
+              acceptance ? new Date(acceptance.fechaAceptacion).toLocaleDateString('es-UY') : '',
+              e.fecha.toLocaleDateString('es-UY')], eW);
+          }),
+        ]}));
+      }
     }
 
     // ═══ 7. NOTAS INTERPRETATIVAS ═══
     children.push(heading1('8. NOTAS INTERPRETATIVAS'));
     children.push(p([run('H-001 — Ozono libre TM6/TM11: ', { bold: true }), run('Spec rango 0.2-0.4 mg/L conforme REG v5.0. Alerta <0.2, OOS <0.1.')]));
     children.push(p([run('H-002 — LOD Ozono libre: ', { bold: true }), run('LOD = 0.1 mg/L. Valor 0.1 = no detectable = conforme para TM7-TM10 y POUs.')]));
-    children.push(p([run('H-003 — Conversión unidades Aerobios: ', { bold: true }), run('Specs en ufc/mL; datos en ufc/100 mL. Factor ÷100 aplicado antes de evaluar.')]));
+    children.push(p([run('H-003 — Conversión unidades Aerobios: ', { bold: true }), run('Specs en ufc/mL; datos en ufc/100 mL. Factor ÷100. Tres niveles: Alerta >1 ufc/mL (>100 ufc/100mL), Acción ≥25 ufc/mL (≥2500 ufc/100mL), OOS ≥100 ufc/mL (≥10000 ufc/100mL).')]));
 
     // ═══ 8. CONCLUSIONES ═══
     children.push(new Paragraph({ children: [new PageBreak()] }));
     children.push(heading1('9. CONCLUSIONES'));
     const unresolvedCrit = crit.filter(function(e) { return !getOosAcceptance(e); });
     const acceptedCrit = crit.filter(function(e) { return getOosAcceptance(e); });
-    if (crit.length === 0 && warn.length === 0) {
-      // Sin excursiones
-      children.push(p('Habiéndose ejecutado la Fase ' + STATE.faseActual + ' (' + faseNombre + ') del protocolo PPQ-H2O-001 v2.0, con un total de ' + totalEvals + ' evaluaciones contra especificación de las cuales ' + conformes + ' resultaron conformes (' + pctConf + '%), no surgieron no conformidades ni excursiones de ningún tipo.'));
+    if (crit.length === 0 && accionExc.length === 0 && warn.length === 0) {
+      children.push(p('Habiéndose ejecutado la Fase ' + STATE.faseActual + ' (' + faseNombre + ') del protocolo PPQ-H2O-001 v2.0, con un total de ' + totalEvals + ' evaluaciones contra especificación de las cuales ' + conformes + ' resultaron conformes (' + pctConf + '%), no surgieron no conformidades ni excursiones de ningún tipo en ninguno de los dos loops (Agua Fría Ozonizada y Agua Caliente).'));
       children.push(p('Se concluye que el sistema SAO-001 se encuentra controlado durante el período evaluado. Se entiende que el sistema presenta un nivel de riesgo Bajo.'));
-    } else if (crit.length === 0 && warn.length > 0) {
-      // Solo alertas, sin OOS
-      children.push(p('Habiéndose ejecutado la Fase ' + STATE.faseActual + ' (' + faseNombre + ') del protocolo PPQ-H2O-001 v2.0, con un total de ' + totalEvals + ' evaluaciones contra especificación, no surgieron no conformidades críticas (OOS). Se registraron ' + warn.length + ' excursión(es) a nivel de alerta (ver Sección 7).'));
-      children.push(p('Las excursiones a nivel de alerta no constituyen no conformidades pero indican la necesidad de monitoreo reforzado. Se concluye que el sistema SAO-001 se encuentra controlado durante el período evaluado, con nivel de riesgo Bajo a Medio.'));
+    } else if (crit.length === 0) {
+      children.push(p('Habiéndose ejecutado la Fase ' + STATE.faseActual + ' (' + faseNombre + ') del protocolo PPQ-H2O-001 v2.0, no surgieron excursiones OOS (fuera de especificación ≥100 ufc/mL). Se registraron ' + accionExc.length + ' excursión(es) a nivel de acción (≥25 ufc/mL) y ' + warn.length + ' a nivel de alerta (>1 ufc/mL).'));
+      children.push(p('Desglose por loop: Agua Fría — Acción: ' + loopFria.accion.length + ', Alertas: ' + loopFria.warn.length + '.  Agua Caliente — Acción: ' + loopCal.accion.length + ', Alertas: ' + loopCal.warn.length + '.'));
+      children.push(p('Las excursiones a nivel de alerta y acción no constituyen no conformidades (OOS) pero indican la necesidad de monitoreo reforzado conforme a QMIC 0030-12 sec. 8.C. Se concluye que el sistema se encuentra controlado con nivel de riesgo Bajo a Medio.'));
     } else if (unresolvedCrit.length === 0 && acceptedCrit.length > 0) {
-      // Todos los OOS aceptados/justificados
-      children.push(p('Habiéndose ejecutado la Fase ' + STATE.faseActual + ' (' + faseNombre + ') del protocolo PPQ-H2O-001 v2.0, con un total de ' + totalEvals + ' evaluaciones contra especificación, se registraron ' + crit.length + ' excursiones fuera de especificación (OOS) y ' + warn.length + ' alertas. Las no conformidades se detallan en la Sección 7.'));
-      children.push(p('La totalidad de las excursiones OOS han sido justificadas y aceptadas conforme al procedimiento de gestión de no conformidades (SOP-AC-036). Las acciones correctivas implementadas y las justificaciones correspondientes se documentan en la tabla de la Sección 7.'));
-      children.push(p('Se concluye que el sistema SAO-001 se encuentra controlado durante el período evaluado, considerando que las desviaciones fueron investigadas, corregidas y documentadas. Se entiende que el sistema presenta un nivel de riesgo Bajo a Medio.'));
+      children.push(p('Se registraron ' + crit.length + ' excursiones OOS (≥100 ufc/mL), ' + accionExc.length + ' de acción y ' + warn.length + ' alertas. Desglose por loop: Agua Fría — OOS: ' + loopFria.crit.length + ', Acción: ' + loopFria.accion.length + '.  Agua Caliente — OOS: ' + loopCal.crit.length + ', Acción: ' + loopCal.accion.length + '.'));
+      children.push(p('La totalidad de las excursiones OOS han sido justificadas y aceptadas conforme a SOP-AC-036. Se concluye que el sistema se encuentra controlado con nivel de riesgo Bajo a Medio.'));
     } else {
-      // Con OOS sin resolver
-      children.push(p('Habiéndose ejecutado la Fase ' + STATE.faseActual + ' (' + faseNombre + ') del protocolo PPQ-H2O-001 v2.0, con un total de ' + totalEvals + ' evaluaciones contra especificación, se registraron ' + crit.length + ' excursiones fuera de especificación (OOS) y ' + warn.length + ' alertas. Las no conformidades se detallan en la Sección 7.'));
+      children.push(p('Se registraron ' + crit.length + ' excursiones OOS (≥100 ufc/mL), ' + accionExc.length + ' de acción (≥25 ufc/mL) y ' + warn.length + ' alertas (>1 ufc/mL). Desglose por loop: Agua Fría — OOS: ' + loopFria.crit.length + ', Acción: ' + loopFria.accion.length + '.  Agua Caliente — OOS: ' + loopCal.crit.length + ', Acción: ' + loopCal.accion.length + '.'));
       if (acceptedCrit.length > 0) {
         children.push(p('De las ' + crit.length + ' excursiones OOS, ' + acceptedCrit.length + ' han sido aceptadas/justificadas y ' + unresolvedCrit.length + ' permanecen sin resolver.'));
       }
