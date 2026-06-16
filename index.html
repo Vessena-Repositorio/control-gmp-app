@@ -33,7 +33,7 @@
 select.fi{background:var(--s2);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-family:var(--f);font-size:11px;appearance:auto}
 .w5{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;padding:8px 10px}
 .w5 input{background:var(--s2);border:1px solid var(--border);border-radius:var(--rs);padding:9px 2px;color:var(--text);font-family:var(--m);font-size:12px;text-align:center;outline:none;width:100%}
-.w5 input:focus{border-color:var(--mint)}.w5 input.ok{color:var(--mint);border-color:var(--mint)}.w5 input.bad{color:var(--red);border-color:var(--red)}
+.w5 input:focus{border-color:var(--mint)}.w5 input.ok{color:var(--mint);border-color:var(--mint)}.w5 input.tol{color:var(--amber);border-color:var(--amber)}.w5 input.bad{color:var(--red);border-color:var(--red)}
 .w5l{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;padding:0 10px 4px;font-size:8px;color:var(--text3);text-align:center;font-weight:600}
 .ri{padding:5px 10px;font-size:9px;color:var(--text3);border-top:1px solid var(--border);text-align:center;font-family:var(--m)}
 .ri b{color:var(--mint)}
@@ -119,53 +119,86 @@ select.fi{background:var(--s2);border:1px solid var(--border);border-radius:6px;
 <body>
 
 <script>
+// Calcula T según Decreto 129/009 (Resolución GMC 91/94)
+function calcT(qn){
+  if(qn<50)return qn*0.09;
+  if(qn<=100)return 4.5;
+  if(qn<200)return qn*0.045;
+  if(qn<=300)return 9;
+  if(qn<500)return qn*0.03;
+  if(qn<=1000)return 15;
+  if(qn<10000)return qn*0.015;
+  if(qn<=15000)return 150;
+  return qn*0.01;
+}
+// qn = peso nominal en gramos (objetivo según etiqueta/densidad)
+// min/max = rango interno de la empresa
 const SPECS={
   'Elf':[
-    {pres:'280 ml Det LV',obj:300,min:290,max:310},
-    {pres:'300 ml Det LV',obj:318,min:305,max:330},
-    {pres:'500 ml Det LV',obj:525,min:510,max:540},
-    {pres:'600 ml Det LV',obj:625,min:610,max:640},
-    {pres:'640 ml Det LV',obj:670,min:655,max:685},
-    {pres:'900 ml Det LV/Manos',obj:920,min:910,max:930},
-    {pres:'1.1 L Det LV',obj:1130,min:1120,max:1140},
-    {pres:'1.25 L Det LV',obj:1285,min:1275,max:1295},
-    {pres:'1.35 L Det LV',obj:1385,min:1375,max:1395},
-    {pres:'500 ml Det Ropa Diluir',obj:610,min:600,max:620}
+    {pres:'280 ml Det LV',qn:285.6,min:290,max:310},
+    {pres:'300 ml Det LV',qn:306,min:305,max:330},
+    {pres:'500 ml Det LV',qn:510,min:510,max:540},
+    {pres:'600 ml Det LV',qn:612,min:610,max:640},
+    {pres:'640 ml Det LV',qn:652.8,min:655,max:685},
+    {pres:'900 ml Det LV/Manos',qn:918,min:910,max:930},
+    {pres:'1.1 L Det LV',qn:1122,min:1120,max:1140},
+    {pres:'1.25 L Det LV',qn:1275,min:1275,max:1295},
+    {pres:'1.35 L Det LV',qn:1377,min:1375,max:1395},
+    {pres:'500 ml Det Ropa Diluir',qn:648,min:600,max:620}
   ],
   'Strunk':[
-    {pres:'900 ml Limpiador',obj:900,min:890,max:910},
-    {pres:'1.8 L Limpiador',obj:1800,min:1790,max:1810}
+    {pres:'900 ml Limpiador',qn:899.91,min:890,max:910},
+    {pres:'1.8 L Limpiador',qn:1799.82,min:1790,max:1810}
   ],
   'Alfi':[
-    {pres:'3 L Suavizante',obj:2980,min:2910,max:3050},
-    {pres:'5 L Suavizante',obj:4950,min:4850,max:5050},
-    {pres:'3 L Det Ropa',obj:3080,min:3030,max:3130},
-    {pres:'5 L Det Ropa',obj:5100,min:5050,max:5150}
+    {pres:'3 L Suavizante',qn:2910,min:2910,max:3050},
+    {pres:'5 L Suavizante',qn:4850,min:4850,max:5050},
+    {pres:'3 L Det Ropa',qn:3060,min:3030,max:3130},
+    {pres:'5 L Det Ropa',qn:5100,min:5050,max:5150}
   ],
   'Bossar':[
-    {pres:'400 ml Det Pluma',obj:412,min:404,max:420},
-    {pres:'450 ml Det Pluma',obj:462,min:454,max:470},
-    {pres:'800 ml Det Pluma',obj:816,min:808,max:825},
-    {pres:'400 ml Det Conejo',obj:413,min:406,max:420},
-    {pres:'800 ml Det Conejo',obj:820,min:814,max:825},
-    {pres:'600 ml Suav Pluma',obj:599,min:588,max:610},
-    {pres:'700 ml Suav Pluma',obj:698,min:686,max:710},
-    {pres:'900 ml Suav Pluma',obj:896,min:882,max:910},
-    {pres:'450 ml Suav Conejo',obj:446,min:436,max:455},
-    {pres:'900 ml Suav Conejo',obj:892,min:873,max:910},
-    {pres:'400 ml Baños/Antigrasa',obj:410,min:400,max:420},
-    {pres:'500 ml Baños/Antigrasa',obj:510,min:500,max:520},
-    {pres:'400 ml Vidrios',obj:405,min:390,max:420},
-    {pres:'500 ml Vidrios',obj:505,min:490,max:520}
+    {pres:'400 ml Det Pluma',qn:408,min:404,max:420},
+    {pres:'450 ml Det Pluma',qn:459,min:454,max:470},
+    {pres:'800 ml Det Pluma',qn:816,min:808,max:825},
+    {pres:'400 ml Det Conejo',qn:410,min:406,max:420},
+    {pres:'800 ml Det Conejo',qn:816,min:814,max:825},
+    {pres:'600 ml Suav Pluma',qn:588,min:588,max:610},
+    {pres:'700 ml Suav Pluma',qn:686,min:686,max:710},
+    {pres:'900 ml Suav Pluma',qn:882,min:882,max:910},
+    {pres:'450 ml Suav Conejo',qn:436,min:436,max:455},
+    {pres:'900 ml Suav Conejo',qn:873,min:873,max:910},
+    {pres:'400 ml Baños/Antigrasa',qn:400,min:400,max:420},
+    {pres:'500 ml Baños/Antigrasa',qn:500,min:500,max:520},
+    {pres:'400 ml Vidrios',qn:390,min:390,max:420},
+    {pres:'500 ml Vidrios',qn:490,min:490,max:520}
   ],
-  'Hipo 1':[{pres:'1 L',obj:1056,min:1056,max:1087},{pres:'750 ml',obj:792,min:792,max:800}],
-  'Hipo 2':[{pres:'2 L',obj:2112,min:2112,max:2175}],
-  'Alcoholes':[{pres:'900 ml',obj:774,min:774,max:800},{pres:'600 ml',obj:530,min:520,max:535}],
-  'Bidonera':[{pres:'1 L',obj:970,min:970,max:1000}],
-  'Alwid':[{pres:'1.25 L',obj:1275,min:1275,max:1289}],
-  'Cleanway':[{pres:'5 L Detergente',obj:5105,min:5105,max:5156},{pres:'5 L Suavizante',obj:5000,min:5000,max:5100},{pres:'4 L',obj:4224,min:4224,max:4300},{pres:'5 L Limpiadores',obj:5000,min:5000,max:5100},{pres:'10 L Suav Conejo',obj:10170,min:10170,max:10679},{pres:'10 L Det Neutro',obj:9700,min:9700,max:10185},{pres:'5 L Det Cristal Limón',obj:5100,min:5100,max:5355},{pres:'5 L Limpiador Cristal',obj:4950,min:4950,max:5198},{pres:'4 L Hipoclorito 40g/L',obj:4240,min:4240,max:4452},{pres:'10 L Hipoclorito 100g/L',obj:10800,min:10800,max:11340},{pres:'10 L Alcohol 70',obj:8800,min:8800,max:9240},{pres:'10 L Alcohol Rectificado',obj:8060,min:8060,max:8463}],
-  'Limpiadores':[{pres:'1 L',obj:0,min:0,max:0},{pres:'2 L',obj:0,min:0,max:0}]
+  'Fabuloso':[
+    {pres:'1 L Limpiador',qn:1000,min:1000,max:1020},
+    {pres:'2 L Limpiador',qn:2000,min:2000,max:2030}
+  ],
+  'Hipo 1':[{pres:'1 L',qn:1056,min:1056,max:1087},{pres:'750 ml',qn:792,min:792,max:800}],
+  'Hipo 2':[{pres:'2 L',qn:2112,min:2112,max:2175}],
+  'Alcoholes':[{pres:'900 ml',qn:774,min:774,max:800},{pres:'600 ml',qn:530,min:520,max:535}],
+  'Bidonera':[{pres:'1 L',qn:970,min:970,max:1000}],
+  'Alwid':[{pres:'1.25 L',qn:1275,min:1275,max:1289},{pres:'1.0 L Det LV',qn:1020,min:1020,max:1050}],
+  'Cleanway':[
+    {pres:'5 L Detergente',qn:5105,min:5105,max:5156},
+    {pres:'5 L Suavizante',qn:5000,min:5000,max:5100},
+    {pres:'4 L',qn:4224,min:4224,max:4300},
+    {pres:'5 L Limpiadores',qn:5000,min:5000,max:5100},
+    {pres:'10 L Suav Conejo',qn:10170,min:10170,max:10679},
+    {pres:'10 L Det Neutro',qn:9894,min:9700,max:10185},
+    {pres:'5 L Det Cristal Limón',qn:5100,min:5100,max:5355},
+    {pres:'5 L Limpiador Cristal',qn:5000,min:4950,max:5198},
+    {pres:'4 L Hipoclorito 40g/L',qn:4240,min:4240,max:4452},
+    {pres:'10 L Hipoclorito 100g/L',qn:10800,min:10800,max:11340},
+    {pres:'10 L Alcohol 70',qn:8800,min:8800,max:9240},
+    {pres:'10 L Alcohol Rectificado',qn:8060,min:8060,max:8463}
+  ],
+  'Limpiadores':[{pres:'1 L',qn:0,min:0,max:0},{pres:'2 L',qn:0,min:0,max:0}]
 };
+// Pre-calcula T para cada producto y agrega campos del decreto
+Object.keys(SPECS).forEach(m=>{SPECS[m].forEach(s=>{if(s.qn>0){s.t=calcT(s.qn);s.qnT=s.qn-s.t;s.qn2T=s.qn-2*s.t;s.obj=s.qn}else{s.t=0;s.qnT=0;s.qn2T=0;s.obj=0}})});
 const MACHINES=Object.keys(SPECS);
 
 // Defects checklist for Limpiadores line
@@ -520,17 +553,49 @@ function onPres(){
   curSpec=null;document.getElementById('specI').style.display='none';
   if(!m||!p)return;
   const sp=(SPECS[m]||[]).find(s=>s.pres===p);
-  if(sp){curSpec=sp;document.getElementById('specI').style.display='block';document.getElementById('specI').innerHTML='🎯 <b>Obj: '+sp.obj+'g</b> · Rango: '+sp.min+'g — '+sp.max+'g'}
+  if(sp&&sp.qn>0){
+    curSpec=sp;
+    document.getElementById('specI').style.display='block';
+    document.getElementById('specI').innerHTML=
+      '🎯 <b>Nominal Qn: '+sp.qn+'g</b> · Rango empresa: '+sp.min+'g — '+sp.max+'g<br>'+
+      '<span style="color:var(--text3);font-size:9px">Decreto 129/009 → T='+sp.t.toFixed(2)+'g · Mín tolerante (Qn-T): '+sp.qnT.toFixed(1)+'g · Mín crítico (Qn-2T): '+sp.qn2T.toFixed(1)+'g</span>';
+  } else if(sp){curSpec=sp}
   updRange()
 }
-function updRange(){const rb=document.getElementById('rangeB');rb.innerHTML=curSpec?'🎯 <b>'+curSpec.min+'g — '+curSpec.max+'g</b>':'—'}
+function updRange(){
+  const rb=document.getElementById('rangeB');
+  if(!curSpec||!curSpec.qn){rb.innerHTML='—';return}
+  rb.innerHTML='🎯 Qn:<b>'+curSpec.qn+'g</b> · Rango:<b>'+curSpec.min+'-'+curSpec.max+'g</b> · T:'+curSpec.t.toFixed(1)+'g (Qn-T:'+curSpec.qnT.toFixed(0)+'g)';
+}
+// Devuelve el estado del peso según Decreto 129/009
+// 'ok' = ≥ rango empresa (verde)
+// 'tol' = entre Qn-T y rango (amarillo - tolerante)
+// 'bad' = entre Qn-2T y Qn-T (rojo - no conforme)
+// 'crit' = < Qn-2T (rojo crítico - defecto)
+function weightStatus(v){
+  if(!curSpec||!curSpec.qn)return 'ok';
+  if(v<curSpec.qn2T)return 'crit';
+  if(v<curSpec.qnT)return 'bad';
+  if(v<curSpec.qn)return 'tol';
+  return 'ok';
+}
 function calcW(){
   const vs=[1,2,3,4,5].map(i=>parseFloat(document.getElementById('cP'+i).value)).filter(v=>!isNaN(v));
   const pr=vs.length?(vs.reduce((a,b)=>a+b,0)/vs.length):null;
   const el=document.getElementById('cProm');
-  if(pr!==null){el.textContent=pr.toFixed(2);el.style.color=curSpec?(pr>=curSpec.min&&pr<=curSpec.max?'var(--mint)':'var(--red)'):'var(--mint)'}
-  else{el.textContent='—';el.style.color='var(--text)'};
-  [1,2,3,4,5].forEach(i=>{const e=document.getElementById('cP'+i);const v=parseFloat(e.value);if(isNaN(v)||!curSpec){e.className='';return}e.className=v>=curSpec.min&&v<=curSpec.max?'ok':'bad'})
+  if(pr!==null){
+    el.textContent=pr.toFixed(2);
+    // Color del promedio según cumple Qn
+    if(curSpec&&curSpec.qn){
+      el.style.color=pr>=curSpec.qn?'var(--mint)':(pr>=curSpec.qnT?'var(--amber)':'var(--red)');
+    }else el.style.color='var(--mint)';
+  } else {el.textContent='—';el.style.color='var(--text)'};
+  [1,2,3,4,5].forEach(i=>{
+    const e=document.getElementById('cP'+i);const v=parseFloat(e.value);
+    if(isNaN(v)||!curSpec||!curSpec.qn){e.className='';return}
+    const st=weightStatus(v);
+    e.className=st==='ok'?'ok':(st==='tol'?'tol':'bad');
+  });
 }
 
 // FORM
@@ -597,7 +662,7 @@ function renderTL(){
 // SHEETS
 function sendCtrl(c,num){if(!SURL)return;const pd=(c.fotos||[]).map(p=>p.replace(/^data:image\/\w+;base64,/,''));
 // Lookup spec for the product
-let spec='';if(c.maquina&&c.presentacion){const sp=(SPECS[c.maquina]||[]).find(s=>s.pres===c.presentacion);if(sp&&sp.min&&sp.max)spec=sp.min+'-'+sp.max+' g (obj: '+sp.obj+'g)'}
+let spec='';if(c.maquina&&c.presentacion){const sp=(SPECS[c.maquina]||[]).find(s=>s.pres===c.presentacion);if(sp&&sp.qn>0)spec='Qn:'+sp.qn+'g · Rango empresa:'+sp.min+'-'+sp.max+'g · Dec.129/009 T='+sp.t.toFixed(1)+'g (Qn-T:'+sp.qnT.toFixed(1)+'g · Qn-2T:'+sp.qn2T.toFixed(1)+'g)'}
 fetch(SURL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({type:'control',fecha:shift.fecha,analista:USER,orden:c.orden,lote:c.lote,vence:c.vence,maquina:c.maquina,presentacion:c.presentacion,granel:c.granel,codPT:c.codPT,controlNum:num,hora:c.hora,pesos:c.pesos,promedio:c.promedio,spec:spec,ph:c.ph,checks:c.checks,hasDev:c.hasDev,devDesc:c.devDesc,devQty:c.devQty,isRep:c.isRep,obs:c.obs,timestamp:c.timestamp,numFotos:pd.length,photos:pd,isLimp:c.isLimp,limpDefects:c.limpDefects,limpUds:c.limpUds,limpMotivo:c.limpMotivo,limpAccion:c.limpAccion})}).catch(()=>toast('⚠️ Error',true))}
 function loadSheet(){if(!SURL)return;fetch(SURL).then(r=>r.json()).then(d=>{if(d.status==='ok'&&d.records){allR=d.records;allR.forEach(r=>{r.promedio=r.promedio!=null?String(r.promedio):'';r.ph=r.ph!=null?String(r.ph):'';r.maquina=r.maquina?String(r.maquina).trim():'';r.presentacion=r.presentacion?String(r.presentacion).trim():'';r.lote=r.lote?String(r.lote).trim():'';r.analista=r.analista?String(r.analista).trim():'';if(r.pesos)r.pesos=r.pesos.map(p=>p!=null?String(p):'')});renderDash();toast('📊 '+allR.length+' registros')}}).catch(()=>{toast('⚠️ Error carga',true)})}
 
