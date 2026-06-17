@@ -6,7 +6,7 @@
     <title>Dashboard Calidad - Vessena</title>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.26.4/babel.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -253,7 +253,10 @@
 </head>
 <body>
     <div id="root"></div>
-    <script type="text/babel">
+    <script type="text/babel" data-presets="env,react">
+        /** @jsxRuntime classic */
+        /** @jsx React.createElement */
+        /** @jsxFrag React.Fragment */
         const { useState, useEffect, useMemo, useRef } = React;
 
         // Error Boundary para capturar errores de render
@@ -330,45 +333,42 @@
                 'profundidad_pie_hd': { min: 78.40, max: 79.60, unidad: 'mm' },
                 'brimful': { min: 1286, max: 1292, unidad: 'mL' }
             }},
+            'PET-1100': { nombre: 'PET 1.1 L', parametros: {} },
+            'PET-1350': { nombre: 'PET 1.35 L', parametros: {} },
+            'PET-AXION-1250': { nombre: 'PET AXION 1.25 L', parametros: {} },
+            'PET-600': { nombre: 'PET 600 ML', parametros: {} },
+            'PET-640': { nombre: 'PET 640 ML', parametros: {} },
+            'PET-250': { nombre: 'PET 250 ML', parametros: {} },
+            'PET-600ESP': { nombre: 'PET 600 ESP', parametros: {} },
             'HIPO-750': { nombre: 'Hipoclorito 750-800 ML', parametros: {
-                'altura_h': { min: 203.50, max: 205.50, unidad: 'mm' },
-                'ancho_hombro_sw': { min: 68.00, max: 69.00, unidad: 'mm' },
-                'profundidad_hombro_sd': { min: 68.00, max: 69.00, unidad: 'mm' },
-                'ancho_pie_hw': { min: 76.50, max: 77.50, unidad: 'mm' },
-                'profundidad_pie_hd': { min: 76.50, max: 77.50, unidad: 'mm' },
-                'brimful': { min: 783, max: 805, unidad: 'mL' }
+                'altura_h': { min: 227.85, max: 230.15, unidad: 'mm' },
+                'ancho_pie_hw': { min: 79.10, max: 79.90, unidad: 'mm' },
+                'brimful': { min: 819, max: 839, unidad: 'mL' },
+                'peso': { min: 36, max: 42, unidad: 'g' }
             }},
             'HIPO-1000': { nombre: 'Hipoclorito 1000 ML', parametros: {
-                'altura_h': { min: 234.50, max: 236.50, unidad: 'mm' },
-                'ancho_hombro_sw': { min: 68.00, max: 69.00, unidad: 'mm' },
-                'profundidad_hombro_sd': { min: 68.00, max: 69.00, unidad: 'mm' },
-                'ancho_pie_hw': { min: 76.50, max: 77.50, unidad: 'mm' },
-                'profundidad_pie_hd': { min: 76.50, max: 77.50, unidad: 'mm' },
-                'brimful': { min: 1017, max: 1043, unidad: 'mL' }
+                'altura_h': { min: 274.12, max: 276.88, unidad: 'mm' },
+                'ancho_pie_hw': { min: 79.10, max: 79.90, unidad: 'mm' },
+                'brimful': { min: 1040, max: 1070, unidad: 'mL' },
+                'peso': { min: 40, max: 46, unidad: 'g' }
             }},
             'HIPO-2000': { nombre: 'Hipoclorito 2000 ML', parametros: {
-                'altura_h': { min: 298.00, max: 300.00, unidad: 'mm' },
-                'ancho_hombro_sw': { min: 91.50, max: 92.50, unidad: 'mm' },
-                'profundidad_hombro_sd': { min: 68.00, max: 69.00, unidad: 'mm' },
-                'ancho_pie_hw': { min: 99.50, max: 100.50, unidad: 'mm' },
-                'profundidad_pie_hd': { min: 76.50, max: 77.50, unidad: 'mm' },
-                'brimful': { min: 2045, max: 2095, unidad: 'mL' }
+                'altura_h': { min: 298.10, max: 301.10, unidad: 'mm' },
+                'ancho_pie_hw': { min: 108.95, max: 110.05, unidad: 'mm' },
+                'brimful': { min: 2025, max: 2075, unidad: 'mL' },
+                'peso': { min: 67, max: 75, unidad: 'g' }
             }},
             'HIPO-4L': { nombre: 'Hipoclorito 4L', parametros: {
-                'altura_h': { min: 307.50, max: 309.50, unidad: 'mm' },
-                'ancho_hombro_sw': { min: 135.00, max: 136.00, unidad: 'mm' },
-                'profundidad_hombro_sd': { min: 91.50, max: 92.50, unidad: 'mm' },
-                'ancho_pie_hw': { min: 143.00, max: 144.00, unidad: 'mm' },
-                'profundidad_pie_hd': { min: 99.50, max: 100.50, unidad: 'mm' },
-                'brimful': { min: 4080, max: 4180, unidad: 'mL' }
+                'altura_h': { min: 318, max: 322, unidad: 'mm' },
+                'ancho_pie_hw': { min: 140, max: 144, unidad: 'mm' },
+                'brimful': { min: 4562, max: 4567, unidad: 'mL' },
+                'peso': { min: 138, max: 145, unidad: 'g' }
             }},
             'BIDON-10L': { nombre: 'Bidón PEAD 10L', parametros: {
-                'altura_h': { min: 360.00, max: 363.00, unidad: 'mm' },
-                'ancho_hombro_sw': { min: 181.00, max: 183.00, unidad: 'mm' },
-                'profundidad_hombro_sd': { min: 135.00, max: 137.00, unidad: 'mm' },
-                'ancho_pie_hw': { min: 189.00, max: 191.00, unidad: 'mm' },
-                'profundidad_pie_hd': { min: 143.00, max: 145.00, unidad: 'mm' },
-                'brimful': { min: 10200, max: 10400, unidad: 'mL' }
+                'altura_h': { min: 362, max: 366, unidad: 'mm' },
+                'ancho_pie_hw': { min: 190, max: 200, unidad: 'mm' },
+                'brimful': { min: 10500, max: 10700, unidad: 'mL' },
+                'peso': { min: 380, max: 400, unidad: 'g' }
             }}
         };
 
