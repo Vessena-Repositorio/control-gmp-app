@@ -1198,6 +1198,7 @@
   <button class="btn" data-fase-preset="1" style="font-size:11px;padding:4px 10px;">Fase 1</button>
   <button class="btn" data-fase-preset="2" style="font-size:11px;padding:4px 10px;">Fase 2</button>
   <button class="btn" data-fase-preset="3" style="font-size:11px;padding:4px 10px;">Fase 3</button>
+  <button class="btn" id="btn-todas-fases" style="font-size:11px;padding:4px 10px;">Todas</button>
   <span style="font-size:11px;color:var(--text-3);margin-left:4px;">|</span>
   <button class="btn btn-primary" data-sistema-filter="all" style="font-size:11px;padding:4px 10px;" id="sf-all">Todos</button>
   <button class="btn" data-sistema-filter="fria" style="font-size:11px;padding:4px 10px;" id="sf-fria">💧 Agua Fría</button>
@@ -1899,9 +1900,9 @@ function normalize(rows) {
 
 // Fases definidas con rangos fijos de fechas
 const FASES_CONFIG = [
-  { fase: 1, nombre: 'Validación Prospectiva',            inicio: new Date(2026, 4, 18), fin: new Date(2026, 4, 29), diasTotales: 10 },
-  { fase: 2, nombre: 'Validación Concurrente Primaria',   inicio: new Date(2026, 5, 1),  fin: new Date(2026, 5, 12), diasTotales: 10 },
-  { fase: 3, nombre: 'Validación Concurrente Secundaria', inicio: new Date(2026, 5, 15), fin: new Date(2026, 11, 4), diasTotales: 120 },
+  { fase: 1, nombre: 'Validación Prospectiva',            inicio: new Date(2026, 4, 18), fin: new Date(2026, 4, 31), diasTotales: 10 },
+  { fase: 2, nombre: 'Validación Concurrente Primaria',   inicio: new Date(2026, 5, 1),  fin: new Date(2026, 5, 14), diasTotales: 10 },
+  { fase: 3, nombre: 'Validación Concurrente Secundaria', inicio: new Date(2026, 5, 15), fin: new Date(2026, 11, 31), diasTotales: 120 },
 ];
 
 function detectarFase(samples) {
@@ -3480,6 +3481,7 @@ document.getElementById('btn-limpiar-fechas').onclick = () => {
   document.getElementById('fecha-desde').value = '';
   document.getElementById('fecha-hasta').value = '';
   document.querySelectorAll('[data-fase-preset]').forEach(b => b.classList.remove('btn-primary'));
+  document.getElementById('btn-todas-fases').classList.remove('btn-primary');
   document.querySelectorAll('[data-sistema-filter]').forEach(b => {
     b.classList.toggle('btn-primary', b.dataset.sistemaFilter === 'all');
   });
@@ -3503,9 +3505,22 @@ document.querySelectorAll('[data-fase-preset]').forEach(btn => {
     applyDateFilter();
     // Highlight active button
     document.querySelectorAll('[data-fase-preset]').forEach(b => b.classList.remove('btn-primary'));
+    document.getElementById('btn-todas-fases').classList.remove('btn-primary');
     btn.classList.add('btn-primary');
   };
 });
+
+// "Todas" — remove date filter, show all data
+document.getElementById('btn-todas-fases').onclick = () => {
+  STATE.fechaDesde = null;
+  STATE.fechaHasta = null;
+  document.getElementById('fecha-desde').value = '';
+  document.getElementById('fecha-hasta').value = '';
+  document.querySelectorAll('[data-fase-preset]').forEach(b => b.classList.remove('btn-primary'));
+  document.getElementById('btn-todas-fases').classList.add('btn-primary');
+  destroyCharts();
+  applyDateFilter();
+};
 
 // Sistema filter handlers (agua fría / caliente / etc.)
 document.querySelectorAll('[data-sistema-filter]').forEach(btn => {
