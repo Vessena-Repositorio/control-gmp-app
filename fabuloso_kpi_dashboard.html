@@ -493,27 +493,7 @@ window.__sheetCallback=function(resp){
     var d1=document.getElementById("d1"),d2=document.getElementById("d2");
     d1.value=minD;d2.value=maxD;
     d1.min=minD;d1.max=maxD;d2.min=minD;d2.max=maxD;
-    // Show column debug info + data completeness
-    var nAni=0,nGda=0,nPh=0,nPeso=0;
-    var sampleAni=[];
-    for(var si=0;si<ALL.length;si++){
-      if(ALL[si].ani!==null){nAni++;if(sampleAni.length<3)sampleAni.push(ALL[si].lote+"="+ALL[si].ani);}
-      if(ALL[si].gda!==null)nGda++;
-      if(ALL[si].ph!==null)nPh++;
-      if(ALL[si].pesoP!==null&&ALL[si].pesoP!==0)nPeso++;
-    }
-    var rawHeaders=cols.map(function(c,i){return i+":"+JSON.stringify(c.label)}).join(" | ");
-    var mapInfo="ani="+iAni+" gda="+iGDA+" ph="+iPH+" peso="+iPeso;
-    var dataInfo="ani="+nAni+"/"+ALL.length+" gda="+nGda+" ph="+nPh+" peso="+nPeso+" | muestras ani: "+sampleAni.join(", ");
-    var nullDump="";
-    if(aniNullSamples.length>0){
-      nullDump="<br><b style='color:#fbbf24'>Lotes con ani=null (gda sí OK) — diagnóstico columna:</b><br>";
-      for(var ns=0;ns<aniNullSamples.length;ns++){
-        var s=aniNullSamples[ns];
-        nullDump+="&nbsp;&nbsp;• "+s.lote+" ("+s.fecha+"): filaLen="+s.rowLen+" | iAni="+s.iAni+" | gda="+s.gdaVal+" | ph="+s.phVal+" | escaneo: "+s.scan+"<br>";
-      }
-    }
-    st.innerHTML="✓ "+ALL.length+" lotes ("+minD+"→"+maxD+") <span style='cursor:pointer;text-decoration:underline' onclick='this.nextSibling.style.display=this.nextSibling.style.display===\"none\"?\"block\":\"none\"'>[debug]</span><div style='display:none;margin-top:6px;font-size:10px;word-break:break-all;max-height:280px;overflow:auto;background:rgba(0,0,0,.15);padding:6px;border-radius:4px'><b>Mapping:</b> "+mapInfo+"<br><b>Datos no nulos:</b> "+dataInfo+nullDump+"<br><b>Headers:</b> "+rawHeaders+"</div>";
+    st.innerHTML="✓ Conectado · "+ALL.length+" lotes ("+minD+" → "+maxD+")";
     st.style.background="rgba(22,163,74,.3)";
     populateProductFilter();
     render();
@@ -617,6 +597,7 @@ function parseCsvSheet(csvText){
     if(iDesc<0||iFecha<0||iUE<0||iRend<0)throw new Error("Columnas requeridas no encontradas");
     var data=[];
     var aniNullSamples=[];
+    var headerLen=headerRow.length;
     for(var r=1;r<rows.length;r++){
       var row=rows[r];
       if(!row||row.length===0)continue;
@@ -637,7 +618,12 @@ function parseCsvSheet(csvText){
       var aniRaw=getCell(iAni);
       var ani=toNum(aniRaw);
       if(ani===null&&gda!==null&&aniNullSamples.length<5){
-        aniNullSamples.push({lote:lote,fecha:fecha,raw:JSON.stringify(aniRaw)});
+        // Show a wider slice of the row to see what's actually there
+        var slice=[];
+        for(var sc=Math.max(0,iAni-2);sc<Math.min(row.length,iAni+4);sc++){
+          slice.push("["+sc+"]="+JSON.stringify(row[sc]));
+        }
+        aniNullSamples.push({lote:lote,fecha:fecha,rowLen:row.length,expected:headerLen,iAni:iAni,slice:slice.join(" ")});
       }
       var ph=toNum(getCell(iPH));
       if(uE===null||rend===null)continue;
@@ -652,21 +638,7 @@ function parseCsvSheet(csvText){
     var d1=document.getElementById("d1"),d2=document.getElementById("d2");
     d1.value=minD;d2.value=maxD;
     d1.min=minD;d1.max=maxD;d2.min=minD;d2.max=maxD;
-    // Debug info
-    var nAni=0,nGda=0,nPh=0,nPeso=0,sampleAni=[];
-    for(var si=0;si<ALL.length;si++){
-      if(ALL[si].ani!==null){nAni++;if(sampleAni.length<3)sampleAni.push(ALL[si].lote+"="+ALL[si].ani);}
-      if(ALL[si].gda!==null)nGda++;
-      if(ALL[si].ph!==null)nPh++;
-      if(ALL[si].pesoP!==null&&ALL[si].pesoP!==0)nPeso++;
-    }
-    var dataInfo="ani="+nAni+"/"+ALL.length+" gda="+nGda+" ph="+nPh+" peso="+nPeso+" | muestras ani: "+sampleAni.join(", ");
-    var nullDump="";
-    if(aniNullSamples.length>0){
-      nullDump="<br><b style='color:#fbbf24'>Lotes con ani=null (CSV crudo):</b><br>";
-      for(var ns=0;ns<aniNullSamples.length;ns++){var s=aniNullSamples[ns];nullDump+="&nbsp;&nbsp;• "+s.lote+" ("+s.fecha+"): "+s.raw+"<br>";}
-    }
-    st.innerHTML="✓ CSV · "+ALL.length+" lotes ("+minD+"→"+maxD+") <span style='cursor:pointer;text-decoration:underline' onclick='this.nextSibling.style.display=this.nextSibling.style.display===\"none\"?\"block\":\"none\"'>[debug]</span><div style='display:none;margin-top:6px;font-size:10px;word-break:break-all;max-height:200px;overflow:auto;background:rgba(0,0,0,.15);padding:6px;border-radius:4px'>"+dataInfo+nullDump+"</div>";
+    st.innerHTML="✓ Conectado · "+ALL.length+" lotes ("+minD+" → "+maxD+")";
     st.style.background="rgba(22,163,74,.3)";
     populateProductFilter();
     render();
