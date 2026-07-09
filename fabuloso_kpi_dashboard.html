@@ -25,7 +25,7 @@ input[type=date]::-webkit-calendar-picker-indicator{filter:invert(1)}
 .tabs button.on{background:#f1f3f5;color:#1e293b}
 .mn{padding:18px 28px 32px;max-width:1260px;margin:0 auto}
 .cds{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:18px}
-.cd{background:#fff;border-radius:12px;padding:16px 20px;flex:1 1 160px;min-width:150;box-shadow:0 1px 6px rgba(0,0,0,.05);border-left:4px solid var(--c)}
+.cd{background:#fff;border-radius:12px;padding:16px 20px;flex:1 1 160px;min-width:150px;box-shadow:0 1px 6px rgba(0,0,0,.05);border-left:4px solid var(--c)}
 .cd .l{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:#8892a4;margin-bottom:5px}
 .cd .v{font-size:24px;font-weight:800;color:var(--c);font-family:monospace;line-height:1}
 .cd .u{font-size:10px;color:#8892a4;margin-top:4px}
@@ -55,10 +55,27 @@ td{padding:8px 10px;font-size:12px;border-bottom:1px solid #eee}
 <div class="hdr">
 <div class="top">
 <div><div class="c">Contract Manufacturing Quality</div><h1>KPI Dashboard — Fabuloso</h1><div class="s">Vessena S.A. · Cno Teniente Galeano 3160</div></div>
-<div class="fil"><label>Desde</label><input type="date" id="d1"><label>Hasta</label><input type="date" id="d2"><label>Producto</label><select id="prod" style="padding:6px;border-radius:4px"><option value="">Todos los productos</option></select><button id="btnf">Filtrar</button><button id="rst">Reset</button><button id="rfsh">↻ Actualizar</button><button id="xport" style="background:#16a34a">📥 Exportar Excel</button></div>
+<div class="fil"><label>Desde</label><input type="date" id="d1"><label>Hasta</label><input type="date" id="d2"><label>Producto</label><select id="prod" style="padding:6px;border-radius:4px"><option value="">Todos los productos</option></select><button id="btnf">Filtrar</button><button id="rst">Reset</button><button id="rfsh">↻ Actualizar</button><button id="xport" style="background:#16a34a">📥 Exportar Excel</button><button id="importBtn" style="background:#0ea5e9">📤 Importar Excel</button><input type="file" id="importFile" accept=".xlsx,.xls,.csv" style="display:none"></div>
 </div>
 <div id="status" style="margin-top:10px;font-size:11px;padding:6px 12px;border-radius:6px;background:rgba(255,255,255,.1);display:inline-block">Iniciando...</div>
 <div class="tabs" id="tabs"></div>
+</div>
+<!-- Specs Panel (siempre visible, colapsable) -->
+<div id="specsPanel" style="background:linear-gradient(135deg,#f5f3ff,#ede9fe);border-bottom:2px solid #7c3aed;padding:0;max-width:100%;overflow:hidden;transition:max-height .3s ease">
+<div style="max-width:1260px;margin:0 auto;padding:0 28px">
+<div id="specToggle" style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;cursor:pointer;user-select:none">
+<div style="display:flex;align-items:center;gap:8px"><span style="font-size:14px">⚙️</span><span style="font-weight:700;font-size:13px;color:#5b21b6">Límites de Especificación (LSL / USL)</span><span style="font-size:10px;color:#7c3aed;background:#ddd6fe;padding:2px 8px;border-radius:10px" id="specSummary"></span></div>
+<span id="specArrow" style="font-size:16px;color:#7c3aed;transition:transform .2s">▼</span>
+</div>
+<div id="specBody" style="display:none;padding-bottom:16px">
+<div id="specGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px"></div>
+<div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+<button id="applySpecs" style="background:#7c3aed;color:#fff;border:none;padding:8px 20px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">✓ Aplicar</button>
+<button id="resetSpecs" style="background:#e2e8f0;color:#334155;border:none;padding:8px 20px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">↺ Defaults</button>
+<span id="specStatus" style="font-size:11px;color:#16a34a;margin-left:8px"></span>
+</div>
+</div>
+</div>
 </div>
 <div class="mn">
 <div class="tp on" id="t0"></div>
@@ -200,6 +217,7 @@ MR̄ = Σ MR_i / (n − 1)<br>
 </div>
 
 </div>
+<div class="tp" id="t7"></div>
 <div class="ft">Vessena S.A. — KPIs Fabuloso</div>
 </div>
 <script>
@@ -311,7 +329,18 @@ for(var i=0;i<R.length;i++){
   ALL.push({desc:r[0],fecha:r[1],uE:r[2],caj:r[3],gK:r[4],rend:r[5],pesoP:r[6],gda:r[7],ani:r[8],ph:r[9]});
 }
 var COL=["#2563eb","#ea580c","#16a34a","#dc2626","#9333ea","#0369a1","#ca8a04","#0f766e","#be185d","#6d28d9","#0284c7","#d97706"];
-var TN=["Resumen","Produccion","Rendimiento","Calidad","Process Capability","Referencia","Guía"];
+var TN=["Resumen","Produccion","Rendimiento","Calidad","Process Capability","Referencia","Guía","Configuración"];
+
+// === Especificaciones editables ===
+var SPECS={
+  peso1L:{lsl:1000,usl:1025,label:"Peso 1L (g)"},
+  peso2L:{lsl:2000,usl:2030,label:"Peso 2L (g)"},
+  ph:{lsl:6.5,usl:8.0,label:"pH"},
+  gdaStd:{lsl:0.04,usl:0.06,label:"GDA Estándar (%)"},
+  gdaCloro:{lsl:0.05,usl:0.07,label:"GDA Alt.Cloro (%)"},
+  aniStd:{lsl:0.82,usl:1.12,label:"Aniónico Estándar (%)"},
+  aniCloro:{lsl:1.02,usl:1.32,label:"Aniónico Alt.Cloro (%)"}
+};
 var allF=[];for(var i=0;i<ALL.length;i++)allF.push(ALL[i].fecha);
 allF.sort();
 var minD=allF[0], maxD=allF[allF.length-1];
@@ -321,6 +350,9 @@ var myCharts=[];
 // === Google Sheets auto-fetch (gviz JSONP — works from file://) ===
 var SHEET_ID="1j5TkRMZbnR8v7vhPGGKiwJ3HnPErKFtM44BOyG02gk4";
 var SHEET_GID="0";
+
+// Strip accents for robust column matching (handles NFD/NFC Unicode differences from Google Sheets)
+function stripAccents(s){return s.normalize?s.normalize("NFD").replace(/[\u0300-\u036f]/g,""):s.replace(/[áàâä]/g,"a").replace(/[éèêë]/g,"e").replace(/[íìîï]/g,"i").replace(/[óòôö]/g,"o").replace(/[úùûü]/g,"u").replace(/[ñ]/g,"n");}
 
 function toNum(s){
   if(s===null||s===undefined||s==="")return null;
@@ -338,16 +370,29 @@ function toNum(s){
 
 function toISODate(s){
   if(!s)return null;
-  if(s instanceof Date)return s.toISOString().slice(0,10);
+  if(s instanceof Date){var iso=s.toISOString().slice(0,10);return fixYear(iso);}
   s=String(s).trim();
   // gviz Date format: "Date(2026,3,28)" — month is 0-indexed
   var d=s.match(/^Date\((\d+),(\d+),(\d+)/);
-  if(d)return d[1]+"-"+("0"+(parseInt(d[2])+1)).slice(-2)+"-"+("0"+d[3]).slice(-2);
+  if(d)return fixYear(d[1]+"-"+("0"+(parseInt(d[2])+1)).slice(-2)+"-"+("0"+d[3]).slice(-2));
   // DD/MM/YYYY
-  var m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if(m)return m[3]+"-"+("0"+m[2]).slice(-2)+"-"+("0"+m[1]).slice(-2);
-  if(/^\d{4}-\d{2}-\d{2}/.test(s))return s.slice(0,10);
+  var m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4,5})$/);
+  if(m)return fixYear(m[3]+"-"+("0"+m[2]).slice(-2)+"-"+("0"+m[1]).slice(-2));
+  if(/^\d{4,5}-\d{2}-\d{2}/.test(s))return fixYear(s.slice(0,s.indexOf("-",1)+6));
   return null;
+}
+// Fix common 5-digit year typos: 20024→2024, 20025→2025, 20026→2026
+function fixYear(iso){
+  if(!iso)return null;
+  var parts=iso.split("-");
+  var y=parts[0];
+  if(y.length===5&&y.charAt(0)==="2"&&y.charAt(1)==="0"&&y.charAt(2)==="0"){
+    y=y.charAt(0)+y.substring(2); // 20024 → 2024
+    parts[0]=y;
+  }
+  var yn=parseInt(y);
+  if(yn<1900||yn>2100)return null; // reject nonsense years
+  return parts.join("-");
 }
 
 window.__sheetCallback=function(resp){
@@ -359,19 +404,19 @@ window.__sheetCallback=function(resp){
     var cols=resp.table.cols||[];
     var colMap={};
     for(var k=0;k<cols.length;k++){
-      var lbl=(cols[k].label||"").toString().toLowerCase().replace(/\s+/g," ").trim();
+      var lbl=stripAccents((cols[k].label||"").toString().toLowerCase().replace(/\s+/g," ").trim());
       colMap[lbl]=k;
     }
     function findCol(){
       for(var i=0;i<arguments.length;i++){
-        var needle=arguments[i].toLowerCase();
+        var needle=stripAccents(arguments[i].toLowerCase());
         for(var key in colMap){
           if(key.indexOf(needle)>=0)return colMap[key];
         }
       }
       return -1;
     }
-    var iDesc=findCol("descripcion","descripción");
+    var iDesc=findCol("descripcion");
     var iLote=findCol("lote");
     var iFecha=findCol("fecha envasado","fecha");
     var iCaj=findCol("cajas entregadas","cajas");
@@ -380,20 +425,31 @@ window.__sheetCallback=function(resp){
     var iRend=findCol("rendimiento");
     var iPeso=findCol("peso promedio");
     var iGDA=findCol("gda");
-    var iAni=findCol("anionico","aniónico");
+    var iAni=findCol("anionico");
     var iPH=findCol("ph");
 
-    // Debug log
+    // Debug log — headers as received + column indices
+    console.log("Sheet columns (raw):",cols.map(function(c){return c.label}));
     console.log("Column mapping:",{desc:iDesc,lote:iLote,fecha:iFecha,caj:iCaj,gK:iGK,uE:iUE,rend:iRend,peso:iPeso,gda:iGDA,ani:iAni,ph:iPH});
 
     if(iDesc<0||iFecha<0||iUE<0||iRend<0)throw new Error("No se encontraron columnas requeridas");
 
     var rows=resp.table.rows;
     var data=[];
+    var aniNullSamples=[]; // Debug: capture raw values where ani parses to null
     for(var i=0;i<rows.length;i++){
       var c=rows[i].c;
       if(!c)continue;
-      function cell(idx){return idx>=0&&c[idx]&&c[idx].v!==null&&c[idx].v!==undefined?c[idx].v:null;}
+      function cell(idx){
+        if(idx<0||c[idx]===null||c[idx]===undefined)return null;
+        // Try .v first (typed value); if null, try .f (formatted text as seen in sheet)
+        var v=c[idx].v;
+        if(v!==null&&v!==undefined&&v!=="")return v;
+        var f=c[idx].f;
+        if(f!==null&&f!==undefined&&f!=="")return f;
+        return null;
+      }
+      function cellRaw(idx){if(idx<0||!c[idx])return {v:"NO_CELL",f:"NO_CELL"};return {v:c[idx].v,f:c[idx].f,type:typeof c[idx].v};}
       var desc=cell(iDesc);
       var fechaRaw=cell(iFecha);
       if(!desc||!fechaRaw)continue;
@@ -408,12 +464,27 @@ window.__sheetCallback=function(resp){
       var rend=toNum(cell(iRend));
       var pesoP=toNum(cell(iPeso));
       var gda=toNum(cell(iGDA));
+      var aniRawCell=cellRaw(iAni);
       var ani=toNum(cell(iAni));
+      // Diagnostic: if ani is null but the row seems otherwise complete, capture raw
+      if(ani===null&&gda!==null&&aniNullSamples.length<5){
+        var rowLen=c.length;
+        var gdaRawStr=(c[iGDA]?JSON.stringify(c[iGDA].v):"MISS");
+        var phRawStr=(c[iPH]?JSON.stringify(c[iPH].v):"MISS");
+        // Sample surrounding cells around iAni to find where value might be
+        var surrounding="";
+        for(var scan=iAni-1;scan<=iAni+2;scan++){
+          if(scan>=0&&scan<rowLen){surrounding+="["+scan+"]="+(c[scan]?JSON.stringify(c[scan].v):"null")+" ";}
+        }
+        aniNullSamples.push({lote:lote,fecha:fecha,rowLen:rowLen,iAni:iAni,gdaVal:gdaRawStr,phVal:phRawStr,scan:surrounding});
+      }
       var ph=toNum(cell(iPH));
       if(uE===null||rend===null)continue;
       desc=desc.replace(/^Fabuloso\s+/i,"").replace(/Alternativa al Cloro/i,"Alt Cloro").replace(/Alternativa cloro/i,"Alt Cloro").replace(/Pasi[óo]n de Frutas/i,"Pasion Frutas").replace(/Tulipanes y kiwi/i,"Tulipanes Kiwi").replace(/Tulipanes y Kiwi/i,"Tulipanes Kiwi").replace(/Naturals Eucalipto/i,"Naturals Eucalipto").replace(/(\d)\s+L\b/gi,"$1L").replace(/\s+/g," ").trim();
       data.push({desc:desc,lote:lote,fecha:fecha,uE:uE,caj:caj||0,gK:gK||0,rend:rend,pesoP:pesoP||0,gda:gda,ani:ani,ph:ph});
     }
+    console.log("Muestras donde ani=null pero gda no es null (posible bug de parseo):",aniNullSamples);
+    window.__aniNullSamples=aniNullSamples;
     if(data.length===0)throw new Error("Sin datos válidos");
     ALL=data;
     var f=[];for(var i=0;i<ALL.length;i++)f.push(ALL[i].fecha);
@@ -422,7 +493,27 @@ window.__sheetCallback=function(resp){
     var d1=document.getElementById("d1"),d2=document.getElementById("d2");
     d1.value=minD;d2.value=maxD;
     d1.min=minD;d1.max=maxD;d2.min=minD;d2.max=maxD;
-    st.innerHTML="✓ Conectado · "+ALL.length+" lotes ("+minD+" → "+maxD+")";
+    // Show column debug info + data completeness
+    var nAni=0,nGda=0,nPh=0,nPeso=0;
+    var sampleAni=[];
+    for(var si=0;si<ALL.length;si++){
+      if(ALL[si].ani!==null){nAni++;if(sampleAni.length<3)sampleAni.push(ALL[si].lote+"="+ALL[si].ani);}
+      if(ALL[si].gda!==null)nGda++;
+      if(ALL[si].ph!==null)nPh++;
+      if(ALL[si].pesoP!==null&&ALL[si].pesoP!==0)nPeso++;
+    }
+    var rawHeaders=cols.map(function(c,i){return i+":"+JSON.stringify(c.label)}).join(" | ");
+    var mapInfo="ani="+iAni+" gda="+iGDA+" ph="+iPH+" peso="+iPeso;
+    var dataInfo="ani="+nAni+"/"+ALL.length+" gda="+nGda+" ph="+nPh+" peso="+nPeso+" | muestras ani: "+sampleAni.join(", ");
+    var nullDump="";
+    if(aniNullSamples.length>0){
+      nullDump="<br><b style='color:#fbbf24'>Lotes con ani=null (gda sí OK) — diagnóstico columna:</b><br>";
+      for(var ns=0;ns<aniNullSamples.length;ns++){
+        var s=aniNullSamples[ns];
+        nullDump+="&nbsp;&nbsp;• "+s.lote+" ("+s.fecha+"): filaLen="+s.rowLen+" | iAni="+s.iAni+" | gda="+s.gdaVal+" | ph="+s.phVal+" | escaneo: "+s.scan+"<br>";
+      }
+    }
+    st.innerHTML="✓ "+ALL.length+" lotes ("+minD+"→"+maxD+") <span style='cursor:pointer;text-decoration:underline' onclick='this.nextSibling.style.display=this.nextSibling.style.display===\"none\"?\"block\":\"none\"'>[debug]</span><div style='display:none;margin-top:6px;font-size:10px;word-break:break-all;max-height:280px;overflow:auto;background:rgba(0,0,0,.15);padding:6px;border-radius:4px'><b>Mapping:</b> "+mapInfo+"<br><b>Datos no nulos:</b> "+dataInfo+nullDump+"<br><b>Headers:</b> "+rawHeaders+"</div>";
     st.style.background="rgba(22,163,74,.3)";
     populateProductFilter();
     render();
@@ -437,11 +528,30 @@ function fetchSheet(){
   var st=document.getElementById("status");
   st.textContent="🔄 Cargando datos de Google Sheets...";
   st.style.background="rgba(234,179,8,.25)";
+  // Try CSV first (preserves decimal comma strings correctly); fallback to JSONP for file:// protocol
+  var csvUrl="https://docs.google.com/spreadsheets/d/"+SHEET_ID+"/gviz/tq?tqx=out:csv&gid="+SHEET_GID+"&headers=1&t="+Date.now();
+  if(typeof fetch!=="undefined"&&location.protocol!=="file:"){
+    fetch(csvUrl).then(function(r){
+      if(!r.ok)throw new Error("HTTP "+r.status);
+      return r.text();
+    }).then(function(csv){
+      parseCsvSheet(csv);
+    }).catch(function(err){
+      console.warn("CSV fetch falló, usando JSONP:",err);
+      loadJsonpFallback();
+    });
+  }else{
+    loadJsonpFallback();
+  }
+}
+
+function loadJsonpFallback(){
   var old=document.getElementById("gvizScript");
   if(old)old.parentNode.removeChild(old);
   var s=document.createElement("script");
   s.id="gvizScript";
   s.onerror=function(){
+    var st=document.getElementById("status");
     st.innerHTML="⚠ No se pudo conectar a Google Sheets — usando caché";
     st.style.background="rgba(220,38,38,.3)";
   };
@@ -449,11 +559,242 @@ function fetchSheet(){
   document.body.appendChild(s);
 }
 
+// Parse CSV (RFC 4180-ish, handles quoted fields with commas inside)
+function parseCSV(text){
+  var rows=[];
+  var row=[];
+  var field="";
+  var inQuotes=false;
+  for(var i=0;i<text.length;i++){
+    var ch=text.charAt(i);
+    if(inQuotes){
+      if(ch==='"'){
+        if(text.charAt(i+1)==='"'){field+='"';i++;}
+        else{inQuotes=false;}
+      }else{field+=ch;}
+    }else{
+      if(ch==='"'){inQuotes=true;}
+      else if(ch===","){row.push(field);field="";}
+      else if(ch==="\n"){row.push(field);rows.push(row);row=[];field="";}
+      else if(ch==="\r"){/*skip*/}
+      else{field+=ch;}
+    }
+  }
+  if(field||row.length){row.push(field);rows.push(row);}
+  return rows;
+}
+
+function parseCsvSheet(csvText){
+  var st=document.getElementById("status");
+  try{
+    var rows=parseCSV(csvText);
+    if(rows.length<2)throw new Error("CSV vacío");
+    var headerRow=rows[0];
+    // Build colMap from header row (normalized)
+    var colMap={};
+    for(var k=0;k<headerRow.length;k++){
+      var lbl=stripAccents((headerRow[k]||"").toString().toLowerCase().replace(/\s+/g," ").trim());
+      colMap[lbl]=k;
+    }
+    function findCol(){
+      for(var i=0;i<arguments.length;i++){
+        var needle=stripAccents(arguments[i].toLowerCase());
+        for(var key in colMap){if(key.indexOf(needle)>=0)return colMap[key];}
+      }
+      return -1;
+    }
+    var iDesc=findCol("descripcion");
+    var iLote=findCol("lote");
+    var iFecha=findCol("fecha envasado","fecha");
+    var iCaj=findCol("cajas entregadas","cajas");
+    var iGK=findCol("granales","granel");
+    var iUE=findCol("unidades envasadas");
+    var iRend=findCol("rendimiento");
+    var iPeso=findCol("peso promedio");
+    var iGDA=findCol("gda");
+    var iAni=findCol("anionico");
+    var iPH=findCol("ph");
+    if(iDesc<0||iFecha<0||iUE<0||iRend<0)throw new Error("Columnas requeridas no encontradas");
+    var data=[];
+    var aniNullSamples=[];
+    for(var r=1;r<rows.length;r++){
+      var row=rows[r];
+      if(!row||row.length===0)continue;
+      function getCell(idx){if(idx<0||idx>=row.length)return null;var v=row[idx];return (v===null||v===undefined||v==="")?null:v;}
+      var desc=getCell(iDesc);
+      var fechaRaw=getCell(iFecha);
+      if(!desc||!fechaRaw)continue;
+      desc=String(desc).trim();
+      var fecha=toISODate(fechaRaw);
+      if(!fecha)continue;
+      var lote=getCell(iLote);lote=lote?String(lote).trim():"";
+      var uE=toNum(getCell(iUE));
+      var caj=toNum(getCell(iCaj));
+      var gK=toNum(getCell(iGK));
+      var rend=toNum(getCell(iRend));
+      var pesoP=toNum(getCell(iPeso));
+      var gda=toNum(getCell(iGDA));
+      var aniRaw=getCell(iAni);
+      var ani=toNum(aniRaw);
+      if(ani===null&&gda!==null&&aniNullSamples.length<5){
+        aniNullSamples.push({lote:lote,fecha:fecha,raw:JSON.stringify(aniRaw)});
+      }
+      var ph=toNum(getCell(iPH));
+      if(uE===null||rend===null)continue;
+      desc=desc.replace(/^Fabuloso\s+/i,"").replace(/Alternativa al Cloro/i,"Alt Cloro").replace(/Alternativa cloro/i,"Alt Cloro").replace(/Pasi[óo]n de Frutas/i,"Pasion Frutas").replace(/Tulipanes y kiwi/i,"Tulipanes Kiwi").replace(/Tulipanes y Kiwi/i,"Tulipanes Kiwi").replace(/Naturals Eucalipto/i,"Naturals Eucalipto").replace(/(\d)\s+L\b/gi,"$1L").replace(/\s+/g," ").trim();
+      data.push({desc:desc,lote:lote,fecha:fecha,uE:uE,caj:caj||0,gK:gK||0,rend:rend,pesoP:pesoP||0,gda:gda,ani:ani,ph:ph});
+    }
+    if(data.length===0)throw new Error("Sin datos válidos en CSV");
+    ALL=data;
+    var f=[];for(var i=0;i<ALL.length;i++)f.push(ALL[i].fecha);
+    f.sort();
+    minD=f[0];maxD=f[f.length-1];
+    var d1=document.getElementById("d1"),d2=document.getElementById("d2");
+    d1.value=minD;d2.value=maxD;
+    d1.min=minD;d1.max=maxD;d2.min=minD;d2.max=maxD;
+    // Debug info
+    var nAni=0,nGda=0,nPh=0,nPeso=0,sampleAni=[];
+    for(var si=0;si<ALL.length;si++){
+      if(ALL[si].ani!==null){nAni++;if(sampleAni.length<3)sampleAni.push(ALL[si].lote+"="+ALL[si].ani);}
+      if(ALL[si].gda!==null)nGda++;
+      if(ALL[si].ph!==null)nPh++;
+      if(ALL[si].pesoP!==null&&ALL[si].pesoP!==0)nPeso++;
+    }
+    var dataInfo="ani="+nAni+"/"+ALL.length+" gda="+nGda+" ph="+nPh+" peso="+nPeso+" | muestras ani: "+sampleAni.join(", ");
+    var nullDump="";
+    if(aniNullSamples.length>0){
+      nullDump="<br><b style='color:#fbbf24'>Lotes con ani=null (CSV crudo):</b><br>";
+      for(var ns=0;ns<aniNullSamples.length;ns++){var s=aniNullSamples[ns];nullDump+="&nbsp;&nbsp;• "+s.lote+" ("+s.fecha+"): "+s.raw+"<br>";}
+    }
+    st.innerHTML="✓ CSV · "+ALL.length+" lotes ("+minD+"→"+maxD+") <span style='cursor:pointer;text-decoration:underline' onclick='this.nextSibling.style.display=this.nextSibling.style.display===\"none\"?\"block\":\"none\"'>[debug]</span><div style='display:none;margin-top:6px;font-size:10px;word-break:break-all;max-height:200px;overflow:auto;background:rgba(0,0,0,.15);padding:6px;border-radius:4px'>"+dataInfo+nullDump+"</div>";
+    st.style.background="rgba(22,163,74,.3)";
+    populateProductFilter();
+    render();
+  }catch(e){
+    st.innerHTML="⚠ Error CSV: "+e.message+" — probando JSONP...";
+    st.style.background="rgba(234,179,8,.3)";
+    console.error(e);
+    loadJsonpFallback();
+  }
+}
+
+// === Importar Excel ===
+function importExcel(file){
+  var st=document.getElementById("status");
+  st.textContent="📤 Importando "+file.name+"...";
+  st.style.background="rgba(234,179,8,.25)";
+  var reader=new FileReader();
+  reader.onerror=function(){st.innerHTML="⚠ Error al leer archivo";st.style.background="rgba(220,38,38,.3)";};
+  reader.onload=function(e){
+    try{
+      var wb=new ExcelJS.Workbook();
+      wb.xlsx.load(e.target.result).then(function(workbook){
+        var ws=workbook.worksheets[0];
+        if(!ws)throw new Error("No se encontró hoja");
+        // Find headers in first row
+        var headers={};
+        ws.getRow(1).eachCell(function(cell,colNum){
+          var lbl=stripAccents((cell.value||"").toString().toLowerCase().replace(/\s+/g," ").trim());
+          headers[lbl]=colNum;
+        });
+        function findCol(){
+          for(var i=0;i<arguments.length;i++){
+            var needle=stripAccents(arguments[i].toLowerCase());
+            for(var key in headers){if(key.indexOf(needle)>=0)return headers[key];}
+          }
+          return -1;
+        }
+        var iDesc=findCol("descripcion","producto","product");
+        var iLote=findCol("lote","lot","batch");
+        var iFecha=findCol("fecha envasado","fecha","date");
+        var iCaj=findCol("cajas entregadas","cajas","cases");
+        var iGK=findCol("granales","granel","bulk");
+        var iUE=findCol("unidades envasadas","unidades","units");
+        var iRend=findCol("rendimiento","yield");
+        var iPeso=findCol("peso promedio","peso","weight");
+        var iGDA=findCol("gda","%gda");
+        var iAni=findCol("anionico","anionic");
+        var iPH=findCol("ph");
+        if(iDesc<0||iFecha<0)throw new Error("No se encontraron columnas 'Descripción' y 'Fecha'. Columnas encontradas: "+Object.keys(headers).join(", "));
+        var data=[];
+        ws.eachRow(function(row,rowNum){
+          if(rowNum===1)return;
+          function cell(idx){if(idx<0)return null;var v=row.getCell(idx).value;if(v===null||v===undefined)return null;return v;}
+          var desc=cell(iDesc);
+          var fechaRaw=cell(iFecha);
+          if(!desc||!fechaRaw)return;
+          desc=String(desc).trim();
+          var fecha=null;
+          if(fechaRaw instanceof Date){fecha=fixYear(fechaRaw.toISOString().slice(0,10));}
+          else{fecha=toISODate(String(fechaRaw));}
+          if(!fecha)return;
+          var lote=cell(iLote);lote=lote?String(lote).trim():"";
+          var uE=toNum(cell(iUE));
+          var caj=toNum(cell(iCaj));
+          var gK=toNum(cell(iGK));
+          var rend=toNum(cell(iRend));
+          var pesoP=toNum(cell(iPeso));
+          var gda=toNum(cell(iGDA));
+          var ani=toNum(cell(iAni));
+          var ph=toNum(cell(iPH));
+          desc=desc.replace(/^Fabuloso\s+/i,"").replace(/Alternativa al Cloro/i,"Alt Cloro").replace(/Alternativa cloro/i,"Alt Cloro").replace(/Pasi[óo]n de Frutas/i,"Pasion Frutas").replace(/Tulipanes y kiwi/i,"Tulipanes Kiwi").replace(/Tulipanes y Kiwi/i,"Tulipanes Kiwi").replace(/Naturals Eucalipto/i,"Naturals Eucalipto").replace(/(\d)\s+L\b/gi,"$1L").replace(/\s+/g," ").trim();
+          data.push({desc:desc,lote:lote,fecha:fecha,uE:uE||0,caj:caj||0,gK:gK||0,rend:rend||0,pesoP:pesoP||0,gda:gda,ani:ani,ph:ph});
+        });
+        if(data.length===0)throw new Error("Sin datos válidos en el archivo");
+        ALL=data;
+        var f=[];for(var i=0;i<ALL.length;i++)f.push(ALL[i].fecha);
+        f.sort();
+        minD=f[0];maxD=f[f.length-1];
+        document.getElementById("d1").value=minD;
+        document.getElementById("d2").value=maxD;
+        st.innerHTML="✓ Importado: "+file.name+" · "+ALL.length+" lotes ("+minD+" → "+maxD+")";
+        st.style.background="rgba(14,165,233,.3)";
+        populateProductFilter();
+        render();
+      }).catch(function(err){
+        st.innerHTML="⚠ Error al parsear Excel: "+err.message;
+        st.style.background="rgba(220,38,38,.3)";
+        console.error(err);
+      });
+    }catch(err){
+      st.innerHTML="⚠ Error: "+err.message;
+      st.style.background="rgba(220,38,38,.3)";
+      console.error(err);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
 function avg(a){if(!a.length)return 0;var s=0;for(var i=0;i<a.length;i++)s+=a[i];return s/a.length;}
 function stdev(a){if(a.length<2)return 0;var m=avg(a);var s=0;for(var i=0;i<a.length;i++)s+=(a[i]-m)*(a[i]-m);return Math.sqrt(s/(a.length-1));}
 function fmtn(n){return n.toLocaleString();}
 
 function killCharts(){for(var i=0;i<myCharts.length;i++){try{myCharts[i].destroy();}catch(e){}}myCharts=[];}
+
+function buildSpecsPanel(){
+  var grid=document.getElementById("specGrid");
+  var specKeys=["peso1L","peso2L","ph","gdaStd","gdaCloro","aniStd","aniCloro"];
+  var specColors=["#16a34a","#0f766e","#9333ea","#2563eb","#0369a1","#ea580c","#dc2626"];
+  var h="";
+  for(var i=0;i<specKeys.length;i++){
+    var k=specKeys[i],sp=SPECS[k],clr=specColors[i];
+    h+='<div style="background:#fff;border-radius:6px;padding:10px 12px;border-left:3px solid '+clr+';display:flex;align-items:center;gap:8px;flex-wrap:wrap">';
+    h+='<span style="font-weight:700;font-size:11px;color:'+clr+';min-width:120px">'+sp.label+'</span>';
+    h+='<label style="font-size:10px;color:#888">LSL</label>';
+    h+='<input type="number" step="any" id="sp_'+k+'_lsl" value="'+sp.lsl+'" style="width:80px;padding:5px 6px;border:1px solid #d4d4d8;border-radius:4px;font-size:12px;font-family:monospace;text-align:right">';
+    h+='<label style="font-size:10px;color:#888">USL</label>';
+    h+='<input type="number" step="any" id="sp_'+k+'_usl" value="'+sp.usl+'" style="width:80px;padding:5px 6px;border:1px solid #d4d4d8;border-radius:4px;font-size:12px;font-family:monospace;text-align:right">';
+    h+='</div>';
+  }
+  grid.innerHTML=h;
+  updateSpecSummary();
+}
+
+function updateSpecSummary(){
+  var el=document.getElementById("specSummary");
+  if(!el)return;
+  el.textContent="Peso: "+SPECS.peso1L.lsl+"-"+SPECS.peso1L.usl+" / "+SPECS.peso2L.lsl+"-"+SPECS.peso2L.usl+" · pH: "+SPECS.ph.lsl+"-"+SPECS.ph.usl;
+}
 
 function card(t,v,u,c){
   return '<div class="cd" style="--c:'+c+'"><div class="l">'+t+'</div><div class="v">'+v+'</div>'+(u?'<div class="u">'+u+'</div>':'')+'</div>';
@@ -543,12 +884,12 @@ function exportExcel(){
     var totalCas=cas1L+cas2L;
     var totAI=casStd+casCloro;
 
-    var rPeso1=calcCpk(p1L,1000,1025);
-    var rPeso2=calcCpk(p2L,2000,2030);
-    var rAniStd=calcCpk(aniStd,0.82,1.12);
-    var rAniClo=calcCpk(aniClo,1.02,1.32);
-    var rGdaStd=calcCpk(gdaStd,0.04,0.06);
-    var rGdaClo=calcCpk(gdaClo,0.05,0.07);
+    var rPeso1=calcCpk(p1L,SPECS.peso1L.lsl,SPECS.peso1L.usl);
+    var rPeso2=calcCpk(p2L,SPECS.peso2L.lsl,SPECS.peso2L.usl);
+    var rAniStd=calcCpk(aniStd,SPECS.aniStd.lsl,SPECS.aniStd.usl);
+    var rAniClo=calcCpk(aniClo,SPECS.aniCloro.lsl,SPECS.aniCloro.usl);
+    var rGdaStd=calcCpk(gdaStd,SPECS.gdaStd.lsl,SPECS.gdaStd.usl);
+    var rGdaClo=calcCpk(gdaClo,SPECS.gdaCloro.lsl,SPECS.gdaCloro.usl);
 
     // Corner % weighted by cases produced
     var wW={Green:0,Yellow:0,Orange:0,Red:0};
@@ -1062,18 +1403,18 @@ function exportExcel(){
   var nextRow=8;
   // Peso promedio: 1L + 2L combined
   nextRow=buildCombinedKrs(ws7,nextRow,"Peso promedio",[
-    {details:det1L,lsl:1000,usl:1025,result:rPeso1},
-    {details:det2L,lsl:2000,usl:2030,result:rPeso2}
+    {details:det1L,lsl:SPECS.peso1L.lsl,usl:SPECS.peso1L.usl,result:rPeso1},
+    {details:det2L,lsl:SPECS.peso2L.lsl,usl:SPECS.peso2L.usl,result:rPeso2}
   ]);
   // %Anionico: standard + Alt Cloro combined
   nextRow=buildCombinedKrs(ws7,nextRow,"%Anionico",[
-    {details:detStd.filter(function(d){return d.ani!==null;}),lsl:0.82,usl:1.12,result:rAniStd},
-    {details:detCloro.filter(function(d){return d.ani!==null;}),lsl:1.02,usl:1.32,result:rAniClo}
+    {details:detStd.filter(function(d){return d.ani!==null;}),lsl:SPECS.aniStd.lsl,usl:SPECS.aniStd.usl,result:rAniStd},
+    {details:detCloro.filter(function(d){return d.ani!==null;}),lsl:SPECS.aniCloro.lsl,usl:SPECS.aniCloro.usl,result:rAniClo}
   ]);
   // %GDA: standard + Alt Cloro combined
   nextRow=buildCombinedKrs(ws7,nextRow,"%GDA",[
-    {details:detStd.filter(function(d){return d.gda!==null;}),lsl:0.04,usl:0.06,result:rGdaStd},
-    {details:detCloro.filter(function(d){return d.gda!==null;}),lsl:0.05,usl:0.07,result:rGdaClo}
+    {details:detStd.filter(function(d){return d.gda!==null;}),lsl:SPECS.gdaStd.lsl,usl:SPECS.gdaStd.usl,result:rGdaStd},
+    {details:detCloro.filter(function(d){return d.gda!==null;}),lsl:SPECS.gdaCloro.lsl,usl:SPECS.gdaCloro.usl,result:rGdaClo}
   ]);
 
   // ===== Summary table at bottom of Cpk sheet (matches model rows 159-165) =====
@@ -1209,6 +1550,44 @@ function go(){
   document.getElementById("btnf").addEventListener("click",render);
   document.getElementById("rfsh").addEventListener("click",fetchSheet);
   document.getElementById("xport").addEventListener("click",exportExcel);
+  // Import Excel
+  document.getElementById("importBtn").addEventListener("click",function(){document.getElementById("importFile").click();});
+  document.getElementById("importFile").addEventListener("change",function(e){if(e.target.files&&e.target.files[0]){importExcel(e.target.files[0]);e.target.value="";}});
+
+  // === Specs Panel ===
+  buildSpecsPanel();
+  document.getElementById("specToggle").addEventListener("click",function(){
+    var body=document.getElementById("specBody");
+    var arrow=document.getElementById("specArrow");
+    if(body.style.display==="none"){body.style.display="block";arrow.style.transform="rotate(180deg)";}
+    else{body.style.display="none";arrow.style.transform="";}
+  });
+  document.getElementById("applySpecs").addEventListener("click",function(){
+    var keys=["peso1L","peso2L","ph","gdaStd","gdaCloro","aniStd","aniCloro"];
+    for(var i=0;i<keys.length;i++){
+      var lsl=parseFloat(document.getElementById("sp_"+keys[i]+"_lsl").value);
+      var usl=parseFloat(document.getElementById("sp_"+keys[i]+"_usl").value);
+      if(isNaN(lsl)||isNaN(usl)){alert("Todos los campos deben tener valores numéricos.");return;}
+      if(lsl>=usl){alert("Error: LSL debe ser menor que USL para "+SPECS[keys[i]].label);return;}
+    }
+    for(var i=0;i<keys.length;i++){
+      SPECS[keys[i]].lsl=parseFloat(document.getElementById("sp_"+keys[i]+"_lsl").value);
+      SPECS[keys[i]].usl=parseFloat(document.getElementById("sp_"+keys[i]+"_usl").value);
+    }
+    document.getElementById("specStatus").textContent="✓ Aplicado";
+    setTimeout(function(){document.getElementById("specStatus").textContent="";},2000);
+    updateSpecSummary();
+    render();
+  });
+  document.getElementById("resetSpecs").addEventListener("click",function(){
+    var defaults={peso1L:{lsl:1000,usl:1025},peso2L:{lsl:2000,usl:2030},ph:{lsl:6.5,usl:8},gdaStd:{lsl:0.04,usl:0.06},gdaCloro:{lsl:0.05,usl:0.07},aniStd:{lsl:0.82,usl:1.12},aniCloro:{lsl:1.02,usl:1.32}};
+    for(var k in defaults){SPECS[k].lsl=defaults[k].lsl;SPECS[k].usl=defaults[k].usl;}
+    buildSpecsPanel();
+    updateSpecSummary();
+    document.getElementById("specStatus").textContent="✓ Restaurado";
+    setTimeout(function(){document.getElementById("specStatus").textContent="";},2000);
+    render();
+  });
   // Product filter listener (dropdown is populated by populateProductFilter after data loads)
   var pSel=document.getElementById("prod");
   if(pSel){pSel.addEventListener("change",render);}
@@ -1290,7 +1669,7 @@ function render(){
   // TAB 0
   if(curTab===0){
     var sc=[["KPI 11A: No Conformidades","0"],["KPI 11B: % NC vs Prod.","0%"],["KPI 12: Desvios","0"],["KPI 13: CAPA","0"],["KPI 14: Microbiologia","Sin crecimiento"],["KPI 15: MPI","1"]];
-    var h='<div class="cds">'+card("Unidades Envasadas",fmtn(tu),nl+" lotes","#2563eb")+card("Cajas Entregadas",fmtn(tc),(tg/1000).toFixed(1)+" ton","#16a34a")+card("Rendimiento",ar.toFixed(1)+"%","Meta: 97-103%",ar>=97&&ar<=103?"#16a34a":"#dc2626")+card("Lotes en Spec",pis.toFixed(0)+"%",lis+"/"+nl,pis>=85?"#16a34a":"#dc2626")+card("pH Promedio",aph.toFixed(2),"6.5-8.0","#9333ea")+'</div>';
+    var h='<div class="cds">'+card("Unidades Envasadas",fmtn(tu),nl+" lotes","#2563eb")+card("Cajas Entregadas",fmtn(tc),(tg/1000).toFixed(1)+" ton","#16a34a")+card("Rendimiento",ar.toFixed(1)+"%","Meta: 97-103%",ar>=97&&ar<=103?"#16a34a":"#dc2626")+card("Lotes en Spec",pis.toFixed(0)+"%",lis+"/"+nl,pis>=85?"#16a34a":"#dc2626")+card("pH Promedio",aph.toFixed(2),SPECS.ph.lsl+"-"+SPECS.ph.usl,"#9333ea")+'</div>';
     h+='<div class="bx"><h3>KPI Scorecard</h3><div class="sg">';
     for(var i=0;i<sc.length;i++)h+='<div class="si"><div class="ic">&#10003;</div><div><div class="sl">'+sc[i][0]+'</div><div class="sv">'+sc[i][1]+'</div></div></div>';
     h+='</div></div>';
@@ -1330,9 +1709,9 @@ function render(){
 
   // TAB 3
   if(curTab===3){
-    var agda=avg(fd.map(function(d){return d.gda}));
-    var aani=avg(fd.map(function(d){return d.ani}));
-    var h='<div class="cds">'+card("GDA Prom.",agda.toFixed(4),"Std 0.04-0.06 | AC 0.05-0.07","#2563eb")+card("Anionico Prom.",aani.toFixed(3),"Std 0.82-1.12 | AC 1.02-1.32","#ea580c")+card("pH Prom.",aph.toFixed(2),"6.5-8.0","#9333ea")+card("Microbiologia","Sin crecimiento","","#16a34a")+'</div>';
+    var agda=avg(fd.filter(function(d){return d.gda!==null}).map(function(d){return d.gda}));
+    var aani=avg(fd.filter(function(d){return d.ani!==null}).map(function(d){return d.ani}));
+    var h='<div class="cds">'+card("GDA Prom.",agda.toFixed(4),"Std "+SPECS.gdaStd.lsl+"-"+SPECS.gdaStd.usl+" | AC "+SPECS.gdaCloro.lsl+"-"+SPECS.gdaCloro.usl,"#2563eb")+card("Anionico Prom.",aani.toFixed(3),"Std "+SPECS.aniStd.lsl+"-"+SPECS.aniStd.usl+" | AC "+SPECS.aniCloro.lsl+"-"+SPECS.aniCloro.usl,"#ea580c")+card("pH Prom.",aph.toFixed(2),SPECS.ph.lsl+"-"+SPECS.ph.usl,"#9333ea")+card("Microbiologia","Sin crecimiento","","#16a34a")+'</div>';
     h+='<div class="bx"><h3>GDA (%) — Standard vs Alt.Cloro</h3><div class="cw" style="height:280px"><canvas id="ch3a"></canvas></div></div>';
     h+='<div class="bx"><h3>Aniónico (%) — Standard vs Alt.Cloro</h3><div class="cw" style="height:280px"><canvas id="ch3b"></canvas></div></div>';
     h+='<div class="bx"><h3>pH</h3><div class="cw" style="height:220px"><canvas id="ch3c"></canvas></div></div>';
@@ -1377,16 +1756,16 @@ function render(){
           }
         });
       }
-      // GDA: Std 0.04-0.06, Alt Cloro 0.05-0.07
-      dualLine("ch3a",stdG,cloG,0.04,0.06,0.05,0.07,0.03,0.08);
-      // Anionico: Std 0.82-1.12, Alt Cloro 1.02-1.32
-      dualLine("ch3b",stdA,cloA,0.82,1.12,1.02,1.32,0.7,1.4);
-      // pH: same for all
+      // GDA: Std/Alt Cloro from SPECS
+      dualLine("ch3a",stdG,cloG,SPECS.gdaStd.lsl,SPECS.gdaStd.usl,SPECS.gdaCloro.lsl,SPECS.gdaCloro.usl,Math.min(SPECS.gdaStd.lsl,SPECS.gdaCloro.lsl)-0.01,Math.max(SPECS.gdaStd.usl,SPECS.gdaCloro.usl)+0.01);
+      // Anionico: Std/Alt Cloro from SPECS
+      dualLine("ch3b",stdA,cloA,SPECS.aniStd.lsl,SPECS.aniStd.usl,SPECS.aniCloro.lsl,SPECS.aniCloro.usl,Math.min(SPECS.aniStd.lsl,SPECS.aniCloro.lsl)-0.12,Math.max(SPECS.aniStd.usl,SPECS.aniCloro.usl)+0.08);
+      // pH from SPECS
       mk("ch3c",{type:"line",data:{labels:plbl,datasets:[
         {label:"pH",data:ppv,borderColor:"#9333ea",pointRadius:1.5,tension:.1,borderWidth:2,fill:false},
-        {label:"LSL",data:new Array(ppv.length).fill(6.5),borderColor:"#dc2626",borderDash:[5,3],pointRadius:0,borderWidth:1,fill:false},
-        {label:"USL",data:new Array(ppv.length).fill(8),borderColor:"#dc2626",borderDash:[5,3],pointRadius:0,borderWidth:1,fill:false}
-      ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{min:6.8,max:7.5}}}});
+        {label:"LSL",data:new Array(ppv.length).fill(SPECS.ph.lsl),borderColor:"#dc2626",borderDash:[5,3],pointRadius:0,borderWidth:1,fill:false},
+        {label:"USL",data:new Array(ppv.length).fill(SPECS.ph.usl),borderColor:"#dc2626",borderDash:[5,3],pointRadius:0,borderWidth:1,fill:false}
+      ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{min:Math.min(SPECS.ph.lsl,aph)-0.2,max:Math.max(SPECS.ph.usl,aph)+0.2}}}});
     },30);
   }
 
@@ -1410,7 +1789,7 @@ function render(){
       var ratio=(cpk!==null&&ppk!==null&&ppk!==0)?cpk/ppk:null;
       // Capable: Ppk >= 1 ; In ctrl: Cpk/Ppk < 1.33
       var capable=ppk!==null&&ppk>=1;
-      var inCtrl=ratio!==null&&Math.abs(ratio)<1.33;
+      var inCtrl=ratio!==null&&ratio>0&&ratio<1.33;
       var co="#94a3b8",lb="N/A",corner="N/A";
       if(ppk!==null){
         if(capable&&inCtrl){co="#16a34a";lb="Green";corner="Green";}
@@ -1437,8 +1816,8 @@ function render(){
       if(d.desc.indexOf("2L")>=0){p2L.push(d.pesoP);cas2L+=d.caj;det2L.push(d);}
       else{p1L.push(d.pesoP);cas1L+=d.caj;det1L.push(d);}
     }
-    var peso1=cpkCalc(p1L,1000,1025);
-    var peso2=cpkCalc(p2L,2000,2030);
+    var peso1=cpkCalc(p1L,SPECS.peso1L.lsl,SPECS.peso1L.usl);
+    var peso2=cpkCalc(p2L,SPECS.peso2L.lsl,SPECS.peso2L.usl);
 
     // --- Split products: Alt.Cloro vs Standard ---
     var aniStd=[],aniCloro=[],gdaStd=[],gdaCloro=[],casStd=0,casCloro=0,detStd=[],detCloro=[];
@@ -1457,10 +1836,10 @@ function render(){
         detStd.push(d);
       }
     }
-    var aniStdR=cpkCalc(aniStd,0.82,1.12);
-    var aniCloroR=cpkCalc(aniCloro,1.02,1.32);
-    var gdaStdR=cpkCalc(gdaStd,0.04,0.06);
-    var gdaCloroR=cpkCalc(gdaCloro,0.05,0.07);
+    var aniStdR=cpkCalc(aniStd,SPECS.aniStd.lsl,SPECS.aniStd.usl);
+    var aniCloroR=cpkCalc(aniCloro,SPECS.aniCloro.lsl,SPECS.aniCloro.usl);
+    var gdaStdR=cpkCalc(gdaStd,SPECS.gdaStd.lsl,SPECS.gdaStd.usl);
+    var gdaCloroR=cpkCalc(gdaCloro,SPECS.gdaCloro.lsl,SPECS.gdaCloro.usl);
 
     // --- Summary: % Cases by corner for each KRS ---
     var totalCas=cas1L+cas2L;
@@ -1511,22 +1890,22 @@ function render(){
     peso1.nm="Productos 1L ("+fmtn(cas1L)+" cajas)";
     peso2.nm="Productos 2L ("+fmtn(cas2L)+" cajas)";
     h+=krsTable("Peso Promedio",[peso1,peso2]);
-    h+=lotesTable("Peso 1L",det1L,"pesoP","g",1000,1025);
-    h+=lotesTable("Peso 2L",det2L,"pesoP","g",2000,2030);
+    h+=lotesTable("Peso 1L",det1L,"pesoP","g",SPECS.peso1L.lsl,SPECS.peso1L.usl);
+    h+=lotesTable("Peso 2L",det2L,"pesoP","g",SPECS.peso2L.lsl,SPECS.peso2L.usl);
 
     // Anionico table (Standard + Alt Cloro)
     aniStdR.nm="Standard ("+fmtn(casStd)+" cajas)";
     aniCloroR.nm="Alt. Cloro ("+fmtn(casCloro)+" cajas)";
     h+=krsTable("%Anionico (Active Ingredient)",[aniStdR,aniCloroR]);
-    h+=lotesTable("%Aniónico Std",detStd,"ani","%",0.82,1.12);
-    h+=lotesTable("%Aniónico Alt.Cloro",detCloro,"ani","%",1.02,1.32);
+    h+=lotesTable("%Aniónico Std",detStd,"ani","%",SPECS.aniStd.lsl,SPECS.aniStd.usl);
+    h+=lotesTable("%Aniónico Alt.Cloro",detCloro,"ani","%",SPECS.aniCloro.lsl,SPECS.aniCloro.usl);
 
     // GDA table (Standard + Alt Cloro)
     gdaStdR.nm="Standard ("+fmtn(casStd)+" cajas)";
     gdaCloroR.nm="Alt. Cloro ("+fmtn(casCloro)+" cajas)";
     h+=krsTable("%GDA",[gdaStdR,gdaCloroR]);
-    h+=lotesTable("%GDA Std",detStd,"gda","%",0.04,0.06);
-    h+=lotesTable("%GDA Alt.Cloro",detCloro,"gda","%",0.05,0.07);
+    h+=lotesTable("%GDA Std",detStd,"gda","%",SPECS.gdaStd.lsl,SPECS.gdaStd.usl);
+    h+=lotesTable("%GDA Alt.Cloro",detCloro,"gda","%",SPECS.gdaCloro.lsl,SPECS.gdaCloro.usl);
 
     // Summary corners table
     h+='<div class="bx"><h3>Resumen Process Capability - % Cases Produced</h3><div style="overflow-x:auto"><table><thead><tr><th>Process Capability</th><th>Corner</th><th>Weight</th><th>Active Ingredient</th><th>%GDA</th><th>Average</th></tr></thead><tbody>';
@@ -1561,8 +1940,8 @@ function render(){
     var h='<div class="bx"><h3>Tabla SKU - B Numbers</h3><table><thead><tr><th>SKU</th><th>B#</th><th>Descripcion</th></tr></thead><tbody>';
     for(var i=0;i<SKU.length;i++){var r=SKU[i];h+='<tr style="background:'+(i%2?"#fafbfc":"#fff")+'"><td style="font-family:monospace;font-weight:600">'+r[0]+'</td><td style="font-family:monospace">'+r[1]+'</td><td>'+r[2]+'</td></tr>';}
     h+='</tbody></table></div>';
-    h+='<div class="bx"><h3>Limites de Especificacion</h3><table><thead><tr><th>Parametro</th><th>1L LSL</th><th>1L USL</th><th>2L LSL</th><th>2L USL</th></tr></thead><tbody>';
-    var sp=[["Peso (g)",1000,1025,2000,2030],["pH",6.5,8,6.5,8],["GDA (%)",0.04,0.07,0.04,0.07],["Anionico Std",0.82,1.12,0.82,1.12],["Anionico Cloro",1.02,1.32,1.02,1.32]];
+    h+='<div class="bx"><h3>Limites de Especificacion (actuales)</h3><table><thead><tr><th>Parametro</th><th>1L LSL</th><th>1L USL</th><th>2L LSL</th><th>2L USL</th></tr></thead><tbody>';
+    var sp=[["Peso (g)",SPECS.peso1L.lsl,SPECS.peso1L.usl,SPECS.peso2L.lsl,SPECS.peso2L.usl],["pH",SPECS.ph.lsl,SPECS.ph.usl,SPECS.ph.lsl,SPECS.ph.usl],["GDA Std (%)",SPECS.gdaStd.lsl,SPECS.gdaStd.usl,SPECS.gdaStd.lsl,SPECS.gdaStd.usl],["GDA Alt.Cloro (%)",SPECS.gdaCloro.lsl,SPECS.gdaCloro.usl,SPECS.gdaCloro.lsl,SPECS.gdaCloro.usl],["Anionico Std",SPECS.aniStd.lsl,SPECS.aniStd.usl,SPECS.aniStd.lsl,SPECS.aniStd.usl],["Anionico Cloro",SPECS.aniCloro.lsl,SPECS.aniCloro.usl,SPECS.aniCloro.lsl,SPECS.aniCloro.usl]];
     for(var i=0;i<sp.length;i++){var r=sp[i];h+='<tr><td style="font-weight:600">'+r[0]+'</td><td>'+r[1]+'</td><td>'+r[2]+'</td><td>'+r[3]+'</td><td>'+r[4]+'</td></tr>';}
     h+='</tbody></table></div>';
     var kd=[["KPI 11","Non-Conformances","Casos producidos fuera de specs. A) # incidentes/mes. B) % NC vs produccion total."],["KPI 12","Notice of Deviations","Proceso formalizado para aceptar y documentar liberacion de producto no conforme o materia prima OOS."],["KPI 13","CAPA","Acciones correctivas y preventivas. Identifica problemas, causas raiz e implementa acciones."],["KPI 14","Micro-Susceptibility","Rastrea datos microbiologicos de producto terminado."],["KPI 15","MPI","Factor Celsis + Micro Incidentes + MSI + % Bicarga + % Muestras con crecimiento post-retesteo."],["KPI 17","Process Capability","Ppk y Cpk/Ppk. n>=100 recomendado. Corners: Green/Yellow/Orange/Red."]];
@@ -1570,6 +1949,24 @@ function render(){
     for(var i=0;i<kd.length;i++)h+='<div class="kd"><b>'+kd[i][0]+': '+kd[i][1]+'</b><p>'+kd[i][2]+'</p></div>';
     h+='</div>';
     document.getElementById("t5").innerHTML=h;
+  }
+
+  // TAB 7 — Configuración (solo importación; specs se editan desde el panel superior)
+  if(curTab===7){
+    var h='<div class="bx" style="border-left:4px solid #0ea5e9"><h3 style="color:#0369a1">📤 Importar datos desde Excel</h3>';
+    h+='<p style="font-size:12px;line-height:1.6;margin-bottom:12px">Podés importar un archivo <b>.xlsx</b> con tus propios datos de producción. El archivo debe tener una fila de encabezados en la primera fila y una fila por lote. Las columnas se buscan por nombre (no importa el orden). Columnas requeridas: <b>Descripción</b> y <b>Fecha</b>.</p>';
+    h+='<table style="margin-bottom:16px"><thead><tr><th>Columna</th><th>Nombres aceptados</th><th>Requerida</th></tr></thead><tbody>';
+    var cols=[["Producto","descripcion, descripción, producto, product","Sí"],["Lote","lote, lot, batch","No"],["Fecha","fecha envasado, fecha, date","Sí"],["Cajas","cajas entregadas, cajas, cases","No"],["Granel (kg)","granales, granel, bulk","No"],["Unidades Env.","unidades envasadas, unidades, units","No"],["Rendimiento (%)","rendimiento, yield","No"],["Peso Promedio (g)","peso promedio, peso, weight","No"],["GDA (%)","gda, %gda","No"],["Aniónico (%)","anionico, aniónico, anionic","No"],["pH","ph","No"]];
+    for(var i=0;i<cols.length;i++){h+='<tr><td style="font-weight:600">'+cols[i][0]+'</td><td style="font-family:monospace;font-size:11px">'+cols[i][1]+'</td><td style="text-align:center;color:'+(cols[i][2]==="Sí"?"#dc2626":"#666")+'">'+cols[i][2]+'</td></tr>';}
+    h+='</tbody></table>';
+    h+='<button onclick="document.getElementById(\'importFile\').click()" style="background:#0ea5e9;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">📤 Seleccionar archivo Excel</button>';
+    h+='<p style="font-size:11px;color:#888;margin-top:8px">Fuente actual: '+(ALL.length>0?ALL.length+' lotes ('+minD+' → '+maxD+')':'sin datos')+'</p>';
+    h+='</div>';
+
+    h+='<div class="bx" style="border-left:4px solid #7c3aed"><h3 style="color:#7c3aed">⚙️ Límites de Especificación</h3>';
+    h+='<p style="font-size:12px;line-height:1.6">Los límites LSL/USL se configuran desde el <b>panel violeta desplegable</b> en la parte superior de la página (hacé click en ⚙️). Los cambios aplican inmediatamente a todos los tabs, gráficos y la exportación Excel.</p>';
+    h+='</div>';
+    document.getElementById("t7").innerHTML=h;
   }
 }
 
