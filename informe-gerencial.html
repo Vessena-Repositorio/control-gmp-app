@@ -742,11 +742,16 @@ function renderSummary(){
     const conf=recs.length?Math.round((recs.length-devs)/recs.length*100):0;
     const qn=getQn(prod.maquina,prod.presentacion);
     const t=qn?calcT(qn):0;const qnT=qn-t;
-    const cpk=(qn&&s&&s.sd>0)?((s.mean-qnT)/(3*s.sd)):null;
+    const nCtl=recs.length;
+    const lowN=nCtl<3;
+    // Cpk sólo tiene sentido con al menos 3 controles independientes
+    const cpk=(qn&&s&&s.sd>0&&!lowN)?((s.mean-qnT)/(3*s.sd)):null;
     const exceso=(qn&&s)?(s.mean-qn):0;
     const excesoPct=(qn&&s)?(exceso/qn*100):0;
     const minBelow2T=(qn&&s)?s.min<(qn-2*t):false;
     const minBelowT=(qn&&s)?s.min<qnT:false;
+    // Discrepancia: análisis detecta incumplimiento pero no hay desvío registrado
+    const discrep=minBelow2T&&devs===0;
     
     // Determine status
     let status='ok', stTxt='OK', stIcon='✅', stClass='s-ok', priority=4;
@@ -754,24 +759,24 @@ function renderSummary(){
     
     if(minBelow2T){
       status='bad';stTxt='Incumplimiento';stIcon='🚨';stClass='s-bad';priority=1;
-      reason=`Pesos bajo Qn-2T (${(qn-2*t).toFixed(1)}g) — Defecto crítico`;
+      reason=`Pesos bajo Qn-2T (${(qn-2*t).toFixed(1)}g) — Defecto crítico`+(discrep?' · sin desvío registrado':'')+(lowN?` · N=${nCtl}`:'');
     } else if(conf<85){
       status='bad';stTxt='Incumplimiento';stIcon='❌';stClass='s-bad';priority=1;
       reason=`Conformidad ${conf}% — Múltiples desvíos`;
     } else if(minBelowT||(cpk!==null&&cpk<1.0)){
       status='warn';stTxt='Atención';stIcon='⚠️';stClass='s-warn';priority=2;
-      reason=cpk<1.0?`Cpk ${cpk.toFixed(2)} — No capaz`:'Pesos bajo Qn-T detectados';
+      reason=(cpk!==null&&cpk<1.0)?`Cpk ${cpk.toFixed(2)} — No capaz`:'Pesos bajo Qn-T detectados';
     } else if(conf<95||(cpk!==null&&cpk<1.33)){
       status='warn';stTxt='Atención';stIcon='⚠️';stClass='s-warn';priority=2;
-      reason=cpk!==null&&cpk<1.33?`Cpk ${cpk.toFixed(2)} — Marginal`:`Conformidad ${conf}%`;
+      reason=(cpk!==null&&cpk<1.33)?`Cpk ${cpk.toFixed(2)} — Marginal`:`Conformidad ${conf}%`;
     } else if(excesoPct>3){
       status='opp';stTxt='Oportunidad';stIcon='💰';stClass='s-opp';priority=3;
       reason=`Sobrellenado +${exceso.toFixed(1)}g (+${excesoPct.toFixed(1)}%) — Ahorro posible`;
     } else {
-      reason=cpk!==null?`Cpk ${cpk.toFixed(2)} · Conf. ${conf}%`:`Conf. ${conf}%`;
+      reason=lowN?`N=${nCtl} · Datos limitados para análisis`:(cpk!==null?`Cpk ${cpk.toFixed(2)} · Conf. ${conf}%`:`Conf. ${conf}%`);
     }
     
-    return{prod,recs,s,devs,conf,qn,cpk,exceso,status,stTxt,stIcon,stClass,priority,reason,idx};
+    return{prod,recs,s,devs,conf,qn,cpk,exceso,status,stTxt,stIcon,stClass,priority,reason,lowN,nCtl,discrep,idx};
   });
   
   // Sort by priority (worst first)
@@ -805,13 +810,15 @@ function renderSummary(){
   
   filteredProds.forEach(p=>{
     const sdTxt=p.s?p.s.sd.toFixed(2):'—';
-    const cpkTxt=p.cpk!==null?p.cpk.toFixed(2):'—';
+    const cpkTxt=p.cpk!==null?p.cpk.toFixed(2):(p.lowN?`<span style="font-size:10px;color:var(--text3);font-family:var(--f)">N&lt;3</span>`:'—');
     const cpkCls=p.cpk!==null?(p.cpk>=1.33?'t-ok':(p.cpk>=1?'t-wn':'t-bd')):'';
     const promTxt=p.s?p.s.mean.toFixed(1):'—';
+    const nBadge=p.lowN?` <span title="Muestra pequeña (${p.nCtl} control${p.nCtl>1?'es':''})" style="color:var(--amber-d);font-weight:800">⚠</span>`:'';
+    const discFlag=p.discrep?` <span title="Peso bajo Qn-2T sin desvío registrado" style="color:var(--red-d);font-weight:800">🔍</span>`:'';
     html+=`<tr class="status-${p.status}" onclick="scrollToProduct('${p.prod.maquina}','${p.prod.presentacion}')" title="Clic para ver detalle">
-      <td><span class="status-badge ${p.stClass}">${p.stIcon} ${p.stTxt}</span></td>
+      <td><span class="status-badge ${p.stClass}">${p.stIcon} ${p.stTxt}</span>${discFlag}</td>
       <td><div class="prod-name">${p.prod.maquina}<br><small>${p.prod.presentacion}</small></div></td>
-      <td>${p.recs.length}</td>
+      <td>${p.recs.length}${nBadge}</td>
       <td><b>${promTxt}</b></td>
       <td>${sdTxt}</td>
       <td class="${cpkCls}"><b>${cpkTxt}</b></td>
@@ -920,15 +927,34 @@ function genInsights(prod, recs, stats, indivStats, qn, t, devs, conf){
   const qnT=qn-t;
   const exceso=indivStats.mean-qn;
   const excesoPct=qn?(exceso/qn*100):0;
-  const cpk=indivStats.sd>0?((indivStats.mean-qnT)/(3*indivStats.sd)):null;
+  const nCtl=recs.length;
+  const lowN=nCtl<3;
+  // Cpk sólo tiene sentido con al menos 3 controles independientes
+  const cpk=(indivStats.sd>0&&!lowN)?((indivStats.mean-qnT)/(3*indivStats.sd)):null;
+  const minBelow2T=indivStats.min<(qn-2*t);
+  const minBelowT=indivStats.min<qnT;
+  const discrepCritica=minBelow2T&&devs===0;
+  const discrepTolerante=minBelowT&&!minBelow2T&&devs===0;
+  
+  // 0. Aviso de muestra limitada
+  if(lowN){
+    items.push({c:'warn',i:'📉',t:`<b>Muestra limitada:</b> ${nCtl} control${nCtl>1?'es':''} en el período. Los estadísticos descriptivos (promedio, σ) reflejan sólo estos controles y <b>no permiten estimar la capacidad del proceso</b> (Cpk requiere ≥3 controles independientes).`});
+  }
   
   // 1. Cumplimiento normativo (Decreto 129/009)
   if(indivStats.min>=qnT){
     items.push({c:'good',i:'✅',t:`<b>Cumplimiento Decreto 129/009:</b> Todos los pesos individuales (mín ${indivStats.min}g) están por encima del límite tolerante Qn-T (${qnT.toFixed(1)}g).`});
   } else if(indivStats.min>=qn-2*t){
-    items.push({c:'warn',i:'⚠️',t:`<b>Atención normativa:</b> Hay pesos individuales entre Qn-T (${qnT.toFixed(1)}g) y Qn-2T. Tolerantes admisibles pero requieren control.`});
+    items.push({c:'warn',i:'⚠️',t:`<b>Atención normativa:</b> Hay pesos individuales entre Qn-T (${qnT.toFixed(1)}g) y Qn-2T (${(qn-2*t).toFixed(1)}g). Tolerantes admisibles pero requieren control.`});
   } else {
-    items.push({c:'bad',i:'❌',t:`<b>Incumplimiento crítico:</b> Hay pesos por debajo de Qn-2T (${(qn-2*t).toFixed(1)}g). No conforme al Decreto 129/009.`});
+    items.push({c:'bad',i:'❌',t:`<b>Incumplimiento crítico:</b> Hay pesos por debajo de Qn-2T (${(qn-2*t).toFixed(1)}g). Mínimo detectado: <b>${indivStats.min}g</b>. No conforme al Decreto 129/009.`});
+  }
+  
+  // 1b. Discrepancia entre análisis estadístico y reporte del analista
+  if(discrepCritica){
+    items.push({c:'bad',i:'🔍',t:`<b>Discrepancia en registro:</b> El análisis detecta peso${(indivStats.min<qn-2*t)?'':'s'} bajo Qn-2T (mín ${indivStats.min}g < ${(qn-2*t).toFixed(1)}g) pero <b>no se registró desvío</b> en el control. Revisar carga y retroalimentar al analista responsable.`});
+  } else if(discrepTolerante){
+    items.push({c:'warn',i:'🔍',t:`<b>Verificar registro:</b> Se detectaron pesos bajo Qn-T (${qnT.toFixed(1)}g) pero ningún control marcado con desvío. Confirmar criterio con el analista.`});
   }
   
   // 2. Promedio vs Nominal
@@ -942,7 +968,7 @@ function genInsights(prod, recs, stats, indivStats, qn, t, devs, conf){
     items.push({c:'bad',i:'⚠️',t:`<b>Promedio por debajo del nominal:</b> Media ${indivStats.mean.toFixed(1)}g vs Qn ${qn}g (déficit ${(-exceso).toFixed(1)}g).`});
   }
   
-  // 3. Cpk
+  // 3. Cpk (sólo si hay N suficiente)
   if(cpk!==null){
     if(cpk>=1.67){
       items.push({c:'good',i:'📊',t:`<b>Capacidad excelente:</b> Cpk = ${cpk.toFixed(2)} (Cpk ≥ 1.67). Proceso muy estable y altamente capaz.`});
@@ -953,35 +979,43 @@ function genInsights(prod, recs, stats, indivStats, qn, t, devs, conf){
     } else {
       items.push({c:'bad',i:'📊',t:`<b>Proceso NO capaz:</b> Cpk = ${cpk.toFixed(2)} (< 1.0). Riesgo de incumplimiento por variabilidad del proceso.`});
     }
+  } else if(!lowN){
+    items.push({c:'warn',i:'📊',t:`<b>Cpk no calculable:</b> Sin variabilidad medible (σ=0).`});
   }
   
-  // 4. Variabilidad (σ relativa)
+  // 4. Variabilidad (σ relativa) — solo con N suficiente
   const sdPct=qn?(indivStats.sd/qn*100):0;
-  if(sdPct>2){
-    items.push({c:'warn',i:'📈',t:`<b>Variabilidad alta:</b> σ = ${indivStats.sd.toFixed(2)}g (${sdPct.toFixed(2)}% de Qn). Considerar revisar calibración o mantenimiento de la envasadora.`});
-  } else if(sdPct<0.5){
-    items.push({c:'good',i:'📈',t:`<b>Variabilidad muy baja:</b> σ = ${indivStats.sd.toFixed(2)}g (${sdPct.toFixed(2)}% de Qn). Proceso muy estable.`});
+  if(!lowN){
+    if(sdPct>2){
+      items.push({c:'warn',i:'📈',t:`<b>Variabilidad alta:</b> σ = ${indivStats.sd.toFixed(2)}g (${sdPct.toFixed(2)}% de Qn). Considerar revisar calibración o mantenimiento de la envasadora.`});
+    } else if(sdPct<0.5){
+      items.push({c:'good',i:'📈',t:`<b>Variabilidad muy baja:</b> σ = ${indivStats.sd.toFixed(2)}g (${sdPct.toFixed(2)}% de Qn). Proceso muy estable.`});
+    }
   }
   
   // 5. Desvíos
-  if(devs===0){
-    items.push({c:'good',i:'🛡️',t:`<b>Cero desvíos</b> reportados en ${recs.length} controles. Excelente disciplina operativa.`});
-  } else if(devs/recs.length>0.1){
-    items.push({c:'bad',i:'🚨',t:`<b>Alta tasa de desvíos:</b> ${devs} desvíos en ${recs.length} controles (${(devs/recs.length*100).toFixed(0)}%). Requiere análisis de causa raíz.`});
+  if(devs===0&&!discrepCritica&&!discrepTolerante){
+    items.push({c:'good',i:'🛡️',t:`<b>Cero desvíos</b> reportados en ${nCtl} control${nCtl>1?'es':''}. Excelente disciplina operativa.`});
+  } else if(devs/nCtl>0.1){
+    items.push({c:'bad',i:'🚨',t:`<b>Alta tasa de desvíos:</b> ${devs} desvíos en ${nCtl} controles (${(devs/nCtl*100).toFixed(0)}%). Requiere análisis de causa raíz.`});
   }
   
   // RECOMMENDATION
   let rec='';
-  if(conf===100&&excesoPct>3){
+  if(discrepCritica){
+    rec=`<b>Acción inmediata:</b> Peso mínimo ${indivStats.min}g bajo Qn-2T (${(qn-2*t).toFixed(1)}g) sin desvío registrado. Investigar con el analista responsable, verificar procedimiento de detección de desvíos y evaluar liberación del lote afectado.`;
+  } else if(conf===100&&excesoPct>3&&!lowN){
     const targetMean=qn+(2*indivStats.sd);
     rec=`Proceso 100% conforme pero con sobrellenado de ${exceso.toFixed(1)}g/unidad. Evaluar ajuste del setpoint hacia <b>${targetMean.toFixed(0)}g</b> (Qn + 2σ) para reducir costo manteniendo cumplimiento normativo.`;
   } else if(conf<85){
     rec=`Conformidad baja (${conf}%). Priorizar análisis de causa raíz de desvíos y verificar calibración/mantenimiento de la línea.`;
   } else if(cpk!==null&&cpk<1.33){
     rec=`Cpk insuficiente (${cpk.toFixed(2)}). Reducir variabilidad del proceso o incrementar setpoint para mejorar margen ante límite legal.`;
-  } else if(sdPct>2){
+  } else if(!lowN&&sdPct>2){
     rec=`Variabilidad elevada (σ=${indivStats.sd.toFixed(2)}g). Investigar fuentes de variación: balanza, operario, materia prima, válvulas dosificadoras.`;
-  } else if(devs===0&&conf===100&&cpk>=1.33){
+  } else if(lowN){
+    rec=`Aumentar frecuencia de muestreo para este producto. Con ≥3 controles independientes se podrá evaluar capacidad del proceso (Cpk) y estabilidad.`;
+  } else if(devs===0&&conf===100&&cpk!==null&&cpk>=1.33){
     rec=`Proceso bajo control estadístico. Mantener parámetros actuales y continuar monitoreo.`;
   } else {
     rec=`Monitorear evolución del proceso. Continuar registro sistemático.`;
@@ -1016,6 +1050,8 @@ function renderProducts(){
     const indivStats=calcStats(allPesos);
     const devs=recs.filter(r=>r.hasDev).length;
     const conf=recs.length?Math.round((recs.length-devs)/recs.length*100):0;
+    const nCtl=recs.length;
+    const lowN=nCtl<3;
     
     // Get Qn from SPECS lookup (works even with old records without spec field)
     const firstSpec=recs.find(r=>r.spec)?.spec||'';
@@ -1023,6 +1059,9 @@ function renderProducts(){
     // Fallback: try to extract from spec field if not found in SPECS
     if(!qn&&firstSpec){const qnMatch=firstSpec.match(/Qn:(\d+\.?\d*)/);if(qnMatch)qn=parseFloat(qnMatch[1])}
     const t=qn?calcT(qn):0;const qnT=qn-t;
+    
+    // Cpk sólo con N≥3 controles independientes
+    const cpkCalc=(qn&&indivStats&&indivStats.sd>0&&!lowN)?((indivStats.mean-qnT)/(3*indivStats.sd)):null;
     
     // Status
     const meanOk=stats&&qn?stats.mean>=qn:true;
@@ -1037,12 +1076,14 @@ function renderProducts(){
         ${firstSpec?`<div class="product-spec">${firstSpec}</div>`:''}
       </div>
       
+      ${lowN?`<div style="background:var(--amber-l);color:var(--amber-d);padding:11px 14px;border-radius:8px;margin-bottom:12px;font-size:12px;border-left:4px solid var(--amber);line-height:1.5"><b>⚠️ Muestra limitada · N=${nCtl} control${nCtl>1?'es':''}</b><br>Los indicadores descriptivos (promedio, mín/máx, σ) reflejan sólo estos controles. El <b>Cpk no se calcula</b> porque requiere al menos 3 controles independientes para estimar la capacidad del proceso. Los pesos individuales sí pueden evaluarse contra los límites del Decreto 129/009.</div>`:''}
+      
       <div class="product-stats">
         <div class="stat"><div class="stat-lbl">Conformidad</div><div class="stat-val ${statCls==='ok'?'ok':(statCls==='warn'?'warn':'bad')}">${conf}%</div></div>
         <div class="stat"><div class="stat-lbl">Promedio Pesos</div><div class="stat-val">${indivStats?indivStats.mean.toFixed(1)+'g':'—'}</div></div>
         <div class="stat"><div class="stat-lbl">Desv. Estándar (σ)</div><div class="stat-val">${indivStats?indivStats.sd.toFixed(2)+'g':'—'}</div></div>
         <div class="stat"><div class="stat-lbl">Mínimo / Máximo</div><div class="stat-val" style="font-size:13px">${indivStats?indivStats.min.toFixed(0)+' / '+indivStats.max.toFixed(0):'—'}</div></div>
-        <div class="stat"><div class="stat-lbl">Cpk estimado</div><div class="stat-val">${(qn&&indivStats&&indivStats.sd>0)?((indivStats.mean-qnT)/(3*indivStats.sd)).toFixed(2):'—'}</div></div>
+        <div class="stat"><div class="stat-lbl">Cpk estimado</div><div class="stat-val" style="${lowN?'font-size:13px;color:var(--text3)':''}">${cpkCalc!==null?cpkCalc.toFixed(2):(lowN?`N=${nCtl}`:'—')}</div></div>
         <div class="stat"><div class="stat-lbl">Desvíos</div><div class="stat-val ${devs===0?'ok':'bad'}">${devs}</div></div>
       </div>
       
@@ -1145,10 +1186,11 @@ function exportExcel(){
     let qn=getQn(prod.m,prod.p);
     if(!qn&&firstSpec){const qnM=firstSpec.match(/Qn:(\d+\.?\d*)/);if(qnM)qn=parseFloat(qnM[1])}
     const t=qn?calcT(qn):0;const qnT=qn-t;
-    const cpk=(qn&&s&&s.sd>0)?((s.mean-qnT)/(3*s.sd)):null;
+    const nCtl=prod.recs.length;const lowN=nCtl<3;
+    const cpk=(qn&&s&&s.sd>0&&!lowN)?((s.mean-qnT)/(3*s.sd)):null;
     const devs=prod.recs.filter(r=>r.hasDev).length;
-    const conf=prod.recs.length?Math.round((prod.recs.length-devs)/prod.recs.length*100):0;
-    stats.push([prod.m,prod.p,prod.recs.length,s?s.mean.toFixed(2):'—',s?s.sd.toFixed(2):'—',s?s.min:'—',s?s.max:'—',cpk!==null?cpk.toFixed(2):'—',conf+'%',devs]);
+    const conf=nCtl?Math.round((nCtl-devs)/nCtl*100):0;
+    stats.push([prod.m,prod.p,nCtl,s?s.mean.toFixed(2):'—',s?s.sd.toFixed(2):'—',s?s.min:'—',s?s.max:'—',cpk!==null?cpk.toFixed(2):(lowN?'N<3':'—'),conf+'%',devs]);
   });
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(stats),'Por Producto');
   
