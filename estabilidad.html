@@ -105,7 +105,7 @@ a.lb{font-size:12.5px;color:var(--td);cursor:pointer;text-decoration:underline;}
 /* ============================================================
    GOOGLE SHEETS BACKEND + EMAIL
 ============================================================ */
-let SCRIPT_URL=localStorage.getItem('gscript_url')||'';
+let SCRIPT_URL=localStorage.getItem('gscript_url')||'https://script.google.com/macros/s/AKfycby3255SdR4jZ2ia6td9ShJGyJmuz7pKwKg6QN_zov5k8uR88ubnD9AkHsBwIIH9qZCZ/exec';
 let syncStatus='disconnected';
 
 async function gRead(){if(!SCRIPT_URL)return null;syncStatus='loading';rSync();try{const r=await fetch(SCRIPT_URL+'?t='+Date.now());const d=await r.json();syncStatus='ok';rSync();return d;}catch(e){syncStatus='error';rSync();return null;}}
