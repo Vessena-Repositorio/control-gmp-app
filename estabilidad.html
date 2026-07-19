@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Programa de Estabilidad — LCC</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+:root{--bg:#F4F6F5;--panel:#FFF;--ink:#1E2B2E;--ink2:#5B6B6E;--line:#DCE3E1;--teal:#0E6B67;--td:#0A4F4C;--tt:#E4F1EF;--amber:#B9762A;--at:#FBEEDF;--red:#B03A2E;--rt:#F8E7E4;--green:#357A55;--gt:#E6F1EA;--grey:#8592A0;--grt:#EEF1F3;--r:10px;--sh:0 1px 2px rgba(20,30,30,.06),0 1px 12px rgba(20,30,30,.05);}
+*{box-sizing:border-box;}body{margin:0;background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans',-apple-system,sans-serif;font-size:14px;line-height:1.5;}
+.mono{font-family:'IBM Plex Mono',monospace;}
+header.app{background:var(--td);color:#fff;padding:18px 28px 0 28px;}
+.app-title{font-size:19px;font-weight:700;}.app-sub{font-size:12px;color:#BFE0DB;font-family:'IBM Plex Mono',monospace;}
+nav.tabs{display:flex;gap:2px;margin-top:16px;flex-wrap:wrap;}
+nav.tabs button{background:transparent;border:none;color:#CFE7E3;padding:10px 16px;font-size:13px;font-weight:600;cursor:pointer;border-radius:8px 8px 0 0;font-family:inherit;}
+nav.tabs button.active{background:var(--bg);color:var(--td);}nav.tabs button:hover:not(.active){background:rgba(255,255,255,.08);}
+main{padding:24px 28px 60px 28px;max-width:1320px;margin:0 auto;}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh);}.panel+.panel{margin-top:18px;}.pp{padding:20px 22px;}
+h2.st{font-size:15px;font-weight:700;margin:0 0 4px 0;color:var(--td);}.sd{font-size:12.5px;color:var(--ink2);margin:0 0 16px 0;}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:18px;}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;box-shadow:var(--sh);cursor:pointer;transition:transform .12s,box-shadow .12s;}
+.kpi:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(20,30,30,.1);}
+.kpi .n{font-size:28px;font-weight:700;font-family:'IBM Plex Mono',monospace;}.kpi .lb{font-size:12px;color:var(--ink2);margin-top:2px;}
+.kpi.amber .n{color:var(--amber);}.kpi.red .n{color:var(--red);}.kpi.teal .n{color:var(--teal);}.kpi.green .n{color:var(--green);}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink2);padding:8px 10px;border-bottom:1px solid var(--line);}
+td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:middle;}tr:last-child td{border-bottom:none;}
+tr.ck{cursor:pointer;}tr.ck:hover{background:var(--grt);}
+.tag{display:inline-block;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:11px;padding:2px 7px;border-radius:3px;letter-spacing:.03em;border:1px solid currentColor;}
+.tag.pendiente{color:var(--grey);background:var(--grt);}.tag.proximo{color:var(--amber);background:var(--at);}.tag.atrasado{color:var(--red);background:var(--rt);}.tag.realizado{color:var(--green);background:var(--gt);}
+.bs{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:4px 10px 4px 8px;border-radius:20px;background:var(--tt);color:var(--td);}.bs .dot{width:6px;height:6px;border-radius:50%;background:var(--teal);}
+.sp{display:inline-flex;align-items:center;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:11.5px;padding:3px 8px;background:#FFFCF2;border:1px solid #D8CDA6;border-radius:2px;color:#6B5A22;box-shadow:0 1px 1px rgba(0,0,0,.05);}
+button.btn{font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;padding:8px 16px;border-radius:7px;border:1px solid var(--teal);background:var(--teal);color:#fff;}
+button.btn:hover{background:var(--td);}
+button.btn.ghost{background:transparent;color:var(--td);border:1px solid var(--line);}button.btn.ghost:hover{background:var(--tt);border-color:var(--teal);}
+button.btn.sm{padding:4px 10px;font-size:12px;}
+button.btn.danger{background:#fff;color:var(--red);border-color:var(--red);}button.btn.danger:hover{background:var(--rt);}
+button.btn.approve{background:var(--green);border-color:var(--green);color:#fff;}
+button.btn.mail{background:#4285F4;border-color:#3367D6;color:#fff;}button.btn.mail:hover{background:#3367D6;}
+input[type=text],input[type=email],input[type=date],input[type=number],select,textarea{font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink);width:100%;}
+textarea{resize:vertical;min-height:56px;}
+label.fi{display:block;font-size:12px;font-weight:600;color:var(--ink2);margin-bottom:5px;}.fw{margin-bottom:14px;}
+.fg{display:grid;grid-template-columns:repeat(2,1fr);gap:14px 18px;}.fg.c3{grid-template-columns:repeat(3,1fr);}
+@media(max-width:700px){.fg,.fg.c3{grid-template-columns:1fr;}}
+fieldset{border:1px solid var(--line);border-radius:8px;padding:14px 16px 6px 16px;margin:0 0 16px 0;}
+legend{font-size:12px;font-weight:700;color:var(--td);padding:0 6px;}
+.empty{text-align:center;padding:40px 20px;color:var(--ink2);}.empty .big{font-size:32px;margin-bottom:8px;}
+.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;}
+.toolbar select,.toolbar input{width:auto;min-width:150px;}.spacer{flex:1;}
+.stage-track{display:flex;gap:4px;flex-wrap:wrap;margin:14px 0 4px 0;}
+.stage-step{flex:1;min-width:90px;text-align:center;padding:8px 4px;border-radius:7px;font-size:10.5px;font-weight:600;background:var(--grt);color:var(--ink2);border:1px solid var(--line);}
+.stage-step.done{background:var(--tt);color:var(--td);border-color:var(--teal);}.stage-step.current{background:var(--teal);color:#fff;border-color:var(--td);}
+.stage-step .at{display:block;font-size:9px;font-weight:400;opacity:.7;margin-top:1px;}
+.cc{border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-bottom:10px;background:#FCFDFD;}
+.ch{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.cf{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:12px;}.cf .fw{margin:0;}.cf label.fi{margin-bottom:3px;}
+.tb{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;}
+.tc{font-size:11.5px;padding:4px 10px;border-radius:16px;border:1px solid var(--teal);color:var(--td);background:var(--tt);cursor:pointer;font-family:inherit;font-weight:600;}.tc:hover{background:var(--teal);color:#fff;}
+.an{font-size:12px;color:var(--ink2);background:var(--tt);border:1px solid var(--teal);border-radius:7px;padding:8px 12px;margin-top:10px;display:flex;align-items:center;gap:8px;}.an .icon{font-size:16px;}
+.rb{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:2px 6px;border-radius:3px;margin-left:6px;}
+.rb.creador{background:#E8E0F4;color:#5B3A8A;}.rb.analista{background:#DAEEF8;color:#1A6B94;}.rb.dt{background:#FFF3D8;color:#8B6914;}
+.print-only{display:none;}@media print{header.app,.no-print{display:none !important;}body{background:#fff;}main{padding:0;max-width:none;}.print-only{display:block;}.panel{box-shadow:none;border:none;}}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--ink);color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;box-shadow:var(--sh);opacity:0;transform:translateY(6px);transition:all .25s;pointer-events:none;z-index:50;}.toast.show{opacity:1;transform:translateY(0);}
+.rd{max-width:820px;margin:0 auto;}.rd h1{font-size:18px;color:var(--td);border-bottom:2px solid var(--teal);padding-bottom:8px;}
+.rd h3{font-size:13px;color:var(--td);margin:20px 0 6px 0;text-transform:uppercase;letter-spacing:.03em;}
+.rd .kv{display:grid;grid-template-columns:220px 1fr;gap:4px 12px;font-size:13px;margin-bottom:4px;}.rd .kv .k{color:var(--ink2);}
+a.lb{font-size:12.5px;color:var(--td);cursor:pointer;text-decoration:underline;}
+.spv{max-height:300px;overflow:auto;margin-top:10px;border:1px solid var(--line);border-radius:8px;}.spv table td,.spv table th{font-size:12px;padding:6px 8px;}
+.param-row{display:grid;grid-template-columns:1fr 1fr 1fr 90px 110px 36px;gap:8px;align-items:end;margin-bottom:8px;}
+.param-row.hdr{font-size:11px;font-weight:700;color:var(--ink2);text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px;}
+.param-row input,.param-row select{font-size:12px;padding:6px 8px;}
+.param-row .del{width:32px;height:32px;border:none;background:transparent;color:var(--red);cursor:pointer;font-size:16px;border-radius:4px;}.param-row .del:hover{background:var(--rt);}
+@media(max-width:800px){.param-row{grid-template-columns:1fr 1fr;}}
+.sync-bar{display:flex;align-items:center;gap:8px;font-size:12px;color:#BFE0DB;}
+.sync-dot{width:8px;height:8px;border-radius:50%;}.sync-dot.ok{background:#5CDB95;}.sync-dot.err{background:#FF6B6B;}.sync-dot.loading{background:#FFD93D;animation:pulse .8s infinite;}
+.cond-card{border:2px solid var(--line);border-radius:8px;padding:10px 14px;margin:8px 0;background:#FCFDFD;}
+.cond-card .cond-title{font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:6px;margin-bottom:8px;}
+.cond-card .cond-dot{width:10px;height:10px;border-radius:50%;display:inline-block;}
+.tipo-badge{display:inline-block;font-size:11px;font-weight:700;padding:3px 8px;border-radius:4px;margin-left:8px;}
+.tipo-badge.nat{background:#E4F1EF;color:#0A4F4C;border:1px solid #0E6B67;}
+.tipo-badge.acel{background:#FBEEDF;color:#7A5118;border:1px solid #B9762A;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+.setup-box{max-width:720px;margin:40px auto;}.setup-box h1{color:var(--td);font-size:22px;margin-bottom:8px;}
+.setup-box .step{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px 20px;margin-bottom:12px;}
+.setup-box .step-num{display:inline-flex;width:28px;height:28px;align-items:center;justify-content:center;background:var(--teal);color:#fff;border-radius:50%;font-size:13px;font-weight:700;margin-right:10px;}
+.setup-box .step h3{display:inline;font-size:14px;color:var(--ink);}
+.setup-box pre{background:#1E2B2E;color:#E4F1EF;padding:14px;border-radius:8px;font-size:11.5px;overflow-x:auto;line-height:1.5;margin:10px 0;white-space:pre-wrap;word-break:break-all;}
+.setup-box .copy-btn{font-size:11px;padding:3px 8px;border-radius:4px;border:1px solid #5B6B6E;background:transparent;color:#BFE0DB;cursor:pointer;float:right;margin:-4px 0 4px 8px;}.setup-box .copy-btn:hover{background:#2A3D40;}
+.mail-card{background:#EEF3FE;border:1px solid #B8D0F9;border-radius:8px;padding:12px 16px;margin:10px 0;}
+.mail-card .subj{font-weight:700;color:#1A56DB;font-size:13px;}.mail-card .to{font-size:12px;color:var(--ink2);margin-bottom:4px;}
+</style>
+</head>
+<body>
+<header class="app no-print">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+    <div><div class="app-title">Programa de Estabilidad · LCC</div><div class="app-sub">SOP-LCC-049 V4.0 · Vessena S.A.</div></div>
+    <div class="sync-bar" id="syncBar"></div>
+  </div>
+  <nav class="tabs" id="tabNav"></nav>
+</header>
+<main id="mc"></main>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   GOOGLE SHEETS BACKEND + EMAIL
+============================================================ */
+let SCRIPT_URL=localStorage.getItem('gscript_url')||'';
+let syncStatus='disconnected';
+
+async function gRead(){if(!SCRIPT_URL)return null;syncStatus='loading';rSync();try{const r=await fetch(SCRIPT_URL+'?t='+Date.now());const d=await r.json();syncStatus='ok';rSync();return d;}catch(e){syncStatus='error';rSync();return null;}}
+async function gWrite(key,value){if(!SCRIPT_URL)return;syncStatus='loading';rSync();try{const ctrl=new AbortController();const tid=setTimeout(()=>ctrl.abort(),10000);await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'save',key,value:JSON.stringify(value)}),signal:ctrl.signal});clearTimeout(tid);syncStatus='ok';rSync();}catch(e){syncStatus='ok';rSync();}}
+/* EMAILS FIJOS — reciben copia de TODAS las notificaciones */
+const CC_EMAILS=['claudia.barlocco@vessena.com.uy','antonella.nunez@vessena.com.uy'];
+
+async function gSendEmail(to,subject,body){if(!SCRIPT_URL)return;
+  // Combinar destinatario + supervisión, sin duplicados
+  const all=new Set();
+  if(to)to.split(',').forEach(e=>all.add(e.trim()));
+  CC_EMAILS.forEach(e=>all.add(e));
+  const dest=[...all].filter(Boolean).join(',');
+  try{await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'email',to:dest,subject,body})});toast('Email enviado');}catch(e){toast('Error enviando email');}}
+
+function rSync(){const b=document.getElementById('syncBar');if(!b)return;const m={ok:['ok','Google Sheets ✓'],error:['err','Error conexión'],loading:['loading','Guardando…'],disconnected:['err','No conectado']};const[c,t]=m[syncStatus]||m.disconnected;b.innerHTML=`<span class="sync-dot ${c}"></span> ${t}`;}
+
+/* ============================================================
+   APPS SCRIPT CODE (with email support)
+============================================================ */
+const APPS_SCRIPT_CODE=`// === PROGRAMA DE ESTABILIDAD — BACKEND ===
+// Pegar este código en Apps Script y desplegar como aplicación web.
+
+function doGet(e) {
+  var sheet = getSheet();
+  var data = {};
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (rows[i][0]) data[rows[i][0]] = rows[i][1];
+  }
+  return ContentService.createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
+  var payload = JSON.parse(e.postData.contents);
+
+  if (payload.action === 'email') {
+    sendEmail_(payload.to, payload.subject, payload.body);
+    return ContentService.createTextOutput(JSON.stringify({ok:true}))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  // Default: save data
+  var sheet = getSheet();
+  var key = payload.key;
+  var value = payload.value;
+  var rows = sheet.getDataRange().getValues();
+  var found = false;
+  for (var i = 1; i < rows.length; i++) {
+    if (rows[i][0] === key) {
+      sheet.getRange(i+1, 2).setValue(value);
+      found = true; break;
+    }
+  }
+  if (!found) sheet.appendRow([key, value]);
+  return ContentService.createTextOutput(JSON.stringify({ok:true}))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function getSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('Data');
+  if (!sheet) { sheet = ss.insertSheet('Data'); sheet.appendRow(['key','value']); }
+  return sheet;
+}
+
+function sendEmail_(to, subject, body) {
+  if (!to) return;
+  var supervision = ['claudia.barlocco@vessena.com.uy','antonella.nunez@vessena.com.uy'];
+  var allEmails = {};
+  to.split(',').forEach(function(e){ e=e.trim(); if(e) allEmails[e]=true; });
+  supervision.forEach(function(e){ allEmails[e]=true; });
+  Object.keys(allEmails).forEach(function(email) {
+    MailApp.sendEmail({
+      to: email,
+      subject: '[LCC Estabilidad] ' + subject,
+      htmlBody: body
+    });
+  });
+}
+
+// ============================================
+// RECORDATORIOS DIARIOS (ejecutar una vez crearTrigger)
+// ============================================
+function crearTrigger() {
+  // Eliminar triggers anteriores
+  var triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(function(t) { ScriptApp.deleteTrigger(t); });
+  // Crear trigger diario a las 8:00
+  ScriptApp.newTrigger('enviarRecordatorios')
+    .timeBased()
+    .everyDays(1)
+    .atHour(8)
+    .create();
+  Logger.log('Trigger creado: recordatorios diarios a las 8:00');
+}
+
+function enviarRecordatorios() {
+  var sheet = getSheet();
+  var rows = sheet.getDataRange().getValues();
+  var studiesJson = '';
+  for (var i = 1; i < rows.length; i++) {
+    if (rows[i][0] === 'studies') { studiesJson = rows[i][1]; break; }
+  }
+  if (!studiesJson) return;
+
+  var studies = JSON.parse(studiesJson);
+  var hoy = new Date();
+  var manana = new Date(hoy);
+  manana.setDate(manana.getDate() + 1);
+  var mananaStr = Utilities.formatDate(manana, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  var hoyStr = Utilities.formatDate(hoy, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+
+  studies.forEach(function(s) {
+    if (!s.emailAnalista || s.stage >= 5) return;
+
+    // Checkpoints para mañana
+    var proximos = [];
+    var atrasados = [];
+    s.checkpoints.forEach(function(cp) {
+      if (cp.fechaReal) return; // ya realizado
+      if (cp.fechaProgramada === mananaStr) proximos.push(cp);
+      if (cp.fechaProgramada < hoyStr) atrasados.push(cp);
+    });
+
+    if (proximos.length > 0) {
+      var cpList = proximos.map(function(cp) {
+        return '<li><strong>' + cp.codigo + '</strong> (Mes ' + cp.mes + ') — ' + cp.fechaProgramada + '</li>';
+      }).join('');
+      var body = '<div style="font-family:Arial,sans-serif;max-width:600px">'
+        + '<h2 style="color:#0A4F4C">Recordatorio: Muestreo mañana</h2>'
+        + '<p>Producto: <strong>' + s.producto + '</strong> — Lote: <strong>' + s.lote + '</strong></p>'
+        + '<p>Los siguientes puntos de muestreo están programados para mañana:</p>'
+        + '<ul>' + cpList + '</ul>'
+        + '<p style="color:#5B6B6E;font-size:12px">Programa de Estabilidad — LCC / Vessena S.A.</p>'
+        + '</div>';
+      sendEmail_(s.emailAnalista, 'Muestreo mañana: ' + s.producto + ' (Lote ' + s.lote + ')', body);
+    }
+
+    if (atrasados.length > 0) {
+      var cpList2 = atrasados.map(function(cp) {
+        return '<li><strong>' + cp.codigo + '</strong> (Mes ' + cp.mes + ') — programado: ' + cp.fechaProgramada + '</li>';
+      }).join('');
+      var body2 = '<div style="font-family:Arial,sans-serif;max-width:600px">'
+        + '<h2 style="color:#B03A2E">⚠ Muestreos atrasados</h2>'
+        + '<p>Producto: <strong>' + s.producto + '</strong> — Lote: <strong>' + s.lote + '</strong></p>'
+        + '<p>Los siguientes puntos están <strong>atrasados</strong>:</p>'
+        + '<ul>' + cpList2 + '</ul>'
+        + '<p style="color:#5B6B6E;font-size:12px">Programa de Estabilidad — LCC / Vessena S.A.</p>'
+        + '</div>';
+      sendEmail_(s.emailAnalista, '⚠ ATRASADO: ' + s.producto + ' (Lote ' + s.lote + ')', body2);
+      if (s.emailCreador && s.emailCreador !== s.emailAnalista) {
+        sendEmail_(s.emailCreador, '⚠ ATRASADO: ' + s.producto + ' (Lote ' + s.lote + ')', body2);
+      }
+    }
+  });
+}`;
+
+/* ============================================================
+   CONFIG
+============================================================ */
+const ZONAS=[{z:'I',d:'Templada',l:'21°C±2/(45±5)%HR',a:'40°C±2/(75±5)%HR'},{z:'II',d:'Subtrop.',l:'25°C±2/(60±5)%HR',a:'40°C±2/(75±5)%HR'},{z:'III',d:'Caliente/Seca',l:'30°C±2/(35±5)%HR',a:'40°C±2/(75±5)%HR'},{z:'IV',d:'Tropical',l:'30°C±2/(75±5)%HR',a:'40°C±2/(75±5)%HR'}];
+const NORMAS=[{id:'oms43',l:'OMS Informe 43/09'},{id:'cipac463',l:'CIPAC MT 46.3 (MSP)'},{id:'decreto148',l:'Decreto 148/015'},{id:'cosmeurope',l:'Cosmetics Europe 2004'},{id:'iso22716',l:'ISO 22716'}];
+const CT={
+  limpiador:{l:'Limpiador',t:'domisanitario',p:[{p:'Color',e:'Característico',m:'Comparativo',lab:'Interno',f:'Por lote'},{p:'Apariencia',e:'Líq. traslúcido',m:'Visual',lab:'Interno',f:'Por lote'},{p:'Olor',e:'Característico',m:'Sensorial',lab:'Interno',f:'Por lote'},{p:'Partículas/Turbidez',e:'Ausencia/Nítido',m:'Visual',lab:'Interno',f:'Por lote'},{p:'pH',e:'6.0-8.5',m:'pHímetro',lab:'Interno',f:'Por lote'},{p:'Densidad (g/mL)',e:'0.999',m:'Densímetro',lab:'Interno',f:'Rutinario'},{p:'Materia activa % (aniónicos)',e:'Min: 0.15',m:'Aniónico',lab:'Interno',f:'Por lote'},{p:'Recuento microbiano',e:'<500 ufc',m:'USP',lab:'Externo',f:'Según plan'},{p:'Hongos y levaduras',e:'<500 ufc',m:'USP',lab:'Externo',f:'Según plan'},{p:'S. aureus',e:'Ausencia',m:'USP',lab:'Externo',f:'Según plan'},{p:'Bacilos gram(-)',e:'Ausencia',m:'USP',lab:'Externo',f:'Según plan'}]},
+  detergente:{l:'Detergente',t:'domisanitario',p:[{p:'Color',e:'Característico',m:'Comparativo',lab:'Interno',f:'Rutinario'},{p:'Apariencia',e:'Líq. traslúcido',m:'Visual',lab:'Interno',f:'Rutinario'},{p:'Olor',e:'Característico',m:'Sensorial',lab:'Interno',f:'Rutinario'},{p:'Partículas/Turbidez',e:'Ausencia/Nítido',m:'Visual',lab:'Interno',f:'Rutinario'},{p:'pH',e:'6.5-8.0',m:'pHímetro',lab:'Interno',f:'Rutinario'},{p:'Materia activa %',e:'Min 5.0%',m:'Aniónico',lab:'Interno',f:'Rutinario'},{p:'Viscosidad (cps)',e:'Min 200',m:'Brookfield 25°C #21 20rpm',lab:'Interno',f:'Rutinario'},{p:'Recuento microbiano',e:'<500 ufc',m:'USP',lab:'Externo',f:'Rutinario'},{p:'Hongos y levaduras',e:'<500 ufc',m:'USP',lab:'Externo',f:'Rutinario'},{p:'S. aureus',e:'Ausencia',m:'USP',lab:'Externo',f:'Rutinario'},{p:'Bacilos gram(-)',e:'Ausencia',m:'USP',lab:'Externo',f:'Rutinario'}]},
+  suavizante:{l:'Suavizante',t:'domisanitario',p:[{p:'Color',e:'Característico',m:'Comparativo',lab:'Interno',f:'Rutinario'},{p:'Apariencia',e:'Líq. viscoso',m:'Visual',lab:'Interno',f:'Rutinario'},{p:'Olor',e:'Característico',m:'Sensorial',lab:'Interno',f:'Rutinario'},{p:'Partículas/Turbidez',e:'Ausencia',m:'Visual',lab:'Interno',f:'Rutinario'},{p:'pH',e:'6.0-8.0',m:'pHímetro',lab:'Interno',f:'Rutinario'},{p:'Materia activa % (catiónico)',e:'(0.40-0.60)%',m:'Catiónico',lab:'Interno',f:'Rutinario'},{p:'Viscosidad (cps)',e:'(200-500)',m:'Brookfield 25°C #21 20rpm',lab:'Interno',f:'Rutinario'},{p:'Recuento microbiano',e:'<500 ufc',m:'USP',lab:'Externo',f:'Rutinario'},{p:'Hongos y levaduras',e:'<500 ufc',m:'USP',lab:'Externo',f:'Rutinario'},{p:'S. aureus',e:'Ausencia',m:'USP',lab:'Externo',f:'Rutinario'},{p:'Bacilos gram(-)',e:'Ausencia',m:'USP',lab:'Externo',f:'Rutinario'}]},
+  hipoclorito:{l:'Hipoclorito',t:'domisanitario',p:[{p:'Color',e:'Característico',m:'Comparativo',lab:'Interno',f:'Rutinario'},{p:'Olor',e:'Característico',m:'Sensorial',lab:'Interno',f:'Rutinario'},{p:'Partículas/Turbidez',e:'Ausencia',m:'Visual',lab:'Interno',f:'Rutinario'},{p:'Densidad 20°C',e:'1.050-1.075 g/L',m:'Densidad',lab:'Interno',f:'Rutinario'},{p:'Cloro (g/L)',e:'(40-44)',m:'Iodimetría',lab:'Interno',f:'Rutinario'}]},
+  jabon_manos:{l:'Jabón de manos',t:'domisanitario',p:[{p:'Color',e:'Característico',m:'Comparativo',lab:'Interno',f:'Por lote'},{p:'Apariencia',e:'Líq. traslúcido/cremoso',m:'Visual',lab:'Interno',f:'Por lote'},{p:'Olor',e:'Característico',m:'Sensorial',lab:'Interno',f:'Por lote'},{p:'Partículas/Turbidez',e:'Ausencia/Nítido',m:'Visual',lab:'Interno',f:'Por lote'},{p:'pH',e:'6.9-7.5',m:'pHímetro',lab:'Interno',f:'Por lote'},{p:'Materia activa % (aniónicos)',e:'(3.0-5.0)%',m:'Aniónico',lab:'Interno',f:'Por lote'},{p:'Viscosidad (cps)',e:'(500-1500)',m:'Brookfield 25°C',lab:'Interno',f:'Por lote'},{p:'Recuento microbiano',e:'<500 ufc',m:'USP',lab:'Externo',f:'Según plan'},{p:'Hongos y levaduras',e:'<500 ufc',m:'USP',lab:'Externo',f:'Según plan'},{p:'S. aureus',e:'Ausencia',m:'USP',lab:'Externo',f:'Según plan'},{p:'Bacilos gram(-)',e:'Ausencia',m:'USP',lab:'Externo',f:'Según plan'}]},
+  alcohol:{l:'Alcohol/Desinfect.',t:'domisanitario',p:[{p:'Color',e:'Característico',m:'Comparativo',lab:'Interno',f:'Cada lote'},{p:'Olor',e:'Característico',m:'Sensorial',lab:'Interno',f:'Cada lote'},{p:'Partículas/Turbidez',e:'Ausencia',m:'Visual',lab:'Interno',f:'Cada lote'},{p:'Graduación alcohólica %',e:'(65-75)',m:'Graduación',lab:'Interno',f:'Cada lote'}]},
+  perfumador:{l:'Perfumador/Cosm.',t:'cosmetico',p:[{p:'Color',e:'Incoloro',m:'Comparativo',lab:'Interno',f:'Cada lote'},{p:'Olor',e:'Característico',m:'Sensorial',lab:'Interno',f:'Cada lote'},{p:'Partículas/Turbidez',e:'Ausencia',m:'Visual',lab:'Interno',f:'Cada lote'},{p:'Graduación alcohólica %',e:'(40-42)',m:'Graduación',lab:'Interno',f:'Cada lote'}]},
+  cosmetico:{l:'Cosmético (otro)',t:'cosmetico',p:[{p:'Color',e:'Característico',m:'Comparativo',lab:'Interno',f:'Cada lote'},{p:'Apariencia',e:'—',m:'Visual',lab:'Interno',f:'Cada lote'},{p:'Olor',e:'Característico',m:'Sensorial',lab:'Interno',f:'Cada lote'},{p:'pH',e:'—',m:'pHímetro',lab:'Interno',f:'Cada lote'},{p:'Recuento microbiano',e:'<500 ufc',m:'USP',lab:'Externo',f:'Rutinario'},{p:'Hongos y levaduras',e:'<500 ufc',m:'USP',lab:'Externo',f:'Rutinario'},{p:'S. aureus',e:'Ausencia',m:'USP',lab:'Externo',f:'Rutinario'},{p:'Bacilos gram(-)',e:'Ausencia',m:'USP',lab:'Externo',f:'Rutinario'}]},
+};
+const FR={'limpiador|acelerada':[{c:'0A',m:0},{c:'3A',m:3}],'limpiador|natural':[{c:'0N',m:0},{c:'12N',m:12},{c:'24N',m:24}],'detergente|acelerada':[{c:'0A',m:0},{c:'3A',m:3}],'detergente|natural':[{c:'0N',m:0},{c:'12N',m:12},{c:'24N',m:24}],'suavizante|acelerada':[{c:'0A',m:0},{c:'3A',m:3}],'suavizante|natural':[{c:'0N',m:0},{c:'12N',m:12},{c:'24N',m:24}],'hipoclorito|acelerada':[{c:'0A',m:0},{c:'3A',m:3}],'hipoclorito|natural':[{c:'0N',m:0},{c:'6N',m:6}],'jabon_manos|acelerada':[{c:'0A',m:0},{c:'3A',m:3}],'jabon_manos|natural':[{c:'0N',m:0},{c:'12N',m:12},{c:'24N',m:24}],'alcohol|acelerada':[{c:'0A',m:0},{c:'3A',m:3}],'alcohol|natural':[{c:'0N',m:0},{c:'12N',m:12},{c:'24N',m:24}],'perfumador|acelerada':[{c:'0A',m:0},{c:'3A',m:3}],'perfumador|natural':[{c:'0N',m:0},{c:'3N',m:3},{c:'12N',m:12},{c:'24N',m:24}],'cosmetico|acelerada':[{c:'0A',m:0},{c:'3A',m:3}],'cosmetico|natural':[{c:'0N',m:0},{c:'3N',m:3},{c:'12N',m:12},{c:'24N',m:24}]};
+const SG=[{l:'Solicitud',a:'Al crear'},{l:'Con espec.',a:'Espec. OK'},{l:'Muestreos',a:'1er resultado'},{l:'Completo',a:'Todos OK'},{l:'Informe',a:'Conclusión'},{l:'Aprobado',a:'Manual'}];
+const TPL={alcance:{nuevo_registro:'Estudio {{te}} del producto "{{p}}" ({{c}}), lote {{l}}, para establecer vida útil y condiciones de almacenamiento para registro MSP. Ref: SOP-LCC-049 V4.0.',renovacion:'Estudio {{te}} del producto "{{p}}" ({{c}}), lote {{l}}, renovación de registro. Ref: SOP-LCC-049 V4.0.',cambio_formula:'Estudio {{te}} del producto "{{p}}" ({{c}}), lote {{l}}, cambio en composición. Ref: SOP-LCC-049 V4.0.',cambio_envase:'Estudio {{te}} del producto "{{p}}" ({{c}}), lote {{l}}, cambio en envase primario. Ref: SOP-LCC-049 V4.0.'},metodos:{domisanitario:'Organolépticas (aspecto, homogeneidad, color, olor), fisicoquímicas (activo, viscosidad, pH), microbiológicas (mesófilos, S. aureus, hongos/levaduras, gram-), exposición a la luz, viabilidad de uso.',cosmetico:'Organolépticas (aspecto, homogeneidad, color, olor), fisicoquímicas (activo, viscosidad, pH), microbiológicas, exposición a la luz.'},criterios:{estandar:'Cumplir criterios fisicoquímicos y microbiológicos establecidos. Cambio significativo: pérdida 5% activo vs. inicial; degradación sobre límite; pH fuera de rango; incumplimiento aspecto/propiedades.'},conclusion:{cumple:'"{{p}}", lote {{l}}, estudio {{te}}, zona {{z}} ({{zd}}): CUMPLE. Vida útil: {{vu}} meses.',no_cumple:'"{{p}}", lote {{l}}, zona {{z}} ({{zd}}): DESVIACIONES. Revisar formulación/condiciones. Decisiones: Dir. Técnica.',acelerada_provisoria:'"{{p}}", lote {{l}}, acelerada, zona {{z}} ({{zd}}): CUMPLE. Vida útil PROVISORIA: {{vu}} meses, confirmar con larga duración.'},rotulacion:{proteger_luz:'Proteger de la luz.',lugar_seco:'Mantener en lugar seco.',no_aplica:'Sin condiciones adicionales.'}};
+const CHL={nuevo_registro:'Nuevo registro',renovacion:'Renovación',cambio_formula:'Cambio fórmula',cambio_envase:'Cambio envase',domisanitario:'Domisanitarios',cosmetico:'Cosméticos',estandar:'Estándar SOP',cumple:'Cumple',no_cumple:'No cumple',acelerada_provisoria:'Acel.(prov.)',proteger_luz:'Luz',lugar_seco:'Seco',no_aplica:'No aplica'};
+
+/* CONDICIONES ACELERADA */
+const CONDS=[{k:'estufa',l:'40°C (Estufa)',color:'#E85D04'},{k:'heladera',l:'4°C (Heladera)',color:'#0077B6'},{k:'luz',l:'Luz directa',color:'#E9C46A'},{k:'patron',l:'Patrón (estándar)',color:'#8592A0'}];
+function emptyCondResult(){return{organoleptico:'',ph:'',activo:'',viscosidad:'',microbiologia:'',homogeneidad:'',cumple:'',observaciones:''};}
+function initDesarrolloCheckpoints(fi){
+  return[
+    {codigo:'0',mes:0,fase:'compartido',fechaProgramada:fi,fechaReal:''},
+    {codigo:'3A',mes:3,fase:'acelerada',fechaProgramada:addM(fi,3),fechaReal:'',
+     condiciones:{estufa:emptyCondResult(),heladera:emptyCondResult(),luz:emptyCondResult(),patron:emptyCondResult()}}
+  ];
+}
+function initStartupCheckpoints(fi,cat){
+  const natFreq = cat==='hipoclorito' ? [{c:'6N',m:6}] : [{c:'12N',m:12},{c:'24N',m:24}];
+  return[
+    {codigo:'0',mes:0,fase:'compartido',fechaProgramada:fi,fechaReal:''},
+    {codigo:'3A',mes:3,fase:'acelerada',fechaProgramada:addM(fi,3),fechaReal:'',
+     condiciones:{estufa:emptyCondResult(),heladera:emptyCondResult(),luz:emptyCondResult(),patron:emptyCondResult()}},
+    ...natFreq.map(c=>({codigo:c.c,mes:c.m,fase:'natural',fechaProgramada:addM(fi,c.m),fechaReal:''}))
+  ];
+}
+// Legacy compat
+function initAccelCheckpoints(fi){return initDesarrolloCheckpoints(fi);}
+
+/* EQUIPO */
+const TEAM=[
+  {n:'Laboratorio',e:'laboratorio@vessena.com.uy'},
+  {n:'Gloria Nuñez',e:'gloria.nuñez@vesssena.com.uy'},
+  {n:'Antonella Nuñez',e:'antonella.nunez@vessena.com.uy'},
+  {n:'Claudia Barlocco',e:'claudia.barlocco@vessena.com.uy'},
+  {n:'Analista Minilab',e:'analista.minilab@vessena.com.uy'},
+];
+function emailSel(id,val){return`<select id="${id}"><option value="">— Seleccionar —</option>${TEAM.map(t=>`<option value="${E(t.e)}" ${val===t.e?'selected':''}>${t.n} (${t.e})</option>`).join('')}</select>`;}
+
+/* STATE */
+let studies=[],productos=[],activeTab='dashboard',filters={t:'',q:''},selSt=null,selRep=null,charts={},catMode='list',editProd=null,dashFilter='';
+
+/* UTILS */
+const uid=()=>'ST-'+Date.now().toString(36).toUpperCase()+Math.floor(Math.random()*90+10);
+const pid=()=>'P-'+Date.now().toString(36).toUpperCase()+Math.floor(Math.random()*90+10);
+const E=s=>(s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const td2=()=>new Date().toISOString().slice(0,10);
+const addM=(iso,n)=>{const d=new Date(iso+'T00:00:00');d.setMonth(d.getMonth()+n);return d.toISOString().slice(0,10);};
+const fmt=iso=>!iso?'—':new Date(iso+'T00:00:00').toLocaleDateString('es-UY',{day:'2-digit',month:'2-digit',year:'numeric'});
+const dTo=iso=>Math.round((new Date(iso+'T00:00:00')-new Date(td2()+'T00:00:00'))/86400000);
+const cpS=cp=>{if(cp.fechaReal)return'realizado';const d=dTo(cp.fechaProgramada);return d<0?'atrasado':d<=7?'proximo':'pendiente';};
+const sL=s=>({realizado:'Realizado',atrasado:'Atrasado',proximo:'Próximo',pendiente:'Pendiente'}[s]||s);
+const catL=id=>{const c=CT[id];return c?c.l:id;};
+const norL=id=>{const n=NORMAS.find(n=>n.id===id);return n?n.l:id;};
+const toast=m=>{const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2400);};
+const q=s=>document.querySelector(s);
+const bind=(s,ev,fn)=>document.querySelectorAll(s).forEach(el=>el.addEventListener(ev,()=>fn(el)));
+function cS(s){if(s.stage===5)return 5;if(s.approvedManually)return 5;const hs=!!(s.especificacion&&s.especificacion.trim());const any=s.checkpoints.some(c=>c.fechaReal);const all=s.checkpoints.length>0&&s.checkpoints.every(c=>c.fechaReal);const hc=!!(s.conclusion&&s.conclusion.trim());if(hc&&all)return 4;if(all)return 3;if(any)return 2;if(hs)return 1;return 0;}
+function rS(s){const p=s.stage;s.stage=cS(s);if(s.stage!==p)saveStudies();}
+function xT(t,s){const z=ZONAS.find(z=>z.z===s.zonaClimatica)||{};const tl=s.tipoEstudio==='acelerada'?'acelerada':'larga duración';return t.replace(/\{\{p\}\}/g,s.producto||'').replace(/\{\{l\}\}/g,s.lote||'').replace(/\{\{c\}\}/g,catL(s.categoria)).replace(/\{\{te\}\}/g,tl).replace(/\{\{z\}\}/g,s.zonaClimatica||'').replace(/\{\{zd\}\}/g,z.d||'').replace(/\{\{vu\}\}/g,s.vidaUtilMeses||'__').replace(/\{\{cond\}\}/g,s.condAlm||'[completar]');}
+
+function buildAssignEmail(s){
+  const cpList=s.checkpoints.map(cp=>`<li><strong>${cp.codigo}</strong> (Mes ${cp.mes}) — ${cp.fechaProgramada}</li>`).join('');
+  const specList=(s.specParams||[]).map(p=>`<li>${p.p}: ${p.e}</li>`).join('');
+  return `<div style="font-family:Arial,sans-serif;max-width:600px">
+    <h2 style="color:#0A4F4C">Nueva asignación: Estudio de Estabilidad</h2>
+    <p>Se te asignó el siguiente estudio:</p>
+    <table style="border-collapse:collapse;font-size:14px;margin:10px 0">
+      <tr><td style="padding:4px 12px 4px 0;color:#5B6B6E">Producto</td><td><strong>${s.producto}</strong></td></tr>
+      <tr><td style="padding:4px 12px 4px 0;color:#5B6B6E">Lote</td><td><strong>${s.lote}</strong></td></tr>
+      <tr><td style="padding:4px 12px 4px 0;color:#5B6B6E">Tipo</td><td>${s.tipoEstudio}</td></tr>
+      <tr><td style="padding:4px 12px 4px 0;color:#5B6B6E">Inicio</td><td>${s.fechaInicio}</td></tr>
+      <tr><td style="padding:4px 12px 4px 0;color:#5B6B6E">Creado por</td><td>${s.responsable||'—'}</td></tr>
+    </table>
+    <h3 style="color:#0A4F4C">Especificación</h3><ul>${specList||'<li>Ver en la plataforma</li>'}</ul>
+    <h3 style="color:#0A4F4C">Cronograma de muestreo</h3><ul>${cpList}</ul>
+    <p>Vas a recibir un recordatorio el día anterior a cada muestreo.</p>
+    <p style="color:#5B6B6E;font-size:12px">Programa de Estabilidad — LCC / Vessena S.A.</p></div>`;
+}
+
+async function loadAll(){const d=await gRead();if(d){if(d.productos)try{productos=JSON.parse(d.productos);}catch(e){}if(d.studies)try{studies=JSON.parse(d.studies);}catch(e){}}
+  // Auto-fix en memoria + guardar si hay cambios
+  let needsSave=false;
+  studies.forEach(s=>{
+    if(s.rechazos&&s.rechazos.length&&!s.approvedManually&&s.stage!==5){
+      if(!s.rechazado){s.rechazado=true;needsSave=true;}
+    }
+    // Fix 4S → 3A (error de 4 semanas → correcto 3 meses)
+    s.checkpoints.forEach(cp=>{
+      if(cp.codigo==='4S'){
+        cp.codigo='3A'; cp.mes=3; cp.fechaReal='';
+        if(s.fechaInicio) cp.fechaProgramada=addM(s.fechaInicio,3);
+        if(!cp.condiciones) cp.condiciones={estufa:emptyCondResult(),heladera:emptyCondResult(),luz:emptyCondResult(),patron:emptyCondResult()};
+        if(!cp.fase) cp.fase='acelerada';
+        needsSave=true;
+      }
+    });
+    // Fix T0 sin fase
+    if(s.checkpoints.length&&s.checkpoints[0].mes===0&&!s.checkpoints[0].fase&&(s.tipoLote==='desarrollo'||s.tipoLote==='startup'||s.tipoLote==='lanzamiento')){
+      s.checkpoints[0].fase='compartido'; s.checkpoints[0].codigo='0'; needsSave=true;
+    }
+    // Fix acelerada sin condiciones
+    s.checkpoints.forEach(cp=>{
+      if(cp.mes>0&&!cp.condiciones&&(cp.codigo.includes('A')||cp.fase==='acelerada')){
+        cp.condiciones={estufa:emptyCondResult(),heladera:emptyCondResult(),luz:emptyCondResult(),patron:emptyCondResult()};
+        if(cp.activo||cp.ph||cp.viscosidad){
+          cp.condiciones.patron={organoleptico:cp.organoleptico||'',ph:cp.ph||'',activo:cp.activo||'',viscosidad:cp.viscosidad||'',microbiologia:cp.microbiologia||'',homogeneidad:cp.homogeneidad||'',cumple:cp.cumple||'',observaciones:cp.observaciones||''};
+        }
+        if(!cp.fase) cp.fase='acelerada'; needsSave=true;
+      }
+    });
+    // Fix lanzamiento → startup con fases naturales
+    if(s.tipoLote==='lanzamiento'&&!s.checkpoints.some(c=>c.fase==='natural')){
+      s.tipoLote='startup'; s.tipoEstudio='startup';
+      const natMs=(s.categoria==='hipoclorito')?[6]:[12,24];
+      natMs.forEach(m=>{if(!s.checkpoints.some(c=>c.mes===m)) s.checkpoints.push({codigo:`${m}N`,mes:m,fase:'natural',fechaProgramada:s.fechaInicio?addM(s.fechaInicio,m):'',fechaReal:''});});
+      needsSave=true;
+    }
+  });
+  if(needsSave) setTimeout(()=>saveStudies(),1500);
+  // Forzar recálculo de etapas para todos los estudios
+  let stageChanged=false;
+  studies.forEach(s=>{
+    if(s.rechazado||s.stage===5)return;
+    const old=s.stage;
+    s.stage=cS(s);
+    if(s.stage!==old)stageChanged=true;
+  });
+  if(stageChanged&&!needsSave) setTimeout(()=>saveStudies(),2000);
+}
+async function saveStudies(){await gWrite('studies',studies);}
+async function saveProductos(){await gWrite('productos',productos);}
+
+/* ============================================================
+   TABS
+============================================================ */
+const TABS=[{id:'dashboard',l:'Dashboard'},{id:'estudios',l:'Estudios'},{id:'rechazados',l:'Rechazados'},{id:'catalogo',l:'Catálogo'},{id:'nuevo',l:'+ Nuevo'},{id:'informe',l:'Informe'},{id:'info',l:'ℹ Criterios'},{id:'config',l:'⚙'}];
+function renderNav(){const nav=document.getElementById('tabNav');if(!SCRIPT_URL){nav.innerHTML='';return;}const nRech=studies.filter(s=>s.rechazado).length;nav.innerHTML=TABS.map(t=>`<button class="${t.id===activeTab?'active':''}" data-t="${t.id}">${t.l}${t.id==='catalogo'?` (${productos.length})`:t.id==='rechazados'&&nRech?` (${nRech})`:''}</button>`).join('');nav.querySelectorAll('button').forEach(b=>b.onclick=()=>{activeTab=b.dataset.t;render();});}
+
+/* ============================================================
+   SETUP
+============================================================ */
+function renderSetup(){
+  document.getElementById('mc').innerHTML=`<div class="setup-box">
+    <h1>Configuración</h1><p class="sd">Conectar con Google Sheets para guardar datos y enviar emails.</p>
+    <div class="step"><span class="step-num">1</span><h3>Crear planilla en <a href="https://sheets.new" target="_blank" style="color:var(--teal)">sheets.new</a></h3></div>
+    <div class="step"><span class="step-num">2</span><h3>Extensiones → Apps Script</h3></div>
+    <div class="step"><span class="step-num">3</span><h3>Pegar este código y guardar</h3>
+      <pre><button class="copy-btn" id="cpBtn">Copiar</button>${E(APPS_SCRIPT_CODE)}</pre>
+      <p style="font-size:13px;color:var(--ink2);margin:4px 0 0 38px">Implementar → Nueva implementación → Aplicación web → Ejecutar como: Yo → Acceso: Cualquier persona → Implementar</p>
+    </div>
+    <div class="step"><span class="step-num">4</span><h3>Pegar la URL acá</h3>
+      <div style="margin:10px 0 0 38px;display:flex;gap:10px"><input type="text" id="urlIn" placeholder="https://script.google.com/macros/s/..." value="${E(SCRIPT_URL)}" style="flex:1"><button class="btn" id="btnConn">Conectar</button></div>
+      <p id="connRes" style="margin:8px 0 0 38px;font-size:12px"></p>
+    </div>
+    <div class="step"><span class="step-num">5</span><h3>Activar recordatorios por email (una sola vez)</h3>
+      <p style="margin:8px 0 0 38px;font-size:13px;color:var(--ink2)">En el editor de Apps Script, seleccionar la función <strong>crearTrigger</strong> en el menú desplegable de arriba y hacer clic en ▶ Ejecutar. Esto programa los recordatorios diarios a las 8:00.</p>
+    </div>
+    ${SCRIPT_URL?`<div class="an" style="margin-top:16px"><span class="icon">✓</span> Conectado. <a class="lb" onclick="activeTab='dashboard';render()">Ir al dashboard →</a></div>`:''}</div>`;
+  q('#cpBtn').onclick=()=>{navigator.clipboard.writeText(APPS_SCRIPT_CODE);toast('Código copiado');};
+  q('#btnConn').onclick=async()=>{const url=q('#urlIn').value.trim();if(!url.startsWith('https://script.google.com')){q('#connRes').innerHTML='<span style="color:var(--red)">URL inválida</span>';return;}SCRIPT_URL=url;const d=await gRead();if(d!==null){localStorage.setItem('gscript_url',url);q('#connRes').innerHTML='<span style="color:var(--green)">✓ Conectado</span>';toast('Conectado');setTimeout(()=>{activeTab='dashboard';render();},1000);}else{q('#connRes').innerHTML='<span style="color:var(--red)">Error — verificá URL y autorización</span>';SCRIPT_URL='';}};
+}
+
+/* ============================================================
+   CATÁLOGO
+============================================================ */
+function renderCatalogo(){
+  if(catMode==='form'){renderCatForm();return;}
+  document.getElementById('mc').innerHTML=`<div class="panel pp"><div class="toolbar"><h2 class="st" style="margin:0">Catálogo</h2><div class="spacer"></div><button class="btn" id="bNP">+ Nuevo producto</button></div>
+  ${productos.length?`<table><thead><tr><th>Código</th><th>Producto</th><th>Categoría</th><th>Activo</th><th>Params</th><th></th></tr></thead><tbody>${productos.map(p=>`<tr><td class="mono">${E(p.codigo||'—')}</td><td><strong>${E(p.producto)}</strong></td><td>${E(catL(p.categoria))}</td><td>${E(p.activo)} ${E(p.concentracion)}</td><td>${(p.params||[]).length}</td><td><button class="btn sm ghost" data-edit="${p.id}">Editar</button></td></tr>`).join('')}</tbody></table>`:`<div class="empty"><div class="big">📋</div>Sin productos. Creá el primero.</div>`}</div>`;
+  q('#bNP').onclick=()=>{editProd=null;catMode='form';render();};
+  bind('[data-edit]','click',el=>{editProd=productos.find(p=>p.id===el.dataset.edit);catMode='form';render();});
+}
+function renderCatForm(){
+  const isE=!!editProd;const p=editProd||{id:'',codigo:'',producto:'',marca:'',categoria:'limpiador',envase:'',presentacion:'',almacenamiento:'Temperatura ambiente',vidaUtil:24,activo:'',concentracion:'',params:[]};
+  // Cargar parámetros típicos si no tiene (nuevo o importado sin specs)
+  if(!p.params||!p.params.length){p.params=JSON.parse(JSON.stringify(CT[p.categoria]?.p||[]));}
+  document.getElementById('mc').innerHTML=`<div class="panel pp"><a class="lb" id="bBk">← Volver</a><h2 class="st" style="margin-top:8px">${isE?'Editar':'Nuevo'} producto</h2>
+  ${isE&&editProd&&(!editProd.params||!editProd.params.length)?'<div class="an" style="margin-bottom:12px"><span class="icon">ℹ️</span> Se cargaron los parámetros típicos de la categoría. Ajustá los valores que necesites y guardá.</div>':''}
+  <fieldset><legend>Datos</legend><div class="fg c3">
+    <div class="fw"><label class="fi">Código ESP</label><input type="text" id="pC" value="${E(p.codigo)}"></div>
+    <div class="fw"><label class="fi">Producto *</label><input type="text" id="pN" value="${E(p.producto)}"></div>
+    <div class="fw"><label class="fi">Categoría *</label><select id="pCt">${Object.entries(CT).map(([k,v])=>`<option value="${k}" ${p.categoria===k?'selected':''}>${v.l}</option>`).join('')}</select></div>
+    <div class="fw"><label class="fi">Envase</label><input type="text" id="pE" value="${E(p.envase)}"></div>
+    <div class="fw"><label class="fi">Activo</label><input type="text" id="pAc" value="${E(p.activo)}"></div>
+    <div class="fw"><label class="fi">Concentración</label><input type="text" id="pCn" value="${E(p.concentracion)}"></div>
+    <div class="fw"><label class="fi">Almacenamiento</label><input type="text" id="pAl" value="${E(p.almacenamiento)}"></div>
+    <div class="fw"><label class="fi">Vida útil (meses)</label><input type="number" id="pVU" value="${p.vidaUtil||24}"></div>
+    <div class="fw"><label class="fi">Presentación</label><input type="text" id="pPr" value="${E(p.presentacion)}"></div>
+  </div></fieldset>
+  <fieldset><legend>Parámetros</legend>
+  <div class="param-row hdr"><div>Parámetro</div><div>Especificación</div><div>Método</div><div>Lab.</div><div>Frecuencia</div><div></div></div>
+  <div id="pR"></div><button class="btn ghost sm" id="bAP">+ Agregar</button></fieldset>
+  <div style="display:flex;gap:10px"><button class="btn" id="bSv">${isE?'Guardar':'Crear'}</button>${isE?`<button class="btn danger" id="bDlP">Eliminar</button>`:''}</div></div>`;
+  let params=JSON.parse(JSON.stringify(p.params||[]));
+  function rP(){q('#pR').innerHTML=params.map((pr,i)=>`<div class="param-row"><input value="${E(pr.p)}" data-i="${i}" data-k="p"><input value="${E(pr.e)}" data-i="${i}" data-k="e"><input value="${E(pr.m)}" data-i="${i}" data-k="m"><select data-i="${i}" data-k="lab"><option ${pr.lab==='Interno'?'selected':''}>Interno</option><option ${pr.lab==='Externo'?'selected':''}>Externo</option></select><input value="${E(pr.f)}" data-i="${i}" data-k="f"><button class="del" data-del="${i}">✕</button></div>`).join('');q('#pR').querySelectorAll('input,select').forEach(el=>el.onchange=()=>{params[parseInt(el.dataset.i)][el.dataset.k]=el.value;});q('#pR').querySelectorAll('[data-del]').forEach(el=>el.onclick=()=>{params.splice(parseInt(el.dataset.del),1);rP();});}rP();
+  q('#pCt').onchange=()=>{
+    const newCat=q('#pCt').value;
+    const hasParams=params.length>0&&params.some(p=>p.p);
+    if(!hasParams||confirm('¿Cargar los parámetros típicos de '+catL(newCat)+'? (reemplaza los actuales)')){
+      params=JSON.parse(JSON.stringify(CT[newCat]?.p||[]));rP();
+    }
+  };
+  q('#bAP').onclick=()=>{params.push({p:'',e:'',m:'',lab:'Interno',f:'Rutinario'});rP();};
+  q('#bBk').onclick=()=>{catMode='list';editProd=null;render();};
+  q('#bSv').onclick=async()=>{const nom=q('#pN').value.trim();if(!nom){toast('Falta nombre');return;}q('#pR').querySelectorAll('input,select').forEach(el=>{params[parseInt(el.dataset.i)][el.dataset.k]=el.value;});const data={codigo:q('#pC').value.trim(),producto:nom,categoria:q('#pCt').value,envase:q('#pE').value.trim(),presentacion:q('#pPr').value.trim(),almacenamiento:q('#pAl').value.trim(),vidaUtil:q('#pVU').value||24,activo:q('#pAc').value.trim(),concentracion:q('#pCn').value.trim(),params};if(isE)Object.assign(editProd,data);else{data.id=pid();productos.push(data);}await saveProductos();catMode='list';editProd=null;render();toast(isE?'Actualizado':'Creado');};
+  const bd=q('#bDlP');if(bd)bd.onclick=async()=>{if(confirm('¿Eliminar?')){productos=productos.filter(x=>x.id!==editProd.id);await saveProductos();catMode='list';editProd=null;render();}};
+}
+
+/* ============================================================
+   DASHBOARD
+============================================================ */
+function renderDashboard(){
+  studies.forEach(rS);const activeStudies=studies.filter(s=>!s.rechazado);const cps=[];activeStudies.forEach(s=>s.checkpoints.forEach(cp=>cps.push({...cp,sid:s.id,producto:s.producto,lote:s.lote})));
+  const at=cps.filter(c=>cpS(c)==='atrasado'),pr=cps.filter(c=>cpS(c)==='proximo');
+  const ec=activeStudies.filter(s=>s.stage>=1&&s.stage<=2).length,ap=activeStudies.filter(s=>s.stage===5).length;
+  const nRech=studies.filter(s=>s.rechazado).length;
+  const pendInf=activeStudies.filter(s=>s.stage===3).length;
+  const pendAprob=activeStudies.filter(s=>s.stage===4).length;
+  const up=cps.filter(c=>cpS(c)!=='realizado').sort((a,b)=>a.fechaProgramada.localeCompare(b.fechaProgramada)).slice(0,8);
+  document.getElementById('mc').innerHTML=`
+    ${!productos.length?'<div class="an" style="margin-bottom:16px"><span class="icon">📋</span> Primer paso: andá a "Catálogo" y creá tu primer producto.</div>':''}
+    <div class="kpi-grid"><div class="kpi teal" data-kpi="curso"><div class="n">${ec}</div><div class="lb">En curso (muestreos)</div></div><div class="kpi amber" data-kpi="proximos"><div class="n">${pr.length}</div><div class="lb">Próximos (≤7d)</div></div><div class="kpi red" data-kpi="atrasados"><div class="n">${at.length}</div><div class="lb">Atrasados</div></div>${pendInf?`<div class="kpi" data-kpi="pendinf" style="border-left:3px solid var(--amber)"><div class="n" style="color:var(--amber)">${pendInf}</div><div class="lb">Completos → sin informe</div></div>`:''} ${pendAprob?`<div class="kpi" data-kpi="pendaprob" style="border-left:3px solid #7C3AED"><div class="n" style="color:#7C3AED">${pendAprob}</div><div class="lb">Informe → pend. aprobación</div></div>`:''}<div class="kpi green" data-kpi="aprobados"><div class="n">${ap}</div><div class="lb">Aprobados</div></div>${nRech?`<div class="kpi" data-kpi="rechazados"><div class="n" style="color:var(--red)">${nRech}</div><div class="lb">Rechazados</div></div>`:''}</div>${nRech?`<div class="kpi" data-kpi="rechazados"><div class="n" style="color:var(--red)">${nRech}</div><div class="lb">Rechazados</div></div>`:''}</div>
+    <div class="panel pp"><h2 class="st">Próximos muestreos</h2>
+    ${up.length?`<table><thead><tr><th>Código</th><th>Producto/Lote</th><th>Programado</th><th>Estado</th></tr></thead><tbody>${up.map(c=>`<tr class="ck" data-go="${c.sid}"><td><span class="sp">${E(c.codigo)}</span></td><td>${E(c.producto)} (${E(c.lote)})</td><td>${fmt(c.fechaProgramada)}</td><td><span class="tag ${cpS(c)}">${sL(cpS(c))}</span></td></tr>`).join('')}</tbody></table>`:`<div class="empty">Sin pendientes.</div>`}</div>`;
+  bind('[data-go]','click',el=>{selSt=el.dataset.go;activeTab='estudios';render();});
+  bind('[data-kpi]','click',el=>{
+    const kpi=el.dataset.kpi;
+    if(kpi==='rechazados'){activeTab='rechazados';render();return;}
+    // Filtrar estudios según KPI
+    dashFilter=kpi;activeTab='estudios';render();
+  });
+}
+
+/* ============================================================
+   ESTUDIOS
+============================================================ */
+function renderEstudios(){
+  studies.forEach(rS);if(selSt&&studies.find(s=>s.id===selSt)){renderDetail();return;}
+  const fl=studies.filter(s=>{
+    if(s.rechazado)return false;
+    if(filters.t&&s.tipoProducto!==filters.t)return false;
+    if(filters.q&&!(s.producto+' '+s.lote).toLowerCase().includes(filters.q.toLowerCase()))return false;
+    // Dashboard KPI filters
+    if(dashFilter==='curso')return s.stage>=1&&s.stage<=2;
+    if(dashFilter==='proximos')return s.checkpoints.some(c=>!c.fechaReal&&dTo(c.fechaProgramada)>=0&&dTo(c.fechaProgramada)<=7);
+    if(dashFilter==='atrasados')return s.checkpoints.some(c=>!c.fechaReal&&dTo(c.fechaProgramada)<0);
+    if(dashFilter==='aprobados')return s.stage===5;
+    if(dashFilter==='pendinf')return s.stage===3;
+    if(dashFilter==='pendaprob')return s.stage===4;
+    return true;});
+  document.getElementById('mc').innerHTML=`<div class="panel pp">
+    ${dashFilter?`<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:8px 12px;background:var(--tt);border:1px solid var(--teal);border-radius:8px;font-size:13px"><strong>Filtro:</strong> ${{curso:'En curso (muestreos)',proximos:'Próximos (≤7 días)',atrasados:'Atrasados',aprobados:'Aprobados',pendinf:'Completos → sin informe',pendaprob:'Informe → pend. aprobación'}[dashFilter]} (${fl.length}) <div class="spacer"></div><button class="btn sm ghost" id="clearF">✕ Limpiar</button></div>`:''}
+    <div class="toolbar"><select id="fT"><option value="">Todos</option><option value="domisanitario" ${filters.t==='domisanitario'?'selected':''}>Domisanitarios</option><option value="cosmetico" ${filters.t==='cosmetico'?'selected':''}>Cosméticos</option></select><input type="text" id="fQ" placeholder="Buscar…" value="${E(filters.q)}"><div class="spacer"></div><button class="btn" id="gN">+ Nuevo</button></div>
+  ${fl.length?`<table><thead><tr><th>Producto</th><th>Lote</th><th>Analista</th><th>Etapa</th><th>Próximo</th></tr></thead><tbody>${fl.map(s=>{const p=s.checkpoints.filter(c=>cpS(c)!=='realizado').sort((a,b)=>a.fechaProgramada.localeCompare(b.fechaProgramada))[0];return`<tr class="ck" data-go="${s.id}"><td><strong>${E(s.producto)}</strong>${s.tipoLote==='desarrollo'?' <span class="tag pendiente" style="font-size:9px">DESARROLLO</span>':s.tipoLote==='lanzamiento'?' <span class="tag proximo" style="font-size:9px">LANZAMIENTO</span>':''}</td><td class="mono">${E(s.lote)}</td><td>${(()=>{const t=TEAM.find(t=>t.e===s.emailAnalista);return t?E(t.n):E(s.emailAnalista||'—');})()}</td><td><span class="bs"><span class="dot"></span>${E(SG[s.stage].l)}</span></td><td>${p?`<span class="sp">${E(p.codigo)}</span> <span class="tag ${cpS(p)}">${sL(cpS(p))}</span>`:'<span class="tag realizado">OK</span>'}</td></tr>`;}).join('')}</tbody></table>`:`<div class="empty"><div class="big">🧪</div>Sin estudios.</div>`}</div>`;
+  q('#fT').onchange=e=>{filters.t=e.target.value;render();};q('#fQ').oninput=e=>{filters.q=e.target.value;render();};q('#gN').onclick=()=>{dashFilter='';activeTab='nuevo';render();};
+  const cf=q('#clearF');if(cf)cf.onclick=()=>{dashFilter='';render();};
+  bind('[data-go]','click',el=>{dashFilter='';selSt=el.dataset.go;render();});
+}
+
+/* ---- Checkpoint render helpers ---- */
+function renderFlatCp(cp,i,st,rech){
+  return`<div class="cc" ${rech?'style="opacity:0.6"':''}>
+    <div class="ch"><span class="sp">${E(cp.codigo)}</span><span style="font-size:12px;color:var(--ink2)">Mes ${cp.mes}</span><span class="tag ${st}">${rech?'Rechazado':sL(st)}</span><span style="font-size:12px;color:var(--ink2)">${fmt(cp.fechaProgramada)}</span></div>
+    <div class="cf" style="margin-top:8px">
+      <div class="fw"><label class="fi">Fecha real</label><input type="date" data-cp="${i}" data-f="fechaReal" value="${cp.fechaReal||''}"></div>
+      <div class="fw"><label class="fi">Aspecto</label><input type="text" data-cp="${i}" data-f="organoleptico" value="${E(cp.organoleptico||'')}"></div>
+      <div class="fw"><label class="fi">pH</label><input type="text" data-cp="${i}" data-f="ph" value="${E(cp.ph||'')}"></div>
+      <div class="fw"><label class="fi">Activo</label><input type="text" data-cp="${i}" data-f="activo" value="${E(cp.activo||'')}"></div>
+      <div class="fw"><label class="fi">Viscosidad</label><input type="text" data-cp="${i}" data-f="viscosidad" value="${E(cp.viscosidad||'')}"></div>
+      <div class="fw"><label class="fi">Micro</label><input type="text" data-cp="${i}" data-f="microbiologia" value="${E(cp.microbiologia||'')}"></div>
+      <div class="fw"><label class="fi">Homog.</label><input type="text" data-cp="${i}" data-f="homogeneidad" value="${E(cp.homogeneidad||'')}"></div>
+      <div class="fw"><label class="fi">¿Cumple?</label><select data-cp="${i}" data-f="cumple"><option value="">—</option><option value="si" ${cp.cumple==='si'?'selected':''}>Sí</option><option value="no" ${cp.cumple==='no'?'selected':''}>No</option></select></div>
+      <div class="fw" style="grid-column:1/-1"><label class="fi">Obs.</label><input type="text" data-cp="${i}" data-f="observaciones" value="${E(cp.observaciones||'')}"></div>
+    </div></div>`;
+}
+function renderCondCp(cp,i,st,rech){
+  return`<div class="cc" ${rech?'style="opacity:0.6"':''}>
+    <div class="ch"><span class="sp">${E(cp.codigo)}</span><span style="font-size:12px;color:var(--ink2)">Mes ${cp.mes} — 4 condiciones</span><span class="tag ${st}">${rech?'Rechazado':sL(st)}</span><span style="font-size:12px;color:var(--ink2)">${fmt(cp.fechaProgramada)}</span></div>
+    <div style="margin-top:8px"><div class="fw" style="max-width:200px"><label class="fi">Fecha real</label><input type="date" data-cp="${i}" data-f="fechaReal" value="${cp.fechaReal||''}"></div></div>
+    ${CONDS.map(cd=>{const d=cp.condiciones[cd.k]||{};
+      return`<div class="cond-card" style="border-left:4px solid ${cd.color}">
+        <div class="cond-title"><span class="cond-dot" style="background:${cd.color}"></span>${cd.l}</div>
+        <div class="cf">
+          <div class="fw"><label class="fi">Aspecto</label><input type="text" data-cp="${i}" data-cond="${cd.k}" data-f="organoleptico" value="${E(d.organoleptico||'')}"></div>
+          <div class="fw"><label class="fi">pH</label><input type="text" data-cp="${i}" data-cond="${cd.k}" data-f="ph" value="${E(d.ph||'')}"></div>
+          <div class="fw"><label class="fi">Activo</label><input type="text" data-cp="${i}" data-cond="${cd.k}" data-f="activo" value="${E(d.activo||'')}"></div>
+          <div class="fw"><label class="fi">Viscosidad</label><input type="text" data-cp="${i}" data-cond="${cd.k}" data-f="viscosidad" value="${E(d.viscosidad||'')}"></div>
+          <div class="fw"><label class="fi">Micro</label><input type="text" data-cp="${i}" data-cond="${cd.k}" data-f="microbiologia" value="${E(d.microbiologia||'')}"></div>
+          <div class="fw"><label class="fi">Homog.</label><input type="text" data-cp="${i}" data-cond="${cd.k}" data-f="homogeneidad" value="${E(d.homogeneidad||'')}"></div>
+          <div class="fw"><label class="fi">¿Cumple?</label><select data-cp="${i}" data-cond="${cd.k}" data-f="cumple"><option value="">—</option><option value="si" ${d.cumple==='si'?'selected':''}>Sí</option><option value="no" ${d.cumple==='no'?'selected':''}>No</option></select></div>
+          <div class="fw" style="grid-column:1/-1"><label class="fi">Obs.</label><input type="text" data-cp="${i}" data-cond="${cd.k}" data-f="observaciones" value="${E(d.observaciones||'')}"></div>
+        </div></div>`;}).join('')}
+  </div>`;
+}
+
+/* ============================================================
+   DETAIL
+============================================================ */
+function renderDetail(){
+  const s=studies.find(x=>x.id===selSt);if(!s){selSt=null;render();return;}rS(s);
+  const spt=(s.specParams||[]).map(p=>`<tr><td><strong>${E(p.p)}</strong></td><td>${E(p.e)}</td><td>${E(p.m)}</td></tr>`).join('');
+  document.getElementById('mc').innerHTML=`
+    <div class="panel pp">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px"><div><a class="lb" id="back">← Volver</a><h2 class="st" style="margin-top:8px">${E(s.producto)} — Lote ${E(s.lote)}</h2><p class="sd">${E(catL(s.categoria))} · ${E(norL(s.norma))}${s.tipoLote?' · <strong>'+{desarrollo:'Desarrollo',startup:'Start-up',programa:'Programa',lanzamiento:'Lanzamiento'}[s.tipoLote]+'</strong>':''}</p>
+      </div>
+      <div style="display:flex;gap:8px">${s.stage>=3||s.rechazado?'<button class="btn approve" id="bAp">✓ Aprobar</button><button class="btn danger" id="bRej">✗ Rechazar</button>':''}<button class="btn ghost sm" id="bDl" style="margin-left:auto">Eliminar</button></div></div>
+      ${s.rechazos&&s.rechazos.length?`<div style="margin-top:10px">${s.rechazos.map(r=>`<div style="background:var(--rt);border:1px solid var(--red);border-radius:8px;padding:10px 14px;margin-bottom:6px;font-size:13px"><strong style="color:var(--red)">✗ Rechazado</strong> <span style="color:var(--ink2)">(${r.fecha})</span><br>${E(r.motivo)}</div>`).join('')}</div>`:''}
+      ${s.stage===5?`<div style="margin-top:10px;background:var(--gt);border:1px solid var(--green);border-radius:8px;padding:10px 14px;font-size:13px"><strong style="color:var(--green)">✓ Aprobado por Dir. Técnica</strong>${s.fechaAprobacion?' <span style="color:var(--ink2)">('+s.fechaAprobacion+')</span>':''}</div>`:''}
+      <div class="stage-track">${SG.map((st,i)=>`<div class="stage-step ${i<s.stage?'done':i===s.stage?'current':''}">${i}. ${st.l}</div>`).join('')}</div>
+      <!-- Asignación email -->
+      <fieldset style="margin-top:14px"><legend>📧 Asignación</legend>
+        <div class="fg c3">
+          <div class="fw"><label class="fi">Analista asignado</label>${emailSel('eAn',s.emailAnalista||'')}</div>
+          <div class="fw"><label class="fi">Creador (alertas atraso)</label>${emailSel('eCr',s.emailCreador||'')}</div>
+          <div class="fw" style="display:flex;align-items:end;gap:8px"><button class="btn sm ghost" id="bSvMail">Guardar emails</button><button class="btn sm mail" id="bSendAssign">📧 Enviar asignación ahora</button></div>
+        </div>
+      </fieldset>
+    </div>
+    <div class="panel pp"><h2 class="st">Especificación</h2>${spt?`<div class="spv"><table><thead><tr><th>Parámetro</th><th>Espec.</th><th>Método</th></tr></thead><tbody>${spt}</tbody></table></div>`:''}</div>
+    <div class="panel pp"><h2 class="st">Muestreos <span class="rb analista">Analista</span>${s.tipoLote==='startup'?' <span class="tipo-badge acel">ACEL.</span><span class="tipo-badge nat">NAT.</span>':s.tipoLote==='desarrollo'?' <span class="tipo-badge acel">DESARROLLO</span>':s.tipoEstudio?` <span class="tipo-badge ${s.tipoEstudio==='acelerada'?'acel':'nat'}">${s.tipoEstudio==='acelerada'?'ACELERADA':'NATURAL'}</span>`:''}</h2>
+    ${s.rechazado?'<div style="background:var(--rt);border:1px solid var(--red);border-radius:8px;padding:8px 14px;margin-bottom:12px;font-size:13px;color:var(--red);font-weight:600">⛔ Estudio rechazado.</div>':''}
+    ${(()=>{
+      const hasFases = s.checkpoints.some(c=>c.fase);
+      if(hasFases){
+        const compartidos = s.checkpoints.filter(c=>c.fase==='compartido');
+        const acels = s.checkpoints.filter(c=>c.fase==='acelerada');
+        const nats = s.checkpoints.filter(c=>c.fase==='natural');
+        let h = '';
+        // T0 compartido
+        if(compartidos.length){
+          h += '<div style="margin-bottom:14px"><h3 style="font-size:13px;color:var(--ink);margin:0 0 8px 0">T0 — Medición inicial (compartida)</h3>';
+          h += compartidos.map((cp,idx)=>{const i=s.checkpoints.indexOf(cp);const st=s.rechazado?'atrasado':cpS(cp);
+            return renderFlatCp(cp,i,st,s.rechazado);}).join('');
+          h += '</div>';
+        }
+        // Acelerada
+        if(acels.length){
+          h += '<details open style="margin-bottom:14px"><summary style="cursor:pointer;font-size:14px;font-weight:700;color:var(--amber);padding:8px 0;user-select:none">▸ Etapa Acelerada <span style="font-size:12px;font-weight:400;color:var(--ink2)">(3 meses · 4 condiciones: 40°C, 4°C, Luz, Patrón)</span></summary>';
+          h += acels.map(cp=>{const i=s.checkpoints.indexOf(cp);const st=s.rechazado?'atrasado':cpS(cp);
+            if(!cp.condiciones)cp.condiciones={estufa:emptyCondResult(),heladera:emptyCondResult(),luz:emptyCondResult(),patron:emptyCondResult()};
+            if(!cp.condiciones.estufa)cp.condiciones={estufa:emptyCondResult(),heladera:emptyCondResult(),luz:emptyCondResult(),patron:emptyCondResult()};
+            return renderCondCp(cp,i,st,s.rechazado);}).join('');
+          h += '</details>';
+        }
+        // Natural
+        if(nats.length){
+          h += '<details open style="margin-bottom:14px"><summary style="cursor:pointer;font-size:14px;font-weight:700;color:var(--teal);padding:8px 0;user-select:none">▸ Etapa Natural <span style="font-size:12px;font-weight:400;color:var(--ink2)">(condiciones de almacenamiento)</span></summary>';
+          h += nats.map(cp=>{const i=s.checkpoints.indexOf(cp);const st=s.rechazado?'atrasado':cpS(cp);
+            return renderFlatCp(cp,i,st,s.rechazado);}).join('');
+          h += '<button class="btn ghost sm" data-addnat="1">+ Punto natural</button>';
+          h += '</details>';
+        }
+        return h;
+      } else {
+        // Legacy: flat checkpoints
+        let h = s.checkpoints.map((cp,i)=>{
+          const st=s.rechazado?'atrasado':cpS(cp);
+          if(cp.condiciones) return renderCondCp(cp,i,st,s.rechazado);
+          return renderFlatCp(cp,i,st,s.rechazado);
+        }).join('');
+        if(s.tipoEstudio!=='acelerada') h+='<button class="btn ghost sm" id="addCp">+ Punto</button>';
+        return h;
+      }
+    })()}</div>
+    <div class="panel pp"><h2 class="st">Informe</h2>
+    ${tfs('Alcance','alcance',s.alcance,'tfA')}${tfs('Métodos','metodos',s.metodosAnaliticos,'tfM')}${tfs('Criterios','criterios',s.criteriosAceptacion,'tfCr')}
+    <fieldset><legend>Conclusión</legend><div class="fg c3" style="margin-bottom:8px"><div class="fw"><label class="fi">Vida útil (meses)</label><input type="number" id="tfVU" value="${E(s.vidaUtilMeses||'')}"></div><div class="fw"><label class="fi">Cond. almac.</label><input type="text" id="tfCA" value="${E(s.condAlm||'')}"></div></div>
+    <div class="tb">${Object.keys(TPL.conclusion).map(k=>`<button class="tc" data-tpl="conclusion" data-k="${k}">${CHL[k]||k}</button>`).join('')}</div><textarea id="tfCo" rows="3">${E(s.conclusion||'')}</textarea></fieldset>
+    ${tfs('Rotulación','rotulacion',s.rotulacion,'tfR')}
+    <div style="display:flex;gap:10px;margin-top:6px"><button class="btn" id="bSI">Guardar informe</button><button class="btn ghost" id="bVI">Ver informe →</button></div></div>`;
+
+  q('#back').onclick=()=>{selSt=null;render();};
+  q('#bDl').onclick=async()=>{if(confirm('¿Eliminar?')){studies=studies.filter(x=>x.id!==s.id);selSt=null;await saveStudies();render();}};
+  const ap2=q('#bAp');if(ap2)ap2.onclick=async()=>{
+    if(!confirm('¿Aprobar este estudio como Dir. Técnica?'))return;
+    s.approvedManually=true;s.fechaAprobacion=td2();s.stage=5;s.rechazado=false;
+    await saveStudies();
+    // Email al analista
+    if(s.emailAnalista){
+      const body='<div style="font-family:Arial;max-width:600px"><h2 style="color:#357A55">✓ Estudio APROBADO</h2><p>Producto: <strong>'+s.producto+'</strong> — Lote: <strong>'+s.lote+'</strong></p><p>El estudio fue aprobado por Dirección Técnica el '+s.fechaAprobacion+'.</p><p style="color:#5B6B6E;font-size:12px">Programa de Estabilidad — LCC / Vessena S.A.</p></div>';
+      await gSendEmail(s.emailAnalista,'✓ APROBADO: '+s.producto+' (Lote '+s.lote+')',body);
+    }
+    render();toast('Estudio aprobado');
+  };
+  const rej=q('#bRej');if(rej)rej.onclick=async()=>{
+    const motivo=prompt('Motivo del rechazo:');
+    if(!motivo)return;
+    if(!s.rechazos)s.rechazos=[];
+    s.rechazos.push({fecha:td2(),motivo,por:'claudia.barlocco@vessena.com.uy'});
+    s.rechazado=true;
+    s.stage=2; // vuelve a muestreos para corrección
+    s.approvedManually=false;
+    s.conclusion=''; // limpiar conclusión para que rehagan
+    await saveStudies();
+    // Email al analista y creador
+    const body2='<div style="font-family:Arial;max-width:600px"><h2 style="color:#B03A2E">✗ Estudio RECHAZADO</h2><p>Producto: <strong>'+s.producto+'</strong> — Lote: <strong>'+s.lote+'</strong></p><p><strong>Motivo:</strong> '+motivo+'</p><p>Corregir y volver a enviar el informe.</p><p style="color:#5B6B6E;font-size:12px">Programa de Estabilidad — LCC / Vessena S.A.</p></div>';
+    if(s.emailAnalista)await gSendEmail(s.emailAnalista,'✗ RECHAZADO: '+s.producto+' (Lote '+s.lote+')',body2);
+    if(s.emailCreador&&s.emailCreador!==s.emailAnalista)await gSendEmail(s.emailCreador,'✗ RECHAZADO: '+s.producto+' (Lote '+s.lote+')',body2);
+    render();toast('Estudio rechazado — notificación enviada');
+  };
+  q('#bSvMail').onclick=async()=>{s.emailAnalista=q('#eAn').value.trim();s.emailCreador=q('#eCr').value.trim();await saveStudies();toast('Emails guardados');};
+  q('#bSendAssign').onclick=async()=>{
+    s.emailAnalista=q('#eAn').value.trim();s.emailCreador=q('#eCr').value.trim();
+    if(!s.emailAnalista){toast('Completá el email del analista');return;}
+    await saveStudies();
+    const body=buildAssignEmail(s);
+    await gSendEmail(s.emailAnalista,'Asignación: '+s.producto+' (Lote '+s.lote+')',body);
+  };
+  document.querySelectorAll('[data-cp]').forEach(el=>el.onchange=async()=>{
+    const i=parseInt(el.dataset.cp),f=el.dataset.f,cond=el.dataset.cond;
+    if(cond){
+      // Campo dentro de una condición acelerada
+      if(!s.checkpoints[i].condiciones)s.checkpoints[i].condiciones={estufa:emptyCondResult(),heladera:emptyCondResult(),luz:emptyCondResult(),patron:emptyCondResult()};
+      if(!s.checkpoints[i].condiciones[cond])s.checkpoints[i].condiciones[cond]=emptyCondResult();
+      s.checkpoints[i].condiciones[cond][f]=el.value;
+    } else {
+      // Campo normal (natural o fecha)
+      s.checkpoints[i][f]=el.value;
+    }
+    rS(s);await saveStudies();if(f==='fechaReal')render();
+  });
+  const addCpBtn=q('#addCp');if(addCpBtn)addCpBtn.onclick=async()=>{const lm=s.checkpoints.length?s.checkpoints[s.checkpoints.length-1].mes:0;s.checkpoints.push({codigo:`${lm+3}N`,mes:lm+3,fechaProgramada:addM(s.fechaInicio,lm+3),fechaReal:''});await saveStudies();render();};
+  const addNatBtn=q('[data-addnat]');if(addNatBtn)addNatBtn.onclick=async()=>{const nats=s.checkpoints.filter(c=>c.fase==='natural');const lm=nats.length?nats[nats.length-1].mes:0;const nm=lm+3;s.checkpoints.push({codigo:`${nm}N`,mes:nm,fase:'natural',fechaProgramada:addM(s.fechaInicio,nm),fechaReal:''});await saveStudies();render();};
+  document.querySelectorAll('.tc').forEach(ch=>ch.onclick=()=>{s.vidaUtilMeses=q('#tfVU')?.value||s.vidaUtilMeses;s.condAlm=q('#tfCA')?.value||s.condAlm;const txt=xT(TPL[ch.dataset.tpl][ch.dataset.k],s);const map={alcance:'tfA',metodos:'tfM',criterios:'tfCr',conclusion:'tfCo',rotulacion:'tfR'};const ta=q('#'+map[ch.dataset.tpl]);if(ta)ta.value=ta.value.trim()?ta.value.trim()+'\n'+txt:txt;});
+  q('#bSI').onclick=async()=>{s.alcance=q('#tfA').value;s.metodosAnaliticos=q('#tfM').value;s.criteriosAceptacion=q('#tfCr').value;s.conclusion=q('#tfCo').value;s.rotulacion=q('#tfR').value;s.vidaUtilMeses=q('#tfVU')?.value||'';s.condAlm=q('#tfCA')?.value||'';rS(s);await saveStudies();render();toast('Guardado');};
+  q('#bVI').onclick=()=>{selRep=s.id;activeTab='informe';render();};
+}
+function tfs(t,sec,val,id){return`<fieldset><legend>${t}</legend><div class="tb">${Object.keys(TPL[sec]).map(k=>`<button class="tc" data-tpl="${sec}" data-k="${k}">${CHL[k]||k}</button>`).join('')}</div><textarea id="${id}" rows="2">${E(val||'')}</textarea></fieldset>`;}
+
+/* ============================================================
+   NUEVO
+============================================================ */
+function renderNuevo(){
+  if(!productos.length){document.getElementById('mc').innerHTML=`<div class="panel pp"><div class="empty"><div class="big">📋</div>Primero creá un producto en el Catálogo.<br><button class="btn" style="margin-top:12px" id="gC">Ir</button></div></div>`;q('#gC').onclick=()=>{activeTab='catalogo';render();};return;}
+  document.getElementById('mc').innerHTML=`<div class="panel pp"><h2 class="st">Nuevo estudio de estabilidad</h2>
+  <div class="fg c3">
+    <div class="fw"><label class="fi">Producto *</label><select id="nP">${productos.map(p=>`<option value="${p.id}">${E(p.producto)} (${E(p.codigo||'')})</option>`).join('')}</select></div>
+    <div class="fw"><label class="fi">Lote *</label><input type="text" id="nL"></div>
+    <div class="fw"><label class="fi">Categoría de lote *</label>
+      <select id="nTL">
+        <option value="desarrollo">Desarrollo (mesada → solo acelerada)</option>
+        <option value="startup">Start-up (1ra fabricación → acel. + natural)</option>
+      </select>
+    </div>
+    <div class="fw"><label class="fi">Fecha inicio *</label><input type="date" id="nFI" value="${td2()}"></div>
+    <div class="fw"><label class="fi">Zona</label><select id="nZ">${ZONAS.map(z=>`<option value="${z.z}" ${z.z==='II'?'selected':''}>${z.z} — ${z.d}</option>`).join('')}</select></div>
+    <div class="fw"><label class="fi">Norma</label><select id="nN">${NORMAS.map(n=>`<option value="${n.id}">${n.l}</option>`).join('')}</select></div>
+  </div>
+  <fieldset><legend>📧 Asignación</legend>
+    <div class="fg c3">
+      <div class="fw"><label class="fi">Analista *</label>${emailSel('nEA','')}</div>
+      <div class="fw"><label class="fi">Tu email (alertas)</label>${emailSel('nEC','')}</div>
+      <div class="fw"><label class="fi">Responsable</label><input type="text" id="nR"></div>
+    </div>
+    <label style="font-size:12px;color:var(--ink2);display:flex;align-items:center;gap:6px;margin-bottom:10px"><input type="checkbox" id="nSendMail" checked> Enviar email de asignación al crear</label>
+  </fieldset>
+  <fieldset><legend>Especificación (del catálogo)</legend><div id="spP"></div></fieldset>
+  <fieldset><legend>Qué se va a crear</legend><div id="fP"></div></fieldset>
+  <button class="btn" id="bC">Crear estudio</button><button class="btn ghost" id="bX" style="margin-left:8px">Cancelar</button></div>`;
+
+  function rP2(){const p=productos.find(p=>p.id===q('#nP').value);if(!p)return;q('#spP').innerHTML=(p.params||[]).length?`<div class="spv"><table><thead><tr><th>Param</th><th>Espec.</th><th>Método</th></tr></thead><tbody>${p.params.map(s=>`<tr><td><strong>${E(s.p)}</strong></td><td>${E(s.e)}</td><td>${E(s.m)}</td></tr>`).join('')}</tbody></table></div>`:'';}
+
+  function rF2(){
+    const p=productos.find(p=>p.id===q('#nP').value);if(!p)return;
+    const tl=q('#nTL').value, fi=q('#nFI').value||td2(), cat=p.categoria;
+    let html='';
+    if(tl==='desarrollo'){
+      html=`<div class="an" style="margin-bottom:10px"><span class="icon">🧪</span> <strong>Desarrollo:</strong> se crea 1 estudio acelerado (0 + 3 meses, 4 condiciones: 40°C, 4°C, Luz, Patrón).</div>
+      <table><thead><tr><th>Estudio</th><th>Código</th><th>Mes</th><th>Fecha</th></tr></thead><tbody>
+      <tr><td rowspan="2"><span class="tipo-badge acel">ACELERADA</span></td><td><span class="sp">0A</span></td><td>0</td><td>${fmt(fi)}</td></tr>
+      <tr><td><span class="sp">3A</span></td><td>3</td><td>${fmt(addM(fi,3))}</td></tr></tbody></table>`;
+    } else {
+      const natCps = cat==='hipoclorito' ? [{c:'0N',m:0},{c:'6N',m:6}] : (FR[cat+'|natural']||[{c:'0N',m:0},{c:'12N',m:12},{c:'24N',m:24}]);
+      html=`<div class="an" style="margin-bottom:10px"><span class="icon">🏭</span> <strong>Start-up:</strong> se crean 2 estudios en paralelo para el mismo lote. La acelerada termina primero (informe provisorio). La natural confirma la vida útil.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div><h3 style="font-size:13px;color:var(--amber);margin:0 0 6px 0"><span class="tipo-badge acel">ACELERADA</span> (3 meses)</h3>
+        <table><thead><tr><th>Código</th><th>Mes</th><th>Fecha</th></tr></thead><tbody>
+        <tr><td><span class="sp">0A</span></td><td>0</td><td>${fmt(fi)}</td></tr>
+        <tr><td><span class="sp">3A</span></td><td>3</td><td>${fmt(addM(fi,3))}</td></tr></tbody></table>
+        <p style="font-size:11px;color:var(--ink2)">4 condiciones: 40°C · 4°C · Luz · Patrón</p></div>
+        <div><h3 style="font-size:13px;color:var(--teal);margin:0 0 6px 0"><span class="tipo-badge nat">NATURAL</span> (${cat==='hipoclorito'?'6':'24'} meses)</h3>
+        <table><thead><tr><th>Código</th><th>Mes</th><th>Fecha</th></tr></thead><tbody>
+        ${natCps.map(c=>`<tr><td><span class="sp">${c.c}</span></td><td>${c.m}</td><td>${fmt(addM(fi,c.m))}</td></tr>`).join('')}</tbody></table>
+        <p style="font-size:11px;color:var(--ink2)">1 muestra, condiciones de almacenamiento</p></div>
+      </div>`;
+    }
+    q('#fP').innerHTML=html;
+  }
+
+  q('#nP').onchange=()=>{rP2();rF2();};q('#nTL').onchange=rF2;q('#nFI').onchange=rF2;rP2();rF2();
+  q('#bX').onclick=()=>{activeTab='estudios';render();};
+  q('#bC').onclick=async()=>{
+    const lote=q('#nL').value.trim(),emailAn=q('#nEA').value.trim(),tl=q('#nTL').value;
+    if(!lote){toast('Falta lote');return;}
+    const p=productos.find(p=>p.id===q('#nP').value);if(!p)return;
+    const fi=q('#nFI').value||td2();
+    const ct2=CT[p.categoria]||{t:'domisanitario'};
+    const espText=(p.params||[]).map(s=>`${s.p}: ${s.e}`).join('\n');
+    const base={codigoESP:p.codigo,producto:p.producto,lote,categoria:p.categoria,tipoProducto:ct2.t,
+      fechaInicio:fi,responsable:q('#nR').value.trim(),zonaClimatica:q('#nZ').value,norma:q('#nN').value,
+      envase:p.envase,presentacion:p.presentacion,ingredienteActivo:p.activo,concentracion:p.concentracion,
+      especificacion:espText,specParams:JSON.parse(JSON.stringify(p.params||[])),
+      alcance:'',metodosAnaliticos:'',criteriosAceptacion:'',conclusion:'',rotulacion:'',
+      vidaUtilMeses:String(p.vidaUtil||''),condAlm:p.almacenamiento||'',
+      emailAnalista:emailAn,emailCreador:q('#nEC').value.trim(),approvedManually:false};
+    const grupoId='GR-'+Date.now().toString(36).toUpperCase();
+    const created=[];
+
+    if(tl==='desarrollo'){
+      const s1={...base,id:uid(),tipoEstudio:'acelerada',tipoLote:'desarrollo',grupoId,stage:1,
+        checkpoints:initDesarrolloCheckpoints(fi)};
+      studies.push(s1);created.push(s1);
+    } else {
+      const s1={...base,id:uid(),tipoEstudio:'startup',tipoLote:'startup',grupoId,stage:1,
+        checkpoints:initStartupCheckpoints(fi,p.categoria)};
+      studies.push(s1);created.push(s1);
+    }
+
+    await saveStudies();
+    if(q('#nSendMail').checked&&emailAn){
+      for(const ns of created){await gSendEmail(emailAn,'Asignación: '+ns.producto+' ('+ns.tipoEstudio+', Lote '+ns.lote+')',buildAssignEmail(ns));}
+    }
+    selSt=created[0].id;activeTab='estudios';render();
+    toast(tl==='desarrollo'?'Estudio de desarrollo creado':'Estudio start-up creado (acelerada + natural)');
+  };
+}
+
+/* ============================================================
+   INFORME
+============================================================ */
+function renderInforme(){
+  selRep=selRep||selSt||(studies[0]&&studies[0].id);const s=studies.find(x=>x.id===selRep);
+  const sel=`<div class="panel pp no-print"><div class="toolbar"><select id="rS">${studies.map(st=>`<option value="${st.id}" ${st.id===selRep?'selected':''}>${E(st.producto)} — ${E(st.lote)}</option>`).join('')}</select><div class="spacer"></div><button class="btn" id="bP">Imprimir / PDF</button></div></div>`;
+  if(!s){document.getElementById('mc').innerHTML=sel+`<div class="panel pp"><div class="empty">Sin estudios.</div></div>`;return;}
+  const z=ZONAS.find(z=>z.z===s.zonaClimatica)||{};const spt=(s.specParams||[]).map(p=>`<tr><td>${E(p.p)}</td><td>${E(p.e)}</td><td>${E(p.m)}</td><td>${E(p.lab)}</td><td>${E(p.f)}</td></tr>`).join('');
+  document.getElementById('mc').innerHTML=`${sel}<div class="panel pp rd">
+  <div class="print-only" style="text-align:center;font-size:11px;color:#666;margin-bottom:10px">SOP-LCC-049 V4.0 — REG-SOP-LCC-049-A</div>
+  <h1>Informe de Estabilidad</h1>
+  <h3>1. Identificación</h3>
+  <div class="kv"><div class="k">Producto</div><div>${E(s.producto)}</div></div><div class="kv"><div class="k">Código</div><div>${E(s.codigoESP||'—')}</div></div><div class="kv"><div class="k">Lote</div><div>${E(s.lote)}</div></div><div class="kv"><div class="k">Categoría</div><div>${E(catL(s.categoria))}</div></div><div class="kv"><div class="k">Envase</div><div>${E(s.envase||'—')}</div></div><div class="kv"><div class="k">Activo</div><div>${E(s.ingredienteActivo||'')} ${E(s.concentracion||'')}</div></div><div class="kv"><div class="k">Responsable</div><div>${E(s.responsable||'—')}</div></div><div class="kv"><div class="k">Inicio</div><div>${fmt(s.fechaInicio)}</div></div>
+  <h3>2. Alcance</h3><p style="white-space:pre-line">${E(s.alcance||'—')}</p>
+  <h3>3. Condiciones</h3><div class="kv"><div class="k">Zona</div><div>${E(s.zonaClimatica)} — ${E(z.d||'')}</div></div><div class="kv"><div class="k">Largo plazo</div><div>${E(z.l||'—')}</div></div><div class="kv"><div class="k">Acelerado</div><div>${E(z.a||'—')}</div></div><div class="kv"><div class="k">Norma</div><div>${E(norL(s.norma))}</div></div>
+  <h3>4. Especificación</h3>${spt?`<table><thead><tr><th>Parámetro</th><th>Espec.</th><th>Método</th><th>Lab.</th><th>Frec.</th></tr></thead><tbody>${spt}</tbody></table>`:E(s.especificacion||'—')}
+  <h3>5. Métodos</h3><p style="white-space:pre-line">${E(s.metodosAnaliticos||'—')}</p>
+  <h3>6. Resultados</h3><table><thead><tr><th>Cód</th><th>Mes</th><th>Fecha</th><th>Org.</th><th>pH</th><th>Activo</th><th>Visc.</th><th>Micro</th><th>Homog.</th><th>OK</th></tr></thead><tbody>${s.checkpoints.map(cp=>`<tr><td>${E(cp.codigo)}</td><td>${cp.mes}</td><td>${cp.fechaReal?fmt(cp.fechaReal):'—'}</td><td>${E(cp.organoleptico||'—')}</td><td>${E(cp.ph||'—')}</td><td>${E(cp.activo||'—')}</td><td>${E(cp.viscosidad||'—')}</td><td>${E(cp.microbiologia||'—')}</td><td>${E(cp.homogeneidad||'—')}</td><td>${cp.cumple==='si'?'Sí':cp.cumple==='no'?'No':'—'}</td></tr>`).join('')}</tbody></table>
+  <h3>7. Criterios</h3><p style="white-space:pre-line">${E(s.criteriosAceptacion||'—')}</p>
+  <h3>8. Conclusión</h3><p style="white-space:pre-line">${E(s.conclusion||'—')}</p>
+  <h3>9. Rotulación</h3><p style="white-space:pre-line">${E(s.rotulacion||'No aplica')}</p>
+  <h3>10. Aprobación</h3><div class="kv"><div class="k">Estado</div><div>${E(SG[s.stage].l)}</div></div><div class="kv"><div class="k">Dir. Técnica</div><div>${s.stage===5?'Aprobado':'Pendiente'}</div></div>
+  <div style="margin-top:40px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:30px;font-size:12px;color:var(--ink2)"><div style="border-top:1px solid var(--line);padding-top:6px">Preparado por<br><br></div><div style="border-top:1px solid var(--line);padding-top:6px">Revisado por<br><br></div><div style="border-top:1px solid var(--line);padding-top:6px">Aprobado por<br><br></div></div></div>`;
+  q('#rS').onchange=e=>{selRep=e.target.value;render();};q('#bP').onclick=()=>window.print();
+}
+
+/* RECHAZADOS */
+function renderRechazados(){
+  const rech=studies.filter(s=>s.rechazado);
+  document.getElementById('mc').innerHTML=`<div class="panel pp">
+    <h2 class="st">Estudios rechazados</h2>
+    <p class="sd">Estudios rechazados por Dir. Técnica. Se pueden reactivar desde el detalle.</p>
+    ${rech.length?`<table><thead><tr><th>Producto</th><th>Lote</th><th>Fecha rechazo</th><th>Motivo</th><th></th></tr></thead>
+    <tbody>${rech.map(s=>{const lastR=s.rechazos&&s.rechazos.length?s.rechazos[s.rechazos.length-1]:{};
+    return`<tr><td><strong>${E(s.producto)}</strong></td><td class="mono">${E(s.lote)}</td><td>${E(lastR.fecha||'—')}</td><td style="max-width:300px">${E(lastR.motivo||'—')}</td><td><button class="btn sm ghost" data-react="${s.id}">Reactivar</button> <button class="btn sm ghost" data-ver="${s.id}">Ver</button></td></tr>`;}).join('')}</tbody></table>`:`<div class="empty"><div class="big">✓</div>No hay estudios rechazados.</div>`}</div>`;
+  bind('[data-react]','click',async el=>{
+    const s=studies.find(x=>x.id===el.dataset.react);if(!s)return;
+    if(!confirm('¿Reactivar este estudio? Vuelve a Muestreos.'))return;
+    s.rechazado=false;s.stage=2;await saveStudies();render();toast('Estudio reactivado');
+  });
+  bind('[data-ver]','click',el=>{selSt=el.dataset.ver;activeTab='estudios';render();});
+}
+
+/* INFO / CRITERIOS */
+function renderInfo(){
+  document.getElementById('mc').innerHTML=`
+  <div class="panel pp rd" style="max-width:900px">
+    <h1>Programa de Estabilidad — Criterios y estructura</h1>
+    <p class="sd">Ref: SOP-LCC-049 V4.0 · Vessena S.A. · LCC / Aseguramiento de Calidad</p>
+
+    <h3>1. Tipos de estudio</h3>
+    <table>
+      <thead><tr><th>Categoría de lote</th><th>Qué se crea</th><th>Cuándo aplica</th></tr></thead>
+      <tbody>
+        <tr><td><span class="tipo-badge acel">DESARROLLO</span></td><td>1 estudio: solo <strong>Acelerada</strong> (T0 + 3A)</td><td>Lote de mesada / laboratorio. Producto nuevo en desarrollo.</td></tr>
+        <tr><td><span class="tipo-badge nat">START-UP</span></td><td>1 estudio con <strong>2 fases en paralelo</strong>:<br>• Acelerada (T0 + 3A)<br>• Natural (T0 + 12N + 24N)</td><td>Primer lote de producción. La acelerada da vida útil provisoria; la natural confirma.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>2. Estructura de cada estudio</h3>
+    <table>
+      <thead><tr><th>Checkpoint</th><th>Código</th><th>Significado</th></tr></thead>
+      <tbody>
+        <tr><td><strong>T0</strong></td><td><span class="sp">0</span></td><td>Medición inicial, compartida entre las dos fases. Se toma del lote al inicio.</td></tr>
+        <tr><td><strong>3 meses (Acelerada)</strong></td><td><span class="sp">3A</span></td><td>Evaluación a 3 meses bajo 4 condiciones aceleradas.</td></tr>
+        <tr><td><strong>6 meses (Natural)</strong></td><td><span class="sp">6N</span></td><td>Solo para Hipoclorito (vida útil 6 meses).</td></tr>
+        <tr><td><strong>12 meses (Natural)</strong></td><td><span class="sp">12N</span></td><td>Evaluación intermedia a condiciones de almacenamiento.</td></tr>
+        <tr><td><strong>24 meses (Natural)</strong></td><td><span class="sp">24N</span></td><td>Evaluación final. Confirma vida útil de 24 meses.</td></tr>
+      </tbody>
+    </table>
+    <p style="font-size:12.5px;color:var(--ink2)"><strong>A</strong> = Acelerada · <strong>N</strong> = Natural · El número indica los meses.</p>
+
+    <h3>3. Condiciones de la estabilidad acelerada (3A)</h3>
+    <p>Cada muestra se coloca bajo 4 condiciones durante 3 meses:</p>
+    <table>
+      <thead><tr><th>Condición</th><th>Color en la plataforma</th><th>Descripción</th></tr></thead>
+      <tbody>
+        <tr><td><strong>40°C (Estufa)</strong></td><td><span style="display:inline-block;width:14px;height:14px;background:#E85D04;border-radius:50%;vertical-align:middle"></span> Naranja</td><td>Temperatura elevada. Estrés térmico.</td></tr>
+        <tr><td><strong>4°C (Heladera)</strong></td><td><span style="display:inline-block;width:14px;height:14px;background:#0077B6;border-radius:50%;vertical-align:middle"></span> Azul</td><td>Temperatura baja. Evaluación de estabilidad al frío.</td></tr>
+        <tr><td><strong>Luz directa</strong></td><td><span style="display:inline-block;width:14px;height:14px;background:#E9C46A;border-radius:50%;vertical-align:middle"></span> Amarillo</td><td>Exposición a la luz. Evaluación de fotoestabilidad.</td></tr>
+        <tr><td><strong>Patrón (estándar)</strong></td><td><span style="display:inline-block;width:14px;height:14px;background:#8592A0;border-radius:50%;vertical-align:middle"></span> Gris</td><td>Muestra de referencia a condiciones de almacenamiento normales.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>4. Zona climática</h3>
+    <table>
+      <thead><tr><th>Zona</th><th>Descripción</th><th>Larga duración</th><th>Acelerado</th></tr></thead>
+      <tbody>${ZONAS.map(z=>`<tr><td><strong>${z.z}</strong></td><td>${z.d}</td><td>${z.l}</td><td>${z.a}</td></tr>`).join('')}</tbody>
+    </table>
+    <p style="font-size:12.5px;color:var(--ink2)">Uruguay: <strong>Zona II</strong> (Mediterránea/Subtropical).</p>
+
+    <h3>5. Vida útil por tipo de producto</h3>
+    <table>
+      <thead><tr><th>Categoría</th><th>Vida útil</th><th>Natural</th><th>Acelerada</th></tr></thead>
+      <tbody>
+        <tr><td>Limpiador</td><td>24 meses</td><td>0, 12, 24 meses</td><td>0, 3 meses</td></tr>
+        <tr><td>Detergente</td><td>24 meses</td><td>0, 12, 24 meses</td><td>0, 3 meses</td></tr>
+        <tr><td>Suavizante</td><td>24 meses</td><td>0, 12, 24 meses</td><td>0, 3 meses</td></tr>
+        <tr><td>Jabón de manos</td><td>24 meses</td><td>0, 12, 24 meses</td><td>0, 3 meses</td></tr>
+        <tr><td><strong>Hipoclorito</strong></td><td><strong>6 meses</strong></td><td><strong>0, 6 meses</strong></td><td>0, 3 meses</td></tr>
+        <tr><td>Alcohol/Desinfectante</td><td>24 meses</td><td>0, 12, 24 meses</td><td>0, 3 meses</td></tr>
+        <tr><td>Perfumador/Cosmético</td><td>24 meses</td><td>0, 3, 12, 24 meses</td><td>0, 3 meses</td></tr>
+      </tbody>
+    </table>
+
+    <h3>6. Flujo de trabajo (etapas automáticas)</h3>
+    <table>
+      <thead><tr><th>Etapa</th><th>Avanza cuando…</th></tr></thead>
+      <tbody>
+        <tr><td><strong>0. Solicitud</strong></td><td>Se crea el estudio.</td></tr>
+        <tr><td><strong>1. Con especificación</strong></td><td>La especificación del producto está cargada (viene del catálogo).</td></tr>
+        <tr><td><strong>2. Muestreos en curso</strong></td><td>El analista carga la primera fecha real en un checkpoint.</td></tr>
+        <tr><td><strong>3. Resultados completos</strong></td><td>Todos los checkpoints tienen fecha real.</td></tr>
+        <tr><td><strong>4. Informe redactado</strong></td><td>Se guarda el informe con la conclusión.</td></tr>
+        <tr><td><strong>5. Aprobado</strong></td><td>Dir. Técnica aprueba manualmente (botón ✓).</td></tr>
+      </tbody>
+    </table>
+    <p style="font-size:12.5px;color:var(--ink2)">Las etapas 0 a 4 avanzan <strong>automáticamente</strong>. Solo la aprobación (5) es manual.</p>
+
+    <h3>7. Notificaciones por email</h3>
+    <table>
+      <thead><tr><th>Evento</th><th>Cuándo</th><th>A quién</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Asignación</strong></td><td>Al crear un estudio</td><td>Analista + Supervisión</td></tr>
+        <tr><td><strong>Recordatorio</strong></td><td>Todos los días a las 8:00</td><td>Analista + Supervisión (muestreos de mañana)</td></tr>
+        <tr><td><strong>Atraso</strong></td><td>Todos los días a las 8:00</td><td>Analista + Supervisión (muestreos vencidos)</td></tr>
+        <tr><td><strong>Aprobación</strong></td><td>Al aprobar un estudio</td><td>Analista + Supervisión</td></tr>
+        <tr><td><strong>Rechazo</strong></td><td>Al rechazar un estudio</td><td>Analista + Creador + Supervisión</td></tr>
+      </tbody>
+    </table>
+    <p style="font-size:12.5px;color:var(--ink2)"><strong>Supervisión fija:</strong> claudia.barlocco@vessena.com.uy · antonella.nunez@vessena.com.uy — reciben copia de todas las notificaciones.</p>
+
+    <h3>8. Parámetros evaluados (por categoría)</h3>
+    ${Object.entries(CT).map(([k,v])=>`
+      <details style="margin-bottom:8px"><summary style="cursor:pointer;font-weight:600;color:var(--td);padding:4px 0">${v.l} (${v.p.length} parámetros)</summary>
+      <table style="margin-top:4px"><thead><tr><th>Parámetro</th><th>Especificación típica</th><th>Método</th><th>Lab.</th></tr></thead>
+      <tbody>${v.p.map(p=>`<tr><td>${E(p.p)}</td><td>${E(p.e)}</td><td>${E(p.m)}</td><td>${E(p.lab)}</td></tr>`).join('')}</tbody></table>
+      </details>`).join('')}
+
+    <h3>9. Normas de referencia</h3>
+    <table>
+      <thead><tr><th>Norma</th><th>Aplicación</th></tr></thead>
+      <tbody>
+        <tr><td>OMS Informe 43/09, Anexo 2</td><td>Zonas climáticas y estabilidad (referencia general)</td></tr>
+        <tr><td><strong>CIPAC MT 46.3</strong></td><td><strong>Domisanitarios</strong> — recomendado por MSP Uruguay</td></tr>
+        <tr><td>Decreto 148/015</td><td>RT MERCOSUR BPF Domisanitarios</td></tr>
+        <tr><td>ICH Q1A (R2)</td><td>Stability testing (referencia farmacéutica)</td></tr>
+        <tr><td><strong>Cosmetics Europe Guidelines (2004)</strong></td><td><strong>Cosméticos</strong> — estabilidad</td></tr>
+        <tr><td>ISO 29621</td><td>Riesgo microbiológico en cosméticos</td></tr>
+        <tr><td>ISO 22716</td><td>BPF Cosméticos</td></tr>
+      </tbody>
+    </table>
+
+    <h3>10. Criterio de cambio significativo</h3>
+    <p>Se considera cambio significativo (SOP-LCC-049 §5.10):</p>
+    <ul style="font-size:13px;color:var(--ink);padding-left:20px">
+      <li>Pérdida del <strong>5%</strong> en valoración del ingrediente activo vs. valor inicial</li>
+      <li>Producto de degradación por encima del límite especificado</li>
+      <li>pH fuera de los límites establecidos</li>
+      <li>Incumplimiento de las especificaciones de aspecto y propiedades físicas</li>
+    </ul>
+  </div>`;
+}
+
+/* RENDER */
+function render(){if(!SCRIPT_URL){renderSetup();renderNav();rSync();return;}renderNav();rSync();
+  if(activeTab==='dashboard')renderDashboard();else if(activeTab==='estudios')renderEstudios();else if(activeTab==='rechazados')renderRechazados();else if(activeTab==='catalogo')renderCatalogo();else if(activeTab==='nuevo')renderNuevo();else if(activeTab==='informe')renderInforme();else if(activeTab==='info')renderInfo();else if(activeTab==='config')renderSetup();}
+(async()=>{if(SCRIPT_URL)await loadAll();render();})();
+</script>
+</body>
+</html>
