@@ -359,57 +359,36 @@ function buildAssignEmail(s){
 }
 
 async function loadAll(){const d=await gRead();if(d){if(d.productos)try{productos=JSON.parse(d.productos);}catch(e){}if(d.studies)try{studies=JSON.parse(d.studies);}catch(e){}}
-  // Auto-fix en memoria + guardar si hay cambios
-  let needsSave=false;
+  // Auto-fix en memoria — NUNCA guarda automáticamente
   studies.forEach(s=>{
-    if(s.rechazos&&s.rechazos.length&&!s.approvedManually&&s.stage!==5){
-      if(!s.rechazado){s.rechazado=true;needsSave=true;}
-    }
-    // Fix 4S → 3A (error de 4 semanas → correcto 3 meses)
+    if(s.rechazos&&s.rechazos.length&&!s.approvedManually&&s.stage!==5) s.rechazado=true;
     s.checkpoints.forEach(cp=>{
-      if(cp.codigo==='4S'){
-        cp.codigo='3A'; cp.mes=3; cp.fechaReal='';
-        if(s.fechaInicio) cp.fechaProgramada=addM(s.fechaInicio,3);
-        if(!cp.condiciones) cp.condiciones={estufa:emptyCondResult(),heladera:emptyCondResult(),luz:emptyCondResult(),patron:emptyCondResult()};
-        if(!cp.fase) cp.fase='acelerada';
-        needsSave=true;
-      }
+      if(cp.codigo==='4S'){cp.codigo='3A';cp.mes=3;cp.fechaReal='';if(s.fechaInicio)cp.fechaProgramada=addM(s.fechaInicio,3);if(!cp.condiciones)cp.condiciones={estufa:emptyCondResult(),heladera:emptyCondResult(),luz:emptyCondResult(),patron:emptyCondResult()};if(!cp.fase)cp.fase='acelerada';}
     });
-    // Fix T0 sin fase
-    if(s.checkpoints.length&&s.checkpoints[0].mes===0&&!s.checkpoints[0].fase&&(s.tipoLote==='desarrollo'||s.tipoLote==='startup'||s.tipoLote==='lanzamiento')){
-      s.checkpoints[0].fase='compartido'; s.checkpoints[0].codigo='0'; needsSave=true;
-    }
-    // Fix acelerada sin condiciones
+    if(s.checkpoints.length&&s.checkpoints[0].mes===0&&!s.checkpoints[0].fase&&(s.tipoLote==='desarrollo'||s.tipoLote==='startup'||s.tipoLote==='lanzamiento')){s.checkpoints[0].fase='compartido';s.checkpoints[0].codigo='0';}
     s.checkpoints.forEach(cp=>{
-      if(cp.mes>0&&!cp.condiciones&&(cp.codigo.includes('A')||cp.fase==='acelerada')){
-        cp.condiciones={estufa:emptyCondResult(),heladera:emptyCondResult(),luz:emptyCondResult(),patron:emptyCondResult()};
-        if(cp.activo||cp.ph||cp.viscosidad){
-          cp.condiciones.patron={organoleptico:cp.organoleptico||'',ph:cp.ph||'',activo:cp.activo||'',viscosidad:cp.viscosidad||'',microbiologia:cp.microbiologia||'',homogeneidad:cp.homogeneidad||'',cumple:cp.cumple||'',observaciones:cp.observaciones||''};
-        }
-        if(!cp.fase) cp.fase='acelerada'; needsSave=true;
-      }
+      if(cp.mes>0&&!cp.condiciones&&(cp.codigo.includes('A')||cp.fase==='acelerada')){cp.condiciones={estufa:emptyCondResult(),heladera:emptyCondResult(),luz:emptyCondResult(),patron:emptyCondResult()};if(cp.activo||cp.ph||cp.viscosidad){cp.condiciones.patron={organoleptico:cp.organoleptico||'',ph:cp.ph||'',activo:cp.activo||'',viscosidad:cp.viscosidad||'',microbiologia:cp.microbiologia||'',homogeneidad:cp.homogeneidad||'',cumple:cp.cumple||'',observaciones:cp.observaciones||''};};if(!cp.fase)cp.fase='acelerada';}
     });
-    // Fix lanzamiento → startup con fases naturales
-    if(s.tipoLote==='lanzamiento'&&!s.checkpoints.some(c=>c.fase==='natural')){
-      s.tipoLote='startup'; s.tipoEstudio='startup';
-      const natMs=(s.categoria==='hipoclorito')?[6]:[12,24];
-      natMs.forEach(m=>{if(!s.checkpoints.some(c=>c.mes===m)) s.checkpoints.push({codigo:`${m}N`,mes:m,fase:'natural',fechaProgramada:s.fechaInicio?addM(s.fechaInicio,m):'',fechaReal:''});});
-      needsSave=true;
-    }
+    if(s.tipoLote==='lanzamiento'&&!s.checkpoints.some(c=>c.fase==='natural')){s.tipoLote='startup';s.tipoEstudio='startup';const natMs=(s.categoria==='hipoclorito')?[6]:[12,24];natMs.forEach(m=>{if(!s.checkpoints.some(c=>c.mes===m))s.checkpoints.push({codigo:`${m}N`,mes:m,fase:'natural',fechaProgramada:s.fechaInicio?addM(s.fechaInicio,m):'',fechaReal:''});});}
+    if(!s.rechazado&&s.stage!==5) s.stage=cS(s);
   });
-  if(needsSave) setTimeout(()=>saveStudies(),1500);
-  // Forzar recálculo de etapas para todos los estudios
-  let stageChanged=false;
-  studies.forEach(s=>{
-    if(s.rechazado||s.stage===5)return;
-    const old=s.stage;
-    s.stage=cS(s);
-    if(s.stage!==old)stageChanged=true;
-  });
-  if(stageChanged&&!needsSave) setTimeout(()=>saveStudies(),2000);
+  // Protección: guardar cantidad cargada para evitar sobreescritura accidental
+  window._loadedCounts={p:productos.length,s:studies.length};
 }
-async function saveStudies(){await gWrite('studies',studies);}
-async function saveProductos(){await gWrite('productos',productos);}
+async function saveStudies(){
+  // Protección: no guardar si hay menos datos que los que se cargaron
+  if(window._loadedCounts&&studies.length<window._loadedCounts.s-1&&window._loadedCounts.s>5){
+    console.warn('PROTECCIÓN: no se guardó porque hay menos estudios ('+studies.length+') que los cargados ('+window._loadedCounts.s+')');
+    toast('Error: datos incompletos, no se guardó');return;
+  }
+  await gWrite('studies',studies);window._loadedCounts.s=studies.length;
+}
+async function saveProductos(){
+  if(window._loadedCounts&&productos.length<window._loadedCounts.p-1&&window._loadedCounts.p>5){
+    console.warn('PROTECCIÓN: no se guardó productos');toast('Error: datos incompletos');return;
+  }
+  await gWrite('productos',productos);window._loadedCounts.p=productos.length;
+}
 
 /* ============================================================
    TABS
