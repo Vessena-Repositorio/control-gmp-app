@@ -517,23 +517,33 @@ function renderEstudios(){
   bind('[data-go]','click',el=>{dashFilter='';selSt=el.dataset.go;render();});
 }
 
+/* CAMPOS DE MUESTREO POR CATEGORÍA */
+const CAT_FIELDS={
+  limpiador:    [{k:'organoleptico',l:'Aspecto/Color/Olor'},{k:'ph',l:'pH'},{k:'activo',l:'Materia activa %'},{k:'densidad',l:'Densidad'},{k:'microbiologia',l:'Microbiología'}],
+  detergente:   [{k:'organoleptico',l:'Aspecto/Color/Olor'},{k:'ph',l:'pH'},{k:'activo',l:'Materia activa %'},{k:'viscosidad',l:'Viscosidad (cps)'},{k:'microbiologia',l:'Microbiología'}],
+  suavizante:   [{k:'organoleptico',l:'Aspecto/Color/Olor'},{k:'ph',l:'pH'},{k:'activo',l:'Materia activa %'},{k:'viscosidad',l:'Viscosidad (cps)'},{k:'microbiologia',l:'Microbiología'}],
+  jabon_manos:  [{k:'organoleptico',l:'Aspecto/Color/Olor'},{k:'ph',l:'pH'},{k:'activo',l:'Materia activa %'},{k:'viscosidad',l:'Viscosidad (cps)'},{k:'microbiologia',l:'Microbiología'}],
+  hipoclorito:  [{k:'organoleptico',l:'Aspecto/Color/Olor'},{k:'activo',l:'Cloro (g/L)'},{k:'densidad',l:'Densidad 20°C'}],
+  alcohol:      [{k:'organoleptico',l:'Aspecto/Color/Olor'},{k:'activo',l:'Graduación alcohólica %'}],
+  perfumador:   [{k:'organoleptico',l:'Aspecto/Color/Olor'},{k:'activo',l:'Graduación alcohólica %'}],
+  cosmetico:    [{k:'organoleptico',l:'Aspecto/Color/Olor'},{k:'ph',l:'pH'},{k:'activo',l:'Activo'},{k:'microbiologia',l:'Microbiología'}],
+};
+function getFields(cat){return CAT_FIELDS[cat]||CAT_FIELDS.limpiador;}
+
 /* ---- Checkpoint render helpers ---- */
-function renderFlatCp(cp,i,st,rech){
+function renderFlatCp(cp,i,st,rech,cat){
+  const fields=getFields(cat);
   return`<div class="cc" ${rech?'style="opacity:0.6"':''}>
     <div class="ch"><span class="sp">${E(cp.codigo)}</span><span style="font-size:12px;color:var(--ink2)">Mes ${cp.mes}</span><span class="tag ${st}">${rech?'Rechazado':sL(st)}</span><span style="font-size:12px;color:var(--ink2)">${fmt(cp.fechaProgramada)}</span></div>
     <div class="cf" style="margin-top:8px">
       <div class="fw"><label class="fi">Fecha real</label><input type="date" data-cp="${i}" data-f="fechaReal" value="${cp.fechaReal||''}"></div>
-      <div class="fw"><label class="fi">Aspecto</label><input type="text" data-cp="${i}" data-f="organoleptico" value="${E(cp.organoleptico||'')}"></div>
-      <div class="fw"><label class="fi">pH</label><input type="text" data-cp="${i}" data-f="ph" value="${E(cp.ph||'')}"></div>
-      <div class="fw"><label class="fi">Activo</label><input type="text" data-cp="${i}" data-f="activo" value="${E(cp.activo||'')}"></div>
-      <div class="fw"><label class="fi">Viscosidad</label><input type="text" data-cp="${i}" data-f="viscosidad" value="${E(cp.viscosidad||'')}"></div>
-      <div class="fw"><label class="fi">Micro</label><input type="text" data-cp="${i}" data-f="microbiologia" value="${E(cp.microbiologia||'')}"></div>
-      <div class="fw"><label class="fi">Homog.</label><input type="text" data-cp="${i}" data-f="homogeneidad" value="${E(cp.homogeneidad||'')}"></div>
+      ${fields.map(f=>`<div class="fw"><label class="fi">${f.l}</label><input type="text" data-cp="${i}" data-f="${f.k}" value="${E(cp[f.k]||'')}"></div>`).join('')}
       <div class="fw"><label class="fi">¿Cumple?</label><select data-cp="${i}" data-f="cumple"><option value="">—</option><option value="si" ${cp.cumple==='si'?'selected':''}>Sí</option><option value="no" ${cp.cumple==='no'?'selected':''}>No</option></select></div>
       <div class="fw" style="grid-column:1/-1"><label class="fi">Obs.</label><input type="text" data-cp="${i}" data-f="observaciones" value="${E(cp.observaciones||'')}"></div>
     </div></div>`;
 }
-function renderCondCp(cp,i,st,rech){
+function renderCondCp(cp,i,st,rech,cat){
+  const fields=getFields(cat);
   return`<div class="cc" ${rech?'style="opacity:0.6"':''}>
     <div class="ch"><span class="sp">${E(cp.codigo)}</span><span style="font-size:12px;color:var(--ink2)">Mes ${cp.mes} — 4 condiciones</span><span class="tag ${st}">${rech?'Rechazado':sL(st)}</span><span style="font-size:12px;color:var(--ink2)">${fmt(cp.fechaProgramada)}</span></div>
     <div style="margin-top:8px"><div class="fw" style="max-width:200px"><label class="fi">Fecha real</label><input type="date" data-cp="${i}" data-f="fechaReal" value="${cp.fechaReal||''}"></div></div>
@@ -541,12 +551,7 @@ function renderCondCp(cp,i,st,rech){
       return`<div class="cond-card" style="border-left:4px solid ${cd.color}">
         <div class="cond-title"><span class="cond-dot" style="background:${cd.color}"></span>${cd.l}</div>
         <div class="cf">
-          <div class="fw"><label class="fi">Aspecto</label><input type="text" data-cp="${i}" data-cond="${cd.k}" data-f="organoleptico" value="${E(d.organoleptico||'')}"></div>
-          <div class="fw"><label class="fi">pH</label><input type="text" data-cp="${i}" data-cond="${cd.k}" data-f="ph" value="${E(d.ph||'')}"></div>
-          <div class="fw"><label class="fi">Activo</label><input type="text" data-cp="${i}" data-cond="${cd.k}" data-f="activo" value="${E(d.activo||'')}"></div>
-          <div class="fw"><label class="fi">Viscosidad</label><input type="text" data-cp="${i}" data-cond="${cd.k}" data-f="viscosidad" value="${E(d.viscosidad||'')}"></div>
-          <div class="fw"><label class="fi">Micro</label><input type="text" data-cp="${i}" data-cond="${cd.k}" data-f="microbiologia" value="${E(d.microbiologia||'')}"></div>
-          <div class="fw"><label class="fi">Homog.</label><input type="text" data-cp="${i}" data-cond="${cd.k}" data-f="homogeneidad" value="${E(d.homogeneidad||'')}"></div>
+          ${fields.map(f=>`<div class="fw"><label class="fi">${f.l}</label><input type="text" data-cp="${i}" data-cond="${cd.k}" data-f="${f.k}" value="${E(d[f.k]||'')}"></div>`).join('')}
           <div class="fw"><label class="fi">¿Cumple?</label><select data-cp="${i}" data-cond="${cd.k}" data-f="cumple"><option value="">—</option><option value="si" ${d.cumple==='si'?'selected':''}>Sí</option><option value="no" ${d.cumple==='no'?'selected':''}>No</option></select></div>
           <div class="fw" style="grid-column:1/-1"><label class="fi">Obs.</label><input type="text" data-cp="${i}" data-cond="${cd.k}" data-f="observaciones" value="${E(d.observaciones||'')}"></div>
         </div></div>`;}).join('')}
@@ -590,7 +595,7 @@ function renderDetail(){
         if(compartidos.length){
           h += '<div style="margin-bottom:14px"><h3 style="font-size:13px;color:var(--ink);margin:0 0 8px 0">T0 — Medición inicial (compartida)</h3>';
           h += compartidos.map((cp,idx)=>{const i=s.checkpoints.indexOf(cp);const st=s.rechazado?'atrasado':cpS(cp);
-            return renderFlatCp(cp,i,st,s.rechazado);}).join('');
+            return renderFlatCp(cp,i,st,s.rechazado,s.categoria);}).join('');
           h += '</div>';
         }
         // Acelerada
@@ -599,14 +604,14 @@ function renderDetail(){
           h += acels.map(cp=>{const i=s.checkpoints.indexOf(cp);const st=s.rechazado?'atrasado':cpS(cp);
             if(!cp.condiciones)cp.condiciones={estufa:emptyCondResult(),heladera:emptyCondResult(),luz:emptyCondResult(),patron:emptyCondResult()};
             if(!cp.condiciones.estufa)cp.condiciones={estufa:emptyCondResult(),heladera:emptyCondResult(),luz:emptyCondResult(),patron:emptyCondResult()};
-            return renderCondCp(cp,i,st,s.rechazado);}).join('');
+            return renderCondCp(cp,i,st,s.rechazado,s.categoria);}).join('');
           h += '</details>';
         }
         // Natural
         if(nats.length){
           h += '<details open style="margin-bottom:14px"><summary style="cursor:pointer;font-size:14px;font-weight:700;color:var(--teal);padding:8px 0;user-select:none">▸ Etapa Natural <span style="font-size:12px;font-weight:400;color:var(--ink2)">(condiciones de almacenamiento)</span></summary>';
           h += nats.map(cp=>{const i=s.checkpoints.indexOf(cp);const st=s.rechazado?'atrasado':cpS(cp);
-            return renderFlatCp(cp,i,st,s.rechazado);}).join('');
+            return renderFlatCp(cp,i,st,s.rechazado,s.categoria);}).join('');
           h += '<button class="btn ghost sm" data-addnat="1">+ Punto natural</button>';
           h += '</details>';
         }
@@ -615,8 +620,8 @@ function renderDetail(){
         // Legacy: flat checkpoints
         let h = s.checkpoints.map((cp,i)=>{
           const st=s.rechazado?'atrasado':cpS(cp);
-          if(cp.condiciones) return renderCondCp(cp,i,st,s.rechazado);
-          return renderFlatCp(cp,i,st,s.rechazado);
+          if(cp.condiciones) return renderCondCp(cp,i,st,s.rechazado,s.categoria);
+          return renderFlatCp(cp,i,st,s.rechazado,s.categoria);
         }).join('');
         if(s.tipoEstudio!=='acelerada') h+='<button class="btn ghost sm" id="addCp">+ Punto</button>';
         return h;
