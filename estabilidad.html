@@ -487,23 +487,54 @@ function renderCatForm(){
    DASHBOARD
 ============================================================ */
 function renderDashboard(){
-  studies.forEach(rS);const activeStudies=studies.filter(s=>!s.rechazado);const cps=[];activeStudies.forEach(s=>s.checkpoints.forEach(cp=>cps.push({...cp,sid:s.id,producto:s.producto,lote:s.lote})));
-  const at=cps.filter(c=>cpS(c)==='atrasado'),pr=cps.filter(c=>cpS(c)==='proximo');
-  const ec=activeStudies.filter(s=>s.stage>=1&&s.stage<=2).length,ap=activeStudies.filter(s=>s.stage===5).length;
+  studies.forEach(rS);
+  const activos=studies.filter(s=>!s.rechazado);
+  // Para cada estudio activo, su PRÓXIMO checkpoint pendiente
+  const pendientes=[];
+  activos.forEach(s=>{
+    const next=s.checkpoints.find(cp=>!cp.fechaReal);
+    if(next) pendientes.push({...next,sid:s.id,producto:s.producto,lote:s.lote,stage:s.stage});
+  });
+  pendientes.sort((a,b)=>(a.fechaProgramada||'9').localeCompare(b.fechaProgramada||'9'));
+  let nProx=0,nAtras=0;
+  pendientes.forEach(cp=>{if(!cp.fechaProgramada)return;const d=dTo(cp.fechaProgramada);if(d<0)nAtras++;else if(d<=7)nProx++;});
+  const enCurso=activos.filter(s=>s.stage>=1&&s.stage<=2).length;
+  const aprobados=activos.filter(s=>s.stage===5).length;
+  const pendInf=activos.filter(s=>s.stage===3).length;
+  const pendAprob=activos.filter(s=>s.stage===4).length;
   const nRech=studies.filter(s=>s.rechazado).length;
-  const pendInf=activeStudies.filter(s=>s.stage===3).length;
-  const pendAprob=activeStudies.filter(s=>s.stage===4).length;
-  const up=cps.filter(c=>cpS(c)!=='realizado').sort((a,b)=>a.fechaProgramada.localeCompare(b.fechaProgramada)).slice(0,8);
   document.getElementById('mc').innerHTML=`
     ${!productos.length?'<div class="an" style="margin-bottom:16px"><span class="icon">📋</span> Primer paso: andá a "Catálogo" y creá tu primer producto.</div>':''}
-    <div class="kpi-grid"><div class="kpi teal" data-kpi="curso"><div class="n">${ec}</div><div class="lb">En curso (muestreos)</div></div><div class="kpi amber" data-kpi="proximos"><div class="n">${pr.length}</div><div class="lb">Próximos (≤7d)</div></div><div class="kpi red" data-kpi="atrasados"><div class="n">${at.length}</div><div class="lb">Atrasados</div></div>${pendInf?`<div class="kpi" data-kpi="pendinf" style="border-left:3px solid var(--amber)"><div class="n" style="color:var(--amber)">${pendInf}</div><div class="lb">Completos → sin informe</div></div>`:''} ${pendAprob?`<div class="kpi" data-kpi="pendaprob" style="border-left:3px solid #7C3AED"><div class="n" style="color:#7C3AED">${pendAprob}</div><div class="lb">Informe → pend. aprobación</div></div>`:''}<div class="kpi green" data-kpi="aprobados"><div class="n">${ap}</div><div class="lb">Aprobados</div></div>${nRech?`<div class="kpi" data-kpi="rechazados"><div class="n" style="color:var(--red)">${nRech}</div><div class="lb">Rechazados</div></div>`:''}</div>${nRech?`<div class="kpi" data-kpi="rechazados"><div class="n" style="color:var(--red)">${nRech}</div><div class="lb">Rechazados</div></div>`:''}</div>
-    <div class="panel pp"><h2 class="st">Próximos muestreos</h2>
-    ${up.length?`<table><thead><tr><th>Código</th><th>Producto/Lote</th><th>Programado</th><th>Estado</th></tr></thead><tbody>${up.map(c=>`<tr class="ck" data-go="${c.sid}"><td><span class="sp">${E(c.codigo)}</span></td><td>${E(c.producto)} (${E(c.lote)})</td><td>${fmt(c.fechaProgramada)}</td><td><span class="tag ${cpS(c)}">${sL(cpS(c))}</span></td></tr>`).join('')}</tbody></table>`:`<div class="empty">Sin pendientes.</div>`}</div>`;
+    <div class="kpi-grid">
+      <div class="kpi teal" data-kpi="curso"><div class="n">${enCurso}</div><div class="lb">En curso</div></div>
+      <div class="kpi amber" data-kpi="proximos"><div class="n">${nProx}</div><div class="lb">Próximos (≤7d)</div></div>
+      <div class="kpi red" data-kpi="atrasados"><div class="n">${nAtras}</div><div class="lb">Atrasados</div></div>
+      ${pendInf?`<div class="kpi" data-kpi="pendinf" style="border-left:3px solid var(--amber)"><div class="n" style="color:var(--amber)">${pendInf}</div><div class="lb">Completos → sin informe</div></div>`:''}
+      ${pendAprob?`<div class="kpi" data-kpi="pendaprob" style="border-left:3px solid #7C3AED"><div class="n" style="color:#7C3AED">${pendAprob}</div><div class="lb">Pend. aprobación</div></div>`:''}
+      <div class="kpi green" data-kpi="aprobados"><div class="n">${aprobados}</div><div class="lb">Aprobados</div></div>
+      ${nRech?`<div class="kpi" data-kpi="rechazados"><div class="n" style="color:var(--red)">${nRech}</div><div class="lb">Rechazados</div></div>`:''}
+    </div>
+    <div class="panel pp">
+      <h2 class="st">Próxima acción por estudio</h2>
+      <p class="sd">El checkpoint pendiente más cercano de cada estudio activo.</p>
+      ${pendientes.length?`<table>
+        <thead><tr><th>Checkpoint</th><th>Producto / Lote</th><th>Programado</th><th>Estado</th></tr></thead>
+        <tbody>${pendientes.slice(0,20).map(cp=>{
+          const d=cp.fechaProgramada?dTo(cp.fechaProgramada):999;
+          const st=!cp.fechaProgramada?'pendiente':d<0?'atrasado':d<=7?'proximo':'pendiente';
+          return`<tr class="ck" data-go="${cp.sid}">
+            <td><span class="sp">${E(cp.codigo)}</span></td>
+            <td>${E(cp.producto)} <span class="mono" style="color:var(--ink2)">(${E(cp.lote)})</span></td>
+            <td>${fmt(cp.fechaProgramada)}</td>
+            <td><span class="tag ${st}">${sL(st)}</span></td>
+          </tr>`;}).join('')}
+        </tbody>
+      </table>`:`<div class="empty">Todos los estudios están al día.</div>`}
+    </div>`;
   bind('[data-go]','click',el=>{selSt=el.dataset.go;activeTab='estudios';render();});
   bind('[data-kpi]','click',el=>{
     const kpi=el.dataset.kpi;
     if(kpi==='rechazados'){activeTab='rechazados';render();return;}
-    // Filtrar estudios según KPI
     dashFilter=kpi;activeTab='estudios';render();
   });
 }
