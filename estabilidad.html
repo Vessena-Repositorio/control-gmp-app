@@ -2,6 +2,9 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Programa de Estabilidad — LCC</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
@@ -95,6 +98,7 @@ a.lb{font-size:12.5px;color:var(--td);cursor:pointer;text-decoration:underline;}
   <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
     <div><div class="app-title">Programa de Estabilidad · LCC</div><div class="app-sub">SOP-LCC-049 V4.0 · Vessena S.A.</div></div>
     <div class="sync-bar" id="syncBar"></div>
+    <div style="font-size:10px;color:#7AAFA8;margin-left:8px">v4.1</div>
   </div>
   <nav class="tabs" id="tabNav"></nav>
 </header>
@@ -129,7 +133,7 @@ async function gSendEmail(to,subject,body){if(!SCRIPT_URL)return;
   const dest=[...all].filter(Boolean).join(',');
   try{await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'email',to:dest,subject,body})});toast('Email enviado');}catch(e){toast('Error enviando email');}}
 
-function rSync(){const b=document.getElementById('syncBar');if(!b)return;const m={ok:['ok','Google Sheets ✓'],error:['err','Error conexión'],loading:['loading','Guardando…'],disconnected:['err','No conectado']};const[c,t]=m[syncStatus]||m.disconnected;b.innerHTML=`<span class="sync-dot ${c}"></span> ${t}`;}
+function rSync(){const b=document.getElementById('syncBar');if(!b)return;const m={ok:['ok','Google Sheets ✓'],error:['err','Error conexión'],loading:['loading','Sincronizando…'],disconnected:['err','No conectado']};const[c,t]=m[syncStatus]||m.disconnected;b.innerHTML=`<span class="sync-dot ${c}"></span> ${t} <a style="color:#BFE0DB;cursor:pointer;font-size:11px;margin-left:6px" id="btnRL">↻ Recargar datos</a>`;const rl=document.getElementById('btnRL');if(rl)rl.onclick=async()=>{toast('Recargando…');await loadAll();render();toast('Datos actualizados');};}
 
 /* ============================================================
    APPS SCRIPT CODE (with email support)
