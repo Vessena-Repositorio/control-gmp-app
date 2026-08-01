@@ -109,7 +109,13 @@ let SCRIPT_URL=localStorage.getItem('gscript_url')||'https://script.google.com/m
 let syncStatus='disconnected';
 
 async function gRead(){if(!SCRIPT_URL)return null;syncStatus='loading';rSync();try{const r=await fetch(SCRIPT_URL+'?t='+Date.now());const d=await r.json();syncStatus='ok';rSync();return d;}catch(e){syncStatus='error';rSync();return null;}}
-async function gWrite(key,value){if(!SCRIPT_URL)return;syncStatus='loading';rSync();try{const ctrl=new AbortController();const tid=setTimeout(()=>ctrl.abort(),10000);await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'save',key,value:JSON.stringify(value)}),signal:ctrl.signal});clearTimeout(tid);syncStatus='ok';rSync();}catch(e){syncStatus='ok';rSync();}}
+async function gWrite(key,value){if(!SCRIPT_URL)return;syncStatus='loading';rSync();try{const ctrl=new AbortController();const tid=setTimeout(()=>ctrl.abort(),10000);await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'save',key,value:JSON.stringify(value)}),signal:ctrl.signal});clearTimeout(tid);
+  // Verificar que se guardó
+  await new Promise(r=>setTimeout(r,1500));
+  const check=await fetch(SCRIPT_URL+'?t='+Date.now());
+  const d=await check.json();
+  if(d[key]){const saved=JSON.parse(d[key]);syncStatus='ok';rSync();toast('Guardado ✓ ('+saved.length+' registros)');} else {syncStatus='error';rSync();toast('⚠ No se pudo verificar el guardado');}
+  }catch(e){syncStatus='error';rSync();toast('Error al guardar — reintentá');}}
 /* EMAILS FIJOS — reciben copia de TODAS las notificaciones */
 const CC_EMAILS=['claudia.barlocco@vessena.com.uy','antonella.nunez@vessena.com.uy'];
 
