@@ -113,7 +113,7 @@ let SCRIPT_URL=localStorage.getItem('gscript_url')||'https://script.google.com/m
 let syncStatus='disconnected';
 
 async function gRead(){if(!SCRIPT_URL)return null;syncStatus='loading';rSync();try{const r=await fetch(SCRIPT_URL+'?t='+Date.now()+Math.random());const d=await r.json();syncStatus='ok';rSync();return d;}catch(e){console.error('gRead:',e);syncStatus='error';rSync();return null;}}
-async function gWrite(key,value){if(!SCRIPT_URL)return;_dirty=true;syncStatus='loading';rSync();try{await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'save',key,value:JSON.stringify(value)})});syncStatus='ok';rSync();toast('Guardado ✓');setTimeout(()=>{_dirty=false;},5000);}catch(e){syncStatus='error';rSync();toast('Error al guardar');_dirty=false;}}
+async function gWrite(key,value){if(!SCRIPT_URL)return;_dirty=true;syncStatus='loading';rSync();try{await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'save',key,value:JSON.stringify(value)})});syncStatus='ok';rSync();toast('Guardado ✓');setTimeout(()=>{_dirty=false;},15000);}catch(e){syncStatus='error';rSync();toast('Error al guardar');_dirty=false;}}
 /* EMAILS FIJOS — reciben copia de TODAS las notificaciones */
 const CC_EMAILS=['claudia.barlocco@vessena.com.uy','antonella.nunez@vessena.com.uy'];
 const APP_URL='https://vessena-repositorio.github.io/control-gmp-app/estabilidad.html';
@@ -512,6 +512,7 @@ function renderDashboard(){
           </tr>`;}).join('')}
         </tbody>
       </table>`:`<div class="empty">Todos los estudios están al día.</div>`}
+      <div style="margin-top:10px;padding:8px;background:#f0f0f0;border-radius:6px;font-size:11px;color:#666;font-family:monospace">DEBUG: ${studies.length} estudios en memoria · ${activos.length} activos · ${pendientes.length} con checkpoints pendientes · dirty=${_dirty}</div>
     </div>`;
   bind('[data-go]','click',el=>{selSt=el.dataset.go;activeTab='estudios';render();});
   bind('[data-kpi]','click',el=>{
@@ -815,8 +816,8 @@ function renderNuevo(){
     if(q('#nSendMail').checked&&emailAn){
       for(const ns of created){await gSendEmail(emailAn,'Asignación: '+ns.producto+' ('+ns.tipoEstudio+', Lote '+ns.lote+')',buildAssignEmail(ns));}
     }
-    selSt=created[0].id;activeTab='estudios';render();
-    toast(tl==='desarrollo'?'Estudio de desarrollo creado':'Estudio start-up creado (acelerada + natural)');
+    activeTab='dashboard';dashFilter='';render();
+    toast(tl==='desarrollo'?'Estudio creado — verificá en el dashboard':'Estudio start-up creado — verificá en el dashboard');
   };
 }
 
