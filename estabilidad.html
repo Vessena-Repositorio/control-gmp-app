@@ -113,13 +113,7 @@ let SCRIPT_URL=localStorage.getItem('gscript_url')||'https://script.google.com/m
 let syncStatus='disconnected';
 
 async function gRead(){if(!SCRIPT_URL)return null;syncStatus='loading';rSync();try{const r=await fetch(SCRIPT_URL+'?t='+Date.now()+Math.random());const d=await r.json();syncStatus='ok';rSync();return d;}catch(e){console.error('gRead:',e);syncStatus='error';rSync();return null;}}
-async function gWrite(key,value){if(!SCRIPT_URL)return;syncStatus='loading';rSync();try{const ctrl=new AbortController();const tid=setTimeout(()=>ctrl.abort(),10000);await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'save',key,value:JSON.stringify(value)}),signal:ctrl.signal});clearTimeout(tid);
-  // Verificar que se guardó
-  await new Promise(r=>setTimeout(r,1500));
-  const check=await fetch(SCRIPT_URL+'?t='+Date.now());
-  const d=await check.json();
-  if(d[key]){const saved=JSON.parse(d[key]);syncStatus='ok';rSync();toast('Guardado ✓ ('+saved.length+' registros)');} else {syncStatus='error';rSync();toast('⚠ No se pudo verificar el guardado');}
-  }catch(e){syncStatus='error';rSync();toast('Error al guardar — reintentá');}}
+async function gWrite(key,value){if(!SCRIPT_URL)return;_dirty=true;syncStatus='loading';rSync();try{await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'save',key,value:JSON.stringify(value)})});syncStatus='ok';rSync();toast('Guardado ✓');setTimeout(()=>{_dirty=false;},5000);}catch(e){syncStatus='error';rSync();toast('Error al guardar');_dirty=false;}}
 /* EMAILS FIJOS — reciben copia de TODAS las notificaciones */
 const CC_EMAILS=['claudia.barlocco@vessena.com.uy','antonella.nunez@vessena.com.uy'];
 const APP_URL='https://vessena-repositorio.github.io/control-gmp-app/estabilidad.html';
@@ -334,7 +328,7 @@ const TEAM=[
 function emailSel(id,val){return`<select id="${id}"><option value="">— Seleccionar —</option>${TEAM.map(t=>`<option value="${E(t.e)}" ${val===t.e?'selected':''}>${t.n} (${t.e})</option>`).join('')}</select>`;}
 
 /* STATE */
-let studies=[],productos=[],activeTab='dashboard',filters={t:'',q:''},selSt=null,selRep=null,charts={},catMode='list',editProd=null,dashFilter='';
+let studies=[],productos=[],activeTab='dashboard',filters={t:'',q:''},selSt=null,selRep=null,charts={},catMode='list',editProd=null,dashFilter='',_dirty=false;
 
 /* UTILS */
 const uid=()=>'ST-'+Date.now().toString(36).toUpperCase()+Math.floor(Math.random()*90+10);
@@ -392,20 +386,8 @@ async function loadAll(){const d=await gRead();if(d){if(d.productos)try{producto
   // Protección: guardar cantidad cargada para evitar sobreescritura accidental
   window._loadedCounts={p:productos.length,s:studies.length};
 }
-async function saveStudies(){
-  // Protección: no guardar si hay menos datos que los que se cargaron
-  if(window._loadedCounts&&studies.length<window._loadedCounts.s-1&&window._loadedCounts.s>5){
-    console.warn('PROTECCIÓN: no se guardó porque hay menos estudios ('+studies.length+') que los cargados ('+window._loadedCounts.s+')');
-    toast('Error: datos incompletos, no se guardó');return;
-  }
-  await gWrite('studies',studies);window._loadedCounts.s=studies.length;
-}
-async function saveProductos(){
-  if(window._loadedCounts&&productos.length<window._loadedCounts.p-1&&window._loadedCounts.p>5){
-    console.warn('PROTECCIÓN: no se guardó productos');toast('Error: datos incompletos');return;
-  }
-  await gWrite('productos',productos);window._loadedCounts.p=productos.length;
-}
+async function saveStudies(){await gWrite('studies',studies);}
+async function saveProductos(){await gWrite('productos',productos);}
 
 /* ============================================================
    TABS
@@ -1012,14 +994,14 @@ function render(){if(!SCRIPT_URL){renderSetup();renderNav();rSync();return;}rend
     if(studies.find(s=>s.id===sid)){selSt=sid;activeTab='estudios';}
   }
   render();
-  // Auto-refresh cada 30 segundos — siempre recarga
+  // Auto-refresh cada 30 seg — NO sobreescribe si hay cambios locales pendientes
   if(SCRIPT_URL) setInterval(async()=>{
+    if(_dirty){console.log('Auto-refresh: skip (dirty)');return;}
     try{
       const r=await fetch(SCRIPT_URL+'?t='+Date.now()+Math.random());
       const d=await r.json();
       if(d.productos)try{productos=JSON.parse(d.productos);}catch(e){}
       if(d.studies)try{studies=JSON.parse(d.studies);}catch(e){}
-      // Re-apply fixes in memory
       studies.forEach(s=>{
         if(s.rechazos&&s.rechazos.length&&!s.approvedManually&&s.stage!==5)s.rechazado=true;
         if(!s.rechazado&&s.stage!==5)s.stage=cS(s);
