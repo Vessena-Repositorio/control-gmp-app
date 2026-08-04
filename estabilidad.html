@@ -386,8 +386,55 @@ async function loadAll(){const d=await gRead();if(d){if(d.productos)try{producto
   // Protección: guardar cantidad cargada para evitar sobreescritura accidental
   window._loadedCounts={p:productos.length,s:studies.length};
 }
-async function saveStudies(){await gWrite('studies',studies);}
-async function saveProductos(){await gWrite('productos',productos);}
+// Comprimir agresivo: eliminar campos vacíos y objetos vacíos
+function compress(obj){
+  if(Array.isArray(obj)){const a=obj.map(compress).filter(v=>v!=null);return a;}
+  if(obj&&typeof obj==='object'){
+    const r={};
+    for(const[k,v]of Object.entries(obj)){
+      if(v===''||v===null||v===undefined||v===false||v===0)continue;
+      if(Array.isArray(v)&&v.length===0)continue;
+      const cv=compress(v);
+      if(cv&&typeof cv==='object'&&!Array.isArray(cv)&&Object.keys(cv).length===0)continue;
+      if(cv===''||cv===null||cv===undefined)continue;
+      r[k]=cv;
+    }
+    return Object.keys(r).length?r:null;
+  }
+  return obj;
+}
+
+// Guardar un solo estudio cambiado (rápido) o todos
+async function saveOneStudy(s){
+  _dirty=true;syncStatus='loading';rSync();
+  try{
+    // Leer datos actuales, actualizar solo este estudio, guardar todo
+    const r=await fetch(SCRIPT_URL+'?t='+Date.now());
+    const d=await r.json();
+    let all=[];
+    if(d.studies)try{all=JSON.parse(d.studies);}catch(e){}
+    const idx=all.findIndex(x=>x.id===s.id);
+    if(idx>=0)all[idx]=compress(s); else all.push(compress(s));
+    await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'save',key:'studies',value:JSON.stringify(all)})});
+    syncStatus='ok';rSync();toast('Guardado ✓');
+    setTimeout(()=>{_dirty=false;},15000);
+  }catch(e){syncStatus='error';rSync();toast('Error al guardar');_dirty=false;}
+}
+async function saveStudies(){
+  _dirty=true;syncStatus='loading';rSync();
+  try{
+    await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'save',key:'studies',value:JSON.stringify(compress(studies))})});
+    syncStatus='ok';rSync();toast('Guardado ✓ ('+studies.length+' estudios)');
+    setTimeout(()=>{_dirty=false;},15000);
+  }catch(e){syncStatus='error';rSync();toast('Error');_dirty=false;}
+}
+async function saveProductos(){
+  _dirty=true;syncStatus='loading';rSync();
+  try{
+    await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'save',key:'productos',value:JSON.stringify(compress(productos))})});
+    syncStatus='ok';rSync();toast('Guardado ✓');setTimeout(()=>{_dirty=false;},15000);
+  }catch(e){syncStatus='error';rSync();toast('Error');_dirty=false;}
+}
 
 /* ============================================================
    TABS
@@ -670,7 +717,7 @@ function renderDetail(){
   const ap2=q('#bAp');if(ap2)ap2.onclick=async()=>{
     if(!confirm('¿Aprobar este estudio como Dir. Técnica?'))return;
     s.approvedManually=true;s.fechaAprobacion=td2();s.stage=5;s.rechazado=false;
-    await saveStudies();
+    await saveOneStudy(s);
     // Email al analista
     if(s.emailAnalista){
       const body='<div style="font-family:Arial;max-width:600px"><h2 style="color:#357A55">✓ Estudio APROBADO</h2><p>Producto: <strong>'+s.producto+'</strong> — Lote: <strong>'+s.lote+'</strong></p><p>El estudio fue aprobado por Dirección Técnica el '+s.fechaAprobacion+'.</p>'+studyLink(s.id)+'<p style="color:#5B6B6E;font-size:12px">Programa de Estabilidad — LCC / Vessena S.A.</p></div>';
@@ -694,7 +741,7 @@ function renderDetail(){
     if(s.emailCreador&&s.emailCreador!==s.emailAnalista)await gSendEmail(s.emailCreador,'✗ RECHAZADO: '+s.producto+' (Lote '+s.lote+')',body2);
     render();toast('Estudio rechazado — notificación enviada');
   };
-  q('#bSvMail').onclick=async()=>{s.emailAnalista=q('#eAn').value.trim();s.emailCreador=q('#eCr').value.trim();await saveStudies();toast('Emails guardados');};
+  q('#bSvMail').onclick=async()=>{s.emailAnalista=q('#eAn').value.trim();s.emailCreador=q('#eCr').value.trim();await saveOneStudy(s);toast('Emails guardados');};
   q('#bSendAssign').onclick=async()=>{
     s.emailAnalista=q('#eAn').value.trim();s.emailCreador=q('#eCr').value.trim();
     if(!s.emailAnalista){toast('Completá el email del analista');return;}
@@ -713,12 +760,12 @@ function renderDetail(){
       // Campo normal (natural o fecha)
       s.checkpoints[i][f]=el.value;
     }
-    rS(s);await saveStudies();if(f==='fechaReal')render();
+    rS(s);await saveOneStudy(s);if(f==='fechaReal')render();
   });
   const addCpBtn=q('#addCp');if(addCpBtn)addCpBtn.onclick=async()=>{const lm=s.checkpoints.length?s.checkpoints[s.checkpoints.length-1].mes:0;s.checkpoints.push({codigo:`${lm+3}N`,mes:lm+3,fechaProgramada:addM(s.fechaInicio,lm+3),fechaReal:''});await saveStudies();render();};
   const addNatBtn=q('[data-addnat]');if(addNatBtn)addNatBtn.onclick=async()=>{const nats=s.checkpoints.filter(c=>c.fase==='natural');const lm=nats.length?nats[nats.length-1].mes:0;const nm=lm+3;s.checkpoints.push({codigo:`${nm}N`,mes:nm,fase:'natural',fechaProgramada:addM(s.fechaInicio,nm),fechaReal:''});await saveStudies();render();};
   document.querySelectorAll('.tc').forEach(ch=>ch.onclick=()=>{s.vidaUtilMeses=q('#tfVU')?.value||s.vidaUtilMeses;s.condAlm=q('#tfCA')?.value||s.condAlm;const txt=xT(TPL[ch.dataset.tpl][ch.dataset.k],s);const map={alcance:'tfA',metodos:'tfM',criterios:'tfCr',conclusion:'tfCo',rotulacion:'tfR'};const ta=q('#'+map[ch.dataset.tpl]);if(ta)ta.value=ta.value.trim()?ta.value.trim()+'\n'+txt:txt;});
-  q('#bSI').onclick=async()=>{s.alcance=q('#tfA').value;s.metodosAnaliticos=q('#tfM').value;s.criteriosAceptacion=q('#tfCr').value;s.conclusion=q('#tfCo').value;s.rotulacion=q('#tfR').value;s.vidaUtilMeses=q('#tfVU')?.value||'';s.condAlm=q('#tfCA')?.value||'';rS(s);await saveStudies();render();toast('Guardado');};
+  q('#bSI').onclick=async()=>{s.alcance=q('#tfA').value;s.metodosAnaliticos=q('#tfM').value;s.criteriosAceptacion=q('#tfCr').value;s.conclusion=q('#tfCo').value;s.rotulacion=q('#tfR').value;s.vidaUtilMeses=q('#tfVU')?.value||'';s.condAlm=q('#tfCA')?.value||'';rS(s);await saveOneStudy(s);render();toast('Guardado');};
   q('#bVI').onclick=()=>{selRep=s.id;activeTab='informe';render();};
 }
 function tfs(t,sec,val,id){return`<fieldset><legend>${t}</legend><div class="tb">${Object.keys(TPL[sec]).map(k=>`<button class="tc" data-tpl="${sec}" data-k="${k}">${CHL[k]||k}</button>`).join('')}</div><textarea id="${id}" rows="2">${E(val||'')}</textarea></fieldset>`;}
@@ -812,7 +859,7 @@ function renderNuevo(){
       studies.push(s1);created.push(s1);
     }
 
-    await saveStudies();
+    await saveOneStudy(created[0]);
     if(q('#nSendMail').checked&&emailAn){
       for(const ns of created){await gSendEmail(emailAn,'Asignación: '+ns.producto+' ('+ns.tipoEstudio+', Lote '+ns.lote+')',buildAssignEmail(ns));}
     }
