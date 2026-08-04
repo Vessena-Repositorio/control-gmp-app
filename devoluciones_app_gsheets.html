@@ -1112,9 +1112,13 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
           <label>Año</label>
           <input id="anio" type="number" value="2026" min="2020" max="2099" />
         </div>
-        <div class="field col-6">
-          <label>Umbral de alerta (%)</label>
-          <input id="umbral" type="number" value="3" step="0.1" min="0" />
+        <div class="field col-3">
+          <label>Umbral global (%)</label>
+          <input id="umbralGlobal" type="number" value="1" step="0.1" min="0" title="Umbral aceptable para la tasa global del mes (dev+rot / venta promedio 3M). Default 1%." />
+        </div>
+        <div class="field col-3">
+          <label>Umbral SKU crítico (%)</label>
+          <input id="umbral" type="number" value="3" step="0.1" min="0" title="Umbral aceptable para la tasa individual de cada SKU. Un SKU es crítico si su tasa supera este valor Y sus unidades superan el corte. Default 3%." />
         </div>
       </div>
       <div class="row" style="margin-top:18px">
@@ -1831,7 +1835,8 @@ function parseMovimientos(wb){
    AGREGAR — calcular indicadores
    ============================================================ */
 function aggregate(monitor, mov, opts){
-  const umbral = Number(opts.umbral) || 3;
+  const umbral = Number(opts.umbral) || 3;              // Umbral SKU crítico (tasa individual)
+  const umbralGlobal = Number(opts.umbralGlobal) || 1;  // Umbral tasa global del mes
   const zeroNeg = !!opts.zeroNeg;
 
   // Si zeroNeg está activo: para cada SKU del Monitor, los meses negativos se ponen
@@ -1931,6 +1936,7 @@ function aggregate(monitor, mov, opts){
     skuConDev, skuConRot, skuTotal: skus.length,
     sumaProm, tasaGlobal, promDevSku,
     umbral,
+    umbralGlobal,
     alertas,
     skus,
     categorias,
@@ -1957,7 +1963,7 @@ const PALETTE = [
 function renderResults(c, monitor, mes, anio){
   STATE.mes = mes; STATE.anio = anio;
   const mesCap = cap(mes);
-  const overUmbral = c.tasaGlobal > c.umbral;
+  const overUmbral = c.tasaGlobal > c.umbralGlobal;
 
   // Banner
   $("bannerMonth").innerHTML = `${mesCap} <em>${anio}</em>`;
@@ -1966,11 +1972,11 @@ function renderResults(c, monitor, mes, anio){
   $("pmBrandTxt").textContent = `Devoluciones & Roturas — ${mesCap} ${anio}`;
 
   // Semaphore
-  const semClass = overUmbral ? "alert" : (c.tasaGlobal > c.umbral*0.66 ? "warn" : "ok");
+  const semClass = overUmbral ? "alert" : (c.tasaGlobal > c.umbralGlobal*0.66 ? "warn" : "ok");
   const semIcon  = semClass === "alert" ? "!" : (semClass === "warn" ? "~" : "✓");
   const semMsg   = overUmbral
-    ? `La tasa global del mes (<em>${pct(c.tasaGlobal,2)}</em>) <em>supera</em> el umbral aceptable del ${c.umbral}%. ${c.alertas.length} SKU concentran el foco de gestión inmediato.`
-    : `La tasa global del mes (<em>${pct(c.tasaGlobal,2)}</em>) se mantiene <em>dentro</em> del umbral aceptable del ${c.umbral}%. ${c.alertas.length === 0 ? "Ningún SKU individual supera la alerta." : `${c.alertas.length} SKU individuales requieren revisión.`}`;
+    ? `La tasa global del mes (<em>${pct(c.tasaGlobal,2)}</em>) <em>supera</em> el umbral aceptable del ${c.umbralGlobal}%. ${c.alertas.length} SKU concentran el foco de gestión inmediato.`
+    : `La tasa global del mes (<em>${pct(c.tasaGlobal,2)}</em>) se mantiene <em>dentro</em> del umbral aceptable del ${c.umbralGlobal}%. ${c.alertas.length === 0 ? "Ningún SKU individual supera la alerta." : `${c.alertas.length} SKU individuales requieren revisión.`}`;
   $("semaphore").innerHTML = `
     <div class="sem-light ${semClass}">${semIcon}</div>
     <div class="sem-text">
@@ -1987,7 +1993,7 @@ function renderResults(c, monitor, mes, anio){
         <div class="kpi-val" style="color:${overUmbral?'var(--red)':'var(--green)'}">${pct(c.tasaGlobal,2)}</div>
       </div>
       <div class="kpi-trend">
-        <span class="badge">Umbral ${c.umbral}%</span>
+        <span class="badge">Umbral ${c.umbralGlobal}%</span>
         <span>${overUmbral?'Por encima del umbral aceptable':'Dentro del umbral aceptable'}</span>
       </div>
     </div>
@@ -2018,7 +2024,7 @@ function renderResults(c, monitor, mes, anio){
   // Methodology
   const notes = [
     `<b>Tasa de devolución por SKU</b> = unidades devueltas / promedio venta últimos 3 meses × 100. Se calcula solo sobre devoluciones de cliente (no incluye roturas internas).`,
-    `<b>Tasa global</b> = (devoluciones + roturas) / suma del promedio venta 3M de todos los SKU activos. Umbral del ${c.umbral}% para alertas.`,
+    `<b>Tasa global</b> = (devoluciones + roturas) / suma del promedio venta 3M de todos los SKU activos. Umbral aceptable del ${c.umbralGlobal}% (configurable).`,
     `<b>Exclusiones:</b> movimientos del tipo <code>MOVIMIENTO DE INVENTARIO</code> se filtran del análisis.`,
     monitor.maestroSheet ? `<b>Categorías:</b> tomadas de la hoja Maestro (${monitor.maestroSheet}).` : `<b>Categorías:</b> la hoja Maestro no se encontró en el Monitor. Revisá manualmente antes de presentar.`,
     `<b>Tasas por categoría:</b> son aproximaciones direccionales calculadas solo sobre SKU con movimiento.`,
@@ -2163,6 +2169,7 @@ function saveHistorySnapshot(){
     mes: STATE.mes, anio: STATE.anio,
     fechaAnalisis: new Date().toISOString(),
     umbral: c.umbral,
+    umbralGlobal: c.umbralGlobal,
     corte,
     totalDev: c.totalDev, totalRot: c.totalRot,
     skuConDev: c.skuConDev, skuConRot: c.skuConRot,
@@ -2227,7 +2234,7 @@ function renderMonthPicker(h, keys){
   grid.innerHTML = keys.map(k => {
     const it = normalizeSnapshot(h[k]);
     const isSel = sel.has(k);
-    const overUmbral = it.tasaGlobal > it.umbral;
+    const overUmbral = it.tasaGlobal > it.umbralGlobal;
     const tasaColor = overUmbral ? "var(--red)" : "var(--green)";
     return `
       <div class="mp-chip ${isSel?'selected':''}" data-key="${k}">
@@ -2272,7 +2279,7 @@ function renderComparison(h){
   const sumProm = items.reduce((a,it)=>a+it.sumaProm,0);
   const tasaAcumulada = sumProm > 0 ? ((totDev+totRot)/sumProm)*100 : 0;
   const totCriticos = items.reduce((a,it)=>a+it.criticosDev+it.criticosRot,0);
-  const mesesOver = items.filter(it => it.tasaGlobal > it.umbral).length;
+  const mesesOver = items.filter(it => it.tasaGlobal > it.umbralGlobal).length;
 
   $("compKpis").innerHTML = `
     <div class="comp-kpi">
@@ -2320,15 +2327,15 @@ function renderComparison(h){
       responsive:true,maintainAspectRatio:false,
       plugins:{legend:{position:"top",labels:{font:{family:"Inter Tight,sans-serif",size:11.5},color:"#2D3B52",boxWidth:14}}, tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${fmt(ctx.parsed.y)} u.`}}},
       scales:{
-        y:{beginAtZero:true, grid:{color:"#EEF0F2"}, ticks:{font:{family:"Inter Tight,sans-serif",size:11},color:"#6B7A8F",callback:v=>fmt(v)}},
-        x:{grid:{display:false}, ticks:{font:{family:"Inter Tight,sans-serif",size:12},color:"#2D3B52"}},
+        y:{beginAtZero:true, title:{display:true, text:"Unidades", font:{family:"Inter Tight,sans-serif",size:12,weight:"600"}, color:"#2D3B52"}, grid:{color:"#EEF0F2"}, ticks:{font:{family:"Inter Tight,sans-serif",size:11},color:"#6B7A8F",callback:v=>fmt(v)}},
+        x:{title:{display:true, text:"Mes", font:{family:"Inter Tight,sans-serif",size:12,weight:"600"}, color:"#2D3B52"}, grid:{display:false}, ticks:{font:{family:"Inter Tight,sans-serif",size:12},color:"#2D3B52"}},
       }
     }
   });
 
   // Chart línea tasa
   if(STATE.charts.histTasa) STATE.charts.histTasa.destroy();
-  const umbralRef = items[items.length-1].umbral || 3;
+  const umbralRef = items[items.length-1].umbralGlobal || items[items.length-1].umbral || 1;
   STATE.charts.histTasa = new Chart($("histTasaChart"), {
     type:"line",
     data:{labels, datasets:[
@@ -2339,8 +2346,8 @@ function renderComparison(h){
       responsive:true,maintainAspectRatio:false,
       plugins:{legend:{position:"top",labels:{font:{family:"Inter Tight,sans-serif",size:11.5},color:"#2D3B52",boxWidth:14}}, tooltip:{callbacks:{label:ctx=>`${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)}%`}}},
       scales:{
-        y:{beginAtZero:true, grid:{color:"#EEF0F2"}, ticks:{font:{family:"Inter Tight,sans-serif",size:11},color:"#6B7A8F",callback:v=>v+"%"}},
-        x:{grid:{display:false}, ticks:{font:{family:"Inter Tight,sans-serif",size:12},color:"#2D3B52"}},
+        y:{beginAtZero:true, title:{display:true, text:"Tasa global (%)", font:{family:"Inter Tight,sans-serif",size:12,weight:"600"}, color:"#2D3B52"}, grid:{color:"#EEF0F2"}, ticks:{font:{family:"Inter Tight,sans-serif",size:11},color:"#6B7A8F",callback:v=>v+"%"}},
+        x:{title:{display:true, text:"Mes", font:{family:"Inter Tight,sans-serif",size:12,weight:"600"}, color:"#2D3B52"}, grid:{display:false}, ticks:{font:{family:"Inter Tight,sans-serif",size:12},color:"#2D3B52"}},
       }
     }
   });
@@ -2354,16 +2361,23 @@ function renderComparison(h){
       if(!skuMap.has(k)){
         skuMap.set(k, {
           codigo:sk.codigo, producto:sk.producto, categoria:sk.categoria, marca:sk.marca,
-          meses:[], totalDev:0, totalRot:0, motivosDev:new Set(), motivosRot:new Set()
+          meses:[], totalDev:0, totalRot:0, motivosDev:new Map(), motivosRot:new Map()
         });
       }
       const entry = skuMap.get(k);
       entry.meses.push({mes:it.mes, anio:it.anio, dev:sk.dev, rot:sk.rot, tasa:sk.tasa,
-        motivoDev:sk.motivoDev, motivoRot:sk.motivoRot});
+        motivoDev:sk.motivoDev, notaDev:sk.notaDev, motivoRot:sk.motivoRot, notaRot:sk.notaRot});
       entry.totalDev += sk.dev;
       entry.totalRot += sk.rot;
-      if(sk.motivoDev) entry.motivosDev.add(sk.motivoDev);
-      if(sk.motivoRot) entry.motivosRot.add(sk.motivoRot);
+      // motivosDev/Rot: Map de motivo -> Set de notas (para agrupar notas por motivo)
+      if(sk.motivoDev){
+        if(!entry.motivosDev.has(sk.motivoDev)) entry.motivosDev.set(sk.motivoDev, new Set());
+        if(sk.notaDev && sk.notaDev.trim()) entry.motivosDev.get(sk.motivoDev).add(sk.notaDev.trim());
+      }
+      if(sk.motivoRot){
+        if(!entry.motivosRot.has(sk.motivoRot)) entry.motivosRot.set(sk.motivoRot, new Set());
+        if(sk.notaRot && sk.notaRot.trim()) entry.motivosRot.get(sk.motivoRot).add(sk.notaRot.trim());
+      }
     });
   });
   // Filtrar: solo los que aparecen en 2+ meses (recurrentes) si hay 2+ meses; si hay solo 1, mostrar todos
@@ -2387,6 +2401,18 @@ function renderComparison(h){
       <th>Motivos devolución</th>
       <th>Motivos rotura</th>
     </tr></thead>`;
+    // Helper para renderizar motivos con sus notas
+    const renderMotivosConNotas = (motivosMap, colorBg, colorTxt, colorBorder) => {
+      if(motivosMap.size === 0) return '<span style="color:var(--muted);font-style:italic">—</span>';
+      return [...motivosMap.entries()].map(([mot, notasSet]) => {
+        const pill = `<span class="pill" style="background:${colorBg};color:${colorTxt};border-color:${colorBorder};margin:1px 2px;display:inline-block">${mot}</span>`;
+        const notas = [...notasSet];
+        if(notas.length === 0) return pill;
+        const notasStr = notas.map(n => `«${n}»`).join(' · ');
+        return `<div style="margin:2px 0"><div>${pill}</div><div style="font-size:10.5px;color:var(--muted);font-style:italic;margin-left:6px;margin-top:2px;line-height:1.35">${notasStr}</div></div>`;
+      }).join("");
+    };
+
     const rows = recurSkus.slice(0,30).map(s => `
       <tr>
         <td class="sku-code">${s.codigo}</td>
@@ -2395,8 +2421,8 @@ function renderComparison(h){
         <td class="num"><b style="color:${s.meses.length>=3?'var(--red)':s.meses.length>=2?'var(--amber)':'var(--ink)'}">${s.meses.length}</b><div style="font-size:10px;color:var(--muted);margin-top:2px">${s.meses.map(m => cap(m.mes).slice(0,3)).join(", ")}</div></td>
         <td class="num" style="color:#C2410C;font-weight:600">${fmt(s.totalDev)}</td>
         <td class="num" style="color:var(--red);font-weight:600">${s.totalRot>0?fmt(s.totalRot):'—'}</td>
-        <td style="font-size:11.5px">${s.motivosDev.size > 0 ? [...s.motivosDev].map(m=>`<span class="pill" style="background:#FED7AA;color:#7C2D12;border-color:#FB923C;margin:1px 2px;display:inline-block">${m}</span>`).join("") : '<span style="color:var(--muted);font-style:italic">—</span>'}</td>
-        <td style="font-size:11.5px">${s.motivosRot.size > 0 ? [...s.motivosRot].map(m=>`<span class="pill" style="background:#FECACA;color:#7F1D1D;border-color:#F87171;margin:1px 2px;display:inline-block">${m}</span>`).join("") : '<span style="color:var(--muted);font-style:italic">—</span>'}</td>
+        <td style="font-size:11.5px;vertical-align:top">${renderMotivosConNotas(s.motivosDev, '#FED7AA', '#7C2D12', '#FB923C')}</td>
+        <td style="font-size:11.5px;vertical-align:top">${renderMotivosConNotas(s.motivosRot, '#FECACA', '#7F1D1D', '#F87171')}</td>
       </tr>
     `).join("");
     $("recurSkuTable").innerHTML = head + `<tbody>${rows}</tbody>`;
@@ -2440,7 +2466,7 @@ function renderComparison(h){
           }}
         },
         scales:{
-          x:{stacked:true, beginAtZero:true, grid:{color:"#EEF0F2"}, ticks:{font:{family:"Inter Tight,sans-serif",size:11},color:"#6B7A8F",callback:v=>fmt(v)}},
+          x:{stacked:true, beginAtZero:true, title:{display:true, text:"Unidades", font:{family:"Inter Tight,sans-serif",size:12,weight:"600"}, color:"#2D3B52"}, grid:{color:"#EEF0F2"}, ticks:{font:{family:"Inter Tight,sans-serif",size:11},color:"#6B7A8F",callback:v=>fmt(v)}},
           y:{stacked:true, grid:{display:false}, ticks:{autoSkip:false, font:{family:"Inter Tight,sans-serif",size:12},color:"#2D3B52"}},
         }
       }
@@ -2486,7 +2512,7 @@ function renderComparison(h){
           }}
         },
         scales:{
-          x:{stacked:true, beginAtZero:true, grid:{color:"#EEF0F2"}, ticks:{font:{family:"Inter Tight,sans-serif",size:11},color:"#6B7A8F",callback:v=>fmt(v)}},
+          x:{stacked:true, beginAtZero:true, title:{display:true, text:"Unidades", font:{family:"Inter Tight,sans-serif",size:12,weight:"600"}, color:"#2D3B52"}, grid:{color:"#EEF0F2"}, ticks:{font:{family:"Inter Tight,sans-serif",size:11},color:"#6B7A8F",callback:v=>fmt(v)}},
           y:{stacked:true, grid:{display:false}, ticks:{autoSkip:false, font:{family:"Inter Tight,sans-serif",size:12},color:"#2D3B52"}},
         }
       }
@@ -2494,6 +2520,38 @@ function renderComparison(h){
   }
 
   // === Tabla detalle por mes (igual que antes) ===
+  // Helper: top 2 motivos para una categoría dada, dentro de los SKU críticos del mes
+  const topMotivosForCat = (criticos, categoria, tipo) => {
+    const motMap = new Map();
+    (criticos || []).forEach(c => {
+      if(c.categoria !== categoria) return;
+      const motivo = tipo === 'dev' ? c.motivoDev : c.motivoRot;
+      const unid = tipo === 'dev' ? (c.dev || 0) : (c.rot || 0);
+      if(!motivo || unid <= 0) return;
+      motMap.set(motivo, (motMap.get(motivo) || 0) + unid);
+    });
+    const total = [...motMap.values()].reduce((a,b) => a+b, 0);
+    if(total === 0) return [];
+    return [...motMap.entries()]
+      .map(([mot, u]) => ({mot, u, pct: 100 * u / total}))
+      .sort((a,b) => b.u - a.u)
+      .slice(0, 2);
+  };
+
+  // Helper: celda de categoría líder con unidades, % y motivos top 2
+  const celdaCatLider = (top, criticos, tipo) => {
+    if(!top) return '—';
+    const motivos = topMotivosForCat(criticos, top.cat, tipo);
+    const motStr = motivos.length > 0
+      ? motivos.map(m => `${m.mot} ${m.pct.toFixed(0)}%`).join(' · ')
+      : '<span style="color:var(--muted);font-style:italic">sin motivo cargado</span>';
+    return `
+      <span class="pill">${top.cat||''}</span>
+      <span style="font-size:11px;color:var(--muted);margin-left:4px">${fmt(top.unid||0)} u · ${Number(top.part||0).toFixed(1)}%</span>
+      <div style="font-size:10.5px;color:var(--body);margin-top:3px" title="Sobre los SKU críticos de esta categoría con motivo cargado">${motStr}</div>
+    `;
+  };
+
   $("histDetalleMeta").textContent = `${items.length} ${items.length===1?'período':'períodos'} · click ✕ para eliminar del histórico`;
   const head2 = `<thead><tr>
     <th>Mes</th>
@@ -2507,7 +2565,7 @@ function renderComparison(h){
     <th style="text-align:right">Acción</th>
   </tr></thead>`;
   const rows2 = items.map(it => {
-    const overUmbral = it.tasaGlobal > it.umbral;
+    const overUmbral = it.tasaGlobal > it.umbralGlobal;
     return `<tr>
       <td><b>${cap(it.mes)} ${it.anio}</b><div style="font-size:11px;color:var(--muted);margin-top:2px">${new Date(it.fechaAnalisis).toLocaleDateString("es-AR")}</div></td>
       <td class="num">${fmt(it.totalDev)}</td>
@@ -2515,8 +2573,8 @@ function renderComparison(h){
       <td class="num ${overUmbral?'alert':''}">${pct(it.tasaGlobal,2)}</td>
       <td class="num" style="${it.criticosDev>0?'color:#C2410C;font-weight:700':''}">${it.criticosDev}</td>
       <td class="num" style="${it.criticosRot>0?'color:var(--red);font-weight:700':''}">${it.criticosRot}</td>
-      <td>${it.topCatDev[0] ? `<span class="pill">${it.topCatDev[0].cat||''}</span> <span style="font-size:11px;color:var(--muted)">${Number(it.topCatDev[0].part||0).toFixed(1)}%</span>` : '—'}</td>
-      <td>${it.topCatRot[0] ? `<span class="pill">${it.topCatRot[0].cat||''}</span> <span style="font-size:11px;color:var(--muted)">${Number(it.topCatRot[0].part||0).toFixed(1)}%</span>` : '—'}</td>
+      <td>${celdaCatLider(it.topCatDev[0], it.criticos, 'dev')}</td>
+      <td>${celdaCatLider(it.topCatRot[0], it.criticos, 'rot')}</td>
       <td style="text-align:right"><button class="btn-ghost-mini" data-hist-del="${historyKeyFor(it.mes, it.anio)}" title="Eliminar este registro">✕</button></td>
     </tr>`;
   }).join("");
@@ -2540,9 +2598,10 @@ function renderComparison(h){
 function renderReading(c){
   const corteEl = document.getElementById("corteMotivos");
   const corte = corteEl ? (Number(corteEl.value)>0 ? Number(corteEl.value) : 50) : 50;
-  const umbral = c.umbral;
+  const umbral = c.umbral;                    // Umbral SKU crítico
+  const umbralGlobal = c.umbralGlobal ?? c.umbral; // Umbral tasa global del mes
   const mesCap = cap(STATE.mes||"");
-  const overUmbral = c.tasaGlobal > umbral;
+  const overUmbral = c.tasaGlobal > umbralGlobal;
 
   // Críticos por tipo
   const critDev = c.skus.filter(s => s.tasa > umbral && s.dev >= corte);
@@ -2562,7 +2621,7 @@ function renderReading(c){
   // Párrafo 1 — Panorama global
   paras.push(
     `En <b>${mesCap} ${STATE.anio||""}</b> se registraron <b>${fmt(c.totalDev)} unidades</b> devueltas por clientes y <b>${fmt(c.totalRot)} unidades</b> de rotura interna sobre una venta promedio de <b>${fmt(c.sumaProm)} u./mes</b>. ` +
-    `La tasa global del mes es del <span class="${overUmbral?'crit':'calm'}">${pct(c.tasaGlobal,2)}</span>${overUmbral?` — por encima del umbral aceptable del ${umbral}%.`:` — dentro del umbral aceptable del ${umbral}%.`}`
+    `La tasa global del mes es del <span class="${overUmbral?'crit':'calm'}">${pct(c.tasaGlobal,2)}</span>${overUmbral?` — por encima del umbral aceptable del ${umbralGlobal}%.`:` — dentro del umbral aceptable del ${umbralGlobal}%.`}`
   );
 
   // Párrafo 2 — Devoluciones críticas
@@ -3121,7 +3180,7 @@ function buildPresentation(){
   const c = STATE.computed, monitor = STATE.monitor;
   const mes = STATE.mes, anio = STATE.anio;
   const mesCap = cap(mes);
-  const overUmbral = c.tasaGlobal > c.umbral;
+  const overUmbral = c.tasaGlobal > c.umbralGlobal;
   const stage = $("pmStage");
 
   // Destroy old charts if any
@@ -3150,7 +3209,7 @@ function buildPresentation(){
       <div class="slide-kpi ${overUmbral?'k-red':'k-green'}">
         <div class="kl">Tasa global dev. + rot.</div>
         <div class="kv">${pct(c.tasaGlobal,2)}</div>
-        <div class="ks">${overUmbral?`Por encima del umbral ${c.umbral}%`:`Dentro del umbral ${c.umbral}%`}</div>
+        <div class="ks">${overUmbral?`Por encima del umbral ${c.umbralGlobal}%`:`Dentro del umbral ${c.umbralGlobal}%`}</div>
       </div>
       <div class="slide-kpi">
         <div class="kl">Venta promedio 3M</div>
@@ -3198,7 +3257,7 @@ function buildPresentation(){
         <div class="num">iii</div>
         <div class="lbl">Tasa sobre venta</div>
         <div class="val">${pct(c.tasaGlobal,2)}</div>
-        <div class="unit">${overUmbral?`Por encima del umbral ${c.umbral}%`:`Dentro del umbral ${c.umbral}%`}</div>
+        <div class="unit">${overUmbral?`Por encima del umbral ${c.umbralGlobal}%`:`Dentro del umbral ${c.umbralGlobal}%`}</div>
         <div class="divider"></div>
         <div class="desc">Mide el peso real del problema sobre el volumen comercial promedio del trimestre.</div>
       </div>
@@ -3739,7 +3798,7 @@ function generatePPT(c, monitor, mes, anio){
   const fmtP = (n) => Number(n||0).toLocaleString("es-AR", {maximumFractionDigits:0});
   const pctP = (n,d=2) => `${Number(n||0).toFixed(d)}%`;
   const mesCap = mes.charAt(0) + mes.slice(1).toLowerCase();
-  const overUmbral = c.tasaGlobal > c.umbral;
+  const overUmbral = c.tasaGlobal > c.umbralGlobal;
 
   function addFooter(s, pageNum){
     s.addShape(pres.shapes.RECTANGLE, {x:0, y:SH-0.35, w:SW, h:0.02, fill:{color:C.line}, line:{type:"none"}});
@@ -3782,7 +3841,7 @@ function generatePPT(c, monitor, mes, anio){
       {label:"Venta promedio 3M", value:fmtP(c.sumaProm), sub:"unidades / mes", color:C.navy},
       {label:"Devoluciones de cliente", value:fmtP(c.totalDev), sub:`${c.skuConDev} SKU afectados`, color:C.ink},
       {label:"Roturas internas", value:fmtP(c.totalRot), sub:`${c.skuConRot} SKU afectados`, color:C.ink},
-      {label:"Tasa global dev. + rot.", value:pctP(c.tasaGlobal,2), sub:overUmbral?`Por encima del umbral ${c.umbral}%`:`Dentro del umbral ${c.umbral}%`, color:overUmbral?C.red:C.green},
+      {label:"Tasa global dev. + rot.", value:pctP(c.tasaGlobal,2), sub:overUmbral?`Por encima del umbral ${c.umbralGlobal}%`:`Dentro del umbral ${c.umbralGlobal}%`, color:overUmbral?C.red:C.green},
     ];
     const cardY=1.85, cardH=1.6, cardW=2.9, gap=0.25;
     const startX = (SW - (cardW*4 + gap*3))/2;
@@ -3826,7 +3885,7 @@ function generatePPT(c, monitor, mes, anio){
     const cards = [
       {label:"VENTA PROMEDIO 3M", value:fmtP(c.sumaProm), unit:"unidades / mes", desc:`Suma del promedio mensual de venta de los ${monitor.ventas.length} SKU activos en los últimos 3 meses.`, color:C.navy},
       {label:"UNIDADES AFECTADAS", value:fmtP(c.total), unit:`Devoluciones ${fmtP(c.totalDev)}  ·  Roturas ${fmtP(c.totalRot)}`, desc:"Total de unidades retiradas del flujo comercial durante el mes (clientes + roturas internas).", color:"B45309"},
-      {label:"TASA SOBRE VENTA", value:pctP(c.tasaGlobal,2), unit:overUmbral?`Por encima del umbral aceptable (${c.umbral}%)`:`Dentro del umbral aceptable (${c.umbral}%)`, desc:"Mide el peso real del problema sobre el volumen comercial promedio.", color:overUmbral?C.red:C.green},
+      {label:"TASA SOBRE VENTA", value:pctP(c.tasaGlobal,2), unit:overUmbral?`Por encima del umbral aceptable (${c.umbralGlobal}%)`:`Dentro del umbral aceptable (${c.umbralGlobal}%)`, desc:"Mide el peso real del problema sobre el volumen comercial promedio.", color:overUmbral?C.red:C.green},
     ];
     const cy=1.95, ch=3.6, cw=3.7, cgap=0.45;
     const sx = (SW - (cw*3 + cgap*2))/2;
@@ -4150,6 +4209,11 @@ function normalizeSnapshot(raw){
   it.totalRot = Number(it.totalRot) || 0;
   it.sumaProm = Number(it.sumaProm) || 0;
   it.umbral = Number(it.umbral) || 3;
+  // Retrocompatibilidad: snapshots viejos no tienen umbralGlobal.
+  // Se usa 1% como default para la tasa global (independiente del umbral SKU crítico).
+  it.umbralGlobal = Number.isFinite(Number(it.umbralGlobal)) && Number(it.umbralGlobal) > 0
+    ? Number(it.umbralGlobal)
+    : 1;
   it.corte = Number(it.corte) || 50;
   it.skuConDev = Number(it.skuConDev) || 0;
   it.skuConRot = Number(it.skuConRot) || 0;
@@ -4290,7 +4354,7 @@ function generateExcelComparativa(h, keys){
     ["Roturas internas acumuladas", data.totRot],
     ["Suma promedio venta 3M", data.sumProm],
     ["Tasa promedio del período (ponderada)", `${data.tasaAcum.toFixed(2)}%`],
-    ["Meses sobre umbral", items.filter(it => it.tasaGlobal > it.umbral).length],
+    ["Meses sobre umbral", items.filter(it => it.tasaGlobal > it.umbralGlobal).length],
     ["SKU críticos acumulados (dev+rot)", items.reduce((a,it)=>a+it.criticosDev+it.criticosRot,0)],
     [],
     ["DETALLE POR MES"],
@@ -4773,9 +4837,10 @@ $("btnProc").addEventListener("click", async () => {
     const mes = $("mes").value;
     const anio = Number($("anio").value);
     const umbral = Number($("umbral").value) || 3;
+    const umbralGlobal = Number($("umbralGlobal").value) || 1;
     const zeroNeg = $("zeroNeg").checked;
 
-    log(`Mes: ${mes} ${anio}   ·   umbral=${umbral}%   ·   negativos→0=${zeroNeg?"sí":"no"}`);
+    log(`Mes: ${mes} ${anio}   ·   umbral global=${umbralGlobal}%  umbral SKU=${umbral}%   ·   negativos→0=${zeroNeg?"sí":"no"}`);
 
     log("Leyendo Monitor de Ventas…");
     const wbMon = await readWorkbook($("fileMon").files[0]);
@@ -4795,7 +4860,7 @@ $("btnProc").addEventListener("click", async () => {
     log(`  ${movimientos.rows.length} registros válidos (excluidos los 'MOVIMIENTO DE INVENTARIO')`, "ok");
 
     log("Calculando indicadores…");
-    const computed = aggregate(monitor, movimientos, {umbral, zeroNeg});
+    const computed = aggregate(monitor, movimientos, {umbral, umbralGlobal, zeroNeg});
     log(`  Devoluciones: ${fmt(computed.totalDev)} u  ·  Roturas: ${fmt(computed.totalRot)} u  ·  Tasa global: ${pct(computed.tasaGlobal,2)}`, "ok");
     log(`  ${computed.alertas.length} SKU en alerta`, computed.alertas.length > 0 ? "warn" : "ok");
 
