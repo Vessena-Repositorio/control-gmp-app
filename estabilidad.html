@@ -561,13 +561,6 @@ function renderDashboard(){
           </tr>`;}).join('')}
         </tbody>
       </table>`:`<div class="empty">Todos los estudios están al día.</div>`}
-      <div style="margin-top:10px;padding:10px;background:#fffbeb;border:1px solid #f59e0b;border-radius:6px;font-size:11px;color:#78350f;font-family:monospace">
-        <strong>DEBUG:</strong> ${studies.length} total · ${activos.length} activos · ${pendientes.length} con acción pendiente<br>
-        Próximos: ${nProx} · Atrasados: ${nAtras}<br>
-        Hoy: ${td2()}<br>
-        <strong>TODOS los pendientes (ordenados por fecha):</strong><br>
-        ${pendientes.map(cp=>{const d=cp.fechaProgramada?dTo(cp.fechaProgramada):'?';const clase=d===0||(d>0&&d<=7)?'style="color:#059669;font-weight:bold"':'';return`<span ${clase}>- ${cp.producto} (${cp.lote}): ${cp.codigo} → ${cp.fechaProgramada||'SIN FECHA'} → d=${d} días</span>`;}).join('<br>')}
-      </div>
     </div>`;
   bind('[data-go]','click',el=>{selSt=el.dataset.go;activeTab='estudios';render();});
   bind('[data-kpi]','click',el=>{
@@ -597,7 +590,7 @@ function renderEstudios(){
   document.getElementById('mc').innerHTML=`<div class="panel pp">
     ${dashFilter?`<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:8px 12px;background:var(--tt);border:1px solid var(--teal);border-radius:8px;font-size:13px"><strong>Filtro:</strong> ${{curso:'En curso (muestreos)',proximos:'Próximos (≤7 días)',atrasados:'Atrasados',aprobados:'Aprobados',pendinf:'Completos → sin informe',pendaprob:'Informe → pend. aprobación'}[dashFilter]} (${fl.length}) <div class="spacer"></div><button class="btn sm ghost" id="clearF">✕ Limpiar</button></div>`:''}
     <div class="toolbar"><select id="fT"><option value="">Todos</option><option value="domisanitario" ${filters.t==='domisanitario'?'selected':''}>Domisanitarios</option><option value="cosmetico" ${filters.t==='cosmetico'?'selected':''}>Cosméticos</option></select><input type="text" id="fQ" placeholder="Buscar…" value="${E(filters.q)}"><div class="spacer"></div><button class="btn" id="gN">+ Nuevo</button></div>
-  ${fl.length?`<table><thead><tr><th>Producto</th><th>Lote</th><th>Analista</th><th>Etapa</th><th>Próximo</th></tr></thead><tbody>${fl.map(s=>{const p=s.checkpoints.filter(c=>cpS(c)!=='realizado').sort((a,b)=>a.fechaProgramada.localeCompare(b.fechaProgramada))[0];return`<tr class="ck" data-go="${s.id}"><td><strong>${E(s.producto)}</strong>${s.tipoLote==='desarrollo'?' <span class="tag pendiente" style="font-size:9px">DESARROLLO</span>':s.tipoLote==='lanzamiento'?' <span class="tag proximo" style="font-size:9px">LANZAMIENTO</span>':''}</td><td class="mono">${E(s.lote)}</td><td>${(()=>{const t=TEAM.find(t=>t.e===s.emailAnalista);return t?E(t.n):E(s.emailAnalista||'—');})()}</td><td><span class="bs"><span class="dot"></span>${E(SG[s.stage].l)}</span></td><td>${p?`<span class="sp">${E(p.codigo)}</span> <span class="tag ${cpS(p)}">${sL(cpS(p))}</span>`:'<span class="tag realizado">OK</span>'}</td></tr>`;}).join('')}</tbody></table>`:`<div class="empty"><div class="big">🧪</div>Sin estudios.</div>`}</div>`;
+  ${fl.length?`<table><thead><tr><th>Producto</th><th>Lote</th><th>Analista</th><th>Etapa</th><th>Próximo</th></tr></thead><tbody>${fl.map(s=>{const p=s.checkpoints.filter(c=>cpS(c)!=='realizado').sort((a,b)=>(a.fechaProgramada||'9').localeCompare(b.fechaProgramada||'9'))[0];return`<tr class="ck" data-go="${s.id}"><td><strong>${E(s.producto)}</strong>${s.tipoLote==='desarrollo'?' <span class="tag pendiente" style="font-size:9px">DESARROLLO</span>':s.tipoLote==='lanzamiento'?' <span class="tag proximo" style="font-size:9px">LANZAMIENTO</span>':''}</td><td class="mono">${E(s.lote)}</td><td>${(()=>{const t=TEAM.find(t=>t.e===s.emailAnalista);return t?E(t.n):E(s.emailAnalista||'—');})()}</td><td><span class="bs"><span class="dot"></span>${E(SG[s.stage].l)}</span></td><td>${p?`<span class="sp">${E(p.codigo)}</span> <span class="tag ${cpS(p)}">${sL(cpS(p))}</span>`:'<span class="tag realizado">OK</span>'}</td></tr>`;}).join('')}</tbody></table>`:`<div class="empty"><div class="big">🧪</div>Sin estudios.</div>`}</div>`;
   q('#fT').onchange=e=>{filters.t=e.target.value;render();};q('#fQ').oninput=e=>{filters.q=e.target.value;render();};q('#gN').onclick=()=>{dashFilter='';activeTab='nuevo';render();};
   const cf=q('#clearF');if(cf)cf.onclick=()=>{dashFilter='';render();};
   bind('[data-go]','click',el=>{dashFilter='';selSt=el.dataset.go;render();});
@@ -652,7 +645,7 @@ function renderDetail(){
   const spt=(s.specParams||[]).map(p=>`<tr><td><strong>${E(p.p)}</strong></td><td>${E(p.e)}</td><td>${E(p.m)}</td></tr>`).join('');
   document.getElementById('mc').innerHTML=`
     <div class="panel pp">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px"><div><a class="lb" id="back">← Volver</a><h2 class="st" style="margin-top:8px">${E(s.producto)} — Lote ${E(s.lote)}</h2><p class="sd">${E(catL(s.categoria))} · ${E(norL(s.norma))}${s.tipoLote?' · <strong>'+{desarrollo:'Desarrollo',startup:'Start-up',programa:'Programa',lanzamiento:'Lanzamiento'}[s.tipoLote]+'</strong>':''}</p>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px"><div><button type="button" onclick="goBackToList()" style="background:#0d9488;border:none;color:white;cursor:pointer;font-size:13px;padding:6px 14px;font-family:inherit;border-radius:6px;font-weight:600">← Volver</button><h2 class="st" style="margin-top:8px">${E(s.producto)} — Lote ${E(s.lote)}</h2><p class="sd">${E(catL(s.categoria))} · ${E(norL(s.norma))}${s.tipoLote?' · <strong>'+{desarrollo:'Desarrollo',startup:'Start-up',programa:'Programa',lanzamiento:'Lanzamiento'}[s.tipoLote]+'</strong>':''}</p>
       </div>
       <div style="display:flex;gap:8px">${s.stage>=3||s.rechazado?'<button class="btn approve" id="bAp">✓ Aprobar</button><button class="btn danger" id="bRej">✗ Rechazar</button>':''}<button class="btn ghost sm" id="bDl" style="margin-left:auto">Eliminar</button></div></div>
       ${s.rechazos&&s.rechazos.length?`<div style="margin-top:10px">${s.rechazos.map(r=>`<div style="background:var(--rt);border:1px solid var(--red);border-radius:8px;padding:10px 14px;margin-bottom:6px;font-size:13px"><strong style="color:var(--red)">✗ Rechazado</strong> <span style="color:var(--ink2)">(${r.fecha})</span><br>${E(r.motivo)}</div>`).join('')}</div>`:''}
@@ -720,7 +713,6 @@ function renderDetail(){
     ${tfs('Rotulación','rotulacion',s.rotulacion,'tfR')}
     <div style="display:flex;gap:10px;margin-top:6px"><button class="btn" id="bSI">Guardar informe</button><button class="btn ghost" id="bVI">Ver informe →</button></div></div>`;
 
-  q('#back').onclick=()=>{selSt=null;render();};
   q('#bDl').onclick=async()=>{if(confirm('¿Eliminar?')){studies=studies.filter(x=>x.id!==s.id);selSt=null;await saveStudies();render();}};
   const ap2=q('#bAp');if(ap2)ap2.onclick=async()=>{
     if(!confirm('¿Aprobar este estudio como Dir. Técnica?'))return;
@@ -1046,6 +1038,14 @@ function renderInfo(){
 /* RENDER */
 function render(){if(!SCRIPT_URL){renderSetup();renderNav();rSync();return;}renderNav();rSync();
   if(activeTab==='dashboard')renderDashboard();else if(activeTab==='estudios')renderEstudios();else if(activeTab==='rechazados')renderRechazados();else if(activeTab==='catalogo')renderCatalogo();else if(activeTab==='nuevo')renderNuevo();else if(activeTab==='informe')renderInforme();else if(activeTab==='info')renderInfo();else if(activeTab==='config')renderSetup();}
+// Función global para el botón Volver
+window.goBackToList=function(){
+  selSt=null;
+  activeTab='estudios';
+  if(window.location.hash)history.replaceState(null,'',window.location.pathname);
+  render();
+};
+
 (async()=>{if(SCRIPT_URL)await loadAll();
   const hash=window.location.hash;
   if(hash&&hash.startsWith('#study=')){
@@ -1053,9 +1053,10 @@ function render(){if(!SCRIPT_URL){renderSetup();renderNav();rSync();return;}rend
     if(studies.find(s=>s.id===sid)){selSt=sid;activeTab='estudios';}
   }
   render();
-  // Auto-refresh cada 30 seg — NO sobreescribe si hay cambios locales pendientes
+  // Auto-refresh cada 30 seg — NO sobreescribe si hay cambios locales pendientes ni si estás editando un detalle
   if(SCRIPT_URL) setInterval(async()=>{
     if(_dirty){console.log('Auto-refresh: skip (dirty)');return;}
+    if(selSt){console.log('Auto-refresh: skip (viewing detail)');return;}
     try{
       const r=await fetch(SCRIPT_URL+'?t='+Date.now()+Math.random());
       const d=await r.json();
