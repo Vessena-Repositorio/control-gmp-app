@@ -371,6 +371,8 @@ function buildAssignEmail(s){
 
 async function loadAll(){const d=await gRead();if(d){if(d.productos)try{productos=JSON.parse(d.productos);}catch(e){}if(d.studies)try{studies=JSON.parse(d.studies);}catch(e){}}
   // Auto-fix en memoria — NUNCA guarda automáticamente
+  // Eliminar duplicados por ID
+  const seen=new Set();studies=studies.filter(s=>{if(seen.has(s.id))return false;seen.add(s.id);return true;});
   studies.forEach(s=>{
     if(s.rechazos&&s.rechazos.length&&!s.approvedManually&&s.stage!==5) s.rechazado=true;
     s.checkpoints.forEach(cp=>{
@@ -559,7 +561,13 @@ function renderDashboard(){
           </tr>`;}).join('')}
         </tbody>
       </table>`:`<div class="empty">Todos los estudios están al día.</div>`}
-      <div style="margin-top:10px;padding:8px;background:#f0f0f0;border-radius:6px;font-size:11px;color:#666;font-family:monospace">DEBUG: ${studies.length} estudios en memoria · ${activos.length} activos · ${pendientes.length} con checkpoints pendientes · dirty=${_dirty}</div>
+      <div style="margin-top:10px;padding:10px;background:#fffbeb;border:1px solid #f59e0b;border-radius:6px;font-size:11px;color:#78350f;font-family:monospace">
+        <strong>DEBUG:</strong> ${studies.length} total · ${activos.length} activos · ${pendientes.length} con acción pendiente<br>
+        Próximos: ${nProx} · Atrasados: ${nAtras}<br>
+        Hoy: ${td2()}<br>
+        <strong>TODOS los pendientes (ordenados por fecha):</strong><br>
+        ${pendientes.map(cp=>{const d=cp.fechaProgramada?dTo(cp.fechaProgramada):'?';const clase=d===0||(d>0&&d<=7)?'style="color:#059669;font-weight:bold"':'';return`<span ${clase}>- ${cp.producto} (${cp.lote}): ${cp.codigo} → ${cp.fechaProgramada||'SIN FECHA'} → d=${d} días</span>`;}).join('<br>')}
+      </div>
     </div>`;
   bind('[data-go]','click',el=>{selSt=el.dataset.go;activeTab='estudios';render();});
   bind('[data-kpi]','click',el=>{
@@ -832,10 +840,12 @@ function renderNuevo(){
 
   q('#nP').onchange=()=>{rP2();rF2();};q('#nTL').onchange=rF2;q('#nFI').onchange=rF2;rP2();rF2();
   q('#bX').onclick=()=>{activeTab='estudios';render();};
-  q('#bC').onclick=async()=>{
+  q('#bC').onclick=async(ev)=>{
+    const btn=ev.target;if(btn.disabled)return;btn.disabled=true;btn.style.opacity='0.5';
+    try{
     const lote=q('#nL').value.trim(),emailAn=q('#nEA').value.trim(),tl=q('#nTL').value;
-    if(!lote){toast('Falta lote');return;}
-    const p=productos.find(p=>p.id===q('#nP').value);if(!p)return;
+    if(!lote){toast('Falta lote');btn.disabled=false;btn.style.opacity='1';return;}
+    const p=productos.find(p=>p.id===q('#nP').value);if(!p){btn.disabled=false;btn.style.opacity='1';return;}
     const fi=q('#nFI').value||td2();
     const ct2=CT[p.categoria]||{t:'domisanitario'};
     const espText=(p.params||[]).map(s=>`${s.p}: ${s.e}`).join('\n');
@@ -859,12 +869,13 @@ function renderNuevo(){
       studies.push(s1);created.push(s1);
     }
 
-    await saveOneStudy(created[0]);
+    await saveStudies();
     if(q('#nSendMail').checked&&emailAn){
       for(const ns of created){await gSendEmail(emailAn,'Asignación: '+ns.producto+' ('+ns.tipoEstudio+', Lote '+ns.lote+')',buildAssignEmail(ns));}
     }
     activeTab='dashboard';dashFilter='';render();
-    toast(tl==='desarrollo'?'Estudio creado — verificá en el dashboard':'Estudio start-up creado — verificá en el dashboard');
+    toast(tl==='desarrollo'?'Estudio creado ✓':'Estudio start-up creado ✓');
+    }catch(e){console.error(e);toast('Error al crear estudio');btn.disabled=false;btn.style.opacity='1';}
   };
 }
 
