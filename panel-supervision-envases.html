@@ -514,7 +514,7 @@ const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby0Idz2-18Nsu
 const HORARIOS_ESPERADOS = ['06:00', '08:00', '10:00', '12:00', '14:00', '16:30'];
 const TOLERANCIA_MIN = 60;   // ± minutos para considerar un control "en horario" (ventana completa entre slots)
 const ATRASO_MAX_MIN = 90;   // entre TOLERANCIA_MIN y este umbral: "atrasado" (aún cuenta al slot)
-const ENVASES_15_DIAS = ['PET-900', 'PET-1800', 'DET-1.25L'];
+const ENVASES_15_DIAS = ['PET-900', 'PET-1800', 'DET-1.25L', 'FAB-1L', 'FAB-2L', 'HIPO-1000', 'HIPO-2000'];
 const DIAS_CIERRE_15 = 15;
 const DIAS_PROMPT_CONFIRMACION = 3;
 const UMBRAL_CUMPL_OK = 90;   // % ≥ verde
@@ -527,7 +527,7 @@ const NOMBRES_ENVASES = {
     'DET-1.25L': 'Detergente Lavavajilla 1.25L',
     'PET-1100': 'PET 1.1 L', 'PET-1350': 'PET 1.35 L',
     'PET-AXION-1250': 'PET Axion 1.25 L', 'PET-600': 'PET 600 mL',
-    'PET-640': 'PET 640 mL', 'PET-250': 'PET 250 mL', 'PET-600ESP': 'PET 600 Esp',
+    'PET-640': 'PET 640 mL', 'PET-250': 'PET 250 mL', 'PET-500': 'PET 500 mL', 'PET-600ESP': 'PET 600 Esp',
     'HIPO-750': 'Hipoclorito 750-800 mL', 'HIPO-1000': 'Hipoclorito 1000 mL',
     'HIPO-2000': 'Hipoclorito 2000 mL', 'HIPO-4L': 'Hipoclorito 4L',
     'BIDON-10L': 'Bidón PEAD 10L'
@@ -748,7 +748,7 @@ function agruparPorCampana(ordenesArr) {
         (o.controles || []).forEach(c => grupos[cid].controles.push({
             ...c,
             fecha: c.fecha || normalizeFecha(c.fecha),
-            ordenId: o.id, operador: o.operador, turno: o.turno
+            ordenId: o.id, operador: o.operador, turno: o.turno, maquina: o.maquina, numeroOrden: o.numeroOrden
         }));
         if (o.estado === 'activa') grupos[cid].tieneActiva = true;
         if (fechaOrden && (!grupos[cid].primeraFecha || fechaOrden < grupos[cid].primeraFecha)) {
@@ -1191,12 +1191,18 @@ function renderCampanas(activas) {
             ? `Cierre automático a los ${DIAS_CIERRE_15} días`
             : `Confirmar continuidad cada ${DIAS_PROMPT_CONFIRMACION} días`;
         const diasAbiertaTxt = est.diasAbierta == null ? '—' : est.diasAbierta;
+        // Máquinas únicas de las órdenes activas (o todas si no hay activas)
+        const ordenesRelevantes = c.ordenes.filter(o => o.estado === 'activa');
+        const maqOrdenes = (ordenesRelevantes.length ? ordenesRelevantes : c.ordenes);
+        const maquinas = [...new Set(maqOrdenes.map(o => o.maquina).filter(Boolean))];
+        const maquinasStr = maquinas.length ? maquinas.join(', ') : 's/d';
         return `
             <div class="campana-card ${clase}" onclick="abrirDetalleCampana('${c.campaign_id}')">
                 <div class="campana-header-row">
                     <div>
                         <div class="campana-nombre">${nombreEnvase(c.envase)}</div>
                         <div class="campana-envase">${c.envase} · ID ${String(c.campaign_id).slice(-6)}</div>
+                        <div style="font-size:12px;color:#667eea;font-weight:600;margin-top:4px;">🏭 ${maquinasStr}</div>
                     </div>
                     ${badge}
                 </div>
@@ -1471,6 +1477,11 @@ function abrirDetalleCampana(cid) {
                             ${diasAbierta} días abierta ·
                             <em>${reglaCierre}</em>
                         </div>
+                        ${(() => {
+                            const mq = [...new Set(c.ordenes.map(o => o.maquina).filter(Boolean))];
+                            if (!mq.length) return '';
+                            return `<div style="margin-top:5px;font-size:13px;color:#667eea;font-weight:600;">🏭 Máquina${mq.length > 1 ? 's' : ''}: ${mq.join(', ')}</div>`;
+                        })()}
                     </div>
                     <button class="modal-close" onclick="cerrarDetalle()">✕</button>
                 </div>
@@ -1513,6 +1524,7 @@ function abrirDetalleCampana(cid) {
                             <tr>
                                 <th>Hora</th>
                                 <th>Tipo</th>
+                                <th>Máquina</th>
                                 <th>Operador / turno</th>
                                 <th>Slot esperado</th>
                                 <th>Mediciones</th>
@@ -1538,6 +1550,7 @@ function abrirDetalleCampana(cid) {
                                     <tr class="${filaClase}">
                                         <td style="font-family:monospace;font-weight:700;color:#2d3748;">${ct.hora || '—'}${dupPill}</td>
                                         <td>${ct.tipo || '—'}</td>
+                                        <td>${ct.maquina ? `🏭 ${ct.maquina}` : '<em style="color:#a0aec0;">s/d</em>'}</td>
                                         <td>${ct.operador || '—'}${ct.turno ? ` <span style="color:#a0aec0;">· ${ct.turno}</span>` : ''}</td>
                                         <td>${s.slot || '—'} <span class="estado-pill ${pillClass}">${pill}</span></td>
                                         <td>${meds}</td>
