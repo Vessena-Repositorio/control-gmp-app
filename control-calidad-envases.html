@@ -289,6 +289,10 @@
                 nombre: 'PET 250 ML', tipo: 'PET', codigo: 'pendiente',
                 parametros: {}
             },
+            'PET-500': {
+                nombre: 'PET 500 ML', tipo: 'PET', codigo: 'pendiente',
+                parametros: {}
+            },
             'PET-600ESP': {
                 nombre: 'PET 600 ESP', tipo: 'PET', codigo: 'pendiente',
                 parametros: {}
@@ -392,11 +396,13 @@
             const [campanaFiltroProceso, setCampanaFiltroProceso] = useState(null);
             const [nuevaOrdenData, setNuevaOrdenData] = useState({
                 numeroOrden: '', envase: '', fecha: new Date().toISOString().split('T')[0],
-                operador: '', turno: getTurnoActual()
+                operador: '', turno: getTurnoActual(), maquina: ''
             });
             const [tipoControlSoplado, setTipoControlSoplado] = useState('');
             const [ordenSeleccionada, setOrdenSeleccionada] = useState(null);
             const [mostrarSeleccionOrden, setMostrarSeleccionOrden] = useState(false);
+            // Filtro por envase para simplificar la selección (paso 1 → elige envase, paso 2 → elige orden)
+            const [envaseFiltroProceso, setEnvaseFiltroProceso] = useState(null);
             
             // Estados Controles LCC
             const [mostrarNuevoLCC, setMostrarNuevoLCC] = useState(false);
@@ -416,6 +422,151 @@
             const [busqueda, setBusqueda] = useState('');
             const [mostrarAlertasOOS, setMostrarAlertasOOS] = useState(false);
 
+            // === CONFIGURACIÓN DE REGLAS DE PROCESO ===
+            // Turnos fijos: mañana 06-14, tarde 14-22, noche 22-06 (ver getTurnoActual)
+            // Auto-cierre: al finalizar el turno + margen
+            const MARGEN_CIERRE_HORAS = 1;  // margen para dejar cerrar el último control del turno
+            const HORA_FIN_MANANA = 14;     // fin turno mañana → cierra a 14 + margen
+            const HORA_FIN_TARDE  = 22;     // fin turno tarde  → cierra a 22 + margen
+            const HORA_FIN_NOCHE  = 6;      // fin turno noche  → cierra a 6  + margen (día siguiente)
+
+            // CASO ESPECIAL FABULOSO: un solo turno extendido 06:00 - 17:30
+            // Envases Fabuloso (FAB-1L, FAB-2L) → cierre a 17:30 + margen = 18:30
+            const HORA_FIN_FABULOSO = 17;
+            const MIN_FIN_FABULOSO  = 30;
+            const esFabulosoEnvase = (env) => env === 'FAB-1L' || env === 'FAB-2L';
+
+            // === REGLA DE ARRANQUE CADA 15 DÍAS ===
+            // Estos envases requieren un nuevo control de ARRANQUE cada 15 días calendario
+            // (se trabaja lu-sá y domingo tarde, ~15 días seguidos de producción).
+            const ENVASES_ARRANQUE_15_DIAS = ['PET-900', 'PET-1800', 'DET-1.25L', 'FAB-1L', 'FAB-2L', 'HIPO-1000', 'HIPO-2000'];
+            const DIAS_ARRANQUE = 15;
+
+            // Máquinas disponibles (dropdown al crear/editar orden)
+            const MAQUINAS = ['6 cavidades', '4 cavidades', 'HQ1', 'HQ2', 'Smargon', 'Power 3', 'Bidones'];
+
+            /* Devuelve { requiere, razon, diasDesdeUltimoArranque, ultimoArranqueFecha }
+               Busca el ÚLTIMO ARRANQUE del MISMO ENVASE en todas las órdenes históricas
+               (las órdenes se auto-cierran cada turno pero los controles quedan guardados
+               para siempre). Como cada máquina es dedicada a un envase, esto refleja
+               correctamente cuándo fue el último arranque de esa línea de producción.
+
+               requiere=true en dos casos:
+               1) No hay ningún control de arranque previo para este envase
+               2) El envase está en la lista de 15 días Y pasaron >= 15 días
+                  desde el último arranque */
+            const chequearArranque = (envase, ordenesArr) => {
+                let ultimoArranqueMs = 0;
+                let ultimoArranqueFecha = null;
+                for (const o of ordenesArr) {
+                    if (o.envase !== envase) continue;
+                    if (!o.controles) continue;
+                    for (const c of o.controles) {
+                        if (c.tipo === 'arranque' && c.timestamp) {
+                            const t = new Date(c.timestamp).getTime();
+                            if (!isNaN(t) && t > ultimoArranqueMs) {
+                                ultimoArranqueMs = t;
+                                ultimoArranqueFecha = normalizeFecha(c.fecha || c.timestamp);
+                            }
+                        }
+                    }
+                }
+
+                // CASO 1: nunca hubo arranque de este envase
+                if (ultimoArranqueMs === 0) {
+                    return {
+                        requiere: true,
+                        razon: 'sin_arranque_previo',
+                        diasDesdeUltimoArranque: null,
+                        ultimoArranqueFecha: null
+                    };
+                }
+
+                // CASO 2: envase 15-días con arranque >= 15 días
+                const dias = Math.floor((Date.now() - ultimoArranqueMs) / 86400000);
+                if (ENVASES_ARRANQUE_15_DIAS.includes(envase) && dias >= DIAS_ARRANQUE) {
+                    return {
+                        requiere: true,
+                        razon: '15_dias',
+                        diasDesdeUltimoArranque: dias,
+                        ultimoArranqueFecha
+                    };
+                }
+
+                return {
+                    requiere: false,
+                    diasDesdeUltimoArranque: dias,
+                    ultimoArranqueFecha
+                };
+            };
+
+            // Helper: calcula el momento en que una orden debería cerrarse según su turno
+            const calcularHoraCierre = (orden) => {
+                const creadoMs = (typeof orden.id === 'number' && orden.id > 1e12) ? orden.id : null;
+                if (!creadoMs) return null;
+                const creado = new Date(creadoMs);
+
+                // CASO ESPECIAL: Fabuloso (turno único 06:00-17:30 + 1h margen = 18:30)
+                if (esFabulosoEnvase(orden.envase)) {
+                    const cierre = new Date(creado);
+                    // 17:30 + 1h margen = 18:30
+                    cierre.setHours(HORA_FIN_FABULOSO + MARGEN_CIERRE_HORAS, MIN_FIN_FABULOSO, 0, 0);
+                    return cierre;
+                }
+
+                // Turnos estándar: determinar el turno (prioridad al campo guardado, fallback por hora)
+                let turno = orden.turno;
+                if (turno !== 'mañana' && turno !== 'tarde' && turno !== 'noche') {
+                    const h = creado.getHours();
+                    if (h >= 6 && h < 14) turno = 'mañana';
+                    else if (h >= 14 && h < 22) turno = 'tarde';
+                    else turno = 'noche';
+                }
+
+                const cierre = new Date(creado);
+                if (turno === 'mañana') {
+                    // Cierra hoy a 14:00 + margen
+                    cierre.setHours(HORA_FIN_MANANA + MARGEN_CIERRE_HORAS, 0, 0, 0);
+                } else if (turno === 'tarde') {
+                    // Cierra hoy a 22:00 + margen
+                    cierre.setHours(HORA_FIN_TARDE + MARGEN_CIERRE_HORAS, 0, 0, 0);
+                } else {
+                    // Noche: cierra a 06:00 + margen del día siguiente.
+                    // Si la orden se abrió entre 22:00 y 23:59, el fin de turno es "mañana"
+                    if (creado.getHours() >= 22) {
+                        cierre.setDate(cierre.getDate() + 1);
+                    }
+                    cierre.setHours(HORA_FIN_NOCHE + MARGEN_CIERRE_HORAS, 0, 0, 0);
+                }
+                return cierre;
+            };
+
+            // Helper: normaliza cualquier formato de fecha a "YYYY-MM-DD"
+            const normalizeFecha = (f) => {
+                if (f == null || f === '') return '';
+                const s = String(f).trim();
+                const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+                if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+                const d = new Date(s);
+                if (!isNaN(d.getTime())) {
+                    return d.getUTCFullYear() + '-' +
+                           String(d.getUTCMonth() + 1).padStart(2, '0') + '-' +
+                           String(d.getUTCDate()).padStart(2, '0');
+                }
+                return s;
+            };
+
+            // Helper: tiempo transcurrido en formato legible
+            const tiempoTranscurrido = (msDesde) => {
+                if (!msDesde || msDesde <= 0) return '';
+                const min = Math.floor(msDesde / 60000);
+                if (min < 60) return `hace ${min} min`;
+                const h = Math.floor(min / 60);
+                if (h < 24) return `hace ${h} h`;
+                const d = Math.floor(h / 24);
+                return `hace ${d} día${d !== 1 ? 's' : ''}`;
+            };
+
             // Cargar datos desde Google Sheets al iniciar
             const cargarDatos = async () => {
                 if (!configurado) { setCargando(false); return; }
@@ -423,8 +574,44 @@
                     setCargando(true);
                     const result = await apiCall('getAll');
                     if (result.error) throw new Error(result.error);
-                    setOrdenesSoplado(result.ordenes || []);
+
+                    // === AUTO-CIERRE de órdenes activas al finalizar el turno + margen ===
+                    const ahora = Date.now();
+                    const ordenesRecibidas = result.ordenes || [];
+                    const ordenesParaCerrar = [];
+                    const ordenesFinales = ordenesRecibidas.map(o => {
+                        if (o.estado !== 'activa') return o;
+                        const horaCierre = calcularHoraCierre(o);
+                        if (horaCierre && ahora > horaCierre.getTime()) {
+                            const motivo = esFabulosoEnvase(o.envase)
+                                ? `auto-cierre Fabuloso 17:30 (+${MARGEN_CIERRE_HORAS}h)`
+                                : `auto-cierre fin turno ${o.turno || ''} (+${MARGEN_CIERRE_HORAS}h)`.trim();
+                            const cerrada = {
+                                ...o,
+                                estado: 'finalizada',
+                                motivoCierre: motivo,
+                                fechaCierre: new Date().toISOString()
+                            };
+                            ordenesParaCerrar.push(cerrada);
+                            return cerrada;
+                        }
+                        return o;
+                    });
+
+                    setOrdenesSoplado(ordenesFinales);
                     setControlesLCC(result.lcc || []);
+                    localStorage.setItem('ordenes_soplado', JSON.stringify(ordenesFinales));
+                    localStorage.setItem('controles_lcc', JSON.stringify(result.lcc || []));
+
+                    // Sincronizar cierres al Sheet en segundo plano (no bloquea la UI)
+                    if (ordenesParaCerrar.length > 0) {
+                        console.log(`[Auto-cierre] Cerrando ${ordenesParaCerrar.length} orden(es) por fin de turno + ${MARGEN_CIERRE_HORAS}h de margen`);
+                        ordenesParaCerrar.forEach(orden => {
+                            apiCall('updateOrden', orden).catch(err =>
+                                console.error('Error auto-cerrando orden', orden.numeroOrden, err)
+                            );
+                        });
+                    }
                 } catch (err) {
                     console.error('Error cargando datos:', err);
                     setMensaje({ tipo: 'warning', texto: '⚠️ Error al conectar con Google Sheets. Verificá la URL del script.' });
@@ -462,10 +649,37 @@
             };
 
             const crearNuevaOrden = async () => {
-                if (!nuevaOrdenData.numeroOrden || !nuevaOrdenData.envase || !nuevaOrdenData.operador) {
-                    setMensaje({ tipo: 'warning', texto: 'Complete todos los campos obligatorios' });
+                if (guardando) return; // guardia anti-doble-click
+                if (!nuevaOrdenData.numeroOrden || !nuevaOrdenData.envase || !nuevaOrdenData.operador || !nuevaOrdenData.maquina) {
+                    setMensaje({ tipo: 'warning', texto: 'Complete todos los campos obligatorios (número de orden, envase, operador y máquina)' });
                     return;
                 }
+
+                // Anti-duplicado: si hace menos de 30 seg se creó una orden con el mismo
+                // número, envase y operador → bloquear (típico doble click)
+                const ultimaMismoNumero = ordenesSoplado.find(o =>
+                    o.numeroOrden === nuevaOrdenData.numeroOrden
+                    && o.envase === nuevaOrdenData.envase
+                    && o.operador === nuevaOrdenData.operador
+                );
+                if (ultimaMismoNumero && typeof ultimaMismoNumero.id === 'number') {
+                    const hace = Date.now() - ultimaMismoNumero.id;
+                    if (hace < 30000) {
+                        setMensaje({
+                            tipo: 'warning',
+                            texto: `⚠ Ya existe una orden ${nuevaOrdenData.numeroOrden} de ${nuevaOrdenData.envase} creada hace ${Math.round(hace/1000)} segundos. Si es diferente, cambiá el número de orden.`
+                        });
+                        return;
+                    }
+                    // Si es un duplicado más viejo (misma orden, mismo operador, mismo envase),
+                    // avisar pero permitir (podría ser un cambio de turno del mismo operador)
+                    setMensaje({
+                        tipo: 'warning',
+                        texto: `⚠ Ya existe una orden con el número ${nuevaOrdenData.numeroOrden}. Verificá que sea correcto antes de continuar.`
+                    });
+                }
+
+                setGuardando(true);
                 const id = Date.now();
                 // Si hay campaña seleccionada, usar su campaign_id; sino, esta orden inicia campaña nueva (id propio)
                 const campaign_id = campanaSeleccionada ? campanaSeleccionada.campaign_id : id;
@@ -474,7 +688,6 @@
                     createdAt: new Date().toISOString(),
                     campaign_id
                 };
-                setGuardando(true);
                 guardarOrdenes([nuevaOrden, ...ordenesSoplado]);
                 
                 // Enviar a Google Sheets
@@ -495,7 +708,7 @@
                 setCampanaSeleccionada(null);
                 setNuevaOrdenData({
                     numeroOrden: '', envase: '', fecha: new Date().toISOString().split('T')[0],
-                    operador: '', turno: getTurnoActual()
+                    operador: '', turno: getTurnoActual(), maquina: ''
                 });
             };
 
@@ -558,9 +771,27 @@
             };
 
             const registrarControlSoplado = async () => {
+                if (guardando) return; // guardia anti-doble-click
                 if (!ordenSeleccionada) {
                     setMensaje({ tipo: 'warning', texto: 'Seleccione una orden' });
                     return;
+                }
+
+                // Verificación anti-duplicado: si el último control de esta orden
+                // es del mismo tipo y se guardó hace menos de 15 segundos, bloquear
+                const ordenActual = ordenesSoplado.find(o => o.id === ordenSeleccionada.id);
+                if (ordenActual && ordenActual.controles && ordenActual.controles.length > 0) {
+                    const ult = ordenActual.controles[ordenActual.controles.length - 1];
+                    if (ult.tipo === tipoControlSoplado && ult.timestamp) {
+                        const hace = Date.now() - new Date(ult.timestamp).getTime();
+                        if (hace < 15000) {
+                            setMensaje({
+                                tipo: 'warning',
+                                texto: `⚠ Ya guardaste un control de ${tipoControlSoplado} hace ${Math.round(hace/1000)} segundos. Si es realmente un control nuevo, esperá unos segundos y volvé a intentar.`
+                            });
+                            return;
+                        }
+                    }
                 }
                 
                 // Validar peso si el envase lo requiere
@@ -623,9 +854,29 @@
             };
 
             const registrarControlLCC = async () => {
+                if (guardando) return; // guardia anti-doble-click
                 if (!nuevoControlLCC.envase || !nuevoControlLCC.operador || !tipoControlLCC) {
                     setMensaje({ tipo: 'warning', texto: 'Complete todos los campos obligatorios' });
                     return;
+                }
+
+                // Verificación anti-duplicado: si el último control LCC tiene mismo
+                // tipo, mismo envase y mismo operador y se guardó hace menos de 15 seg
+                if (controlesLCC && controlesLCC.length > 0) {
+                    const ult = controlesLCC[0]; // controlesLCC se guarda con el más nuevo primero
+                    if (ult.tipo === tipoControlLCC
+                        && ult.envase === nuevoControlLCC.envase
+                        && ult.operador === nuevoControlLCC.operador
+                        && ult.timestamp) {
+                        const hace = Date.now() - new Date(ult.timestamp).getTime();
+                        if (hace < 15000) {
+                            setMensaje({
+                                tipo: 'warning',
+                                texto: `⚠ Ya guardaste un control LCC ${tipoControlLCC} de ${nuevoControlLCC.envase} hace ${Math.round(hace/1000)} segundos.`
+                            });
+                            return;
+                        }
+                    }
                 }
                 const nuevoControl = {
                     id: Date.now(), tipo: tipoControlLCC, ...nuevoControlLCC,
@@ -658,6 +909,7 @@
                 setOrdenSeleccionada(null);
                 setMostrarSeleccionOrden(false);
                 setCampanaFiltroProceso(null);
+                setEnvaseFiltroProceso(null);
                 setNuevoControlLCC({
                     envase: '', fecha: new Date().toISOString().split('T')[0],
                     operador: '', turno: getTurnoActual()
@@ -989,13 +1241,25 @@
                                                         <option value="noche">Noche</option>
                                                     </select>
                                                 </div>
+                                                <div className="form-group">
+                                                    <label>Máquina *</label>
+                                                    <select value={nuevaOrdenData.maquina || ''}
+                                                        onChange={(e) => setNuevaOrdenData({...nuevaOrdenData, maquina: e.target.value})}>
+                                                        <option value="">Seleccione...</option>
+                                                        {MAQUINAS.map(m => (
+                                                            <option key={m} value={m}>{m}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
                                             </div>
                                             <div className="button-group">
-                                                <button className="btn btn-primary" onClick={crearNuevaOrden}>✓ Crear Orden</button>
+                                                <button className="btn btn-primary" onClick={crearNuevaOrden} disabled={guardando}>
+                                                    {guardando ? '⏳ Creando...' : '✓ Crear Orden'}
+                                                </button>
                                                 <button className="btn btn-secondary" onClick={() => {
                                                     setMostrarNuevaOrden(false);
                                                     setCampanaSeleccionada(null);
-                                                }}>Cancelar</button>
+                                                }} disabled={guardando}>Cancelar</button>
                                             </div>
                                         </div>
                                     )}
@@ -1018,61 +1282,218 @@
                                                     </div>
                                                 );
                                             })()}
-                                            <div className="form-group">
-                                                <label>Orden de Soplado Activa</label>
-                                                <select value={ordenSeleccionada?.id || ''}
-                                                    onChange={(e) => {
-                                                        const orden = ordenesSoplado.find(o => o.id === parseInt(e.target.value));
-                                                        setOrdenSeleccionada(orden);
-                                                    }}>
-                                                    <option value="">Seleccione...</option>
-                                                    {ordenesSoplado
-                                                        .filter(o => o.estado === 'activa')
-                                                        .filter(o => !campanaFiltroProceso || (o.campaign_id || o.id) === campanaFiltroProceso)
-                                                        .map(orden => {
-                                                        const spec = ESPECIFICACIONES[orden.envase];
-                                                        return (
-                                                            <option key={orden.id} value={orden.id}>
-                                                                {orden.numeroOrden} - {spec?.nombre}
-                                                            </option>
-                                                        );
-                                                    })}
-                                                </select>
-                                            </div>
 
-                                            {ordenSeleccionada && (
-                                                <div className="tipo-control-selector">
-                                                    <div className={`tipo-control-card ${tipoControlSoplado === 'arranque' ? 'selected' : ''}`}
-                                                        onClick={() => setTipoControlSoplado('arranque')}>
-                                                        <div className="tipo-control-icon">🚀</div>
-                                                        <div className="tipo-control-title">Control de Arranque</div>
-                                                        <div className="tipo-control-desc">
-                                                            {esFabuloso(ordenSeleccionada.envase) ? 'REG-G' : 'REG-B'}
-                                                        </div>
-                                                        <div className="tipo-control-desc" style={{marginTop: '5px', fontWeight: '600'}}>
-                                                            Inicio del SKU
-                                                        </div>
-                                                    </div>
+                                            {/* PASO 1: Elegir envase */}
+                                            {!envaseFiltroProceso && !campanaFiltroProceso && (() => {
+                                                const activas = ordenesSoplado.filter(o => o.estado === 'activa');
+                                                // Agrupar por envase y contar
+                                                const conteoPorEnvase = {};
+                                                activas.forEach(o => {
+                                                    conteoPorEnvase[o.envase] = (conteoPorEnvase[o.envase] || 0) + 1;
+                                                });
+                                                const envasesConOrdenes = Object.keys(conteoPorEnvase).sort();
 
-                                                    <div className={`tipo-control-card ${tipoControlSoplado === 'proceso' ? 'selected' : ''}`}
-                                                        onClick={() => setTipoControlSoplado('proceso')}>
-                                                        <div className="tipo-control-icon">⏱️</div>
-                                                        <div className="tipo-control-title">Control cada 2 Horas</div>
-                                                        <div className="tipo-control-desc">
-                                                            {esFabuloso(ordenSeleccionada.envase) ? 'REG-G' : 'REG-B'}
+                                                if (envasesConOrdenes.length === 0) {
+                                                    return (
+                                                        <div className="empty-state">
+                                                            <div className="empty-state-icon">📦</div>
+                                                            <p>No hay órdenes activas. Creá una desde "Órdenes de Soplado".</p>
                                                         </div>
-                                                        <div className="tipo-control-desc" style={{marginTop: '5px', fontWeight: '600'}}>
-                                                            {esFabuloso(ordenSeleccionada.envase) ? 'Visual + Espesores' : 'Solo visual'}
+                                                    );
+                                                }
+                                                return (
+                                                    <>
+                                                        <div className="form-group">
+                                                            <label style={{fontSize: '15px', fontWeight: 700}}>Paso 1 · Elegí el envase que estás controlando</label>
                                                         </div>
-                                                    </div>
-                                                </div>
-                                            )}
+                                                        <div className="tipo-control-selector">
+                                                            {envasesConOrdenes.map(envaseClave => {
+                                                                const spec = ESPECIFICACIONES[envaseClave];
+                                                                const cant = conteoPorEnvase[envaseClave];
+                                                                return (
+                                                                    <div key={envaseClave}
+                                                                        className="tipo-control-card"
+                                                                        onClick={() => setEnvaseFiltroProceso(envaseClave)}>
+                                                                        <div className="tipo-control-icon">📦</div>
+                                                                        <div className="tipo-control-title">{spec?.nombre || envaseClave}</div>
+                                                                        <div className="tipo-control-desc" style={{marginTop: '8px', fontWeight: '600', color: '#667eea'}}>
+                                                                            {cant} orden{cant !== 1 ? 'es' : ''} activa{cant !== 1 ? 's' : ''}
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </>
+                                                );
+                                            })()}
+
+                                            {/* PASO 2: Elegir orden dentro del envase */}
+                                            {(envaseFiltroProceso || campanaFiltroProceso) && (() => {
+                                                const activas = ordenesSoplado
+                                                    .filter(o => o.estado === 'activa')
+                                                    .filter(o => !envaseFiltroProceso || o.envase === envaseFiltroProceso)
+                                                    .filter(o => !campanaFiltroProceso || (o.campaign_id || o.id) === campanaFiltroProceso);
+
+                                                if (activas.length === 0) {
+                                                    return (
+                                                        <div className="empty-state">
+                                                            <div className="empty-state-icon">🔍</div>
+                                                            <p>No hay órdenes activas para este envase.</p>
+                                                        </div>
+                                                    );
+                                                }
+                                                const spec = envaseFiltroProceso ? ESPECIFICACIONES[envaseFiltroProceso] : null;
+                                                return (
+                                                    <>
+                                                        {envaseFiltroProceso && (() => {
+                                                            const chkEnv = chequearArranque(envaseFiltroProceso, ordenesSoplado);
+                                                            const enLista15 = ENVASES_ARRANQUE_15_DIAS.includes(envaseFiltroProceso);
+                                                            let infoArranque;
+                                                            let infoColor = '#2c5282';
+                                                            if (chkEnv.razon === 'sin_arranque_previo') {
+                                                                infoArranque = '⚠ Sin registro de arranque previo — el primer control debe ser ARRANQUE';
+                                                                infoColor = '#7b341e';
+                                                            } else if (chkEnv.requiere) {
+                                                                infoArranque = `⚠ Último arranque: ${chkEnv.ultimoArranqueFecha} (hace ${chkEnv.diasDesdeUltimoArranque} días) — corresponde NUEVO ARRANQUE (regla ${DIAS_ARRANQUE} días)`;
+                                                                infoColor = '#7b341e';
+                                                            } else {
+                                                                const reglaTxt = enLista15 ? ` · faltan ${DIAS_ARRANQUE - chkEnv.diasDesdeUltimoArranque} días para próximo arranque` : '';
+                                                                infoArranque = `✓ Último arranque: ${chkEnv.ultimoArranqueFecha} (hace ${chkEnv.diasDesdeUltimoArranque} día${chkEnv.diasDesdeUltimoArranque !== 1 ? 's' : ''})${reglaTxt}`;
+                                                            }
+                                                            return (
+                                                                <div className="alert alert-info" style={{marginBottom: '15px'}}>
+                                                                    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px'}}>
+                                                                        <span>▶ Envase seleccionado: <strong>{spec?.nombre || envaseFiltroProceso}</strong></span>
+                                                                        <button className="btn btn-secondary" onClick={() => { setEnvaseFiltroProceso(null); setOrdenSeleccionada(null); }}
+                                                                            style={{fontSize: '12px', padding: '4px 12px'}}>
+                                                                            ← Cambiar envase
+                                                                        </button>
+                                                                    </div>
+                                                                    <div style={{marginTop: '8px', paddingTop: '8px', borderTop: '1px solid rgba(0,0,0,0.1)', fontSize: '13px', color: infoColor, fontWeight: 600}}>
+                                                                        {infoArranque}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })()}
+                                                        <div className="form-group">
+                                                            <label style={{fontSize: '15px', fontWeight: 700}}>
+                                                                Paso 2 · Elegí la orden que estás controlando ({activas.length} activa{activas.length !== 1 ? 's' : ''})
+                                                            </label>
+                                                            <div className="spec-info" style={{fontSize: '12px', marginBottom: '10px'}}>
+                                                                ⚠ Verificá el número de orden antes de continuar.
+                                                            </div>
+                                                        </div>
+                                                        <div className="tipo-control-selector">
+                                                            {activas.map(orden => {
+                                                                // Último control de la orden
+                                                                let ultimoCtrlTxt = 'Sin controles aún';
+                                                                if (orden.controles && orden.controles.length > 0) {
+                                                                    const ult = orden.controles[orden.controles.length - 1];
+                                                                    if (ult.timestamp) {
+                                                                        const min = Math.round((Date.now() - new Date(ult.timestamp).getTime()) / 60000);
+                                                                        if (min < 60) ultimoCtrlTxt = `Último control hace ${min} min`;
+                                                                        else if (min < 60 * 24) ultimoCtrlTxt = `Último control hace ${Math.round(min/60)} h`;
+                                                                        else ultimoCtrlTxt = `Último control hace ${Math.round(min/60/24)} días`;
+                                                                    }
+                                                                }
+                                                                // Cuánto hace que se abrió la orden (por id timestamp)
+                                                                const creadoMs = (typeof orden.id === 'number' && orden.id > 1e12) ? orden.id : null;
+                                                                const abiertaHace = creadoMs ? tiempoTranscurrido(Date.now() - creadoMs) : '';
+                                                                const seleccionada = ordenSeleccionada?.id === orden.id;
+                                                                return (
+                                                                    <div key={orden.id}
+                                                                        className={`tipo-control-card ${seleccionada ? 'selected' : ''}`}
+                                                                        onClick={() => setOrdenSeleccionada(orden)}>
+                                                                        <div className="tipo-control-title" style={{fontSize: '20px', color: '#2d3748'}}>
+                                                                            Orden {orden.numeroOrden}
+                                                                        </div>
+                                                                        {orden.maquina && (
+                                                                            <div className="tipo-control-desc" style={{marginTop: '4px', color: '#667eea', fontWeight: '600'}}>
+                                                                                🏭 Máquina: {orden.maquina}
+                                                                            </div>
+                                                                        )}
+                                                                        <div className="tipo-control-desc" style={{marginTop: '8px'}}>
+                                                                            👤 {orden.operador || 's/d'}{orden.turno ? ` · ${orden.turno}` : ''}
+                                                                        </div>
+                                                                        <div className="tipo-control-desc" style={{marginTop: '4px'}}>
+                                                                            📅 Abierta {normalizeFecha(orden.fecha)}{abiertaHace ? ` · ${abiertaHace}` : ''}
+                                                                        </div>
+                                                                        <div className="tipo-control-desc" style={{marginTop: '8px', fontWeight: '600', color: '#667eea'}}>
+                                                                            ⏱ {ultimoCtrlTxt}
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </>
+                                                );
+                                            })()}
+
+                                            {ordenSeleccionada && (() => {
+                                                const chk = chequearArranque(ordenSeleccionada.envase, ordenesSoplado);
+                                                return (
+                                                    <>
+                                                        <div className="form-group" style={{marginTop: '20px'}}>
+                                                            <label style={{fontSize: '15px', fontWeight: 700}}>Paso 3 · Elegí el tipo de control</label>
+                                                        </div>
+
+                                                        {chk.requiere && (
+                                                            <div className="alert alert-warning" style={{marginBottom: '15px', border: '2px solid #dd6b20', background: '#fffaf0'}}>
+                                                                <strong style={{fontSize: '15px', color: '#7b341e'}}>⚠ Corresponde CONTROL DE ARRANQUE</strong>
+                                                                <div style={{marginTop: '6px', fontSize: '13px', color: '#7b341e'}}>
+                                                                    {chk.razon === 'sin_arranque_previo'
+                                                                        ? `No hay controles de arranque previos registrados para este envase. El primer control debe ser un ARRANQUE.`
+                                                                        : `Pasaron ${chk.diasDesdeUltimoArranque} días desde el último arranque (${chk.ultimoArranqueFecha}). Regla: cada ${DIAS_ARRANQUE} días.`
+                                                                    }
+                                                                </div>
+                                                                <div style={{marginTop: '6px', fontSize: '12px', color: '#744210', fontStyle: 'italic'}}>
+                                                                    El control "cada 2 horas" queda bloqueado hasta que se registre el arranque.
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        <div className="tipo-control-selector">
+                                                            <div className={`tipo-control-card ${tipoControlSoplado === 'arranque' ? 'selected' : ''}`}
+                                                                onClick={() => setTipoControlSoplado('arranque')}>
+                                                                <div className="tipo-control-icon">🚀</div>
+                                                                <div className="tipo-control-title">Control de Arranque</div>
+                                                                <div className="tipo-control-desc">
+                                                                    {esFabuloso(ordenSeleccionada.envase) ? 'REG-G' : 'REG-B'}
+                                                                </div>
+                                                                <div className="tipo-control-desc" style={{marginTop: '5px', fontWeight: '600'}}>
+                                                                    Inicio del SKU
+                                                                </div>
+                                                            </div>
+
+                                                            <div className={`tipo-control-card ${tipoControlSoplado === 'proceso' ? 'selected' : ''}`}
+                                                                onClick={() => {
+                                                                    if (chk.requiere) {
+                                                                        setMensaje({ tipo: 'warning', texto: '⚠ Corresponde ARRANQUE primero. El control cada 2 horas está bloqueado.' });
+                                                                        return;
+                                                                    }
+                                                                    setTipoControlSoplado('proceso');
+                                                                }}
+                                                                style={chk.requiere ? {opacity: 0.4, cursor: 'not-allowed', position: 'relative'} : {}}>
+                                                                <div className="tipo-control-icon">⏱️</div>
+                                                                <div className="tipo-control-title">Control cada 2 Horas</div>
+                                                                <div className="tipo-control-desc">
+                                                                    {esFabuloso(ordenSeleccionada.envase) ? 'REG-G' : 'REG-B'}
+                                                                </div>
+                                                                <div className="tipo-control-desc" style={{marginTop: '5px', fontWeight: '600'}}>
+                                                                    {chk.requiere ? '🚫 Bloqueado - hacer arranque primero' : (esFabuloso(ordenSeleccionada.envase) ? 'Visual + Espesores' : 'Solo visual')}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </>
+                                                );
+                                            })()}
 
                                             <div className="button-group">
                                                 <button className="btn btn-secondary" onClick={() => {
                                                     setMostrarSeleccionOrden(false);
                                                     setOrdenSeleccionada(null);
                                                     setCampanaFiltroProceso(null);
+                                                    setEnvaseFiltroProceso(null);
                                                 }}>
                                                     ← Volver
                                                 </button>
@@ -1164,7 +1585,7 @@
                                                                                     </td>
                                                                                 )}
                                                                                 {['brimful', 'altura_h', 'ancho_pie_hw', 'profundidad_pie_hd', 'ancho_hombro_sw', 'profundidad_hombro_sd'].map(param => {
-                                                                                    if (!spec.parametros[param]) return null;
+                                                                                    const p = spec.parametros[param];
                                                                                     return (
                                                                                         <td key={param}>
                                                                                             <input type="number" step="0.1"
@@ -1174,7 +1595,7 @@
                                                                                                     [`arr_${param}_cav${cav}`]: e.target.value
                                                                                                 })} />
                                                                                             <div className="spec-info">
-                                                                                                {spec.parametros[param].min}-{spec.parametros[param].max}
+                                                                                                {p ? `${p.min}-${p.max}` : <em style={{color:'#a0aec0'}}>sin specs</em>}
                                                                                             </div>
                                                                                         </td>
                                                                                     );
@@ -1329,10 +1750,10 @@
                                                 </div>
 
                                                 <div className="button-group">
-                                                    <button className="btn btn-primary" onClick={registrarControlSoplado}>
-                                                        💾 Guardar Control
+                                                    <button className="btn btn-primary" onClick={registrarControlSoplado} disabled={guardando}>
+                                                        {guardando ? '⏳ Guardando...' : '💾 Guardar Control'}
                                                     </button>
-                                                    <button className="btn btn-secondary" onClick={resetFormularios}>
+                                                    <button className="btn btn-secondary" onClick={resetFormularios} disabled={guardando}>
                                                         Cancelar
                                                     </button>
                                                 </div>
@@ -1564,10 +1985,10 @@
                                                 </div>
 
                                                 <div className="button-group">
-                                                    <button className="btn btn-primary" onClick={registrarControlLCC}>
-                                                        💾 Guardar Control LCC
+                                                    <button className="btn btn-primary" onClick={registrarControlLCC} disabled={guardando}>
+                                                        {guardando ? '⏳ Guardando...' : '💾 Guardar Control LCC'}
                                                     </button>
-                                                    <button className="btn btn-secondary" onClick={resetFormularios}>
+                                                    <button className="btn btn-secondary" onClick={resetFormularios} disabled={guardando}>
                                                         Cancelar
                                                     </button>
                                                 </div>
