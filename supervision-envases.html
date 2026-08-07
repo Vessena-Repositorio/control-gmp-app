@@ -1,0 +1,1613 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel Supervisión - Control Calidad Envases | Vessena</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #2d3748;
+        }
+        .container { max-width: 1500px; margin: 0 auto; }
+        .header {
+            background: white; padding: 22px 28px; border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 22px;
+            display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;
+        }
+        .header h1 { color: #2d3748; font-size: 24px; font-weight: 700; }
+        .header .subtitle { color: #718096; font-size: 13px; margin-top: 4px; }
+        .logo { color: #667eea; font-weight: 800; font-size: 22px; letter-spacing: 0.5px; }
+        .status-bar { display: flex; align-items: center; gap: 15px; font-size: 13px; }
+        .status-indicator { display: inline-flex; align-items: center; gap: 6px; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .dot-green { background: #38a169; }
+        .dot-red { background: #e53e3e; }
+        .dot-amber { background: #d69e2e; }
+        .btn {
+            padding: 8px 16px; border: none; border-radius: 8px; font-weight: 600;
+            font-size: 13px; cursor: pointer; transition: all 0.2s;
+            display: inline-flex; align-items: center; gap: 6px;
+        }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-primary:hover { background: #5a67d8; }
+        .btn-secondary { background: #edf2f7; color: #4a5568; }
+        .btn-secondary:hover { background: #e2e8f0; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .panel {
+            background: white; border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 22px;
+            overflow: hidden;
+        }
+        .panel-header {
+            padding: 18px 25px; border-bottom: 2px solid #e2e8f0;
+            background: #f7fafc; display: flex; align-items: center; justify-content: space-between;
+            flex-wrap: wrap; gap: 10px;
+        }
+        .panel-title { font-size: 17px; font-weight: 700; color: #2d3748; display: flex; align-items: center; gap: 10px; }
+        .panel-body { padding: 25px; }
+
+        /* KPI cards */
+        .kpi-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px; margin-bottom: 22px;
+        }
+        .kpi-card {
+            background: white; border-radius: 12px; padding: 18px 22px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.08);
+            border-left: 4px solid #667eea;
+        }
+        .kpi-card.warn { border-left-color: #d69e2e; }
+        .kpi-card.danger { border-left-color: #e53e3e; }
+        .kpi-card.ok { border-left-color: #38a169; }
+        .kpi-label { font-size: 12px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+        .kpi-value { font-size: 30px; font-weight: 800; color: #2d3748; margin: 6px 0 2px; }
+        .kpi-sub { font-size: 12px; color: #718096; }
+
+        /* Alertas */
+        .alerta {
+            display: flex; align-items: flex-start; gap: 12px;
+            padding: 14px 18px; border-radius: 10px; margin-bottom: 10px;
+            border-left: 4px solid;
+        }
+        .alerta-icon { font-size: 22px; line-height: 1; flex-shrink: 0; }
+        .alerta-content { flex: 1; }
+        .alerta-title { font-weight: 700; font-size: 14px; margin-bottom: 3px; }
+        .alerta-body { font-size: 13px; color: #4a5568; line-height: 1.5; }
+        .alerta.critica { background: #fff5f5; border-left-color: #e53e3e; }
+        .alerta.critica .alerta-title { color: #742a2a; }
+        .alerta.aviso { background: #fffbeb; border-left-color: #d69e2e; }
+        .alerta.aviso .alerta-title { color: #744210; }
+        .alerta.info { background: #ebf8ff; border-left-color: #3182ce; }
+        .alerta.info .alerta-title { color: #2c5282; }
+        .sin-alertas { text-align: center; padding: 30px; color: #48bb78; font-weight: 600; }
+
+        /* Alertas agrupadas y desplegables */
+        .alertas-toolbar {
+            display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;
+        }
+        .alertas-toolbar button {
+            padding: 6px 12px; background: #edf2f7; border: 1px solid #cbd5e0;
+            border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;
+            color: #4a5568;
+        }
+        .alertas-toolbar button:hover { background: #e2e8f0; }
+        .grupo-alertas {
+            border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 10px;
+            overflow: hidden; background: white;
+        }
+        .grupo-alertas.tiene-crit { border-color: #fc8181; }
+        .grupo-alertas.tiene-aviso { border-color: #f6ad55; }
+        .grupo-alertas summary {
+            list-style: none; cursor: pointer; padding: 14px 18px;
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 12px; user-select: none; background: #f7fafc;
+            transition: background 0.15s;
+        }
+        .grupo-alertas summary::-webkit-details-marker { display: none; }
+        .grupo-alertas summary:hover { background: #edf2f7; }
+        .grupo-alertas.tiene-crit summary { background: #fff5f5; }
+        .grupo-alertas.tiene-crit summary:hover { background: #fed7d7; }
+        .grupo-alertas.tiene-aviso summary { background: #fffbeb; }
+        .grupo-alertas.tiene-aviso summary:hover { background: #feebc8; }
+        .grupo-titulo { font-weight: 700; font-size: 14px; color: #2d3748; display: flex; align-items: center; gap: 8px; }
+        .grupo-flecha {
+            font-size: 10px; color: #718096; transition: transform 0.15s;
+            display: inline-block;
+        }
+        .grupo-alertas[open] .grupo-flecha { transform: rotate(90deg); }
+        .grupo-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+        .grupo-badge {
+            padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700;
+        }
+        .grupo-badge.crit { background: #fed7d7; color: #742a2a; }
+        .grupo-badge.aviso { background: #feebc8; color: #7b341e; }
+        .grupo-badge.info { background: #bee3f8; color: #2c5282; }
+        .grupo-contenido { padding: 14px 18px; border-top: 1px solid #e2e8f0; }
+        .grupo-contenido .alerta:last-child { margin-bottom: 0; }
+
+        /* Campaña activa cards */
+        .campana-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 15px;
+        }
+        .campana-card {
+            border-radius: 10px; padding: 18px; border: 2px solid;
+            background: white; transition: all 0.2s;
+        }
+        .campana-card.ok { border-color: #9ae6b4; background: #f0fff4; }
+        .campana-card.warn { border-color: #f6ad55; background: #fffbeb; }
+        .campana-card.crit { border-color: #fc8181; background: #fff5f5; }
+        .campana-header-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+        .campana-nombre { font-size: 16px; font-weight: 700; color: #2d3748; }
+        .campana-envase { font-size: 12px; color: #718096; margin-top: 2px; }
+        .badge {
+            font-size: 10px; padding: 3px 8px; border-radius: 10px;
+            font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px;
+        }
+        .badge-ok { background: #c6f6d5; color: #22543d; }
+        .badge-warn { background: #feebc8; color: #7b341e; }
+        .badge-crit { background: #fed7d7; color: #742a2a; }
+        .campana-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+        .campana-metric { font-size: 12px; }
+        .campana-metric-label { color: #718096; font-weight: 500; }
+        .campana-metric-value { font-weight: 700; color: #2d3748; font-size: 14px; margin-top: 2px; }
+        .slots-list {
+            display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px;
+        }
+        .slot-pill {
+            font-size: 11px; padding: 4px 8px; border-radius: 6px;
+            font-family: 'Courier New', monospace; font-weight: 700;
+        }
+        .slot-hecho { background: #c6f6d5; color: #22543d; }
+        .slot-atrasado { background: #feebc8; color: #7b341e; }
+        .slot-muy-tarde { background: #fbd38d; color: #7b341e; border: 1px solid #dd6b20; }
+        .slot-faltante { background: #fed7d7; color: #742a2a; }
+        .slot-futuro { background: #e2e8f0; color: #718096; }
+
+        /* Tabla operadores */
+        table.data-table {
+            width: 100%; border-collapse: collapse; font-size: 13px;
+        }
+        table.data-table th {
+            background: #667eea; color: white; padding: 10px 12px;
+            text-align: left; font-weight: 700; font-size: 12px;
+            text-transform: uppercase; letter-spacing: 0.4px;
+        }
+        table.data-table td {
+            padding: 10px 12px; border-bottom: 1px solid #e2e8f0;
+        }
+        table.data-table tr:hover td { background: #f7fafc; }
+        .cumplimiento-cell {
+            font-weight: 700;
+            font-family: 'Courier New', monospace;
+        }
+        .cumplimiento-cell.ok { color: #22543d; }
+        .cumplimiento-cell.warn { color: #7b341e; }
+        .cumplimiento-cell.crit { color: #742a2a; }
+        .barra-cumpl {
+            width: 100%; height: 6px; background: #e2e8f0;
+            border-radius: 3px; margin-top: 4px; overflow: hidden;
+        }
+        .barra-cumpl-fill { height: 100%; }
+        .barra-cumpl-fill.ok { background: #38a169; }
+        .barra-cumpl-fill.warn { background: #d69e2e; }
+        .barra-cumpl-fill.crit { background: #e53e3e; }
+
+        /* Timeline visual */
+        .timeline-day {
+            display: grid; grid-template-columns: 100px repeat(6, 1fr); gap: 6px;
+            padding: 8px 0; border-bottom: 1px solid #edf2f7; align-items: center;
+        }
+        .timeline-fecha { font-size: 12px; font-weight: 700; color: #4a5568; }
+        .timeline-slot {
+            font-size: 10px; padding: 8px 6px; border-radius: 6px;
+            text-align: center; font-family: 'Courier New', monospace;
+        }
+        .tl-hecho { background: #c6f6d5; color: #22543d; }
+        .tl-atrasado { background: #feebc8; color: #7b341e; }
+        .tl-muy-tarde { background: #fbd38d; color: #7b341e; border: 1px solid #dd6b20; }
+        .tl-tarde { background: #fed7d7; color: #742a2a; }
+        .tl-faltante { background: #edf2f7; color: #a0aec0; text-decoration: line-through; }
+        .tl-futuro { background: #f7fafc; color: #cbd5e0; }
+        .timeline-header {
+            display: grid; grid-template-columns: 100px repeat(6, 1fr); gap: 6px;
+            padding: 6px 0; font-size: 11px; font-weight: 700;
+            color: #718096; text-transform: uppercase; border-bottom: 2px solid #e2e8f0;
+        }
+
+        /* Chart container */
+        .chart-container {
+            position: relative; height: 320px;
+        }
+
+        /* Empty / loading */
+        .empty-state {
+            text-align: center; padding: 50px 20px; color: #a0aec0;
+        }
+        .empty-state-icon { font-size: 56px; margin-bottom: 12px; opacity: 0.4; }
+        .spinner {
+            display: inline-block; width: 20px; height: 20px;
+            border: 3px solid #e2e8f0; border-top-color: #667eea;
+            border-radius: 50%; animation: spin 0.7s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Filters */
+        .filtros-bar {
+            display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
+            padding: 12px 18px; background: #f7fafc; border-radius: 10px;
+            margin-bottom: 15px;
+        }
+        .filtros-bar label { font-size: 12px; color: #4a5568; font-weight: 600; }
+        .filtros-bar select {
+            padding: 6px 10px; border: 1px solid #cbd5e0; border-radius: 6px;
+            font-size: 13px; background: white;
+        }
+
+        /* Leyenda */
+        .leyenda {
+            display: flex; flex-wrap: wrap; gap: 15px; margin-top: 12px;
+            font-size: 11px; color: #718096;
+        }
+        .leyenda-item { display: inline-flex; align-items: center; gap: 5px; }
+        .leyenda-swatch { width: 12px; height: 12px; border-radius: 3px; }
+
+        /* Selector campaña timeline */
+        .campana-selector {
+            display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 15px;
+        }
+        .campana-selector button {
+            padding: 8px 14px; border: 2px solid #e2e8f0; background: white;
+            border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 13px;
+            color: #4a5568; transition: all 0.2s;
+        }
+        .campana-selector button:hover { border-color: #667eea; }
+        .campana-selector button.activa {
+            background: #667eea; color: white; border-color: #667eea;
+        }
+
+        @media (max-width: 700px) {
+            .timeline-day, .timeline-header {
+                grid-template-columns: 80px repeat(6, 1fr);
+                gap: 3px;
+            }
+            .timeline-slot { padding: 6px 2px; font-size: 9px; }
+            body { padding: 10px; }
+            .panel-body { padding: 15px; }
+        }
+
+        /* MODAL detalle campaña */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.6); z-index: 1000;
+            display: flex; align-items: flex-start; justify-content: center;
+            padding: 30px 15px; overflow-y: auto;
+        }
+        .modal-card {
+            background: white; border-radius: 12px;
+            max-width: 1100px; width: 100%; margin: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            display: flex; flex-direction: column; max-height: 90vh;
+        }
+        .modal-header {
+            padding: 20px 25px; border-bottom: 2px solid #e2e8f0;
+            display: flex; justify-content: space-between; align-items: center;
+            position: sticky; top: 0; background: white; border-radius: 12px 12px 0 0;
+            z-index: 1;
+        }
+        .modal-title {
+            font-size: 18px; font-weight: 700; color: #2d3748;
+        }
+        .modal-subtitle {
+            font-size: 12px; color: #718096; margin-top: 3px;
+        }
+        .modal-close {
+            background: #edf2f7; border: none; width: 36px; height: 36px;
+            border-radius: 50%; cursor: pointer; font-size: 20px; color: #4a5568;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s;
+        }
+        .modal-close:hover { background: #e2e8f0; }
+        .modal-body { padding: 20px 25px; overflow-y: auto; }
+        .day-block {
+            margin-bottom: 25px; border: 1px solid #e2e8f0; border-radius: 10px;
+            overflow: hidden;
+        }
+        .day-header {
+            background: #f7fafc; padding: 12px 18px;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex; justify-content: space-between; align-items: center;
+            flex-wrap: wrap; gap: 8px;
+        }
+        .day-fecha { font-size: 15px; font-weight: 700; color: #2d3748; }
+        .day-summary { font-size: 12px; color: #718096; display: flex; gap: 12px; flex-wrap: wrap; }
+        .day-summary span { padding: 2px 10px; border-radius: 10px; background: #edf2f7; font-weight: 600; }
+        .day-summary .s-ok { background: #c6f6d5; color: #22543d; }
+        .day-summary .s-warn { background: #feebc8; color: #7b341e; }
+        .day-summary .s-crit { background: #fed7d7; color: #742a2a; }
+        .controles-tabla {
+            width: 100%; border-collapse: collapse; font-size: 12px;
+        }
+        .controles-tabla th {
+            background: #edf2f7; color: #4a5568; padding: 8px 10px;
+            text-align: left; font-weight: 700; font-size: 11px;
+            text-transform: uppercase; letter-spacing: 0.4px;
+        }
+        .controles-tabla td {
+            padding: 8px 10px; border-bottom: 1px solid #edf2f7;
+            vertical-align: top;
+        }
+        .controles-tabla tr:hover td { background: #f7fafc; }
+        .estado-pill {
+            display: inline-block; padding: 2px 8px; border-radius: 10px;
+            font-size: 10px; font-weight: 700; letter-spacing: 0.3px;
+        }
+        .estado-ok { background: #c6f6d5; color: #22543d; }
+        .estado-atrasado { background: #feebc8; color: #7b341e; }
+        .estado-muy-tarde { background: #fbd38d; color: #7b341e; }
+        .estado-fuera { background: #fed7d7; color: #742a2a; }
+        .estado-duplicado { background: #fbb6ce; color: #702459; }
+        .controles-tabla tr.fila-duplicada td { background: #fff5f7 !important; }
+        .controles-tabla tr.fila-duplicada:hover td { background: #fed7e2 !important; }
+        details.mediciones-details {
+            font-size: 11px;
+        }
+        details.mediciones-details summary {
+            cursor: pointer; color: #667eea; font-weight: 600;
+        }
+        .mediciones-list {
+            margin-top: 6px; display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 4px 12px;
+        }
+        .mediciones-list div {
+            font-family: 'Courier New', monospace; font-size: 10px;
+            padding: 2px 6px; background: #f7fafc; border-radius: 4px;
+        }
+        .campana-card { cursor: pointer; }
+        .campana-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        .btn-ver-detalle {
+            display: block; width: 100%; margin-top: 12px;
+            padding: 8px; background: #667eea; color: white;
+            border: none; border-radius: 6px; font-weight: 600;
+            font-size: 12px; cursor: pointer;
+        }
+        .btn-ver-detalle:hover { background: #5a67d8; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <div>
+            <div class="logo">VESSENA · SUPERVISIÓN</div>
+            <h1>Panel de Control · Calidad de Envases</h1>
+            <div class="subtitle">SOP-PR-138 · Vista Directora Técnica · Última actualización: <span id="ultima-sync">—</span></div>
+        </div>
+        <div class="status-bar">
+            <div class="status-indicator" id="conn-status">
+                <span class="dot dot-amber"></span> Cargando…
+            </div>
+            <button class="btn btn-secondary" id="btn-sync" onclick="cargarDatos()">🔄 Sincronizar</button>
+        </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="kpi-grid" id="kpi-grid">
+        <div class="kpi-card"><div class="kpi-label">Campañas activas</div><div class="kpi-value">—</div></div>
+        <div class="kpi-card"><div class="kpi-label">Alertas críticas</div><div class="kpi-value">—</div></div>
+        <div class="kpi-card"><div class="kpi-label">Cumplimiento hoy</div><div class="kpi-value">—</div></div>
+        <div class="kpi-card"><div class="kpi-label">Cumplimiento 7 días</div><div class="kpi-value">—</div></div>
+        <div class="kpi-card"><div class="kpi-label">Duplicados</div><div class="kpi-value">—</div></div>
+    </div>
+
+    <!-- Alertas -->
+    <div class="panel">
+        <div class="panel-header">
+            <div class="panel-title">🚨 Alertas activas <span id="alertas-count" style="font-size:12px;color:#718096;font-weight:500;"></span></div>
+        </div>
+        <div class="panel-body" id="alertas-body">
+            <div class="empty-state"><div class="empty-state-icon">⏳</div><p>Cargando…</p></div>
+        </div>
+    </div>
+
+    <!-- Campañas activas -->
+    <div class="panel">
+        <div class="panel-header">
+            <div class="panel-title">🎯 Campañas activas · Estado del día</div>
+        </div>
+        <div class="panel-body">
+            <div class="leyenda" style="margin-bottom:15px;margin-top:0;">
+                <span class="leyenda-item"><span class="leyenda-swatch" style="background:#c6f6d5;"></span>Slot en horario (±60 min)</span>
+                <span class="leyenda-item"><span class="leyenda-swatch" style="background:#feebc8;"></span>Atrasado (60-90 min)</span>
+                <span class="leyenda-item"><span class="leyenda-swatch" style="background:#fbd38d;"></span>Muy tarde (&gt;90 min pero cargado)</span>
+                <span class="leyenda-item"><span class="leyenda-swatch" style="background:#fed7d7;"></span>Slot faltante</span>
+                <span class="leyenda-item"><span class="leyenda-swatch" style="background:#e2e8f0;"></span>Slot futuro (aún no venció)</span>
+            </div>
+            <div id="campanas-body">
+                <div class="empty-state"><div class="empty-state-icon">⏳</div><p>Cargando…</p></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cumplimiento últimos 14 días -->
+    <div class="panel">
+        <div class="panel-header">
+            <div class="panel-title">📈 Cumplimiento diario · últimos 14 días</div>
+        </div>
+        <div class="panel-body">
+            <div class="chart-container">
+                <canvas id="chart-cumpl"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Timeline detallado por campaña -->
+    <div class="panel">
+        <div class="panel-header">
+            <div class="panel-title">🕐 Timeline por campaña · últimos 7 días</div>
+        </div>
+        <div class="panel-body">
+            <div class="campana-selector" id="campana-selector"></div>
+            <div id="timeline-body">
+                <div class="empty-state" style="padding:20px;">Seleccioná una campaña para ver el timeline.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ranking operadores -->
+    <div class="panel">
+        <div class="panel-header">
+            <div class="panel-title">👤 Cumplimiento por operador · últimos 30 días</div>
+        </div>
+        <div class="panel-body">
+            <div id="ranking-body">
+                <div class="empty-state"><div class="empty-state-icon">⏳</div><p>Cargando…</p></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Auditoría LCC -->
+    <div class="panel">
+        <div class="panel-header">
+            <div class="panel-title">🔬 Controles LCC · últimos 30 días</div>
+        </div>
+        <div class="panel-body">
+            <div id="lcc-body">
+                <div class="empty-state"><div class="empty-state-icon">⏳</div><p>Cargando…</p></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Diagnóstico (datos crudos) -->
+    <div class="panel">
+        <div class="panel-header">
+            <div class="panel-title">🔍 Diagnóstico · datos crudos por campaña activa</div>
+            <button class="btn btn-secondary" onclick="toggleDiag()">Ver / ocultar</button>
+        </div>
+        <div class="panel-body" id="diag-body" style="display:none;">
+            <div class="empty-state"><div class="empty-state-icon">🔍</div><p>Cargando…</p></div>
+        </div>
+    </div>
+
+    <div style="text-align:center;color:rgba(255,255,255,0.7);font-size:11px;margin-top:20px;padding-bottom:10px;">
+        Panel de supervisión GMP · sólo lectura · lee de la misma hoja que la app de operadores
+    </div>
+</div>
+
+<!-- MODAL detalle campaña -->
+<div id="modal-detalle" style="display:none;"></div>
+
+<script>
+/* =====================================================================
+   CONFIGURACIÓN
+   ===================================================================== */
+const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby0Idz2-18NsukOhRqqrQrgHCpO7f4gX67kb-5gH0xA1DLxw7t39Yr37_PakYth5srj/exec';
+
+// Reglas de proceso
+const HORARIOS_ESPERADOS = ['06:00', '08:00', '10:00', '12:00', '14:00', '16:30'];
+const TOLERANCIA_MIN = 60;   // ± minutos para considerar un control "en horario" (ventana completa entre slots)
+const ATRASO_MAX_MIN = 90;   // entre TOLERANCIA_MIN y este umbral: "atrasado" (aún cuenta al slot)
+const ENVASES_15_DIAS = ['PET-900', 'PET-1800', 'DET-1.25L', 'FAB-1L', 'FAB-2L', 'HIPO-1000', 'HIPO-2000'];
+const DIAS_CIERRE_15 = 15;
+const DIAS_PROMPT_CONFIRMACION = 3;
+const UMBRAL_CUMPL_OK = 90;   // % ≥ verde
+const UMBRAL_CUMPL_WARN = 70; // % ≥ amarillo, sino rojo
+
+// Diccionario de nombres (compatible con la app de operadores)
+const NOMBRES_ENVASES = {
+    'FAB-2L': 'Fabuloso 2L', 'FAB-1L': 'Fabuloso 1L',
+    'PET-1800': 'PET 1800 mL', 'PET-900': 'PET 900 mL',
+    'DET-1.25L': 'Detergente Lavavajilla 1.25L',
+    'PET-1100': 'PET 1.1 L', 'PET-1350': 'PET 1.35 L',
+    'PET-AXION-1250': 'PET Axion 1.25 L', 'PET-600': 'PET 600 mL',
+    'PET-640': 'PET 640 mL', 'PET-250': 'PET 250 mL', 'PET-500': 'PET 500 mL', 'PET-600ESP': 'PET 600 Esp',
+    'HIPO-750': 'Hipoclorito 750-800 mL', 'HIPO-1000': 'Hipoclorito 1000 mL',
+    'HIPO-2000': 'Hipoclorito 2000 mL', 'HIPO-4L': 'Hipoclorito 4L',
+    'BIDON-10L': 'Bidón PEAD 10L'
+};
+
+/* =====================================================================
+   ESTADO
+   ===================================================================== */
+let ordenes = [];
+let lcc = [];
+let campanaSeleccionadaTimeline = null;
+let chartCumpl = null;
+
+/* =====================================================================
+   FETCH
+   ===================================================================== */
+async function apiCall(action) {
+    const url = new URL(GOOGLE_SCRIPT_URL);
+    url.searchParams.set('action', action);
+    const resp = await fetch(url.toString(), { redirect: 'follow' });
+    return resp.json();
+}
+
+async function cargarDatos() {
+    const statusEl = document.getElementById('conn-status');
+    const btnSync = document.getElementById('btn-sync');
+    statusEl.innerHTML = '<span class="spinner"></span> Sincronizando…';
+    btnSync.disabled = true;
+    try {
+        const data = await apiCall('getAll');
+        if (data.error) throw new Error(data.error);
+        // Normalizar fechas de todos los registros para evitar problemas con ISO datetimes
+        ordenes = (data.ordenes || []).map(o => ({
+            ...o,
+            fecha: normalizeFecha(o.fecha),
+            controles: (o.controles || []).map(c => ({
+                ...c,
+                fecha: normalizeFecha(c.fecha)
+            }))
+        }));
+        lcc = (data.lcc || []).map(l => ({ ...l, fecha: normalizeFecha(l.fecha) }));
+        statusEl.innerHTML = '<span class="dot dot-green"></span> Conectado a Google Sheets';
+        document.getElementById('ultima-sync').textContent = new Date().toLocaleString('es-UY');
+        render();
+    } catch (err) {
+        console.error('Error al cargar:', err);
+        statusEl.innerHTML = '<span class="dot dot-red"></span> Error de conexión';
+        document.getElementById('alertas-body').innerHTML =
+            '<div class="alerta critica"><div class="alerta-icon">⚠️</div><div class="alerta-content">' +
+            '<div class="alerta-title">Error al conectar con Google Sheets</div>' +
+            '<div class="alerta-body">' + (err.message || err) + '</div></div></div>';
+    } finally {
+        btnSync.disabled = false;
+    }
+}
+
+/* =====================================================================
+   HELPERS
+   ===================================================================== */
+function hhmmToMin(hhmm) {
+    if (hhmm == null || hhmm === '') return null;
+    // Number (Sheets serial: fraction of day, 0 = 00:00, 0.5 = 12:00)
+    if (typeof hhmm === 'number' && hhmm >= 0 && hhmm < 2) {
+        const totalMin = Math.round(hhmm * 24 * 60);
+        return totalMin % (24 * 60);
+    }
+    const s = String(hhmm).trim();
+    // ISO datetime: extract HH:MM from it
+    const iso = s.match(/T(\d{2}):(\d{2})/);
+    if (iso) return parseInt(iso[1]) * 60 + parseInt(iso[2]);
+    // "HH:MM" or "HH:MM:SS" or "H:MM" — con posibles espacios / hs / AM/PM
+    const clean = s.replace(/\s+/g, ' ').replace(/hs?\.?/i, '').trim();
+    const parts = clean.match(/(\d{1,2})[:\.](\d{2})/);
+    if (parts) {
+        let h = parseInt(parts[1]);
+        const m = parseInt(parts[2]);
+        // AM/PM tolerante: acepta "pm", "p.m.", "p. m.", "PM", "P. M.", etc.
+        const isPM = /p\.?\s*m\.?/i.test(clean);
+        const isAM = /a\.?\s*m\.?/i.test(clean);
+        if (isPM && h < 12) h += 12;
+        if (isAM && h === 12) h = 0;
+        return h * 60 + m;
+    }
+    // Sólo hora entera "10"
+    const solo = clean.match(/^(\d{1,2})$/);
+    if (solo) return parseInt(solo[1]) * 60;
+    return null;
+}
+/* Obtiene la hora en minutos de un control, con fallback al timestamp. */
+function horaControl(c) {
+    let m = hhmmToMin(c.hora);
+    if (m == null && c.timestamp) {
+        m = hhmmToMin(c.timestamp);
+    }
+    return m;
+}
+
+/* Marca controles duplicados dentro de un array.
+   Un duplicado tiene la misma fecha + hora + tipo + operador que otro. */
+function marcarDuplicados(controles) {
+    const grupos = {};
+    for (const c of controles) {
+        const key = [c.fecha || '', c.hora || '', c.tipo || '', c.operador || ''].join('|');
+        if (!grupos[key]) grupos[key] = [];
+        grupos[key].push(c);
+    }
+    // Marcar todos los que están en un grupo con >1
+    for (const c of controles) {
+        const key = [c.fecha || '', c.hora || '', c.tipo || '', c.operador || ''].join('|');
+        c._duplicado = grupos[key].length > 1;
+        c._duplicadoGrupo = grupos[key].length;
+    }
+    return controles;
+}
+
+/* Cuenta duplicados en una lista (sin marcar) */
+function contarDuplicados(controles) {
+    const grupos = {};
+    for (const c of controles) {
+        const key = [c.fecha || '', c.hora || '', c.tipo || '', c.operador || ''].join('|');
+        grupos[key] = (grupos[key] || 0) + 1;
+    }
+    // "Duplicados" = registros que sobran (total - únicos)
+    let extras = 0;
+    for (const k in grupos) if (grupos[k] > 1) extras += (grupos[k] - 1);
+    return extras;
+}
+function minToHhmm(m) {
+    const h = Math.floor(m / 60), mm = m % 60;
+    return String(h).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+}
+function fechaHoy() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+/* Normaliza cualquier representación de fecha a "YYYY-MM-DD".
+   Acepta: "2026-08-04", "2026-08-04T03:00:00.000Z", Date objects,
+   números seriales de Sheets, o formatos con hora agregada. */
+function normalizeFecha(f) {
+    if (f == null || f === '') return null;
+    if (f instanceof Date) {
+        if (isNaN(f.getTime())) return null;
+        return f.getUTCFullYear() + '-' +
+               String(f.getUTCMonth() + 1).padStart(2, '0') + '-' +
+               String(f.getUTCDate()).padStart(2, '0');
+    }
+    if (typeof f === 'number') {
+        // Serial de Sheets: días desde 1899-12-30
+        const d = new Date((f - 25569) * 86400000);
+        if (!isNaN(d.getTime())) {
+            return d.getUTCFullYear() + '-' +
+                   String(d.getUTCMonth() + 1).padStart(2, '0') + '-' +
+                   String(d.getUTCDate()).padStart(2, '0');
+        }
+        return null;
+    }
+    const s = String(f).trim();
+    // Ya es "YYYY-MM-DD"
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    // ISO datetime → tomar la parte de fecha
+    const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+    // Otros formatos: dejar que Date lo intente
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) {
+        return d.getUTCFullYear() + '-' +
+               String(d.getUTCMonth() + 1).padStart(2, '0') + '-' +
+               String(d.getUTCDate()).padStart(2, '0');
+    }
+    return null;
+}
+function diasEntre(fechaISO1, fechaISO2) {
+    if (!fechaISO1 || !fechaISO2) return null;
+    const d1 = new Date(fechaISO1 + 'T00:00:00');
+    const d2 = new Date(fechaISO2 + 'T00:00:00');
+    if (isNaN(d1.getTime()) || isNaN(d2.getTime())) return null;
+    return Math.round((d2 - d1) / 86400000);
+}
+function fechaISO(offsetDias) {
+    const d = new Date();
+    d.setDate(d.getDate() + offsetDias);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function nombreEnvase(clave) { return NOMBRES_ENVASES[clave] || clave; }
+function esEnv15(env) { return ENVASES_15_DIAS.includes(env); }
+
+/* Devuelve el slot esperado más cercano a una hora dada. */
+function slotDeControl(hora) {
+    const m = hhmmToMin(hora);
+    if (m == null) return { slot: null, delta: null, enHorario: false, tarde: false, muyTarde: false };
+    let mejor = null, mejorDelta = Infinity;
+    for (const slot of HORARIOS_ESPERADOS) {
+        const d = Math.abs(m - hhmmToMin(slot));
+        if (d < mejorDelta) { mejorDelta = d; mejor = slot; }
+    }
+    return {
+        slot: mejor, delta: mejorDelta,
+        enHorario: mejorDelta <= TOLERANCIA_MIN,
+        tarde: mejorDelta > TOLERANCIA_MIN && mejorDelta <= ATRASO_MAX_MIN,
+        muyTarde: mejorDelta > ATRASO_MAX_MIN
+    };
+}
+
+/* Agrupa órdenes por campaign_id */
+function agruparPorCampana(ordenesArr) {
+    const grupos = {};
+    ordenesArr.forEach(o => {
+        const cid = o.campaign_id || o.id;
+        const fechaOrden = o.fecha || normalizeFecha(o.fecha);
+        if (!grupos[cid]) {
+            grupos[cid] = {
+                campaign_id: cid, envase: o.envase, ordenes: [],
+                controles: [], primeraFecha: fechaOrden, ultimaFecha: fechaOrden,
+                tieneActiva: false
+            };
+        }
+        grupos[cid].ordenes.push(o);
+        (o.controles || []).forEach(c => grupos[cid].controles.push({
+            ...c,
+            fecha: c.fecha || normalizeFecha(c.fecha),
+            ordenId: o.id, operador: o.operador, turno: o.turno, maquina: o.maquina, numeroOrden: o.numeroOrden
+        }));
+        if (o.estado === 'activa') grupos[cid].tieneActiva = true;
+        if (fechaOrden && (!grupos[cid].primeraFecha || fechaOrden < grupos[cid].primeraFecha)) {
+            grupos[cid].primeraFecha = fechaOrden;
+        }
+        if (fechaOrden && (!grupos[cid].ultimaFecha || fechaOrden > grupos[cid].ultimaFecha)) {
+            grupos[cid].ultimaFecha = fechaOrden;
+        }
+    });
+    return Object.values(grupos);
+}
+
+/* Devuelve los slots del día con su estado {slot,estado,hora,delta}
+   estado: 'hecho' | 'atrasado' | 'muy_tarde' | 'faltante' | 'futuro'
+   Cada control se asigna a UN solo slot (el más cercano), evitando doble conteo.
+   NO se descarta ningún control por lejanía: todos llenan su slot más cercano.
+   El estado refleja qué tan lejos estuvo del ideal. */
+function slotsDelDia(campana, fechaISOStr) {
+    const controles = campana.controles.filter(c => c.fecha === fechaISOStr);
+    const esHoy = fechaISOStr === fechaHoy();
+    const ahoraMin = new Date().getHours() * 60 + new Date().getMinutes();
+
+    const asignacionesPorSlot = {}; // idxSlot -> { control, delta }
+    for (const c of controles) {
+        const cMin = horaControl(c);
+        if (cMin == null) continue;
+        let mejorIdx = -1, mejorDelta = Infinity;
+        HORARIOS_ESPERADOS.forEach((s, i) => {
+            const d = Math.abs(cMin - hhmmToMin(s));
+            if (d < mejorDelta) { mejorDelta = d; mejorIdx = i; }
+        });
+        const actual = asignacionesPorSlot[mejorIdx];
+        if (!actual || mejorDelta < actual.delta) {
+            asignacionesPorSlot[mejorIdx] = { control: c, delta: mejorDelta };
+        }
+    }
+
+    return HORARIOS_ESPERADOS.map((slot, idx) => {
+        const asig = asignacionesPorSlot[idx];
+        const slotMin = hhmmToMin(slot);
+        if (asig) {
+            let estado;
+            if (asig.delta <= TOLERANCIA_MIN) estado = 'hecho';
+            else if (asig.delta <= ATRASO_MAX_MIN) estado = 'atrasado';
+            else estado = 'muy_tarde';
+            return { slot, estado, hora: asig.control.hora, delta: asig.delta, control: asig.control };
+        }
+        if (esHoy && slotMin > ahoraMin + 15) {
+            return { slot, estado: 'futuro' };
+        }
+        return { slot, estado: 'faltante' };
+    });
+}
+
+/* Cumplimiento de un día = slots hechos (en horario o atrasados) / slots vencidos */
+function cumplimientoDia(campana, fechaISOStr) {
+    const s = slotsDelDia(campana, fechaISOStr);
+    const relevantes = s.filter(x => x.estado !== 'futuro');
+    if (!relevantes.length) return { pct: null, hechos: 0, esperados: 0, atrasados: 0, muyTarde: 0, faltantes: 0 };
+    const hechos = relevantes.filter(x => x.estado === 'hecho').length;
+    const atrasados = relevantes.filter(x => x.estado === 'atrasado').length;
+    const muyTarde = relevantes.filter(x => x.estado === 'muy_tarde').length;
+    const faltantes = relevantes.filter(x => x.estado === 'faltante').length;
+    // Cumplimiento = cualquier slot con control cuenta (aunque sea "muy tarde")
+    return {
+        pct: Math.round(((hechos + atrasados + muyTarde) / relevantes.length) * 100),
+        pctEnHorario: Math.round((hechos / relevantes.length) * 100),
+        hechos, atrasados, muyTarde, faltantes, esperados: relevantes.length
+    };
+}
+
+/* Nivel de estado global para una campaña activa (hoy) */
+function estadoCampana(campana) {
+    const c = cumplimientoDia(campana, fechaHoy());
+    const diasAbierta = diasEntre(campana.primeraFecha, fechaHoy());
+    const diasDesdeUltimaOrden = diasEntre(campana.ultimaFecha, fechaHoy());
+
+    // Reglas de cierre / continuidad
+    const alertas = [];
+    if (esEnv15(campana.envase) && diasAbierta > DIAS_CIERRE_15) {
+        alertas.push({ nivel: 'crit', txt: `Campaña ${nombreEnvase(campana.envase)} lleva ${diasAbierta} días abierta — regla de 15 días excedida.` });
+    }
+    if (!esEnv15(campana.envase) && diasDesdeUltimaOrden > DIAS_PROMPT_CONFIRMACION) {
+        alertas.push({ nivel: 'aviso', txt: `Sin orden nueva hace ${diasDesdeUltimaOrden} días — corresponde confirmar si sigue la misma campaña (regla 3 días).` });
+    }
+    if (c.faltantes > 0 && c.esperados > 0) {
+        const slotsF = slotsDelDia(campana, fechaHoy()).filter(s => s.estado === 'faltante').map(s => s.slot).join(', ');
+        alertas.push({ nivel: c.faltantes >= 2 ? 'crit' : 'aviso', txt: `Faltan controles del día: ${slotsF}.` });
+    }
+    if (c.atrasados > 0) {
+        alertas.push({ nivel: 'aviso', txt: `${c.atrasados} control(es) registrado(s) con atraso hoy.` });
+    }
+
+    let nivel = 'ok';
+    if (alertas.some(a => a.nivel === 'crit')) nivel = 'crit';
+    else if (alertas.some(a => a.nivel === 'aviso')) nivel = 'warn';
+
+    return { nivel, alertas, cumplimientoHoy: c, diasAbierta, diasDesdeUltimaOrden };
+}
+
+/* =====================================================================
+   RENDER
+   ===================================================================== */
+function render() {
+    const campanas = agruparPorCampana(ordenes);
+    const activas = campanas.filter(c => c.tieneActiva);
+
+    renderKPIs(campanas, activas);
+    renderAlertas(campanas, activas);
+    renderCampanas(activas);
+    renderChart(activas);
+    renderTimelineSelector(activas);
+    renderRanking(campanas);
+    renderLCC();
+    renderDiagnostico(campanas, activas);
+}
+
+function toggleDiag() {
+    const el = document.getElementById('diag-body');
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function renderDiagnostico(campanas, activas) {
+    const body = document.getElementById('diag-body');
+    const totalCtrl = campanas.reduce((s, c) => s + c.controles.length, 0);
+    const totalHoy = campanas.reduce((s, c) => s + c.controles.filter(x => x.fecha === fechaHoy()).length, 0);
+
+    let html = `
+        <div style="background:#f7fafc;padding:12px 16px;border-radius:8px;margin-bottom:15px;font-size:13px;color:#4a5568;">
+            <strong>Resumen carga:</strong> ${ordenes.length} órdenes · ${campanas.length} campañas (${activas.length} activas) ·
+            ${totalCtrl} controles totales · <strong>${totalHoy} controles hoy</strong> (${fechaHoy()}).
+        </div>
+    `;
+
+    if (!activas.length) {
+        body.innerHTML = html + '<div class="empty-state" style="padding:20px;">No hay campañas activas.</div>';
+        return;
+    }
+
+    for (const c of activas) {
+        const ctrlHoy = c.controles.filter(x => x.fecha === fechaHoy())
+            .sort((a, b) => (hhmmToMin(a.hora) || 0) - (hhmmToMin(b.hora) || 0));
+        const ult3dias = c.controles.filter(x => x.fecha >= fechaISO(-2))
+            .sort((a, b) => (b.fecha + (b.hora || '')).localeCompare(a.fecha + (a.hora || '')));
+
+        html += `
+            <div style="border:1px solid #e2e8f0;border-radius:10px;padding:15px;margin-bottom:12px;">
+                <div style="font-weight:700;font-size:14px;color:#2d3748;margin-bottom:8px;">
+                    ${nombreEnvase(c.envase)} <span style="font-size:11px;color:#718096;font-weight:500;">(${c.envase} · campaign ${String(c.campaign_id).slice(-8)})</span>
+                </div>
+                <div style="font-size:12px;color:#4a5568;margin-bottom:10px;">
+                    ${c.ordenes.length} órdenes · ${c.controles.length} controles totales ·
+                    <strong>${ctrlHoy.length} controles hoy</strong>
+                </div>
+        `;
+
+        if (ctrlHoy.length) {
+            html += `<div style="font-size:11px;color:#718096;margin-bottom:5px;font-weight:600;text-transform:uppercase;">Controles de hoy (crudos)</div>`;
+            html += `<table class="data-table" style="font-size:11px;margin-bottom:10px;"><thead><tr><th>hora</th><th>tipo</th><th>operador</th><th>timestamp</th><th>slot asignado</th></tr></thead><tbody>`;
+            for (const ct of ctrlHoy) {
+                const s = slotDeControl(ct.hora || ct.timestamp);
+                const estado = s.enHorario ? 'en horario' : s.tarde ? 'atrasado' : s.muyTarde ? 'muy tarde' : 's/d';
+                html += `<tr>
+                    <td><code>${ct.hora ?? ''}</code></td>
+                    <td>${ct.tipo || ''}</td>
+                    <td>${ct.operador || ''}</td>
+                    <td style="font-size:10px;color:#718096;">${ct.timestamp || ''}</td>
+                    <td><strong>${s.slot || '—'}</strong> (Δ ${s.delta ?? '—'}min, ${estado})</td>
+                </tr>`;
+            }
+            html += `</tbody></table>`;
+        } else {
+            html += `<div style="font-size:12px;color:#a0aec0;margin-bottom:10px;"><em>Sin controles cargados hoy.</em></div>`;
+        }
+
+        if (ult3dias.length) {
+            html += `<details><summary style="cursor:pointer;font-size:11px;color:#667eea;font-weight:600;">Ver últimos 3 días crudos (${ult3dias.length})</summary>`;
+            html += `<table class="data-table" style="font-size:11px;margin-top:8px;"><thead><tr><th>fecha</th><th>hora</th><th>tipo</th><th>operador</th></tr></thead><tbody>`;
+            for (const ct of ult3dias.slice(0, 30)) {
+                html += `<tr><td>${ct.fecha}</td><td><code>${ct.hora ?? ''}</code></td><td>${ct.tipo || ''}</td><td>${ct.operador || ''}</td></tr>`;
+            }
+            html += `</tbody></table></details>`;
+        }
+        html += `</div>`;
+    }
+
+    body.innerHTML = html;
+}
+
+/* --------- KPIs --------- */
+function renderKPIs(campanas, activas) {
+    const grid = document.getElementById('kpi-grid');
+
+    // cumplimiento hoy = promedio de % por campaña activa
+    let cumplHoy = null;
+    if (activas.length) {
+        const vals = activas.map(c => cumplimientoDia(c, fechaHoy()).pct).filter(v => v != null);
+        if (vals.length) cumplHoy = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+    }
+    // cumplimiento 7 días
+    let cumpl7 = null;
+    if (activas.length) {
+        const vals = [];
+        for (let i = -6; i <= 0; i++) {
+            for (const c of activas) {
+                const v = cumplimientoDia(c, fechaISO(i)).pct;
+                if (v != null) vals.push(v);
+            }
+        }
+        if (vals.length) cumpl7 = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+    }
+
+    // alertas críticas totales
+    const alertasCrit = activas.reduce((sum, c) => sum + estadoCampana(c).alertas.filter(a => a.nivel === 'crit').length, 0);
+
+    // duplicados totales últimos 30 días (todas las campañas)
+    const desde30 = fechaISO(-29);
+    const dupTotal = campanas.reduce((sum, c) =>
+        sum + contarDuplicados(c.controles.filter(x => x.fecha && x.fecha >= desde30)), 0);
+
+    const nivelKPI = (pct) => pct == null ? '' : pct >= UMBRAL_CUMPL_OK ? 'ok' : pct >= UMBRAL_CUMPL_WARN ? 'warn' : 'danger';
+
+    grid.innerHTML = `
+        <div class="kpi-card">
+            <div class="kpi-label">Campañas activas</div>
+            <div class="kpi-value">${activas.length}</div>
+            <div class="kpi-sub">${campanas.length} en total</div>
+        </div>
+        <div class="kpi-card ${alertasCrit > 0 ? 'danger' : 'ok'}">
+            <div class="kpi-label">Alertas críticas</div>
+            <div class="kpi-value">${alertasCrit}</div>
+            <div class="kpi-sub">${alertasCrit === 0 ? 'Todo en regla' : 'Requieren acción'}</div>
+        </div>
+        <div class="kpi-card ${nivelKPI(cumplHoy)}">
+            <div class="kpi-label">Cumplimiento hoy</div>
+            <div class="kpi-value">${cumplHoy == null ? '—' : cumplHoy + '%'}</div>
+            <div class="kpi-sub">promedio de campañas activas</div>
+        </div>
+        <div class="kpi-card ${nivelKPI(cumpl7)}">
+            <div class="kpi-label">Cumplimiento 7 días</div>
+            <div class="kpi-value">${cumpl7 == null ? '—' : cumpl7 + '%'}</div>
+            <div class="kpi-sub">ventana móvil</div>
+        </div>
+        <div class="kpi-card ${dupTotal > 0 ? 'warn' : 'ok'}">
+            <div class="kpi-label">Duplicados (30 días)</div>
+            <div class="kpi-value">${dupTotal}</div>
+            <div class="kpi-sub">${dupTotal === 0 ? 'Sin duplicados' : 'mismo día + hora + tipo + operador'}</div>
+        </div>
+    `;
+}
+
+/* --------- Alertas globales --------- */
+function renderAlertas(campanas, activas) {
+    const body = document.getElementById('alertas-body');
+    const alertas = [];
+
+    // 1. Reglas de cierre y continuidad
+    for (const c of activas) {
+        const est = estadoCampana(c);
+        est.alertas.forEach(a => alertas.push({ ...a, campana: c }));
+    }
+
+    // 2. Controles registrados a horas fuera del turno productivo (fuera de 05:30 - 17:00)
+    const MIN_INICIO = 5 * 60 + 30;
+    const MIN_FIN = 17 * 60;
+    const ultimos7 = fechaISO(-6);
+    for (const c of campanas) {
+        for (const ctrl of c.controles) {
+            if (!ctrl.fecha || ctrl.fecha < ultimos7) continue;
+            const cm = hhmmToMin(ctrl.hora);
+            if (cm == null) continue;
+            if (cm < MIN_INICIO || cm > MIN_FIN) {
+                alertas.push({
+                    nivel: 'aviso',
+                    txt: `${nombreEnvase(c.envase)}: control registrado a las ${ctrl.hora} del ${ctrl.fecha} (fuera del horario 06-16:30).`,
+                    campana: c
+                });
+            }
+        }
+    }
+
+    // 3. Campañas finalizadas con controles posteriores al cierre
+    // (posible detección: si la campaña está finalizada pero hay controles después de una fecha "límite")
+    const campanasFinalizadasRecientes = campanas.filter(c => !c.tieneActiva && c.ultimaFecha >= ultimos7);
+    for (const c of campanasFinalizadasRecientes) {
+        // esta detección es referencial: alertamos si la duración total superó los límites
+        const dias = diasEntre(c.primeraFecha, c.ultimaFecha);
+        if (esEnv15(c.envase) && dias > DIAS_CIERRE_15) {
+            alertas.push({
+                nivel: 'crit',
+                txt: `Campaña finalizada ${nombreEnvase(c.envase)} duró ${dias} días (regla de cierre a los ${DIAS_CIERRE_15}).`,
+                campana: c
+            });
+        }
+    }
+
+    // 4. Controles duplicados (últimos 30 días) por campaña
+    const desde30 = fechaISO(-29);
+    for (const c of campanas) {
+        const ctrls30 = c.controles.filter(x => x.fecha && x.fecha >= desde30);
+        const dupCount = contarDuplicados(ctrls30);
+        if (dupCount > 0) {
+            // Detectar en qué fechas hay duplicados para el mensaje
+            const marcados = marcarDuplicados(ctrls30.slice());
+            const fechasDup = [...new Set(marcados.filter(x => x._duplicado).map(x => x.fecha))].sort().reverse();
+            const fechasStr = fechasDup.slice(0, 3).join(', ') + (fechasDup.length > 3 ? ` y ${fechasDup.length - 3} más` : '');
+            alertas.push({
+                nivel: 'aviso',
+                txt: `${dupCount} control${dupCount !== 1 ? 'es' : ''} duplicado${dupCount !== 1 ? 's' : ''} detectado${dupCount !== 1 ? 's' : ''} (mismo día + hora + tipo + operador). Fechas: ${fechasStr}. Click en la campaña para ver detalle.`,
+                campana: c
+            });
+        }
+    }
+
+    document.getElementById('alertas-count').textContent = `(${alertas.length})`;
+
+    if (!alertas.length) {
+        body.innerHTML = '<div class="sin-alertas">✓ Sin alertas activas. Todas las campañas están en regla.</div>';
+        return;
+    }
+
+    // Agrupar alertas por campaña (usa el nombre del envase; las que no tienen campaña van a "General")
+    const grupos = {};
+    for (const a of alertas) {
+        const key = a.campana ? (a.campana.envase || 'sin-envase') : '__general';
+        if (!grupos[key]) {
+            grupos[key] = {
+                key,
+                nombre: a.campana ? nombreEnvase(a.campana.envase) : 'General',
+                campana: a.campana || null,
+                alertas: []
+            };
+        }
+        grupos[key].alertas.push(a);
+    }
+
+    // Para cada grupo, contar por nivel y ordenar internamente
+    const ordenNivel = { crit: 0, aviso: 1, info: 2 };
+    const gruposArr = Object.values(grupos).map(g => {
+        const crit = g.alertas.filter(a => a.nivel === 'crit').length;
+        const aviso = g.alertas.filter(a => a.nivel === 'aviso').length;
+        const info = g.alertas.filter(a => a.nivel === 'info').length;
+        g.crit = crit; g.aviso = aviso; g.info = info;
+        g.maxNivel = crit ? 'crit' : aviso ? 'aviso' : 'info';
+        g.alertas.sort((a, b) => (ordenNivel[a.nivel] ?? 3) - (ordenNivel[b.nivel] ?? 3));
+        return g;
+    });
+
+    // Ordenar grupos: los que tienen críticas primero, dentro por cantidad
+    gruposArr.sort((a, b) => {
+        const n = (ordenNivel[a.maxNivel] ?? 3) - (ordenNivel[b.maxNivel] ?? 3);
+        if (n !== 0) return n;
+        return (b.crit + b.aviso) - (a.crit + a.aviso);
+    });
+
+    // Toolbar con "expandir todo / colapsar todo"
+    const toolbarHTML = `
+        <div class="alertas-toolbar">
+            <button onclick="expandirAlertas(true)">▾ Expandir todo</button>
+            <button onclick="expandirAlertas(false)">▸ Colapsar todo</button>
+            <button onclick="expandirAlertas('crit')">🔴 Sólo críticas</button>
+        </div>
+    `;
+
+    body.innerHTML = toolbarHTML + gruposArr.map(g => {
+        const clase = g.crit ? 'tiene-crit' : g.aviso ? 'tiene-aviso' : '';
+        const abierto = g.crit > 0 ? ' open' : ''; // sólo abre por defecto las que tienen críticas
+        const badges = [];
+        if (g.crit) badges.push(`<span class="grupo-badge crit">${g.crit} crítica${g.crit !== 1 ? 's' : ''}</span>`);
+        if (g.aviso) badges.push(`<span class="grupo-badge aviso">${g.aviso} aviso${g.aviso !== 1 ? 's' : ''}</span>`);
+        if (g.info) badges.push(`<span class="grupo-badge info">${g.info} info</span>`);
+
+        const alertasHTML = g.alertas.map(a => {
+            const claseA = a.nivel === 'crit' ? 'critica' : (a.nivel === 'aviso' ? 'aviso' : 'info');
+            const icon = a.nivel === 'crit' ? '🔴' : (a.nivel === 'aviso' ? '🟡' : 'ℹ️');
+            return `
+                <div class="alerta ${claseA}">
+                    <div class="alerta-icon">${icon}</div>
+                    <div class="alerta-content">
+                        <div class="alerta-body">${a.txt}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        return `
+            <details class="grupo-alertas ${clase}"${abierto}>
+                <summary>
+                    <div class="grupo-titulo">
+                        <span class="grupo-flecha">▸</span>
+                        ${g.nombre}
+                    </div>
+                    <div class="grupo-badges">${badges.join('')}</div>
+                </summary>
+                <div class="grupo-contenido">${alertasHTML}</div>
+            </details>
+        `;
+    }).join('');
+}
+
+/* Expande o colapsa todas las alertas (o sólo las críticas) */
+function expandirAlertas(modo) {
+    const items = document.querySelectorAll('#alertas-body details.grupo-alertas');
+    items.forEach(det => {
+        if (modo === true) det.open = true;
+        else if (modo === false) det.open = false;
+        else if (modo === 'crit') det.open = det.classList.contains('tiene-crit');
+    });
+}
+
+/* --------- Cards de campañas activas --------- */
+function renderCampanas(activas) {
+    const body = document.getElementById('campanas-body');
+    if (!activas.length) {
+        body.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📦</div><p>No hay campañas activas.</p></div>';
+        return;
+    }
+    // ordenar críticas primero
+    const orden = { crit: 0, warn: 1, ok: 2 };
+    const ordenadas = activas.map(c => ({ c, est: estadoCampana(c) }))
+        .sort((a, b) => orden[a.est.nivel] - orden[b.est.nivel]);
+
+    body.innerHTML = '<div class="campana-grid">' + ordenadas.map(({ c, est }) => {
+        const slots = slotsDelDia(c, fechaHoy());
+        const controlesHoy = c.controles.filter(ct => ct.fecha === fechaHoy())
+            .sort((a, b) => (hhmmToMin(a.hora) || 0) - (hhmmToMin(b.hora) || 0));
+        const badge = est.nivel === 'crit' ? '<span class="badge badge-crit">CRÍTICO</span>' :
+                      est.nivel === 'warn' ? '<span class="badge badge-warn">REVISAR</span>' :
+                                              '<span class="badge badge-ok">EN REGLA</span>';
+        const clase = est.nivel === 'crit' ? 'crit' : est.nivel === 'warn' ? 'warn' : 'ok';
+        const ultCtrl = c.controles.slice().sort((a,b) => {
+            const ka = (a.fecha || '') + ' ' + (a.hora || '');
+            const kb = (b.fecha || '') + ' ' + (b.hora || '');
+            return kb.localeCompare(ka);
+        })[0];
+        const ultCtrlStr = ultCtrl
+            ? `${ultCtrl.fecha || '?'} · ${ultCtrl.hora || '?'}`
+            : 'sin controles';
+        const reglaCierre = esEnv15(c.envase)
+            ? `Cierre automático a los ${DIAS_CIERRE_15} días`
+            : `Confirmar continuidad cada ${DIAS_PROMPT_CONFIRMACION} días`;
+        const diasAbiertaTxt = est.diasAbierta == null ? '—' : est.diasAbierta;
+        // Máquinas únicas de las órdenes activas (o todas si no hay activas)
+        const ordenesRelevantes = c.ordenes.filter(o => o.estado === 'activa');
+        const maqOrdenes = (ordenesRelevantes.length ? ordenesRelevantes : c.ordenes);
+        const maquinas = [...new Set(maqOrdenes.map(o => o.maquina).filter(Boolean))];
+        const maquinasStr = maquinas.length ? maquinas.join(', ') : 's/d';
+        return `
+            <div class="campana-card ${clase}" onclick="abrirDetalleCampana('${c.campaign_id}')">
+                <div class="campana-header-row">
+                    <div>
+                        <div class="campana-nombre">${nombreEnvase(c.envase)}</div>
+                        <div class="campana-envase">${c.envase} · ID ${String(c.campaign_id).slice(-6)}</div>
+                        <div style="font-size:12px;color:#667eea;font-weight:600;margin-top:4px;">🏭 ${maquinasStr}</div>
+                    </div>
+                    ${badge}
+                </div>
+                <div class="campana-metrics">
+                    <div class="campana-metric">
+                        <div class="campana-metric-label">Días abierta</div>
+                        <div class="campana-metric-value">${diasAbiertaTxt}</div>
+                    </div>
+                    <div class="campana-metric">
+                        <div class="campana-metric-label">Cumplimiento hoy</div>
+                        <div class="campana-metric-value">${est.cumplimientoHoy.pct == null ? '—' : est.cumplimientoHoy.pct + '%'}</div>
+                    </div>
+                    <div class="campana-metric">
+                        <div class="campana-metric-label">Órdenes</div>
+                        <div class="campana-metric-value">${c.ordenes.length}</div>
+                    </div>
+                    <div class="campana-metric">
+                        <div class="campana-metric-label">Último control</div>
+                        <div class="campana-metric-value" style="font-size:12px;">${ultCtrlStr}</div>
+                    </div>
+                </div>
+                <div style="margin-top:12px;font-size:11px;color:#718096;">
+                    <strong>Regla:</strong> ${reglaCierre}
+                </div>
+                <div class="slots-list">
+                    ${slots.map(s => {
+                        const cls = s.estado === 'hecho' ? 'slot-hecho' :
+                                    s.estado === 'atrasado' ? 'slot-atrasado' :
+                                    s.estado === 'muy_tarde' ? 'slot-muy-tarde' :
+                                    s.estado === 'futuro' ? 'slot-futuro' : 'slot-faltante';
+                        const txt = s.estado === 'hecho' ? `✓ ${s.slot}` :
+                                    s.estado === 'atrasado' ? `⚠ ${s.slot} (${s.hora})` :
+                                    s.estado === 'muy_tarde' ? `🟠 ${s.slot} (${s.hora})` :
+                                    s.estado === 'futuro' ? `· ${s.slot}` : `✗ ${s.slot}`;
+                        return `<span class="slot-pill ${cls}">${txt}</span>`;
+                    }).join('')}
+                </div>
+                <div style="margin-top:12px;padding-top:10px;border-top:1px solid #e2e8f0;">
+                    <div style="font-size:11px;color:#718096;text-transform:uppercase;font-weight:600;margin-bottom:6px;">
+                        Controles cargados hoy (${controlesHoy.length})
+                    </div>
+                    <div style="font-size:12px;color:#4a5568;">
+                        ${controlesHoy.length === 0
+                            ? '<em style="color:#a0aec0;">Ninguno todavía</em>'
+                            : controlesHoy.map(cH => `<span style="display:inline-block;background:#edf2f7;padding:3px 8px;border-radius:6px;margin:2px;font-family:monospace;">${cH.hora || '—'} · ${cH.tipo || '?'}${cH.operador ? ' · '+cH.operador : ''}</span>`).join('')
+                        }
+                    </div>
+                </div>
+                <button class="btn-ver-detalle" onclick="event.stopPropagation(); abrirDetalleCampana('${c.campaign_id}')">
+                    📋 Ver todos los controles por día
+                </button>
+            </div>
+        `;
+    }).join('') + '</div>';
+}
+
+/* --------- Chart cumplimiento 14 días --------- */
+function renderChart(activas) {
+    const labels = [];
+    for (let i = -13; i <= 0; i++) labels.push(fechaISO(i));
+
+    const datasets = activas.map((c, idx) => {
+        const color = ['#667eea','#e53e3e','#d69e2e','#38a169','#3182ce','#805ad5','#dd6b20','#319795'][idx % 8];
+        return {
+            label: nombreEnvase(c.envase),
+            data: labels.map(f => cumplimientoDia(c, f).pct),
+            borderColor: color,
+            backgroundColor: color + '22',
+            tension: 0.25,
+            spanGaps: true,
+            pointRadius: 4
+        };
+    });
+
+    const ctx = document.getElementById('chart-cumpl').getContext('2d');
+    if (chartCumpl) chartCumpl.destroy();
+    chartCumpl = new Chart(ctx, {
+        type: 'line',
+        data: { labels: labels.map(l => l.slice(5)), datasets },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            scales: {
+                y: {
+                    min: 0, max: 105,
+                    title: { display: true, text: '% cumplimiento diario' },
+                    ticks: { callback: v => v + '%' }
+                },
+                x: { title: { display: true, text: 'Fecha (MM-DD)' } }
+            },
+            plugins: {
+                legend: { position: 'bottom' },
+                tooltip: {
+                    callbacks: {
+                        label: (c) => `${c.dataset.label}: ${c.parsed.y == null ? 's/d' : c.parsed.y + '%'}`
+                    }
+                }
+            }
+        }
+    });
+}
+
+/* --------- Selector y timeline --------- */
+function renderTimelineSelector(activas) {
+    const sel = document.getElementById('campana-selector');
+    if (!activas.length) { sel.innerHTML = ''; document.getElementById('timeline-body').innerHTML = '<div class="empty-state" style="padding:20px;">No hay campañas activas.</div>'; return; }
+    // por defecto seleccionar la primera si no hay ninguna válida
+    if (!campanaSeleccionadaTimeline || !activas.find(c => String(c.campaign_id) === String(campanaSeleccionadaTimeline))) {
+        campanaSeleccionadaTimeline = activas[0].campaign_id;
+    }
+    sel.innerHTML = activas.map(c =>
+        `<button class="${String(c.campaign_id) === String(campanaSeleccionadaTimeline) ? 'activa' : ''}" onclick="seleccionarCampanaTimeline('${c.campaign_id}')">${nombreEnvase(c.envase)}</button>`
+    ).join('');
+    renderTimelineDetalle();
+}
+function seleccionarCampanaTimeline(cid) {
+    campanaSeleccionadaTimeline = cid;
+    // Sólo re-renderizar el selector y el timeline, no todo el panel
+    const campanas = agruparPorCampana(ordenes);
+    const activas = campanas.filter(c => c.tieneActiva);
+    renderTimelineSelector(activas);
+}
+function renderTimelineDetalle() {
+    const body = document.getElementById('timeline-body');
+    const campanas = agruparPorCampana(ordenes);
+    const c = campanas.find(x => String(x.campaign_id) === String(campanaSeleccionadaTimeline));
+    if (!c) { body.innerHTML = ''; return; }
+
+    let html = '<div class="timeline-header"><div>Fecha</div>' +
+        HORARIOS_ESPERADOS.map(s => `<div>${s}</div>`).join('') + '</div>';
+
+    for (let i = -6; i <= 0; i++) {
+        const f = fechaISO(i);
+        const s = slotsDelDia(c, f);
+        html += `<div class="timeline-day"><div class="timeline-fecha">${f.slice(5)}</div>` +
+            s.map(slot => {
+                if (slot.estado === 'hecho') return `<div class="timeline-slot tl-hecho">✓ ${slot.hora}</div>`;
+                if (slot.estado === 'atrasado') return `<div class="timeline-slot tl-atrasado">⚠ ${slot.hora}</div>`;
+                if (slot.estado === 'muy_tarde') return `<div class="timeline-slot tl-muy-tarde">🟠 ${slot.hora}</div>`;
+                if (slot.estado === 'futuro') return `<div class="timeline-slot tl-futuro">—</div>`;
+                return `<div class="timeline-slot tl-faltante">${slot.slot}</div>`;
+            }).join('') + '</div>';
+    }
+    body.innerHTML = html;
+}
+
+/* --------- Ranking operadores --------- */
+function renderRanking(campanas) {
+    const body = document.getElementById('ranking-body');
+    // Últimos 30 días
+    const desde = fechaISO(-29);
+    const stats = {}; // operador -> {enHorario, atrasado, tarde, total, turnos:Set, envases:Set}
+    for (const c of campanas) {
+        for (const ctrl of c.controles) {
+            if (!ctrl.fecha || ctrl.fecha < desde) continue;
+            const op = ctrl.operador || '(sin operador)';
+            if (!stats[op]) stats[op] = { enHorario: 0, atrasado: 0, tarde: 0, total: 0, turnos: new Set(), envases: new Set() };
+            stats[op].total++;
+            if (ctrl.turno) stats[op].turnos.add(ctrl.turno);
+            stats[op].envases.add(c.envase);
+            const s = slotDeControl(ctrl.hora || ctrl.timestamp);
+            if (s.enHorario) stats[op].enHorario++;
+            else if (s.tarde) stats[op].atrasado++;
+            else if (s.muyTarde) stats[op].tarde++;
+        }
+    }
+    const rows = Object.entries(stats).map(([op, s]) => {
+        const pct = s.total ? Math.round((s.enHorario / s.total) * 100) : 0;
+        return { op, ...s, pct };
+    }).sort((a, b) => b.pct - a.pct);
+
+    if (!rows.length) {
+        body.innerHTML = '<div class="empty-state"><div class="empty-state-icon">👤</div><p>No hay controles registrados en los últimos 30 días.</p></div>';
+        return;
+    }
+    body.innerHTML = `
+        <table class="data-table">
+            <thead><tr>
+                <th>Operador</th><th>Turnos</th><th>Envases</th>
+                <th>Total controles</th>
+                <th>En horario</th><th>Con atraso</th><th>Muy tarde</th>
+                <th>% en horario</th>
+            </tr></thead>
+            <tbody>${rows.map(r => {
+                const clase = r.pct >= UMBRAL_CUMPL_OK ? 'ok' : r.pct >= UMBRAL_CUMPL_WARN ? 'warn' : 'crit';
+                return `
+                    <tr>
+                        <td><strong>${r.op}</strong></td>
+                        <td>${[...r.turnos].join(', ')}</td>
+                        <td>${[...r.envases].map(nombreEnvase).join(', ')}</td>
+                        <td>${r.total}</td>
+                        <td>${r.enHorario}</td>
+                        <td>${r.atrasado}</td>
+                        <td>${r.tarde}</td>
+                        <td class="cumplimiento-cell ${clase}">
+                            ${r.pct}%
+                            <div class="barra-cumpl"><div class="barra-cumpl-fill ${clase}" style="width:${r.pct}%;"></div></div>
+                        </td>
+                    </tr>`;
+            }).join('')}</tbody>
+        </table>
+    `;
+}
+
+/* --------- LCC --------- */
+function renderLCC() {
+    const body = document.getElementById('lcc-body');
+    const desde = fechaISO(-29);
+    const recientes = lcc.filter(l => l.fecha && l.fecha >= desde);
+    if (!recientes.length) {
+        body.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🔬</div><p>No hay controles LCC en los últimos 30 días.</p></div>';
+        return;
+    }
+    // Agrupar por fecha
+    const porFecha = {};
+    recientes.forEach(l => {
+        if (!porFecha[l.fecha]) porFecha[l.fecha] = [];
+        porFecha[l.fecha].push(l);
+    });
+    const fechas = Object.keys(porFecha).sort().reverse();
+    body.innerHTML = `
+        <div style="margin-bottom:15px;font-size:13px;color:#4a5568;">
+            ${recientes.length} controles LCC registrados en los últimos 30 días.
+        </div>
+        <table class="data-table">
+            <thead><tr><th>Fecha</th><th>Cantidad</th><th>Envases</th><th>Operadores</th><th>Tipos</th></tr></thead>
+            <tbody>${fechas.map(f => {
+                const items = porFecha[f];
+                const envs = [...new Set(items.map(i => i.envase))].map(nombreEnvase).join(', ');
+                const ops = [...new Set(items.map(i => i.operador))].join(', ');
+                const tipos = [...new Set(items.map(i => i.tipo))].join(', ');
+                return `<tr><td><strong>${f}</strong></td><td>${items.length}</td><td>${envs}</td><td>${ops}</td><td>${tipos}</td></tr>`;
+            }).join('')}</tbody>
+        </table>
+    `;
+}
+
+/* =====================================================================
+   MODAL DETALLE CAMPAÑA
+   ===================================================================== */
+function abrirDetalleCampana(cid) {
+    const campanas = agruparPorCampana(ordenes);
+    const c = campanas.find(x => String(x.campaign_id) === String(cid));
+    if (!c) return;
+
+    const modal = document.getElementById('modal-detalle');
+
+    // Agrupar controles por fecha
+    const porFecha = {};
+    for (const ctrl of c.controles) {
+        const f = ctrl.fecha || 'sin-fecha';
+        if (!porFecha[f]) porFecha[f] = [];
+        porFecha[f].push(ctrl);
+    }
+    const fechasOrdenadas = Object.keys(porFecha).sort().reverse();
+
+    const est = estadoCampana(c);
+    const diasAbierta = est.diasAbierta == null ? '—' : est.diasAbierta;
+    const reglaCierre = esEnv15(c.envase)
+        ? `Cierre automático a los ${DIAS_CIERRE_15} días`
+        : `Confirmar continuidad cada ${DIAS_PROMPT_CONFIRMACION} días`;
+
+    let html = `
+        <div class="modal-overlay" onclick="cerrarDetalle(event)">
+            <div class="modal-card" onclick="event.stopPropagation()">
+                <div class="modal-header">
+                    <div>
+                        <div class="modal-title">📋 ${nombreEnvase(c.envase)}</div>
+                        <div class="modal-subtitle">
+                            ${c.envase} · Campaign ID ${c.campaign_id} ·
+                            ${c.ordenes.length} órdenes ·
+                            ${c.controles.length} controles totales ·
+                            ${diasAbierta} días abierta ·
+                            <em>${reglaCierre}</em>
+                        </div>
+                        ${(() => {
+                            const mq = [...new Set(c.ordenes.map(o => o.maquina).filter(Boolean))];
+                            if (!mq.length) return '';
+                            return `<div style="margin-top:5px;font-size:13px;color:#667eea;font-weight:600;">🏭 Máquina${mq.length > 1 ? 's' : ''}: ${mq.join(', ')}</div>`;
+                        })()}
+                    </div>
+                    <button class="modal-close" onclick="cerrarDetalle()">✕</button>
+                </div>
+                <div class="modal-body">
+    `;
+
+    if (!fechasOrdenadas.length) {
+        html += '<div class="empty-state"><div class="empty-state-icon">📦</div><p>Esta campaña no tiene controles cargados.</p></div>';
+    } else {
+        for (const fecha of fechasOrdenadas) {
+            const ctrls = porFecha[fecha].slice().sort((a, b) => (hhmmToMin(a.hora) || 0) - (hhmmToMin(b.hora) || 0));
+            marcarDuplicados(ctrls);
+            const cantDup = ctrls.filter(c => c._duplicado).length;
+            // Slots del día
+            const slotsDia = fecha === 'sin-fecha' ? null : slotsDelDia(c, fecha);
+            let sumOK = 0, sumAtr = 0, sumMuy = 0, sumFalt = 0;
+            if (slotsDia) {
+                slotsDia.forEach(s => {
+                    if (s.estado === 'hecho') sumOK++;
+                    else if (s.estado === 'atrasado') sumAtr++;
+                    else if (s.estado === 'muy_tarde') sumMuy++;
+                    else if (s.estado === 'faltante') sumFalt++;
+                });
+            }
+            html += `
+                <div class="day-block">
+                    <div class="day-header">
+                        <div class="day-fecha">📅 ${fecha}</div>
+                        <div class="day-summary">
+                            <span>${ctrls.length} control${ctrls.length !== 1 ? 'es' : ''}</span>
+                            ${sumOK > 0 ? `<span class="s-ok">${sumOK} en horario</span>` : ''}
+                            ${sumAtr > 0 ? `<span class="s-warn">${sumAtr} atrasado${sumAtr !== 1 ? 's' : ''}</span>` : ''}
+                            ${sumMuy > 0 ? `<span class="s-warn">${sumMuy} muy tarde</span>` : ''}
+                            ${sumFalt > 0 ? `<span class="s-crit">${sumFalt} faltante${sumFalt !== 1 ? 's' : ''}</span>` : ''}
+                            ${cantDup > 0 ? `<span class="s-crit">🔁 ${cantDup} duplicado${cantDup !== 1 ? 's' : ''}</span>` : ''}
+                        </div>
+                    </div>
+                    <table class="controles-tabla">
+                        <thead>
+                            <tr>
+                                <th>Hora</th>
+                                <th>Tipo</th>
+                                <th>Máquina</th>
+                                <th>Operador / turno</th>
+                                <th>Slot esperado</th>
+                                <th>Mediciones</th>
+                                <th>Observaciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${ctrls.map(ct => {
+                                const s = slotDeControl(ct.hora || ct.timestamp);
+                                let pill = '', pillClass = '';
+                                if (s.enHorario) { pill = 'En horario'; pillClass = 'estado-ok'; }
+                                else if (s.tarde) { pill = `Atrasado (${s.delta} min)`; pillClass = 'estado-atrasado'; }
+                                else if (s.muyTarde) { pill = `Muy tarde (${s.delta} min)`; pillClass = 'estado-muy-tarde'; }
+                                else { pill = 'S/D'; pillClass = 'estado-fuera'; }
+                                const meds = ct.mediciones && Object.keys(ct.mediciones).length
+                                    ? formatMediciones(ct.mediciones)
+                                    : '<em style="color:#a0aec0;">—</em>';
+                                const dupPill = ct._duplicado
+                                    ? ` <span class="estado-pill estado-duplicado" title="Coincide con otro control del mismo día, hora, tipo y operador">🔁 DUPLICADO</span>`
+                                    : '';
+                                const filaClase = ct._duplicado ? 'fila-duplicada' : '';
+                                return `
+                                    <tr class="${filaClase}">
+                                        <td style="font-family:monospace;font-weight:700;color:#2d3748;">${ct.hora || '—'}${dupPill}</td>
+                                        <td>${ct.tipo || '—'}</td>
+                                        <td>${ct.maquina ? `🏭 ${ct.maquina}` : '<em style="color:#a0aec0;">s/d</em>'}</td>
+                                        <td>${ct.operador || '—'}${ct.turno ? ` <span style="color:#a0aec0;">· ${ct.turno}</span>` : ''}</td>
+                                        <td>${s.slot || '—'} <span class="estado-pill ${pillClass}">${pill}</span></td>
+                                        <td>${meds}</td>
+                                        <td style="max-width:200px;font-size:11px;color:#4a5568;">${ct.observaciones || '<em style="color:#a0aec0;">—</em>'}</td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+    }
+
+    html += `</div></div></div>`;
+    modal.innerHTML = html;
+    modal.style.display = 'block';
+    document.body.style.overflow = 'hidden';
+}
+
+function cerrarDetalle(evt) {
+    // Sólo cerrar si se hace click en el overlay (no en la tarjeta)
+    if (evt && evt.target && !evt.target.classList.contains('modal-overlay')) return;
+    const modal = document.getElementById('modal-detalle');
+    modal.style.display = 'none';
+    modal.innerHTML = '';
+    document.body.style.overflow = '';
+}
+
+function formatMediciones(m) {
+    const keys = Object.keys(m).filter(k => m[k] !== '' && m[k] != null);
+    if (!keys.length) return '<em style="color:#a0aec0;">—</em>';
+    const preview = keys.length + ' valor' + (keys.length !== 1 ? 'es' : '');
+    let listado = '';
+    for (const k of keys) {
+        listado += `<div>${k}: ${m[k]}</div>`;
+    }
+    return `
+        <details class="mediciones-details">
+            <summary>${preview}</summary>
+            <div class="mediciones-list">${listado}</div>
+        </details>
+    `;
+}
+
+// Cerrar modal con ESC
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') cerrarDetalle({ target: { classList: { contains: () => true } } });
+});
+
+/* =====================================================================
+   INIT
+   ===================================================================== */
+cargarDatos();
+// auto-refresh cada 5 minutos
+setInterval(cargarDatos, 5 * 60 * 1000);
+
+</script>
+</body>
+</html>
