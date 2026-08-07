@@ -379,8 +379,84 @@
             return 'noche';
         }
 
+        // ====================================================================
+        // AUTENTICACIÓN
+        // ====================================================================
+        // Usuarios autorizados. La clave inicial de TODOS es "vessena2026".
+        // Para cambiar una clave: pegar en la consola del navegador:
+        //   sha256Hex("nueva_clave").then(h => console.log(h));
+        // y reemplazar el hash correspondiente aquí.
+        const HASH_VESSENA2026 = '838ded3e4d810b0357da9ed0d78e9ec7378e92e650b330ebc5a34d099240c88b';
+        const USUARIOS = {
+            'lorena':    { nombre: 'Lorena Romero',    passwordHash: HASH_VESSENA2026 },
+            'gloria':    { nombre: 'Gloria Nuñez',     passwordHash: HASH_VESSENA2026 },
+            'antonella': { nombre: 'Antonella Nuñez',  passwordHash: HASH_VESSENA2026 },
+            'monica':    { nombre: 'Monica Puñales',   passwordHash: HASH_VESSENA2026 },
+            'claudia':   { nombre: 'Claudia Barlocco', passwordHash: HASH_VESSENA2026 },
+        };
+
+        async function sha256Hex(texto) {
+            const enc = new TextEncoder().encode(texto);
+            const hash = await crypto.subtle.digest('SHA-256', enc);
+            return Array.from(new Uint8Array(hash))
+                .map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
         function App() {
             const [activeTab, setActiveTab] = useState('soplado');
+
+            // === AUTENTICACIÓN ===
+            const [usuarioLogueado, setUsuarioLogueado] = useState(() => {
+                try {
+                    const stored = localStorage.getItem('vessena_usuario_logueado');
+                    return stored ? JSON.parse(stored) : null;
+                } catch { return null; }
+            });
+            const [loginUsername, setLoginUsername] = useState('');
+            const [loginPassword, setLoginPassword] = useState('');
+            const [loginError, setLoginError] = useState('');
+            const [loginProcesando, setLoginProcesando] = useState(false);
+
+            const handleLogin = async (e) => {
+                if (e && e.preventDefault) e.preventDefault();
+                setLoginError('');
+                setLoginProcesando(true);
+                try {
+                    const user = loginUsername.trim().toLowerCase();
+                    const cuenta = USUARIOS[user];
+                    if (!cuenta) {
+                        setLoginError('Usuario no reconocido.');
+                        setLoginProcesando(false);
+                        return;
+                    }
+                    const hashIngresado = await sha256Hex(loginPassword);
+                    if (hashIngresado !== cuenta.passwordHash) {
+                        setLoginError('Clave incorrecta.');
+                        setLoginProcesando(false);
+                        return;
+                    }
+                    const sesion = {
+                        username: user,
+                        nombre: cuenta.nombre,
+                        loginAt: new Date().toISOString()
+                    };
+                    localStorage.setItem('vessena_usuario_logueado', JSON.stringify(sesion));
+                    setUsuarioLogueado(sesion);
+                    setLoginUsername('');
+                    setLoginPassword('');
+                } catch (err) {
+                    setLoginError('Error al iniciar sesión: ' + (err.message || err));
+                } finally {
+                    setLoginProcesando(false);
+                }
+            };
+
+            const handleLogout = () => {
+                if (!confirm('¿Cerrar sesión?')) return;
+                localStorage.removeItem('vessena_usuario_logueado');
+                setUsuarioLogueado(null);
+            };
+
             const [ordenesSoplado, setOrdenesSoplado] = useState([]);
             const [controlesLCC, setControlesLCC] = useState([]);
             const [mensaje, setMensaje] = useState(null);
@@ -650,8 +726,10 @@
 
             const crearNuevaOrden = async () => {
                 if (guardando) return; // guardia anti-doble-click
-                if (!nuevaOrdenData.numeroOrden || !nuevaOrdenData.envase || !nuevaOrdenData.operador || !nuevaOrdenData.maquina) {
-                    setMensaje({ tipo: 'warning', texto: 'Complete todos los campos obligatorios (número de orden, envase, operador y máquina)' });
+                // Operador siempre = usuario logueado (readonly en el form)
+                const operadorEfectivo = usuarioLogueado.nombre;
+                if (!nuevaOrdenData.numeroOrden || !nuevaOrdenData.envase || !nuevaOrdenData.maquina) {
+                    setMensaje({ tipo: 'warning', texto: 'Complete todos los campos obligatorios (número de orden, envase y máquina)' });
                     return;
                 }
 
@@ -660,7 +738,7 @@
                 const ultimaMismoNumero = ordenesSoplado.find(o =>
                     o.numeroOrden === nuevaOrdenData.numeroOrden
                     && o.envase === nuevaOrdenData.envase
-                    && o.operador === nuevaOrdenData.operador
+                    && o.operador === operadorEfectivo
                 );
                 if (ultimaMismoNumero && typeof ultimaMismoNumero.id === 'number') {
                     const hace = Date.now() - ultimaMismoNumero.id;
@@ -671,8 +749,6 @@
                         });
                         return;
                     }
-                    // Si es un duplicado más viejo (misma orden, mismo operador, mismo envase),
-                    // avisar pero permitir (podría ser un cambio de turno del mismo operador)
                     setMensaje({
                         tipo: 'warning',
                         texto: `⚠ Ya existe una orden con el número ${nuevaOrdenData.numeroOrden}. Verificá que sea correcto antes de continuar.`
@@ -681,10 +757,11 @@
 
                 setGuardando(true);
                 const id = Date.now();
-                // Si hay campaña seleccionada, usar su campaign_id; sino, esta orden inicia campaña nueva (id propio)
                 const campaign_id = campanaSeleccionada ? campanaSeleccionada.campaign_id : id;
                 const nuevaOrden = {
-                    id, ...nuevaOrdenData, estado: 'activa', controles: [],
+                    id, ...nuevaOrdenData, operador: operadorEfectivo,
+                    createdBy: usuarioLogueado.username,
+                    estado: 'activa', controles: [],
                     createdAt: new Date().toISOString(),
                     campaign_id
                 };
@@ -816,7 +893,9 @@
                     id: Date.now(), tipo: tipoControlSoplado,
                     fecha: new Date().toISOString().split('T')[0],
                     hora: new Date().toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' }),
-                    mediciones: { ...mediciones }, observaciones, timestamp: new Date().toISOString()
+                    mediciones: { ...mediciones }, observaciones, timestamp: new Date().toISOString(),
+                    createdBy: usuarioLogueado.username,
+                    operador: usuarioLogueado.nombre
                 };
                 const ordenesActualizadas = ordenesSoplado.map(orden => {
                     if (orden.id === ordenSeleccionada.id) {
@@ -855,18 +934,18 @@
 
             const registrarControlLCC = async () => {
                 if (guardando) return; // guardia anti-doble-click
-                if (!nuevoControlLCC.envase || !nuevoControlLCC.operador || !tipoControlLCC) {
+                const operadorEfectivo = usuarioLogueado.nombre;
+                if (!nuevoControlLCC.envase || !tipoControlLCC) {
                     setMensaje({ tipo: 'warning', texto: 'Complete todos los campos obligatorios' });
                     return;
                 }
 
-                // Verificación anti-duplicado: si el último control LCC tiene mismo
-                // tipo, mismo envase y mismo operador y se guardó hace menos de 15 seg
+                // Verificación anti-duplicado
                 if (controlesLCC && controlesLCC.length > 0) {
-                    const ult = controlesLCC[0]; // controlesLCC se guarda con el más nuevo primero
+                    const ult = controlesLCC[0];
                     if (ult.tipo === tipoControlLCC
                         && ult.envase === nuevoControlLCC.envase
-                        && ult.operador === nuevoControlLCC.operador
+                        && ult.operador === operadorEfectivo
                         && ult.timestamp) {
                         const hace = Date.now() - new Date(ult.timestamp).getTime();
                         if (hace < 15000) {
@@ -880,6 +959,8 @@
                 }
                 const nuevoControl = {
                     id: Date.now(), tipo: tipoControlLCC, ...nuevoControlLCC,
+                    operador: operadorEfectivo,
+                    createdBy: usuarioLogueado.username,
                     hora: new Date().toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' }),
                     mediciones: { ...mediciones }, observaciones, timestamp: new Date().toISOString()
                 };
@@ -993,6 +1074,71 @@
                 } catch { return '—'; }
             };
 
+            // Si no hay usuario logueado, mostrar pantalla de login
+            if (!usuarioLogueado) {
+                return (
+                    <div style={{
+                        minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: 'linear-gradient(135deg, #023E56 0%, #028090 100%)', padding: '20px'
+                    }}>
+                        <div style={{
+                            background: 'white', borderRadius: '12px', padding: '40px 32px',
+                            width: '100%', maxWidth: '400px',
+                            boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+                        }}>
+                            <div style={{textAlign: 'center', marginBottom: '30px'}}>
+                                <div style={{fontSize: '13px', fontWeight: 700, color: '#02C39A', letterSpacing: '3px', marginBottom: '8px'}}>
+                                    VESSENA S.A.
+                                </div>
+                                <div style={{fontSize: '24px', fontWeight: 700, color: '#1E2761', fontFamily: 'Cambria, Georgia, serif'}}>
+                                    Control de Envases
+                                </div>
+                                <div style={{fontSize: '13px', color: '#718096', marginTop: '6px'}}>
+                                    Iniciá sesión para continuar
+                                </div>
+                            </div>
+
+                            <form onSubmit={handleLogin}>
+                                <div className="form-group">
+                                    <label>Usuario</label>
+                                    <input type="text" autoFocus autoComplete="username"
+                                        value={loginUsername}
+                                        onChange={(e) => setLoginUsername(e.target.value)}
+                                        placeholder="ej: gloria"
+                                        disabled={loginProcesando} />
+                                </div>
+                                <div className="form-group">
+                                    <label>Clave</label>
+                                    <input type="password" autoComplete="current-password"
+                                        value={loginPassword}
+                                        onChange={(e) => setLoginPassword(e.target.value)}
+                                        disabled={loginProcesando} />
+                                </div>
+
+                                {loginError && (
+                                    <div style={{
+                                        padding: '10px 14px', borderRadius: '8px', marginBottom: '15px',
+                                        background: '#FED7D7', color: '#742A2A', fontSize: '13px', fontWeight: 600
+                                    }}>
+                                        ⚠ {loginError}
+                                    </div>
+                                )}
+
+                                <button type="submit" className="btn btn-primary"
+                                    style={{width: '100%', padding: '12px', fontSize: '15px'}}
+                                    disabled={loginProcesando || !loginUsername || !loginPassword}>
+                                    {loginProcesando ? '⏳ Verificando...' : 'Ingresar'}
+                                </button>
+                            </form>
+
+                            <div style={{marginTop: '25px', paddingTop: '20px', borderTop: '1px solid #E2E8F0', fontSize: '11px', color: '#A0AEC0', textAlign: 'center'}}>
+                                ¿Problemas de acceso? Contactá a la Q.F. Claudia Barlocco.
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
             return (
                 <div className="container">
                     <div className="header">
@@ -1014,6 +1160,23 @@
                                     ? <span style={{color: '#38a169'}}>● Google Sheets conectado</span>
                                     : <span style={{color: '#e53e3e'}}>● Solo local</span>
                                 }
+                            </div>
+                            <div style={{
+                                display: 'flex', alignItems: 'center', gap: '10px',
+                                padding: '6px 14px', borderRadius: '20px', background: '#EDF2F7',
+                                borderLeft: '3px solid #028090'
+                            }}>
+                                <span style={{fontSize: '13px', color: '#2D3748', fontWeight: 600}}>
+                                    👤 {usuarioLogueado.nombre}
+                                </span>
+                                <button onClick={handleLogout}
+                                    style={{
+                                        background: 'transparent', border: 'none', cursor: 'pointer',
+                                        fontSize: '12px', color: '#E53E3E', fontWeight: 600, padding: 0
+                                    }}
+                                    title="Cerrar sesión">
+                                    Salir ✕
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -1228,8 +1391,13 @@
                                                 </div>
                                                 <div className="form-group">
                                                     <label>Operador *</label>
-                                                    <input type="text" value={nuevaOrdenData.operador}
-                                                        onChange={(e) => setNuevaOrdenData({...nuevaOrdenData, operador: e.target.value})} />
+                                                    <input type="text" value={usuarioLogueado.nombre}
+                                                        readOnly
+                                                        style={{background: '#EDF2F7', color: '#4A5568', cursor: 'not-allowed'}}
+                                                        title="Se completa automáticamente con el usuario logueado" />
+                                                    <div className="spec-info" style={{fontSize: '11px'}}>
+                                                        🔒 Se registra con tu usuario logueado
+                                                    </div>
                                                 </div>
                                                 <div className="form-group">
                                                     <label>Turno</label>
@@ -1864,8 +2032,13 @@
                                                     </div>
                                                     <div className="form-group">
                                                         <label>Operador *</label>
-                                                        <input type="text" value={nuevoControlLCC.operador}
-                                                            onChange={(e) => setNuevoControlLCC({...nuevoControlLCC, operador: e.target.value})} />
+                                                        <input type="text" value={usuarioLogueado.nombre}
+                                                            readOnly
+                                                            style={{background: '#EDF2F7', color: '#4A5568', cursor: 'not-allowed'}}
+                                                            title="Se completa automáticamente con el usuario logueado" />
+                                                        <div className="spec-info" style={{fontSize: '11px'}}>
+                                                            🔒 Se registra con tu usuario logueado
+                                                        </div>
                                                     </div>
                                                     <div className="form-group">
                                                         <label>Turno</label>
