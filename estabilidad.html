@@ -114,6 +114,7 @@ let syncStatus='disconnected';
 
 async function gRead(){if(!SCRIPT_URL)return null;syncStatus='loading';rSync();try{const r=await fetch(SCRIPT_URL+'?t='+Date.now()+Math.random());const d=await r.json();syncStatus='ok';rSync();return d;}catch(e){console.error('gRead:',e);syncStatus='error';rSync();return null;}}
 async function gWrite(key,value){if(!SCRIPT_URL)return;_dirty=true;syncStatus='loading';rSync();try{await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'save',key,value:JSON.stringify(value)})});syncStatus='ok';rSync();toast('Guardado ✓');setTimeout(()=>{_dirty=false;},15000);}catch(e){syncStatus='error';rSync();toast('Error al guardar');_dirty=false;}}
+async function gWriteSilent(key,value){if(!SCRIPT_URL)return;try{await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'save',key,value:JSON.stringify(value)})});}catch(e){}}
 /* EMAILS FIJOS — reciben copia de TODAS las notificaciones */
 const CC_EMAILS=['claudia.barlocco@vessena.com.uy','antonella.nunez@vessena.com.uy'];
 const APP_URL='https://vessena-repositorio.github.io/control-gmp-app/estabilidad.html';
@@ -328,7 +329,53 @@ const TEAM=[
 function emailSel(id,val){return`<select id="${id}"><option value="">— Seleccionar —</option>${TEAM.map(t=>`<option value="${E(t.e)}" ${val===t.e?'selected':''}>${t.n} (${t.e})</option>`).join('')}</select>`;}
 
 /* STATE */
-let studies=[],productos=[],activeTab='dashboard',filters={t:'',q:''},selSt=null,selRep=null,charts={},catMode='list',editProd=null,dashFilter='',_dirty=false;
+let studies=[],productos=[],activeTab='dashboard',filters={t:'',q:''},selSt=null,selRep=null,charts={},catMode='list',editProd=null,dashFilter='',_dirty=false,auditLog=[],usuarios=[],currentUser=null,sessionStart=null;
+
+// Sistema de sesión
+function loadSession(){
+  try{
+    const raw=localStorage.getItem('vessena_session');
+    if(!raw)return null;
+    const s=JSON.parse(raw);
+    // Sesión expira en 12 horas
+    if(Date.now()-s.start>12*3600*1000){localStorage.removeItem('vessena_session');return null;}
+    return s;
+  }catch(e){return null;}
+}
+function saveSession(email){
+  const s={email,start:Date.now()};
+  localStorage.setItem('vessena_session',JSON.stringify(s));
+  sessionStart=s.start;
+  currentUser=email;
+}
+window.doLogout=async function(){
+  if(currentUser)await logAudit('logout',null,'','','','Cierre de sesión');
+  localStorage.removeItem('vessena_session');
+  currentUser=null;sessionStart=null;
+  render();
+};
+
+async function logAudit(action,studyId,studyLabel,before,after,extra){
+  const evt={
+    ts:new Date().toISOString(),
+    user:currentUser||'anonimo',
+    action,
+    studyId:studyId||'',
+    studyLabel:studyLabel||'',
+    before:before||'',
+    after:after||'',
+    extra:extra||''
+  };
+  auditLog.push(evt);
+  await gWriteSilent('auditLog',auditLog);
+}
+
+// Hash simple de PIN (no es criptografía real, pero evita almacenar en texto plano)
+function hashPin(pin){
+  let h=5381;
+  for(let i=0;i<pin.length;i++)h=((h<<5)+h)+pin.charCodeAt(i);
+  return String(h);
+}
 
 /* UTILS */
 const uid=()=>'ST-'+Date.now().toString(36).toUpperCase()+Math.floor(Math.random()*90+10);
@@ -369,7 +416,7 @@ function buildAssignEmail(s){
     <p style="color:#5B6B6E;font-size:12px">Programa de Estabilidad — LCC / Vessena S.A.</p></div>`;
 }
 
-async function loadAll(){const d=await gRead();if(d){if(d.productos)try{productos=JSON.parse(d.productos);}catch(e){}if(d.studies)try{studies=JSON.parse(d.studies);}catch(e){}}
+async function loadAll(){const d=await gRead();if(d){if(d.productos)try{productos=JSON.parse(d.productos);}catch(e){}if(d.studies)try{studies=JSON.parse(d.studies);}catch(e){}if(d.auditLog)try{auditLog=JSON.parse(d.auditLog);}catch(e){}if(d.usuarios)try{usuarios=JSON.parse(d.usuarios);}catch(e){}}
   // Auto-fix en memoria — NUNCA guarda automáticamente
   // Eliminar duplicados por ID
   const seen=new Set();studies=studies.filter(s=>{if(seen.has(s.id))return false;seen.add(s.id);return true;});
@@ -441,8 +488,23 @@ async function saveProductos(){
 /* ============================================================
    TABS
 ============================================================ */
-const TABS=[{id:'dashboard',l:'Dashboard'},{id:'estudios',l:'Estudios'},{id:'rechazados',l:'Rechazados'},{id:'catalogo',l:'Catálogo'},{id:'nuevo',l:'+ Nuevo'},{id:'informe',l:'Informe'},{id:'info',l:'ℹ Criterios'},{id:'config',l:'⚙'}];
-function renderNav(){const nav=document.getElementById('tabNav');if(!SCRIPT_URL){nav.innerHTML='';return;}const nRech=studies.filter(s=>s.rechazado).length;nav.innerHTML=TABS.map(t=>`<button class="${t.id===activeTab?'active':''}" data-t="${t.id}">${t.l}${t.id==='catalogo'?` (${productos.length})`:t.id==='rechazados'&&nRech?` (${nRech})`:''}</button>`).join('');nav.querySelectorAll('button').forEach(b=>b.onclick=()=>{activeTab=b.dataset.t;render();});}
+const TABS=[{id:'dashboard',l:'Dashboard'},{id:'estudios',l:'Estudios'},{id:'rechazados',l:'Rechazados'},{id:'catalogo',l:'Catálogo'},{id:'nuevo',l:'+ Nuevo'},{id:'informe',l:'Informe'},{id:'auditoria',l:'📋 Auditoría'},{id:'usuarios',l:'👥 Usuarios',adminOnly:true},{id:'info',l:'ℹ Criterios'},{id:'config',l:'⚙'}];
+function renderNav(){
+  const nav=document.getElementById('tabNav');
+  if(!SCRIPT_URL){nav.innerHTML='';return;}
+  const nRech=studies.filter(s=>s.rechazado).length;
+  const u=usuarios.find(x=>x.email===currentUser);
+  const isAdmin=u&&u.rol==='admin';
+  const visibleTabs=TABS.filter(t=>!t.adminOnly||isAdmin);
+  nav.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+    <div style="display:flex;gap:2px;flex-wrap:wrap">${visibleTabs.map(t=>`<button class="${t.id===activeTab?'active':''}" data-t="${t.id}">${t.l}${t.id==='catalogo'?` (${productos.length})`:t.id==='rechazados'&&nRech?` (${nRech})`:''}</button>`).join('')}</div>
+    <div style="display:flex;align-items:center;gap:8px;font-size:12px;padding-right:8px">
+      <span style="color:var(--ink2)">👤 ${E(u?u.nombre:currentUser)}${isAdmin?' <span style="background:#8b5cf6;color:white;padding:1px 6px;border-radius:3px;font-size:10px">ADMIN</span>':''}</span>
+      <button class="btn sm ghost" style="padding:3px 10px;font-size:11px" onclick="doLogout()">Cerrar sesión</button>
+    </div>
+  </div>`;
+  nav.querySelectorAll('button[data-t]').forEach(b=>b.onclick=()=>{activeTab=b.dataset.t;render();});
+}
 
 /* ============================================================
    SETUP
@@ -613,7 +675,7 @@ function getFields(cat){return CAT_FIELDS[cat]||CAT_FIELDS.limpiador;}
 function renderFlatCp(cp,i,st,rech,cat){
   const fields=getFields(cat);
   return`<div class="cc" ${rech?'style="opacity:0.6"':''}>
-    <div class="ch"><span class="sp">${E(cp.codigo)}</span><span style="font-size:12px;color:var(--ink2)">Mes ${cp.mes}</span><span class="tag ${st}">${rech?'Rechazado':sL(st)}</span><span style="font-size:12px;color:var(--ink2)">${fmt(cp.fechaProgramada)}</span></div>
+    <div class="ch"><span class="sp">${E(cp.codigo)}</span><span style="font-size:12px;color:var(--ink2)">Mes ${cp.mes}</span><span class="tag ${st}">${rech?'Rechazado':sL(st)}</span><span style="font-size:12px;color:var(--ink2)">${fmt(cp.fechaProgramada)}</span><div class="spacer"></div><button class="btn sm ghost cp-del" data-cp="${i}" style="color:var(--red);padding:4px 10px;font-size:12px" title="Eliminar este checkpoint">🗑 Borrar</button></div>
     <div class="cf" style="margin-top:8px">
       <div class="fw"><label class="fi">Fecha real</label><input type="date" data-cp="${i}" data-f="fechaReal" value="${cp.fechaReal||''}"></div>
       ${fields.map(f=>`<div class="fw"><label class="fi">${f.l}</label><input type="text" data-cp="${i}" data-f="${f.k}" value="${E(cp[f.k]||'')}"></div>`).join('')}
@@ -624,7 +686,7 @@ function renderFlatCp(cp,i,st,rech,cat){
 function renderCondCp(cp,i,st,rech,cat){
   const fields=getFields(cat);
   return`<div class="cc" ${rech?'style="opacity:0.6"':''}>
-    <div class="ch"><span class="sp">${E(cp.codigo)}</span><span style="font-size:12px;color:var(--ink2)">Mes ${cp.mes} — 4 condiciones</span><span class="tag ${st}">${rech?'Rechazado':sL(st)}</span><span style="font-size:12px;color:var(--ink2)">${fmt(cp.fechaProgramada)}</span></div>
+    <div class="ch"><span class="sp">${E(cp.codigo)}</span><span style="font-size:12px;color:var(--ink2)">Mes ${cp.mes} — 4 condiciones</span><span class="tag ${st}">${rech?'Rechazado':sL(st)}</span><span style="font-size:12px;color:var(--ink2)">${fmt(cp.fechaProgramada)}</span><div class="spacer"></div><button class="btn sm ghost cp-del" data-cp="${i}" style="color:var(--red);padding:4px 10px;font-size:12px" title="Eliminar este checkpoint">🗑 Borrar</button></div>
     <div style="margin-top:8px"><div class="fw" style="max-width:200px"><label class="fi">Fecha real</label><input type="date" data-cp="${i}" data-f="fechaReal" value="${cp.fechaReal||''}"></div></div>
     ${CONDS.map(cd=>{const d=cp.condiciones[cd.k]||{};
       return`<div class="cond-card" style="border-left:4px solid ${cd.color}">
@@ -732,7 +794,7 @@ function renderDetail(){
     ${tfs('Rotulación','rotulacion',s.rotulacion,'tfR')}
     <div style="display:flex;gap:10px;margin-top:6px"><button class="btn" id="bSI">Guardar informe</button><button class="btn ghost" id="bVI">Ver informe →</button></div></div>`;
 
-  q('#bDl').onclick=async()=>{if(confirm('¿Eliminar?')){studies=studies.filter(x=>x.id!==s.id);selSt=null;await saveStudies();render();}};
+  q('#bDl').onclick=async()=>{if(confirm('¿Eliminar?')){await logAudit('eliminacion_estudio',s.id,s.producto+' (Lote '+s.lote+')','Etapa '+s.stage,'ELIMINADO','Estudio borrado completo');studies=studies.filter(x=>x.id!==s.id);selSt=null;await saveStudies();render();}};
   
   // Handlers de especificación editable
   bind('.sp-p, .sp-e, .sp-m','input',el=>{
@@ -771,8 +833,10 @@ function renderDetail(){
   };
   const ap2=q('#bAp');if(ap2)ap2.onclick=async()=>{
     if(!confirm('¿Aprobar este estudio como Dir. Técnica?'))return;
+    const beforeState=s.rechazado?'Rechazado':'Etapa '+s.stage;
     s.approvedManually=true;s.fechaAprobacion=td2();s.stage=5;s.rechazado=false;
     await saveOneStudy(s);
+    await logAudit('aprobacion',s.id,s.producto+' (Lote '+s.lote+')',beforeState,'Aprobado');
     // Email al analista
     if(s.emailAnalista){
       const body='<div style="font-family:Arial;max-width:600px"><h2 style="color:#357A55">✓ Estudio APROBADO</h2><p>Producto: <strong>'+s.producto+'</strong> — Lote: <strong>'+s.lote+'</strong></p><p>El estudio fue aprobado por Dirección Técnica el '+s.fechaAprobacion+'.</p>'+studyLink(s.id)+'<p style="color:#5B6B6E;font-size:12px">Programa de Estabilidad — LCC / Vessena S.A.</p></div>';
@@ -783,13 +847,15 @@ function renderDetail(){
   const rej=q('#bRej');if(rej)rej.onclick=async()=>{
     const motivo=prompt('Motivo del rechazo:');
     if(!motivo)return;
+    const beforeState=s.stage===5?'Aprobado':'Etapa '+s.stage;
     if(!s.rechazos)s.rechazos=[];
-    s.rechazos.push({fecha:td2(),motivo,por:'claudia.barlocco@vessena.com.uy'});
+    s.rechazos.push({fecha:td2(),motivo,por:currentUser||'sin_identificar'});
     s.rechazado=true;
     s.stage=2; // vuelve a muestreos para corrección
     s.approvedManually=false;
     s.conclusion=''; // limpiar conclusión para que rehagan
     await saveStudies();
+    await logAudit('rechazo',s.id,s.producto+' (Lote '+s.lote+')',beforeState,'Rechazado',motivo);
     // Email al analista y creador
     const body2='<div style="font-family:Arial;max-width:600px"><h2 style="color:#B03A2E">✗ Estudio RECHAZADO</h2><p>Producto: <strong>'+s.producto+'</strong> — Lote: <strong>'+s.lote+'</strong></p><p><strong>Motivo:</strong> '+motivo+'</p><p>Corregir y volver a enviar el informe.</p>'+studyLink(s.id,'Ver estudio rechazado →')+'<p style="color:#5B6B6E;font-size:12px">Programa de Estabilidad — LCC / Vessena S.A.</p></div>';
     if(s.emailAnalista)await gSendEmail(s.emailAnalista,'✗ RECHAZADO: '+s.producto+' (Lote '+s.lote+')',body2);
@@ -804,7 +870,19 @@ function renderDetail(){
     const body=buildAssignEmail(s);
     await gSendEmail(s.emailAnalista,'Asignación: '+s.producto+' (Lote '+s.lote+')',body);
   };
-  document.querySelectorAll('[data-cp]').forEach(el=>el.onchange=async()=>{
+  // Botón eliminar checkpoint (¡antes del bind general de data-cp para que no se pise!)
+  bind('.cp-del','click',el=>{
+    const i=parseInt(el.dataset.cp);
+    const cp=s.checkpoints[i];
+    if(!cp)return;
+    if(!confirm('¿Eliminar el checkpoint '+cp.codigo+' (Mes '+cp.mes+')?\n\nEsta acción no se puede deshacer.'))return;
+    logAudit('eliminacion_checkpoint',s.id,s.producto+' (Lote '+s.lote+')',cp.codigo+' Mes '+cp.mes,'ELIMINADO',cp.fechaReal?'Ya realizado el '+cp.fechaReal:'Pendiente').then(()=>{
+      s.checkpoints.splice(i,1);
+      s.stage=cS(s);
+      saveOneStudy(s).then(()=>{render();toast('Checkpoint eliminado');});
+    });
+  });
+  document.querySelectorAll('[data-cp]:not(.cp-del)').forEach(el=>el.onchange=async()=>{
     const i=parseInt(el.dataset.cp),f=el.dataset.f,cond=el.dataset.cond;
     if(cond){
       // Campo dentro de una condición acelerada
@@ -1091,8 +1169,242 @@ function renderInfo(){
 }
 
 /* RENDER */
-function render(){if(!SCRIPT_URL){renderSetup();renderNav();rSync();return;}renderNav();rSync();
-  if(activeTab==='dashboard')renderDashboard();else if(activeTab==='estudios')renderEstudios();else if(activeTab==='rechazados')renderRechazados();else if(activeTab==='catalogo')renderCatalogo();else if(activeTab==='nuevo')renderNuevo();else if(activeTab==='informe')renderInforme();else if(activeTab==='info')renderInfo();else if(activeTab==='config')renderSetup();}
+function renderAuditoria(){
+  const ACT={
+    login:{l:'🔓 Login',c:'#0891b2'},
+    logout:{l:'🔒 Logout',c:'#64748b'},
+    aprobacion:{l:'✓ Aprobación',c:'#059669'},
+    rechazo:{l:'✗ Rechazo',c:'#dc2626'},
+    eliminacion_estudio:{l:'🗑 Eliminación estudio',c:'#7c2d12'},
+    eliminacion_checkpoint:{l:'🗑 Eliminación checkpoint',c:'#9a3412'},
+    alta_usuario:{l:'👤➕ Alta usuario',c:'#7c3aed'},
+    eliminar_usuario:{l:'👤🗑 Baja usuario',c:'#be123c'},
+    habilitar_usuario:{l:'👤✓ Habilitar',c:'#059669'},
+    deshabilitar_usuario:{l:'👤🚫 Deshabilitar',c:'#ea580c'},
+    cambio_pin:{l:'🔑 Cambio PIN',c:'#4338ca'}
+  };
+  const sorted=[...auditLog].sort((a,b)=>b.ts.localeCompare(a.ts));
+  document.getElementById('mc').innerHTML=`
+    <div class="panel pp">
+      <h2 class="st">📋 Registro de auditoría <span style="font-size:12px;font-weight:400;color:var(--ink2)">— Cumplimiento GMP / trazabilidad</span></h2>
+      <p class="sd">Registro cronológico de todas las acciones críticas y accesos al sistema. Los registros no pueden editarse ni borrarse.</p>
+      ${sorted.length?`
+        <div style="margin-bottom:10px;display:flex;gap:12px;flex-wrap:wrap;font-size:12px">
+          <span><strong>Total:</strong> ${sorted.length}</span>
+          <span><strong>Logins:</strong> ${sorted.filter(e=>e.action==='login').length}</span>
+          <span><strong>Aprobaciones:</strong> ${sorted.filter(e=>e.action==='aprobacion').length}</span>
+          <span><strong>Rechazos:</strong> ${sorted.filter(e=>e.action==='rechazo').length}</span>
+          <span><strong>Eliminaciones:</strong> ${sorted.filter(e=>e.action.includes('eliminacion')||e.action.includes('eliminar')).length}</span>
+        </div>
+        <table style="width:100%;font-size:12px">
+          <thead>
+            <tr>
+              <th style="width:135px">Fecha / Hora</th>
+              <th style="width:200px">Usuario</th>
+              <th style="width:180px">Acción</th>
+              <th>Referencia</th>
+              <th>Antes</th>
+              <th>Después</th>
+              <th>Detalle</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${sorted.map(e=>{
+              const a=ACT[e.action]||{l:e.action,c:'#666'};
+              const dt=new Date(e.ts);
+              const fecha=dt.toLocaleDateString('es-UY')+' '+dt.toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+              return`<tr>
+                <td class="mono" style="font-size:11px">${fecha}</td>
+                <td style="font-size:11px">${E(e.user)}</td>
+                <td><span style="background:${a.c}15;color:${a.c};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">${a.l}</span></td>
+                <td>${E(e.studyLabel)}</td>
+                <td style="font-size:11px;color:var(--ink2)">${E(e.before)}</td>
+                <td style="font-size:11px;color:var(--ink2)">${E(e.after)}</td>
+                <td style="font-size:11px">${E(e.extra)}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid #eee;display:flex;gap:8px">
+          <button class="btn sm ghost" onclick="exportAuditCSV()">📥 Exportar CSV</button>
+        </div>
+      `:`<div class="empty">Sin eventos registrados aún.</div>`}
+    </div>`;
+}
+
+// Export CSV del audit log
+window.exportAuditCSV=function(){
+  const rows=[['Fecha','Usuario','Acción','Estudio','Antes','Después','Detalle']];
+  [...auditLog].sort((a,b)=>b.ts.localeCompare(a.ts)).forEach(e=>{
+    rows.push([e.ts,e.user,e.action,e.studyLabel,e.before,e.after,e.extra]);
+  });
+  const csv=rows.map(r=>r.map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='audit_log_'+td2()+'.csv';a.click();
+};
+
+function renderLogin(){
+  const isFirstUser=usuarios.length===0;
+  document.getElementById('mc').innerHTML=`
+    <div style="max-width:420px;margin:60px auto;padding:32px;background:white;border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,0.08);border-top:4px solid var(--teal)">
+      <div style="text-align:center;margin-bottom:24px">
+        <div style="font-size:32px;margin-bottom:8px">🔐</div>
+        <h2 style="margin:0;color:var(--teal)">Programa de Estabilidad · LCC</h2>
+        <p style="color:var(--ink2);font-size:13px;margin-top:4px">Vessena S.A. · Iniciar sesión</p>
+      </div>
+      ${isFirstUser?`
+        <div style="background:#fef3c7;border-left:3px solid #f59e0b;padding:10px;border-radius:6px;margin-bottom:16px;font-size:12px;color:#78350f">
+          <strong>Primer uso:</strong> Creá el usuario administrador (será el primer usuario del sistema).
+        </div>
+      `:''}
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div>
+          <label style="font-size:12px;font-weight:600;color:var(--ink2);display:block;margin-bottom:4px">Email</label>
+          <input type="email" id="loginEmail" placeholder="usuario@vessena.com.uy" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px" autocomplete="email">
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:var(--ink2);display:block;margin-bottom:4px">PIN (4-6 dígitos)</label>
+          <input type="password" id="loginPin" placeholder="****" maxlength="6" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px;letter-spacing:4px" inputmode="numeric" pattern="[0-9]*">
+        </div>
+        <div id="loginError" style="color:var(--red);font-size:12px;min-height:16px"></div>
+        <button class="btn" id="btnLogin" style="padding:12px;font-size:14px;font-weight:600">${isFirstUser?'Crear cuenta administrador':'Iniciar sesión'}</button>
+      </div>
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid #eee;text-align:center;font-size:11px;color:var(--ink2)">
+        La sesión dura 12 horas · Todas las acciones quedan registradas
+      </div>
+    </div>`;
+  
+  const doLogin=async()=>{
+    const email=q('#loginEmail').value.trim().toLowerCase();
+    const pin=q('#loginPin').value.trim();
+    const err=q('#loginError');
+    if(!email||!email.includes('@')){err.textContent='Email inválido';return;}
+    if(!pin||pin.length<4||!/^\d+$/.test(pin)){err.textContent='PIN debe tener 4 a 6 dígitos';return;}
+    
+    if(isFirstUser){
+      // Crear primer usuario como admin
+      usuarios.push({email,pinHash:hashPin(pin),nombre:email.split('@')[0],rol:'admin',activo:true,creado:new Date().toISOString()});
+      await gWriteSilent('usuarios',usuarios);
+      saveSession(email);
+      await logAudit('login',null,'','','','Primer acceso — creado como admin');
+      render();return;
+    }
+    
+    const u=usuarios.find(x=>x.email===email);
+    if(!u){err.textContent='Usuario no encontrado. Contactá al administrador.';return;}
+    if(!u.activo){err.textContent='Usuario deshabilitado. Contactá al administrador.';return;}
+    if(u.pinHash!==hashPin(pin)){err.textContent='PIN incorrecto';return;}
+    
+    saveSession(email);
+    await logAudit('login',null,'','','','Inicio de sesión');
+    render();
+  };
+  
+  q('#btnLogin').onclick=doLogin;
+  q('#loginPin').onkeydown=(e)=>{if(e.key==='Enter')doLogin();};
+  q('#loginEmail').focus();
+}
+
+function renderUsuarios(){
+  const u=usuarios.find(x=>x.email===currentUser);
+  if(!u||u.rol!=='admin'){document.getElementById('mc').innerHTML='<div class="panel pp"><div class="empty">Solo administradores.</div></div>';return;}
+  document.getElementById('mc').innerHTML=`
+    <div class="panel pp">
+      <h2 class="st">👥 Gestión de usuarios</h2>
+      <p class="sd">Alta, baja y modificación de usuarios habilitados para acceder al sistema. Los cambios quedan registrados en auditoría.</p>
+      
+      <div style="background:#f0f9ff;border:1px solid #7dd3fc;border-radius:8px;padding:14px;margin-bottom:16px">
+        <h3 style="margin:0 0 10px 0;font-size:14px">➕ Agregar usuario nuevo</h3>
+        <div style="display:grid;grid-template-columns:1.5fr 1.5fr 100px 100px 90px;gap:8px;align-items:end">
+          <div><label style="font-size:11px;font-weight:600;color:var(--ink2)">Email</label><input type="email" id="uEmail" placeholder="usuario@vessena.com.uy" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:12px"></div>
+          <div><label style="font-size:11px;font-weight:600;color:var(--ink2)">Nombre</label><input type="text" id="uNombre" placeholder="Nombre y apellido" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:12px"></div>
+          <div><label style="font-size:11px;font-weight:600;color:var(--ink2)">Rol</label><select id="uRol" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:12px"><option value="usuario">Usuario</option><option value="admin">Admin</option></select></div>
+          <div><label style="font-size:11px;font-weight:600;color:var(--ink2)">PIN inicial</label><input type="text" id="uPin" placeholder="4-6 dígitos" maxlength="6" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:12px" inputmode="numeric" pattern="[0-9]*"></div>
+          <button class="btn sm" id="btnAddU">Agregar</button>
+        </div>
+      </div>
+      
+      <table style="width:100%;font-size:13px">
+        <thead>
+          <tr><th>Email</th><th>Nombre</th><th>Rol</th><th>Estado</th><th>Alta</th><th>Acciones</th></tr>
+        </thead>
+        <tbody>
+          ${usuarios.map((usr,i)=>`
+            <tr ${usr.activo?'':'style="opacity:0.5"'}>
+              <td class="mono" style="font-size:11px">${E(usr.email)}</td>
+              <td>${E(usr.nombre||'—')}</td>
+              <td>${usr.rol==='admin'?'<span style="background:#8b5cf6;color:white;padding:2px 8px;border-radius:3px;font-size:10px">ADMIN</span>':'<span style="color:var(--ink2)">Usuario</span>'}</td>
+              <td>${usr.activo?'<span style="color:#059669">● Activo</span>':'<span style="color:#dc2626">● Deshabilitado</span>'}</td>
+              <td style="font-size:11px;color:var(--ink2)">${usr.creado?new Date(usr.creado).toLocaleDateString('es-UY'):'—'}</td>
+              <td>
+                <button class="btn sm ghost usr-pin" data-i="${i}" style="padding:3px 8px;font-size:11px" title="Cambiar PIN">🔑</button>
+                <button class="btn sm ghost usr-toggle" data-i="${i}" style="padding:3px 8px;font-size:11px" title="${usr.activo?'Deshabilitar':'Habilitar'}">${usr.activo?'🚫':'✓'}</button>
+                ${usr.email!==currentUser?`<button class="btn sm ghost usr-del" data-i="${i}" style="padding:3px 8px;font-size:11px;color:var(--red)" title="Eliminar">🗑</button>`:''}
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  
+  q('#btnAddU').onclick=async()=>{
+    const email=q('#uEmail').value.trim().toLowerCase();
+    const nombre=q('#uNombre').value.trim();
+    const rol=q('#uRol').value;
+    const pin=q('#uPin').value.trim();
+    if(!email||!email.includes('@')){toast('Email inválido');return;}
+    if(!nombre){toast('Falta el nombre');return;}
+    if(!pin||pin.length<4||!/^\d+$/.test(pin)){toast('PIN debe ser 4-6 dígitos');return;}
+    if(usuarios.find(x=>x.email===email)){toast('Ese email ya existe');return;}
+    usuarios.push({email,nombre,rol,pinHash:hashPin(pin),activo:true,creado:new Date().toISOString()});
+    await gWriteSilent('usuarios',usuarios);
+    await logAudit('alta_usuario',null,email,'','Creado','Rol: '+rol);
+    render();toast('Usuario creado');
+  };
+  
+  bind('.usr-toggle','click',async(el)=>{
+    const i=parseInt(el.dataset.i);
+    const usr=usuarios[i];
+    if(usr.email===currentUser){toast('No podés deshabilitarte a vos mismo');return;}
+    usr.activo=!usr.activo;
+    await gWriteSilent('usuarios',usuarios);
+    await logAudit(usr.activo?'habilitar_usuario':'deshabilitar_usuario',null,usr.email,usr.activo?'Deshabilitado':'Activo',usr.activo?'Activo':'Deshabilitado','');
+    render();
+  });
+  
+  bind('.usr-pin','click',async(el)=>{
+    const i=parseInt(el.dataset.i);
+    const usr=usuarios[i];
+    const nuevo=prompt('Nuevo PIN para '+usr.email+' (4-6 dígitos):');
+    if(!nuevo)return;
+    if(nuevo.length<4||!/^\d+$/.test(nuevo)){toast('PIN inválido');return;}
+    usr.pinHash=hashPin(nuevo);
+    await gWriteSilent('usuarios',usuarios);
+    await logAudit('cambio_pin',null,usr.email,'','','PIN actualizado por admin');
+    toast('PIN actualizado');
+  });
+  
+  bind('.usr-del','click',async(el)=>{
+    const i=parseInt(el.dataset.i);
+    const usr=usuarios[i];
+    if(!confirm('¿Eliminar el usuario '+usr.email+'?\nEsta acción no se puede deshacer.'))return;
+    usuarios.splice(i,1);
+    await gWriteSilent('usuarios',usuarios);
+    await logAudit('eliminar_usuario',null,usr.email,'Activo','ELIMINADO','');
+    render();toast('Usuario eliminado');
+  });
+}
+
+function render(){
+  if(!SCRIPT_URL){renderSetup();renderNav();rSync();return;}
+  // Verificar sesión activa
+  if(!currentUser){
+    const s=loadSession();
+    if(s){currentUser=s.email;sessionStart=s.start;}
+  }
+  if(!currentUser){document.getElementById('tabNav').innerHTML='';renderLogin();rSync();return;}
+  renderNav();rSync();
+  if(activeTab==='dashboard')renderDashboard();else if(activeTab==='estudios')renderEstudios();else if(activeTab==='rechazados')renderRechazados();else if(activeTab==='catalogo')renderCatalogo();else if(activeTab==='nuevo')renderNuevo();else if(activeTab==='informe')renderInforme();else if(activeTab==='auditoria')renderAuditoria();else if(activeTab==='usuarios')renderUsuarios();else if(activeTab==='info')renderInfo();else if(activeTab==='config')renderSetup();}
 // Función global para el botón Volver
 window.goBackToList=function(){
   selSt=null;
