@@ -748,7 +748,7 @@ function agruparPorCampana(ordenesArr) {
         (o.controles || []).forEach(c => grupos[cid].controles.push({
             ...c,
             fecha: c.fecha || normalizeFecha(c.fecha),
-            ordenId: o.id, operador: o.operador, turno: o.turno, maquina: o.maquina, numeroOrden: o.numeroOrden
+            ordenId: o.id, operador: o.operador, analista: o.analista, turno: o.turno, maquina: o.maquina, numeroOrden: o.numeroOrden
         }));
         if (o.estado === 'activa') grupos[cid].tieneActiva = true;
         if (fechaOrden && (!grupos[cid].primeraFecha || fechaOrden < grupos[cid].primeraFecha)) {
@@ -1247,7 +1247,12 @@ function renderCampanas(activas) {
                     <div style="font-size:12px;color:#4a5568;">
                         ${controlesHoy.length === 0
                             ? '<em style="color:#a0aec0;">Ninguno todavía</em>'
-                            : controlesHoy.map(cH => `<span style="display:inline-block;background:#edf2f7;padding:3px 8px;border-radius:6px;margin:2px;font-family:monospace;">${cH.hora || '—'} · ${cH.tipo || '?'}${cH.operador ? ' · '+cH.operador : ''}</span>`).join('')
+                            : controlesHoy.map(cH => {
+                                const partes = [cH.hora || '—', cH.tipo || '?'];
+                                if (cH.operador) partes.push(`Op: ${cH.operador}`);
+                                if (cH.analista) partes.push(`Q: ${cH.analista}`);
+                                return `<span style="display:inline-block;background:#edf2f7;padding:3px 8px;border-radius:6px;margin:2px;font-family:monospace;">${partes.join(' · ')}</span>`;
+                            }).join('')
                         }
                     </div>
                 </div>
@@ -1525,7 +1530,8 @@ function abrirDetalleCampana(cid) {
                                 <th>Hora</th>
                                 <th>Tipo</th>
                                 <th>Máquina</th>
-                                <th>Operador / turno</th>
+                                <th>Operador máquina</th>
+                                <th>Analista / turno</th>
                                 <th>Slot esperado</th>
                                 <th>Mediciones</th>
                                 <th>Observaciones</th>
@@ -1551,7 +1557,8 @@ function abrirDetalleCampana(cid) {
                                         <td style="font-family:monospace;font-weight:700;color:#2d3748;">${ct.hora || '—'}${dupPill}</td>
                                         <td>${ct.tipo || '—'}</td>
                                         <td>${ct.maquina ? `🏭 ${ct.maquina}` : '<em style="color:#a0aec0;">s/d</em>'}</td>
-                                        <td>${ct.operador || '—'}${ct.turno ? ` <span style="color:#a0aec0;">· ${ct.turno}</span>` : ''}</td>
+                                        <td>${ct.operador || '<em style="color:#a0aec0;">—</em>'}</td>
+                                        <td>${ct.analista || '<em style="color:#a0aec0;">—</em>'}${ct.turno ? ` <span style="color:#a0aec0;">· ${ct.turno}</span>` : ''}</td>
                                         <td>${s.slot || '—'} <span class="estado-pill ${pillClass}">${pill}</span></td>
                                         <td>${meds}</td>
                                         <td style="max-width:200px;font-size:11px;color:#4a5568;">${ct.observaciones || '<em style="color:#a0aec0;">—</em>'}</td>
