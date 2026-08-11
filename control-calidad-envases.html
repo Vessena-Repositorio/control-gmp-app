@@ -350,7 +350,76 @@
         };
 
         // =====================================================
-        // CONFIGURACIÓN: Pegá tu URL de Google Apps Script acá
+        // CATÁLOGO DE TAPAS (Power Jet 1, Power Jet 2)
+        // =====================================================
+        const TAPAS = {
+            'TAPA-28-AM': {
+                nombre: 'Tapa 28 amarilla',
+                codigo: 'pendiente',
+                maquina: 'Power Jet 1',
+                cavidades: 32,
+                cavidadesArranque: [1, 3, 4, 6, 8, 12],
+                esquemaProceso: {
+                    '06:00': [1, 2, 3, 4, 5, 6],
+                    '08:00': [7, 8, 9, 10, 11, 12],
+                    '10:00': [13, 14, 15, 16, 17, 18],
+                    '12:00': [19, 20, 21, 22, 23, 24],
+                    '14:00': [25, 26, 27, 28, 29, 30],
+                    '16:30': [31, 32]
+                },
+                parametros: {
+                    'A':    { min: 14.50, max: 15.50, unidad: 'mm', nombre: 'A · Altura' },
+                    'B':    { min: 29.40, max: 30.40, unidad: 'mm', nombre: 'B · Ø Externo' },
+                    'C':    { min: 27.60, max: 28.60, unidad: 'mm', nombre: 'C · Ø Interno' },
+                    'peso': { min: 1.75, max: 1.90, unidad: 'g',  nombre: 'Peso' }
+                }
+            },
+            'TAPA-FLIPTOP-HIPO': {
+                nombre: 'Tapa Flip Top Hipoclorito',
+                codigo: 'pendiente',
+                maquina: 'Power Jet 2',
+                cavidades: 12,
+                cavidadesArranque: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+                esquemaProceso: {
+                    '06:00': [1, 2],
+                    '08:00': [3, 4],
+                    '10:00': [5, 6],
+                    '12:00': [7, 8],
+                    '14:00': [9, 10],
+                    '16:30': [11, 12]
+                },
+                parametros: {
+                    'A':    { min: 13.23, max: 15.37, unidad: 'mm', nombre: 'A · Altura tapa cerrada' },
+                    'B':    { min: 27.75, max: 32.25, unidad: 'mm', nombre: 'B · Ø Externo' },
+                    'C':    { min: 26.36, max: 30.64, unidad: 'mm', nombre: 'C · Ø Interno' },
+                    'peso': { min: 2.50, max: 2.70, unidad: 'g',  nombre: 'Peso' }
+                }
+            }
+        };
+
+        // Chequeo visual estándar cada 2 h para tapas
+        const CHEQUEO_VISUAL_TAPAS = [
+            { key: 'color',        label: 'Color correcto' },
+            { key: 'sin_marcas',   label: 'Sin marcas' },
+            { key: 'sin_suciedad', label: 'Sin suciedad' },
+            { key: 'sin_deform',   label: 'Sin deformación' }
+        ];
+
+        // Slots horarios de muestreo cada 2 h
+        const HORARIOS_SLOTS = ['06:00', '08:00', '10:00', '12:00', '14:00', '16:30'];
+        function slotActual() {
+            const now = new Date();
+            const min = now.getHours() * 60 + now.getMinutes();
+            let mejor = HORARIOS_SLOTS[0], mejorDelta = Infinity;
+            for (const s of HORARIOS_SLOTS) {
+                const [h, m] = s.split(':').map(Number);
+                const d = Math.abs(min - (h * 60 + m));
+                if (d < mejorDelta) { mejorDelta = d; mejor = s; }
+            }
+            return mejor;
+        }
+
+
         // =====================================================
         const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby0Idz2-18NsukOhRqqrQrgHCpO7f4gX67kb-5gH0xA1DLxw7t39Yr37_PakYth5srj/exec';
         // =====================================================
@@ -404,6 +473,54 @@
 
         function App() {
             const [activeTab, setActiveTab] = useState('soplado');
+
+            // === MODO DE PRODUCTO (envases o tapas) ===
+            const [modoProducto, setModoProducto] = useState(() => {
+                try {
+                    return localStorage.getItem('vessena_modo_producto') || 'envases';
+                } catch { return 'envases'; }
+            });
+            const cambiarModo = (nuevoModo) => {
+                if (nuevoModo === modoProducto) return;
+                localStorage.setItem('vessena_modo_producto', nuevoModo);
+                // Reset flags de UI que pueden estar apuntando al modo anterior
+                setMostrarNuevaOrden(false);
+                setMostrarSeleccionOrden(false);
+                setMostrarNuevoLCC(false);
+                setOrdenSeleccionada(null);
+                setCampanaSeleccionada(null);
+                setCampanaFiltroProceso(null);
+                setEnvaseFiltroProceso(null);
+                setTipoControlSoplado('');
+                setMediciones({});
+                setActiveTab('soplado');
+                setModoProducto(nuevoModo);
+            };
+
+            // Derivados según modo
+            const esModoTapas = modoProducto === 'tapas';
+            const SPECS_ACTIVAS = esModoTapas ? TAPAS : ESPECIFICACIONES;
+            const MAQUINAS_ACTIVAS = esModoTapas
+                ? ['Power Jet 1', 'Power Jet 2']
+                : ['6 cavidades', '4 cavidades', 'HQ1', 'HQ2', 'Smargon', 'Power 3', 'Bidones'];
+            const ENVASES_15_DIAS_ACTIVOS = esModoTapas
+                ? ['TAPA-28-AM', 'TAPA-FLIPTOP-HIPO']
+                : ['PET-900', 'PET-1800', 'DET-1.25L', 'FAB-1L', 'FAB-2L', 'HIPO-1000', 'HIPO-2000'];
+
+            // Endpoint mapping: en modo tapas se agregan sufijos "Tapa"
+            const endpoint = (base) => {
+                if (!esModoTapas) return base;
+                const map = {
+                    'getAll': 'getAllTapas',
+                    'saveOrden': 'saveOrdenTapa',
+                    'updateOrden': 'updateOrdenTapa',
+                    'deleteOrden': 'deleteOrdenTapa',
+                    'saveControlSoplado': 'saveControlSopladoTapa',
+                    'deleteControlSoplado': 'deleteControlSopladoTapa',
+                    'finalizarCampana': 'finalizarCampanaTapa'
+                };
+                return map[base] || base;
+            };
 
             // === AUTENTICACIÓN ===
             const [usuarioLogueado, setUsuarioLogueado] = useState(() => {
@@ -513,13 +630,12 @@
             const esFabulosoEnvase = (env) => env === 'FAB-1L' || env === 'FAB-2L';
 
             // === REGLA DE ARRANQUE CADA 15 DÍAS ===
-            // Estos envases requieren un nuevo control de ARRANQUE cada 15 días calendario
-            // (se trabaja lu-sá y domingo tarde, ~15 días seguidos de producción).
-            const ENVASES_ARRANQUE_15_DIAS = ['PET-900', 'PET-1800', 'DET-1.25L', 'FAB-1L', 'FAB-2L', 'HIPO-1000', 'HIPO-2000'];
+            // Ver lista dinámica ENVASES_ARRANQUE_15_DIAS_ACTIVOS (según modo)
+            const ENVASES_ARRANQUE_15_DIAS = ENVASES_15_DIAS_ACTIVOS;
             const DIAS_ARRANQUE = 15;
 
-            // Máquinas disponibles (dropdown al crear/editar orden)
-            const MAQUINAS = ['6 cavidades', '4 cavidades', 'HQ1', 'HQ2', 'Smargon', 'Power 3', 'Bidones'];
+            // Máquinas disponibles (dropdown al crear/editar orden) — según modo
+            const MAQUINAS = MAQUINAS_ACTIVAS;
 
             /* Devuelve { requiere, razon, diasDesdeUltimoArranque, ultimoArranqueFecha }
                Busca el ÚLTIMO ARRANQUE del MISMO ENVASE en todas las órdenes históricas
@@ -648,7 +764,7 @@
                 if (!configurado) { setCargando(false); return; }
                 try {
                     setCargando(true);
-                    const result = await apiCall('getAll');
+                    const result = await apiCall(endpoint('getAll'));
                     if (result.error) throw new Error(result.error);
 
                     // === AUTO-CIERRE de órdenes activas al finalizar el turno + margen ===
@@ -683,7 +799,7 @@
                     if (ordenesParaCerrar.length > 0) {
                         console.log(`[Auto-cierre] Cerrando ${ordenesParaCerrar.length} orden(es) por fin de turno + ${MARGEN_CIERRE_HORAS}h de margen`);
                         ordenesParaCerrar.forEach(orden => {
-                            apiCall('updateOrden', orden).catch(err =>
+                            apiCall(endpoint('updateOrden'), orden).catch(err =>
                                 console.error('Error auto-cerrando orden', orden.numeroOrden, err)
                             );
                         });
@@ -701,7 +817,7 @@
                 }
             };
 
-            useEffect(() => { cargarDatos(); }, []);
+            useEffect(() => { cargarDatos(); }, [modoProducto]);
 
             // Auto-sincronización cada 5 minutos
             useEffect(() => {
@@ -726,10 +842,8 @@
 
             const crearNuevaOrden = async () => {
                 if (guardando) return; // guardia anti-doble-click
-                // Operador siempre = usuario logueado (readonly en el form)
-                const operadorEfectivo = usuarioLogueado.nombre;
-                if (!nuevaOrdenData.numeroOrden || !nuevaOrdenData.envase || !nuevaOrdenData.maquina) {
-                    setMensaje({ tipo: 'warning', texto: 'Complete todos los campos obligatorios (número de orden, envase y máquina)' });
+                if (!nuevaOrdenData.numeroOrden || !nuevaOrdenData.envase || !nuevaOrdenData.maquina || !nuevaOrdenData.operador) {
+                    setMensaje({ tipo: 'warning', texto: 'Complete todos los campos obligatorios (número de orden, envase, máquina y operador de máquina)' });
                     return;
                 }
 
@@ -738,7 +852,7 @@
                 const ultimaMismoNumero = ordenesSoplado.find(o =>
                     o.numeroOrden === nuevaOrdenData.numeroOrden
                     && o.envase === nuevaOrdenData.envase
-                    && o.operador === operadorEfectivo
+                    && o.operador === nuevaOrdenData.operador
                 );
                 if (ultimaMismoNumero && typeof ultimaMismoNumero.id === 'number') {
                     const hace = Date.now() - ultimaMismoNumero.id;
@@ -759,7 +873,8 @@
                 const id = Date.now();
                 const campaign_id = campanaSeleccionada ? campanaSeleccionada.campaign_id : id;
                 const nuevaOrden = {
-                    id, ...nuevaOrdenData, operador: operadorEfectivo,
+                    id, ...nuevaOrdenData,
+                    analista: usuarioLogueado.nombre,
                     createdBy: usuarioLogueado.username,
                     estado: 'activa', controles: [],
                     createdAt: new Date().toISOString(),
@@ -770,7 +885,7 @@
                 // Enviar a Google Sheets
                 if (configurado) {
                     try {
-                        await apiCall('saveOrden', nuevaOrden);
+                        await apiCall(endpoint('saveOrden'), nuevaOrden);
                     } catch (err) {
                         console.error('Error guardando en Sheets:', err);
                         setMensaje({ tipo: 'warning', texto: '⚠️ Guardado local OK, pero falló la sincronización con Google Sheets' });
@@ -839,7 +954,7 @@
                 // Sincronizar con Google Sheets
                 if (configurado) {
                     try {
-                        await apiCall('finalizarCampana', null, { campaign_id });
+                        await apiCall(endpoint('finalizarCampana'), null, { campaign_id });
                     } catch (err) {
                         console.error('Error finalizando campaña:', err);
                     }
@@ -872,7 +987,7 @@
                 }
                 
                 // Validar peso si el envase lo requiere
-                const specEnvase = ESPECIFICACIONES[ordenSeleccionada.envase];
+                const specEnvase = SPECS_ACTIVAS[ordenSeleccionada.envase];
                 if (specEnvase?.parametros?.peso) {
                     const cavidades = specEnvase.cavidades || 1;
                     const prefijo = tipoControlSoplado === 'arranque' ? 'arr_peso_cav' : 'proc_peso_cav';
@@ -895,7 +1010,8 @@
                     hora: new Date().toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' }),
                     mediciones: { ...mediciones }, observaciones, timestamp: new Date().toISOString(),
                     createdBy: usuarioLogueado.username,
-                    operador: usuarioLogueado.nombre
+                    analista: usuarioLogueado.nombre,
+                    operador: ordenSeleccionada.operador  // heredado de la orden
                 };
                 const ordenesActualizadas = ordenesSoplado.map(orden => {
                     if (orden.id === ordenSeleccionada.id) {
@@ -909,7 +1025,7 @@
                 // Sincronizar con Google Sheets
                 if (configurado) {
                     try {
-                        await apiCall('saveControlSoplado', {
+                        await apiCall(endpoint('saveControlSoplado'), {
                             id: nuevoControl.id,
                             ordenId: ordenSeleccionada.id,
                             numeroOrden: ordenSeleccionada.numeroOrden,
@@ -934,9 +1050,8 @@
 
             const registrarControlLCC = async () => {
                 if (guardando) return; // guardia anti-doble-click
-                const operadorEfectivo = usuarioLogueado.nombre;
-                if (!nuevoControlLCC.envase || !tipoControlLCC) {
-                    setMensaje({ tipo: 'warning', texto: 'Complete todos los campos obligatorios' });
+                if (!nuevoControlLCC.envase || !tipoControlLCC || !nuevoControlLCC.operador) {
+                    setMensaje({ tipo: 'warning', texto: 'Complete todos los campos obligatorios (incluyendo operador de máquina)' });
                     return;
                 }
 
@@ -945,7 +1060,7 @@
                     const ult = controlesLCC[0];
                     if (ult.tipo === tipoControlLCC
                         && ult.envase === nuevoControlLCC.envase
-                        && ult.operador === operadorEfectivo
+                        && ult.operador === nuevoControlLCC.operador
                         && ult.timestamp) {
                         const hace = Date.now() - new Date(ult.timestamp).getTime();
                         if (hace < 15000) {
@@ -959,7 +1074,7 @@
                 }
                 const nuevoControl = {
                     id: Date.now(), tipo: tipoControlLCC, ...nuevoControlLCC,
-                    operador: operadorEfectivo,
+                    analista: usuarioLogueado.nombre,
                     createdBy: usuarioLogueado.username,
                     hora: new Date().toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' }),
                     mediciones: { ...mediciones }, observaciones, timestamp: new Date().toISOString()
@@ -1010,7 +1125,7 @@
                 if (configurado) {
                     try {
                         const ordenFinalizada = ordenesActualizadas.find(o => o.id === ordenId);
-                        await apiCall('updateOrden', ordenFinalizada);
+                        await apiCall(endpoint('updateOrden'), ordenFinalizada);
                     } catch (err) { console.error('Error finalizando:', err); }
                 }
                 setMensaje({ tipo: 'success', texto: 'Orden finalizada' });
@@ -1021,7 +1136,7 @@
                     guardarOrdenes(ordenesSoplado.filter(orden => orden.id !== ordenId));
                     
                     if (configurado) {
-                        try { await apiCall('deleteOrden', null, { id: ordenId }); }
+                        try { await apiCall(endpoint('deleteOrden'), null, { id: ordenId }); }
                         catch (err) { console.error('Error eliminando:', err); }
                     }
                     setMensaje({ tipo: 'success', texto: 'Orden eliminada' });
@@ -1041,7 +1156,7 @@
             };
 
             const exportarOrdenExcel = (orden) => {
-                const spec = ESPECIFICACIONES[orden.envase];
+                const spec = SPECS_ACTIVAS[orden.envase];
                 let csv = `Orden,${orden.numeroOrden}\nEnvase,${spec.nombre}\nOperador,${orden.operador}\nFecha,${orden.fecha}\n\n`;
                 csv += 'CONTROLES\n';
                 orden.controles.forEach((c, i) => {
@@ -1144,7 +1259,7 @@
                     <div className="header">
                         <div>
                             <div className="logo">VESSENA</div>
-                            <h1>Control de Calidad - Envases</h1>
+                            <h1>Control de Calidad {esModoTapas ? '- Tapas' : '- Envases'}</h1>
                         </div>
                         <div style={{textAlign: 'right', color: '#718096', display: 'flex', alignItems: 'center', gap: '15px'}}>
                             <div style={{fontSize: '14px'}}>SOP-PR-138</div>
@@ -1202,15 +1317,48 @@
                         </div>
                     ) : (
                     <div className="main-content">
+                        {/* Toggle Envases / Tapas */}
+                        <div style={{
+                            display: 'flex', padding: '15px', gap: '10px',
+                            background: '#F7FAFC', borderBottom: '2px solid #E2E8F0'
+                        }}>
+                            <button
+                                onClick={() => cambiarModo('envases')}
+                                style={{
+                                    flex: 1, padding: '14px', border: 'none', borderRadius: '10px',
+                                    fontSize: '15px', fontWeight: 700, cursor: 'pointer',
+                                    background: !esModoTapas ? '#028090' : 'white',
+                                    color: !esModoTapas ? 'white' : '#4A5568',
+                                    boxShadow: !esModoTapas ? '0 4px 12px rgba(2,128,144,0.3)' : '0 1px 3px rgba(0,0,0,0.1)',
+                                    transition: 'all 0.2s'
+                                }}>
+                                📦 Envases
+                            </button>
+                            <button
+                                onClick={() => cambiarModo('tapas')}
+                                style={{
+                                    flex: 1, padding: '14px', border: 'none', borderRadius: '10px',
+                                    fontSize: '15px', fontWeight: 700, cursor: 'pointer',
+                                    background: esModoTapas ? '#028090' : 'white',
+                                    color: esModoTapas ? 'white' : '#4A5568',
+                                    boxShadow: esModoTapas ? '0 4px 12px rgba(2,128,144,0.3)' : '0 1px 3px rgba(0,0,0,0.1)',
+                                    transition: 'all 0.2s'
+                                }}>
+                                🎯 Tapas
+                            </button>
+                        </div>
+
                         <div className="tabs">
                             <button className={`tab ${activeTab === 'soplado' ? 'active' : ''}`}
                                 onClick={() => setActiveTab('soplado')}>
-                                🏭 Órdenes de Soplado
+                                {esModoTapas ? '🎯 Órdenes de Tapas' : '🏭 Órdenes de Soplado'}
                             </button>
-                            <button className={`tab ${activeTab === 'lcc' ? 'active' : ''}`}
-                                onClick={() => setActiveTab('lcc')}>
-                                🔬 Controles LCC
-                            </button>
+                            {!esModoTapas && (
+                                <button className={`tab ${activeTab === 'lcc' ? 'active' : ''}`}
+                                    onClick={() => setActiveTab('lcc')}>
+                                    🔬 Controles LCC
+                                </button>
+                            )}
                             <button className={`tab ${activeTab === 'historico' ? 'active' : ''}`}
                                 onClick={() => setActiveTab('historico')}>
                                 📊 Histórico
@@ -1265,7 +1413,7 @@
                                                 return (
                                                     <>
                                                         <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px', marginBottom: '20px'}}>
-                                                            {Object.entries(ESPECIFICACIONES).map(([envaseKey, val]) => {
+                                                            {Object.entries(SPECS_ACTIVAS).map(([envaseKey, val]) => {
                                                                 const campActiva = campanaPorEnvase[envaseKey];
                                                                 const tieneActiva = !!campActiva;
                                                                 
@@ -1357,7 +1505,7 @@
                                         <div className="form-section">
                                             <h2 className="section-title">
                                                 {campanaSeleccionada 
-                                                    ? `Nueva Orden en Campaña ${ESPECIFICACIONES[campanaSeleccionada.envase]?.nombre || campanaSeleccionada.envase}`
+                                                    ? `Nueva Orden en Campaña ${SPECS_ACTIVAS[campanaSeleccionada.envase]?.nombre || campanaSeleccionada.envase}`
                                                     : 'Nueva Campaña - Primera Orden'}
                                             </h2>
                                             {campanaSeleccionada && (
@@ -1379,7 +1527,7 @@
                                                         onChange={(e) => setNuevaOrdenData({...nuevaOrdenData, envase: e.target.value})}
                                                         disabled={!!campanaSeleccionada}>
                                                         <option value="">Seleccione...</option>
-                                                        {Object.entries(ESPECIFICACIONES).map(([key, val]) => (
+                                                        {Object.entries(SPECS_ACTIVAS).map(([key, val]) => (
                                                             <option key={key} value={key}>{val.nombre}</option>
                                                         ))}
                                                     </select>
@@ -1390,13 +1538,22 @@
                                                         onChange={(e) => setNuevaOrdenData({...nuevaOrdenData, fecha: e.target.value})} />
                                                 </div>
                                                 <div className="form-group">
-                                                    <label>Operador *</label>
+                                                    <label>Operador de máquina *</label>
+                                                    <input type="text" value={nuevaOrdenData.operador || ''}
+                                                        onChange={(e) => setNuevaOrdenData({...nuevaOrdenData, operador: e.target.value})}
+                                                        placeholder="Nombre del operador que maneja la máquina" />
+                                                    <div className="spec-info" style={{fontSize: '11px'}}>
+                                                        Ej: Hector, Adrian, Juan...
+                                                    </div>
+                                                </div>
+                                                <div className="form-group">
+                                                    <label>Analista (vos)</label>
                                                     <input type="text" value={usuarioLogueado.nombre}
                                                         readOnly
                                                         style={{background: '#EDF2F7', color: '#4A5568', cursor: 'not-allowed'}}
-                                                        title="Se completa automáticamente con el usuario logueado" />
+                                                        title="Se registra automáticamente con tu usuario logueado" />
                                                     <div className="spec-info" style={{fontSize: '11px'}}>
-                                                        🔒 Se registra con tu usuario logueado
+                                                        🔒 Registrado con tu sesión
                                                     </div>
                                                 </div>
                                                 <div className="form-group">
@@ -1439,7 +1596,7 @@
                                                 const camp = ordenesSoplado.find(o => 
                                                     (o.campaign_id || o.id) === campanaFiltroProceso
                                                 );
-                                                const spec = camp ? ESPECIFICACIONES[camp.envase] : null;
+                                                const spec = camp ? SPECS_ACTIVAS[camp.envase] : null;
                                                 return (
                                                     <div className="alert alert-info" style={{marginBottom: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px'}}>
                                                         <span>▶ Mostrando órdenes activas de la campaña <strong>{spec?.nombre || camp?.envase}</strong></span>
@@ -1476,7 +1633,7 @@
                                                         </div>
                                                         <div className="tipo-control-selector">
                                                             {envasesConOrdenes.map(envaseClave => {
-                                                                const spec = ESPECIFICACIONES[envaseClave];
+                                                                const spec = SPECS_ACTIVAS[envaseClave];
                                                                 const cant = conteoPorEnvase[envaseClave];
                                                                 return (
                                                                     <div key={envaseClave}
@@ -1510,7 +1667,7 @@
                                                         </div>
                                                     );
                                                 }
-                                                const spec = envaseFiltroProceso ? ESPECIFICACIONES[envaseFiltroProceso] : null;
+                                                const spec = envaseFiltroProceso ? SPECS_ACTIVAS[envaseFiltroProceso] : null;
                                                 return (
                                                     <>
                                                         {envaseFiltroProceso && (() => {
@@ -1670,7 +1827,7 @@
                                     )}
 
                                     {tipoControlSoplado && ordenSeleccionada && (() => {
-                                        const spec = ESPECIFICACIONES[ordenSeleccionada.envase];
+                                        const spec = SPECS_ACTIVAS[ordenSeleccionada.envase];
                                         const esFab = esFabuloso(ordenSeleccionada.envase);
                                         
                                         return (
@@ -1689,7 +1846,53 @@
                                                 </div>
 
                                                 {/* CONTROL DE ARRANQUE */}
-                                                {tipoControlSoplado === 'arranque' && (
+                                                {tipoControlSoplado === 'arranque' && spec.cavidadesArranque && (
+                                                    /* --- MODO TAPAS: mediciones dimensionales por cavidad crítica --- */
+                                                    <div style={{background: '#f7fafc', padding: '20px', borderRadius: '8px', marginBottom: '20px'}}>
+                                                        <h3 style={{marginBottom: '10px', color: '#2d3748'}}>Control de Arranque · Mediciones por cavidad crítica</h3>
+                                                        <div style={{marginBottom: '15px', padding: '10px 14px', background: '#EBF8FF', borderRadius: '6px', fontSize: '13px', color: '#2C5282'}}>
+                                                            📋 <strong>Cavidades a medir:</strong> {spec.cavidadesArranque.join(', ')}
+                                                            &nbsp;·&nbsp; Total: {spec.cavidadesArranque.length} de {spec.cavidades}
+                                                            {spec.cavidadesArranque.length < spec.cavidades && <> &nbsp;·&nbsp; <em>(según informe validación)</em></>}
+                                                        </div>
+                                                        <div className="measurement-table">
+                                                            <table>
+                                                                <thead>
+                                                                    <tr>
+                                                                        <th style={{width: '80px'}}>Cavidad</th>
+                                                                        {Object.entries(spec.parametros).map(([k, p]) => (
+                                                                            <th key={k}>{p.nombre} ({p.unidad})</th>
+                                                                        ))}
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {spec.cavidadesArranque.map(cav => (
+                                                                        <tr key={cav}>
+                                                                            <td><strong>Cav {cav}</strong></td>
+                                                                            {Object.entries(spec.parametros).map(([k, p]) => (
+                                                                                <td key={k}>
+                                                                                    <input type="number" step="0.01"
+                                                                                        value={mediciones[`arr_${k}_cav${cav}`] || ''}
+                                                                                        onChange={(e) => setMediciones({
+                                                                                            ...mediciones,
+                                                                                            [`arr_${k}_cav${cav}`]: e.target.value
+                                                                                        })}
+                                                                                        placeholder={p.unidad} />
+                                                                                    <div className="spec-info">
+                                                                                        {p.min} – {p.max}
+                                                                                    </div>
+                                                                                </td>
+                                                                            ))}
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* CONTROL DE ARRANQUE (envases) */}
+                                                {tipoControlSoplado === 'arranque' && !spec.cavidadesArranque && (
                                                     <>
                                                         <div style={{background: '#f7fafc', padding: '20px', borderRadius: '8px', marginBottom: '20px'}}>
                                                             <h3 style={{marginBottom: '15px', color: '#2d3748'}}>Control de Arranque por Cavidad</h3>
@@ -1792,8 +1995,59 @@
                                                     </>
                                                 )}
 
-                                                {/* CONTROL CADA 2 HORAS */}
-                                                {tipoControlSoplado === 'proceso' && (
+                                                {/* CONTROL CADA 2 HORAS — TAPAS: chequeo visual por cavidad del slot */}
+                                                {tipoControlSoplado === 'proceso' && spec.esquemaProceso && (() => {
+                                                    const slot = slotActual();
+                                                    const cavidadesSlot = spec.esquemaProceso[slot] || [];
+                                                    return (
+                                                        <div style={{background: '#f7fafc', padding: '20px', borderRadius: '8px', marginBottom: '20px'}}>
+                                                            <h3 style={{marginBottom: '10px', color: '#2d3748'}}>Chequeo visual cada 2 h</h3>
+                                                            <div style={{marginBottom: '15px', padding: '10px 14px', background: '#EBF8FF', borderRadius: '6px', fontSize: '13px', color: '#2C5282'}}>
+                                                                🕐 <strong>Slot horario:</strong> {slot} &nbsp;·&nbsp;
+                                                                <strong>Cavidades a verificar:</strong> {cavidadesSlot.length ? cavidadesSlot.join(', ') : '—'}
+                                                            </div>
+                                                            <div className="measurement-table">
+                                                                <table>
+                                                                    <thead>
+                                                                        <tr>
+                                                                            <th style={{width: '90px'}}>Cavidad</th>
+                                                                            {CHEQUEO_VISUAL_TAPAS.map(ch => (
+                                                                                <th key={ch.key} style={{textAlign: 'center'}}>{ch.label}</th>
+                                                                            ))}
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody>
+                                                                        {cavidadesSlot.map(cav => (
+                                                                            <tr key={cav}>
+                                                                                <td><strong>Cav {cav}</strong></td>
+                                                                                {CHEQUEO_VISUAL_TAPAS.map(ch => (
+                                                                                    <td key={ch.key} style={{textAlign: 'center'}}>
+                                                                                        <label style={{display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer'}}>
+                                                                                            <input type="checkbox"
+                                                                                                style={{width: '20px', height: '20px'}}
+                                                                                                checked={mediciones[`proc_${ch.key}_cav${cav}`] === true}
+                                                                                                onChange={(e) => setMediciones({
+                                                                                                    ...mediciones,
+                                                                                                    [`proc_${ch.key}_cav${cav}`]: e.target.checked
+                                                                                                })} />
+                                                                                            <span style={{fontSize: '11px', color: '#4A5568'}}>OK</span>
+                                                                                        </label>
+                                                                                    </td>
+                                                                                ))}
+                                                                            </tr>
+                                                                        ))}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                            <div style={{marginTop: '10px', fontSize: '12px', color: '#718096', fontStyle: 'italic'}}>
+                                                                Tildá cada casilla si el aspecto es correcto. Si detectás una anomalía, dejala sin tildar y detallá en Observaciones.
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })()}
+
+                                                {/* CONTROL CADA 2 HORAS — ENVASES */}
+                                                {tipoControlSoplado === 'proceso' && !spec.esquemaProceso && (
                                                     <div style={{background: '#f7fafc', padding: '20px', borderRadius: '8px', marginBottom: '20px'}}>
                                                         <h3 style={{marginBottom: '15px', color: '#2d3748'}}>Verificación Visual</h3>
                                                         
@@ -2004,7 +2258,7 @@
 
                                     {tipoControlLCC && (() => {
                                         const numMuestras = tipoControlLCC === 'semanal' ? 3 : 10;
-                                        const spec = nuevoControlLCC.envase ? ESPECIFICACIONES[nuevoControlLCC.envase] : null;
+                                        const spec = nuevoControlLCC.envase ? SPECS_ACTIVAS[nuevoControlLCC.envase] : null;
                                         
                                         return (
                                             <div className="form-section">
@@ -2020,7 +2274,7 @@
                                                         <select value={nuevoControlLCC.envase}
                                                             onChange={(e) => setNuevoControlLCC({...nuevoControlLCC, envase: e.target.value})}>
                                                             <option value="">Seleccione...</option>
-                                                            {Object.entries(ESPECIFICACIONES).map(([key, val]) => (
+                                                            {Object.entries(SPECS_ACTIVAS).map(([key, val]) => (
                                                                 <option key={key} value={key}>{val.nombre}</option>
                                                             ))}
                                                         </select>
@@ -2031,13 +2285,22 @@
                                                             onChange={(e) => setNuevoControlLCC({...nuevoControlLCC, fecha: e.target.value})} />
                                                     </div>
                                                     <div className="form-group">
-                                                        <label>Operador *</label>
+                                                        <label>Operador de máquina *</label>
+                                                        <input type="text" value={nuevoControlLCC.operador || ''}
+                                                            onChange={(e) => setNuevoControlLCC({...nuevoControlLCC, operador: e.target.value})}
+                                                            placeholder="Ej: Hector, Adrian, Juan..." />
+                                                        <div className="spec-info" style={{fontSize: '11px'}}>
+                                                            Operador de la máquina
+                                                        </div>
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label>Analista (vos)</label>
                                                         <input type="text" value={usuarioLogueado.nombre}
                                                             readOnly
                                                             style={{background: '#EDF2F7', color: '#4A5568', cursor: 'not-allowed'}}
-                                                            title="Se completa automáticamente con el usuario logueado" />
+                                                            title="Se registra automáticamente con tu usuario logueado" />
                                                         <div className="spec-info" style={{fontSize: '11px'}}>
-                                                            🔒 Se registra con tu usuario logueado
+                                                            🔒 Registrado con tu sesión
                                                         </div>
                                                     </div>
                                                     <div className="form-group">
@@ -2216,7 +2479,7 @@
                                             <select value={filtroEnvase} onChange={(e) => setFiltroEnvase(e.target.value)}
                                                 style={{padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e0', minWidth: '180px'}}>
                                                 <option value="">Todos</option>
-                                                {Object.keys(ESPECIFICACIONES).map(env => (
+                                                {Object.keys(SPECS_ACTIVAS).map(env => (
                                                     <option key={env} value={env}>{env}</option>
                                                 ))}
                                             </select>
@@ -2298,7 +2561,7 @@
                                             });
 
                                             return campanasOrdenadas.map(campana => {
-                                                const specCamp = ESPECIFICACIONES[campana.envase];
+                                                const specCamp = SPECS_ACTIVAS[campana.envase];
                                                 const ordenesCamp = [...campana.ordenes].sort((a, b) => 
                                                     new Date(a.createdAt || a.fecha) - new Date(b.createdAt || b.fecha)
                                                 );
@@ -2395,7 +2658,7 @@
                                                         {/* ÓRDENES DENTRO DE LA CAMPAÑA */}
                                                         <div style={{padding: '15px'}}>
                                             {ordenesCamp.map(orden => {
-                                                const spec = ESPECIFICACIONES[orden.envase];
+                                                const spec = SPECS_ACTIVAS[orden.envase];
                                                 const dias = calcularDiasActiva(orden.fecha);
                                                 const controlesArranque = orden.controles.filter(c => c.tipo === 'arranque');
                                                 const controlesProceso = orden.controles.filter(c => c.tipo === 'proceso');
@@ -2514,7 +2777,7 @@
                                                 );
                                             }
                                             return lccFiltrados.map(control => {
-                                                const spec = ESPECIFICACIONES[control.envase];
+                                                const spec = SPECS_ACTIVAS[control.envase];
                                                 const tipoLabel = 
                                                     control.tipo === 'validacion' ? '🔬 Validación' :
                                                     control.tipo === 'quincenal' ? '📅 Quincenal' :
@@ -2673,7 +2936,7 @@
                                                                     <th>Parámetro</th>
                                                                     <th>Valor</th>
                                                                     {controlDetalle.tipo === 'soplado' && controlDetalle.orden && (() => {
-                                                                        const spec = ESPECIFICACIONES[controlDetalle.orden.envase];
+                                                                        const spec = SPECS_ACTIVAS[controlDetalle.orden.envase];
                                                                         return spec ? <th>Especificación</th> : null;
                                                                     })()}
                                                                     <th>Estado</th>
@@ -2694,7 +2957,7 @@
                                                                     let enSpec = false;
                                                                     let specMin = null, specMax = null, specUnidad = '';
                                                                     if (controlDetalle.tipo === 'soplado' && controlDetalle.orden) {
-                                                                        const spec = ESPECIFICACIONES[controlDetalle.orden.envase];
+                                                                        const spec = SPECS_ACTIVAS[controlDetalle.orden.envase];
                                                                         if (spec) {
                                                                             const paramBase = key.replace(/^(arr_|proc_)/, '').replace(/_cav\d$/, '');
                                                                             if (spec.parametros[paramBase]) {
@@ -2720,7 +2983,7 @@
                                                                                 <td style={{fontSize: '12px', color: '#718096'}}>
                                                                                     {specMin} - {specMax} {specUnidad}
                                                                                 </td>
-                                                                            ) : controlDetalle.tipo === 'soplado' && controlDetalle.orden && ESPECIFICACIONES[controlDetalle.orden.envase] ? (
+                                                                            ) : controlDetalle.tipo === 'soplado' && controlDetalle.orden && SPECS_ACTIVAS[controlDetalle.orden.envase] ? (
                                                                                 <td></td>
                                                                             ) : null}
                                                                             <td>
