@@ -214,6 +214,7 @@
         const ESPECIFICACIONES = {
             'FAB-2L': {
                 nombre: 'Fabuloso 2L', tipo: 'PEAD', codigo: 'ESP-COM-033',
+                cavidades: 6,
                 parametros: {
                     'brimful': { min: 2029.00, max: 2069.00, unidad: 'mL', nombre: 'Brimful' },
                     'altura_h': { min: 299.40, max: 305.40, unidad: 'mm', nombre: 'Altura H' },
@@ -226,6 +227,7 @@
             },
             'FAB-1L': {
                 nombre: 'Fabuloso 1L', tipo: 'PEAD', codigo: 'ESP-COM-060',
+                cavidades: 6,
                 parametros: {
                     'brimful': { min: 1018, max: 1042, unidad: 'mL', nombre: 'Brimful' },
                     'altura_h': { min: 267.2, max: 269.9, unidad: 'mm', nombre: 'Altura H' },
@@ -379,7 +381,7 @@
                 codigo: 'pendiente',
                 maquina: 'Power Jet 2',
                 cavidades: 12,
-                cavidadesArranque: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+                cavidadesArranque: [1, 3, 4, 6, 8, 12],
                 esquemaProceso: {
                     '06:00': [1, 2],
                     '08:00': [3, 4],
@@ -2102,40 +2104,23 @@
                                                                         </tr>
                                                                     ))}
                                                                     
-                                                                    {esFab && (
-                                                                        <>
-                                                                            <tr style={{background: '#eef2ff'}}>
-                                                                                <td><strong>Espesor Hombro - Cavidad 1</strong></td>
-                                                                                <td>
-                                                                                    <input type="number" step="0.01"
-                                                                                        value={mediciones['proc_espesor_cav1'] || ''}
-                                                                                        onChange={(e) => setMediciones({
-                                                                                            ...mediciones,
-                                                                                            proc_espesor_cav1: e.target.value
-                                                                                        })}
-                                                                                        placeholder="mm" />
-                                                                                </td>
-                                                                                <td>
-                                                                                    <span className="spec-info">Mínimo: {spec.espesorHombroMin} mm</span>
-                                                                                </td>
-                                                                            </tr>
-                                                                            <tr style={{background: '#eef2ff'}}>
-                                                                                <td><strong>Espesor Hombro - Cavidad 2</strong></td>
-                                                                                <td>
-                                                                                    <input type="number" step="0.01"
-                                                                                        value={mediciones['proc_espesor_cav2'] || ''}
-                                                                                        onChange={(e) => setMediciones({
-                                                                                            ...mediciones,
-                                                                                            proc_espesor_cav2: e.target.value
-                                                                                        })}
-                                                                                        placeholder="mm" />
-                                                                                </td>
-                                                                                <td>
-                                                                                    <span className="spec-info">Mínimo: {spec.espesorHombroMin} mm</span>
-                                                                                </td>
-                                                                            </tr>
-                                                                        </>
-                                                                    )}
+                                                                    {esFab && Array.from({length: spec.cavidades || 2}, (_, i) => i + 1).map(cav => (
+                                                                        <tr key={`espesor_cav${cav}`} style={{background: '#eef2ff'}}>
+                                                                            <td><strong>Espesor Hombro - Cavidad {cav}</strong></td>
+                                                                            <td>
+                                                                                <input type="number" step="0.01"
+                                                                                    value={mediciones[`proc_espesor_cav${cav}`] || ''}
+                                                                                    onChange={(e) => setMediciones({
+                                                                                        ...mediciones,
+                                                                                        [`proc_espesor_cav${cav}`]: e.target.value
+                                                                                    })}
+                                                                                    placeholder="mm" />
+                                                                            </td>
+                                                                            <td>
+                                                                                <span className="spec-info">Mínimo: {spec.espesorHombroMin} mm</span>
+                                                                            </td>
+                                                                        </tr>
+                                                                    ))}
 
                                                                     {/* PESO POR CAVIDAD - obligatorio en envases con peso spec */}
                                                                     {spec.parametros.peso && Array.from({length: spec.cavidades || 1}, (_, i) => i + 1).map(cav => (
@@ -2344,8 +2329,9 @@
                                                                 {/* Iterar sobre cada parámetro dimensional */}
                                                                 {['brimful', 'altura_h', 'ancho_pie_hw', 'profundidad_pie_hd', 'ancho_hombro_sw', 'profundidad_hombro_sd'].map(param => {
                                                                     if (!spec.parametros[param]) return null;
-                                                                    
-                                                                    return [1, 2].map(cav => {
+
+                                                                    const numCavidades = spec.cavidades || 2;
+                                                                    return Array.from({length: numCavidades}, (_, i) => i + 1).map(cav => {
                                                                         const key = `${tipoControlLCC}_${param}_cav${cav}`;
                                                                         const valores = mediciones[key] || Array(numMuestras).fill('');
                                                                         
@@ -2361,7 +2347,7 @@
                                                                         return (
                                                                             <tr key={`${param}_cav${cav}`}>
                                                                                 {cav === 1 && (
-                                                                                    <td rowSpan="2" style={{fontWeight: 'bold', background: '#f7fafc'}}>
+                                                                                    <td rowSpan={numCavidades} style={{fontWeight: 'bold', background: '#f7fafc'}}>
                                                                                         {spec.parametros[param].nombre}
                                                                                     </td>
                                                                                 )}
