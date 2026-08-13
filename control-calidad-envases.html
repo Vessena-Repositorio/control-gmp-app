@@ -7,6 +7,7 @@
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone@7.26.4/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
@@ -406,6 +407,36 @@
             { key: 'sin_suciedad', label: 'Sin suciedad' },
             { key: 'sin_deform',   label: 'Sin deformación' }
         ];
+
+        // Perfil de espesor (LCC semanal · REG-SOP-PR-138-H)
+        // 20 puntos por cavidad, 3 botellas por punto, spec en mm
+        const PERFIL_ESPESOR_PUNTOS = [
+            // Tabla 1
+            { key: 'A1_11',  label: 'A1/11', spec: 0.15 },
+            { key: 'C1_12',  label: 'C1/12', spec: 0.15 },
+            { key: 'B1',     label: 'B1',    spec: 0.16 },
+            { key: 'D1',     label: 'D1',    spec: 0.16 },
+            { key: '1_A2',   label: '1/A2',  spec: 0.16 },
+            { key: '6_C2',   label: '6/C2',  spec: 0.16 },
+            { key: 'B2',     label: 'B2',    spec: 0.16 },
+            { key: 'D2',     label: 'D2',    spec: 0.16 },
+            { key: '2_A3',   label: '2/A3',  spec: 0.18 },
+            { key: '7_C3',   label: '7/C3',  spec: 0.18 },
+            // Tabla 2
+            { key: 'B3',     label: 'B3',    spec: 0.17 },
+            { key: 'D3',     label: 'D3',    spec: 0.17 },
+            { key: '3_A4',   label: '3/A4',  spec: 0.15 },
+            { key: '8_C4',   label: '8/C4',  spec: 0.15 },
+            { key: 'P4',     label: '4',     spec: 0.15 },
+            { key: 'P9',     label: '9',     spec: 0.15 },
+            { key: 'P5',     label: '5',     spec: 0.15 },
+            { key: 'P10',    label: '10',    spec: 0.15 },
+            { key: 'D4',     label: 'D4',    spec: 0.15 },
+            { key: 'B4',     label: 'B4',    spec: 0.15 }
+        ];
+        const PERFIL_ESPESOR_BOTELLAS = 3;
+        // Envases donde aplica el perfil de espesor
+        const ENVASES_PERFIL_ESPESOR = ['FAB-1L', 'FAB-2L'];
 
         // Slots horarios de muestreo cada 2 h
         const HORARIOS_SLOTS = ['06:00', '08:00', '10:00', '12:00', '14:00', '16:30'];
@@ -1155,6 +1186,66 @@
                     }
                     setMensaje({ tipo: 'success', texto: 'Control eliminado' });
                 }
+            };
+
+            // Exporta todos los controles LCC a Excel (tabla plana)
+            const exportarLCCaExcel = () => {
+                if (typeof XLSX === 'undefined') {
+                    setMensaje({ tipo: 'warning', texto: '⏳ Cargando librería Excel, probá de nuevo en un instante.' });
+                    return;
+                }
+                if (controlesLCC.length === 0) {
+                    setMensaje({ tipo: 'warning', texto: 'No hay controles LCC para exportar.' });
+                    return;
+                }
+                // 1) Descubro todas las claves de mediciones (union) — orden estable
+                const clavesMediciones = new Set();
+                controlesLCC.forEach(c => {
+                    Object.keys(c.mediciones || {}).forEach(k => {
+                        if (!k.startsWith('_')) clavesMediciones.add(k);
+                    });
+                });
+                const columnasMediciones = Array.from(clavesMediciones).sort();
+
+                // 2) Genero fila por control con columnas fijas + expandidas
+                const rows = controlesLCC.map(c => {
+                    const spec = ESPECIFICACIONES[c.envase] || TAPAS[c.envase];
+                    const base = {
+                        'ID': c.id,
+                        'Fecha': c.fecha || '',
+                        'Hora': c.hora || '',
+                        'Tipo': c.tipo || '',
+                        'Envase (código)': c.envase || '',
+                        'Envase (nombre)': spec?.nombre || '',
+                        'Operador máquina': c.operador || '',
+                        'Analista': c.analista || (c.mediciones?._analista) || '',
+                        'Turno': c.turno || '',
+                        'Aprobado': (c.mediciones?._aprobado) || 'pendiente',
+                        'Aprobado por': (c.mediciones?._aprobadoPor) || '',
+                        'Fecha aprobación': (c.mediciones?._fechaAprobacion) || '',
+                        'Observaciones': c.observaciones || ''
+                    };
+                    // Agrego columnas dinámicas de mediciones
+                    columnasMediciones.forEach(k => {
+                        const val = c.mediciones?.[k];
+                        base[k] = Array.isArray(val) ? val.join(' | ') : (val ?? '');
+                    });
+                    return base;
+                });
+
+                // 3) Convierto y descargo
+                const ws = XLSX.utils.json_to_sheet(rows);
+                // Auto-ancho aproximado
+                const colWidths = Object.keys(rows[0]).map(k => ({
+                    wch: Math.max(k.length + 2, 12)
+                }));
+                ws['!cols'] = colWidths;
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, 'Controles LCC');
+
+                const fecha = new Date().toISOString().slice(0, 10);
+                XLSX.writeFile(wb, `controles_LCC_${fecha}.xlsx`);
+                setMensaje({ tipo: 'success', texto: `📊 Exportados ${rows.length} controles a Excel.` });
             };
 
             const exportarOrdenExcel = (orden) => {
@@ -2398,6 +2489,80 @@
                                                     </div>
                                                 )}
 
+                                                {/* PERFIL DE ESPESOR — solo en semanal y solo si aplica */}
+                                                {tipoControlLCC === 'semanal' && spec && ENVASES_PERFIL_ESPESOR.includes(nuevoControlLCC.envase) && (
+                                                    <div style={{marginTop: '30px', background: '#f7fafc', padding: '20px', borderRadius: '8px', border: '1px solid #e2e8f0'}}>
+                                                        <h3 style={{marginBottom: '5px', color: '#2d3748'}}>Perfil de Espesor</h3>
+                                                        <div style={{fontSize: '13px', color: '#4a5568', marginBottom: '15px'}}>
+                                                            REG-SOP-PR-138-H · {PERFIL_ESPESOR_PUNTOS.length} puntos por cavidad · {PERFIL_ESPESOR_BOTELLAS} botellas por punto · {spec.cavidades || 2} cavidades
+                                                        </div>
+
+                                                        {Array.from({length: spec.cavidades || 2}, (_, i) => i + 1).map(cav => (
+                                                            <details key={cav} open={cav === 1} style={{marginBottom: '15px', border: '1px solid #cbd5e0', borderRadius: '6px', background: 'white'}}>
+                                                                <summary style={{padding: '10px 14px', cursor: 'pointer', fontWeight: 'bold', color: '#2d3748', background: '#edf2f7', borderRadius: '6px 6px 0 0'}}>
+                                                                    Cavidad {cav}
+                                                                </summary>
+                                                                <div style={{padding: '10px', overflowX: 'auto'}}>
+                                                                    {[0, 10].map(sliceStart => (
+                                                                        <table key={sliceStart} style={{width: '100%', borderCollapse: 'collapse', marginBottom: '10px', fontSize: '12px'}}>
+                                                                            <thead>
+                                                                                <tr style={{background: '#e2e8f0'}}>
+                                                                                    <th style={{padding: '6px', textAlign: 'left', border: '1px solid #cbd5e0', minWidth: '70px'}}>Botella</th>
+                                                                                    {PERFIL_ESPESOR_PUNTOS.slice(sliceStart, sliceStart + 10).map(pt => (
+                                                                                        <th key={pt.key} style={{padding: '6px', border: '1px solid #cbd5e0', minWidth: '60px', textAlign: 'center'}}>
+                                                                                            {pt.label}
+                                                                                        </th>
+                                                                                    ))}
+                                                                                </tr>
+                                                                                <tr style={{background: '#f7fafc'}}>
+                                                                                    <th style={{padding: '4px', textAlign: 'left', border: '1px solid #cbd5e0', fontSize: '10px', color: '#718096'}}>Spec (mm)</th>
+                                                                                    {PERFIL_ESPESOR_PUNTOS.slice(sliceStart, sliceStart + 10).map(pt => (
+                                                                                        <th key={pt.key + '-spec'} style={{padding: '4px', border: '1px solid #cbd5e0', fontSize: '10px', color: '#718096', textAlign: 'center', fontWeight: 'normal'}}>
+                                                                                            ≥ {pt.spec}
+                                                                                        </th>
+                                                                                    ))}
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody>
+                                                                                {Array.from({length: PERFIL_ESPESOR_BOTELLAS}, (_, b) => b + 1).map(bot => (
+                                                                                    <tr key={bot}>
+                                                                                        <td style={{padding: '4px', border: '1px solid #cbd5e0', fontWeight: 'bold', textAlign: 'center'}}>{bot}</td>
+                                                                                        {PERFIL_ESPESOR_PUNTOS.slice(sliceStart, sliceStart + 10).map(pt => {
+                                                                                            const key = `esp_cav${cav}_${pt.key}_b${bot}`;
+                                                                                            const val = mediciones[key] || '';
+                                                                                            const numVal = parseFloat(val);
+                                                                                            const fueraSpec = val !== '' && !isNaN(numVal) && numVal < pt.spec;
+                                                                                            return (
+                                                                                                <td key={pt.key} style={{padding: '2px', border: '1px solid #cbd5e0'}}>
+                                                                                                    <input type="number" step="0.01"
+                                                                                                        value={val}
+                                                                                                        onChange={(e) => setMediciones({
+                                                                                                            ...mediciones,
+                                                                                                            [key]: e.target.value
+                                                                                                        })}
+                                                                                                        style={{
+                                                                                                            width: '100%', minWidth: '50px', padding: '4px', fontSize: '11px',
+                                                                                                            border: '1px solid ' + (fueraSpec ? '#e53e3e' : '#cbd5e0'),
+                                                                                                            background: fueraSpec ? '#fff5f5' : 'white'
+                                                                                                        }} />
+                                                                                                </td>
+                                                                                            );
+                                                                                        })}
+                                                                                    </tr>
+                                                                                ))}
+                                                                            </tbody>
+                                                                        </table>
+                                                                    ))}
+                                                                </div>
+                                                            </details>
+                                                        ))}
+
+                                                        <div style={{marginTop: '10px', fontSize: '11px', color: '#718096', fontStyle: 'italic'}}>
+                                                            Los valores en rojo están por debajo de la especificación mínima. Se registran igual pero es un OOS.
+                                                        </div>
+                                                    </div>
+                                                )}
+
                                                 <div className="form-group" style={{marginTop: '25px'}}>
                                                     <label>Observaciones</label>
                                                     <textarea value={observaciones}
@@ -2734,7 +2899,15 @@
 
                                     {/* CONTROLES LCC */}
                                     <div className="form-section">
-                                        <h2 className="section-title">🔬 Controles LCC (Liberación de Cambio de Calidad)</h2>
+                                        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '10px'}}>
+                                            <h2 className="section-title" style={{margin: 0}}>🔬 Controles LCC (Liberación de Cambio de Calidad)</h2>
+                                            <button className="btn btn-secondary"
+                                                onClick={() => exportarLCCaExcel()}
+                                                disabled={controlesLCC.length === 0}
+                                                style={{fontSize: '13px'}}>
+                                                📊 Exportar a Excel
+                                            </button>
+                                        </div>
                                         {(() => {
                                             const lccFiltrados = controlesLCC.filter(c => {
                                                 if (filtroEnvase && c.envase !== filtroEnvase) return false;
@@ -2770,21 +2943,42 @@
                                                     '📆 Semanal';
                                                 const tipoClass = control.tipo;
 
+                                                // Estado de aprobación (guardado en mediciones._aprobado/_aprobadoPor/_fechaAprobacion)
+                                                const aprobEstado = (control.mediciones && control.mediciones._aprobado) || 'pendiente';
+                                                const aprobadoPor = (control.mediciones && control.mediciones._aprobadoPor) || '';
+                                                const fechaAprob = (control.mediciones && control.mediciones._fechaAprobacion) || '';
+                                                const esAprobado = aprobEstado === 'aprobado';
+
                                                 return (
                                                     <div key={control.id} className="control-card">
-                                                        <div className="control-header">
+                                                        <div className="control-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px'}}>
                                                             <div className="control-title">
                                                                 {tipoLabel} - {spec?.nombre}
                                                             </div>
+                                                            <span style={{
+                                                                padding: '4px 12px', borderRadius: '12px', fontSize: '12px', fontWeight: 700,
+                                                                background: esAprobado ? '#c6f6d5' : '#fefcbf',
+                                                                color:      esAprobado ? '#22543d' : '#744210'
+                                                            }}>
+                                                                {esAprobado
+                                                                    ? `✓ Aprobado por ${aprobadoPor || 'Antonella'}`
+                                                                    : '⏳ Pendiente aprobación LCC'}
+                                                            </span>
                                                         </div>
 
                                                         <div className="control-info-grid">
                                                             <div className="orden-detail"><strong>Envase:</strong> {spec?.nombre}</div>
                                                             <div className="orden-detail"><strong>Fecha:</strong> {formatearFecha(control.fecha)}</div>
                                                             <div className="orden-detail"><strong>Hora:</strong> {control.hora}</div>
-                                                            <div className="orden-detail"><strong>Operador:</strong> {control.operador}</div>
+                                                            <div className="orden-detail"><strong>Operador máquina:</strong> {control.operador}</div>
+                                                            {control.analista && (
+                                                                <div className="orden-detail"><strong>Analista:</strong> {control.analista}</div>
+                                                            )}
                                                             {control.turno && (
                                                                 <div className="orden-detail"><strong>Turno:</strong> {control.turno}</div>
+                                                            )}
+                                                            {esAprobado && fechaAprob && (
+                                                                <div className="orden-detail" style={{color: '#22543d'}}><strong>Aprobado:</strong> {formatearFecha(fechaAprob)}</div>
                                                             )}
                                                         </div>
 
