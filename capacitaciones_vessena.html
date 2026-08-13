@@ -94,6 +94,33 @@ input:focus,select:focus{outline:none;border-color:var(--navy-light);box-shadow:
 .legend-d{width:10px;height:10px;border-radius:2px}
 .upload-zone{border:2px dashed var(--g300);border-radius:var(--r);padding:20px;text-align:center;cursor:pointer;transition:border-color .2s}
 .upload-zone:hover{border-color:var(--navy-light)}
+/* KPIs gerenciales */
+.gr-kpi{background:#fff;border:2px solid var(--g200);border-radius:14px;padding:18px;position:relative;overflow:hidden}
+.gr-kpi .gr-label{font-size:11px;color:var(--g500);font-weight:700;letter-spacing:.4px;text-transform:uppercase;margin-bottom:6px}
+.gr-kpi .gr-value{font-size:44px;font-weight:800;line-height:1;margin-bottom:4px}
+.gr-kpi .gr-sub{font-size:12px;color:var(--g600);margin-top:6px}
+.gr-kpi .gr-bar{height:8px;background:var(--g100);border-radius:4px;margin-top:10px;overflow:hidden}
+.gr-kpi .gr-bar-fill{height:100%;border-radius:4px;transition:width .5s}
+.gr-kpi.gr-green{border-color:#86efac;background:linear-gradient(135deg,#f0fdf4 0%,#fff 60%)}
+.gr-kpi.gr-amber{border-color:#fcd34d;background:linear-gradient(135deg,#fffbeb 0%,#fff 60%)}
+.gr-kpi.gr-red{border-color:#fca5a5;background:linear-gradient(135deg,#fef2f2 0%,#fff 60%)}
+.gr-kpi.gr-green .gr-value{color:#166534}
+.gr-kpi.gr-amber .gr-value{color:#92400e}
+.gr-kpi.gr-red .gr-value{color:#991b1b}
+.gr-sec-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--g100);font-size:12px}
+.gr-sec-row:last-child{border-bottom:none}
+.gr-sec-name{flex:0 0 140px;font-weight:700;color:var(--navy)}
+.gr-sec-count{flex:0 0 60px;font-size:11px;color:var(--g500)}
+.gr-sec-bar{flex:1;height:14px;background:var(--g100);border-radius:7px;overflow:hidden;min-width:80px}
+.gr-sec-bar-fill{height:100%;display:flex;align-items:center;justify-content:flex-end;padding-right:6px;font-size:9px;font-weight:800;color:#fff}
+.gr-sec-pct{flex:0 0 50px;text-align:right;font-weight:800;font-size:13px}
+.gr-sec-status{flex:0 0 30px;font-size:18px;text-align:center}
+@media print{
+  .nav,#user-bar,.hdr-top .code,#btn-gr-print{display:none!important}
+  .section{display:none!important}
+  .section#sec-gerencia{display:block!important}
+  body{background:#fff}
+}
 /* Login */
 #login-screen{position:fixed;top:0;left:0;right:0;bottom:0;background:linear-gradient(135deg,#1a3352 0%,#0d9488 100%);z-index:999;display:flex;align-items:center;justify-content:center;flex-direction:column}
 #login-screen.hidden{display:none}
@@ -149,6 +176,7 @@ input:focus,select:focus{outline:none;border-color:var(--navy-light);box-shadow:
   </div>
   <div class="nav" id="nav">
     <button class="active" data-v="dash">📊 Dashboard</button>
+    <button data-v="gerencia">👔 Gerencial</button>
     <button data-v="reg">📋 Registro</button>
     <button data-v="plan">📅 Plan</button>
     <button data-v="pers">👥 Personal</button>
@@ -572,6 +600,50 @@ input:focus,select:focus{outline:none;border-color:var(--navy-light);box-shadow:
   <div style="font-size:13px;font-weight:700;margin-bottom:8px" id="pers-cnt"></div>
   <div class="grid-3" id="prlist"></div>
 </div>
+</div>
+
+<!-- ═══ GERENCIAL ═══ -->
+<div class="section" id="sec-gerencia">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:16px">
+    <div>
+      <div style="font-size:20px;font-weight:800;color:var(--navy)">👔 Resumen Gerencial</div>
+      <div style="font-size:12px;color:var(--g500)" id="gr-subtitle">Año 2026 · datos al día de hoy</div>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="btn btn-o" id="btn-gr-print" title="Imprimir resumen (Ctrl+P)">🖨️ Imprimir</button>
+    </div>
+  </div>
+
+  <!-- Fila 1: los 3 números que importan -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-bottom:14px">
+    <div class="gr-kpi" id="gr-cumpl"></div>
+    <div class="gr-kpi" id="gr-cobertura"></div>
+    <div class="gr-kpi" id="gr-induccion"></div>
+  </div>
+
+  <!-- Fila 2: alertas críticas -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-bottom:20px">
+    <div id="gr-vencidas" style="background:#fff;border:2px solid var(--g200);border-radius:12px;padding:16px"></div>
+    <div id="gr-sec-riesgo" style="background:#fff;border:2px solid var(--g200);border-radius:12px;padding:16px"></div>
+  </div>
+
+  <!-- Semáforo por sector -->
+  <div style="background:#fff;border:1px solid var(--g200);border-radius:12px;padding:16px;margin-bottom:16px">
+    <div style="font-size:14px;font-weight:800;color:var(--navy);margin-bottom:10px">🚦 Semáforo por sector — Cumplimiento del plan anual</div>
+    <div id="gr-sectores"></div>
+  </div>
+
+  <!-- Foco de este mes + KPIs secundarios -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px">
+    <div style="background:#fff;border:1px solid var(--g200);border-radius:12px;padding:16px">
+      <div style="font-size:14px;font-weight:800;color:var(--navy);margin-bottom:10px">📅 Foco de este mes</div>
+      <div id="gr-mes"></div>
+    </div>
+    <div style="background:#fff;border:1px solid var(--g200);border-radius:12px;padding:16px">
+      <div style="font-size:14px;font-weight:800;color:var(--navy);margin-bottom:10px">📈 Números del año</div>
+      <div id="gr-anio"></div>
+    </div>
+  </div>
 </div>
 
 <!-- AUDITORIA -->
@@ -1557,6 +1629,207 @@ V.dash=function(){
   // Dotación KPI
   renderDot();
 };
+
+// ═══════════════════════════════════════════════════════════════
+// RESUMEN GERENCIAL — pocos números pero relevantes para el GM
+// ═══════════════════════════════════════════════════════════════
+V.gerencia = function(){
+  const year = parseInt($('global-year').value) || new Date().getFullYear();
+  const today = new Date();
+  const currentMonthIdx = today.getMonth(); // 0-11
+  const currentMonthName = MS[currentMonthIdx];
+
+  const IND_TOPICS = ['REGLAMENTO','INDUCCION GMP','INDUCCION SEGURIDAD/SALUD'];
+
+  // Filtrar por año
+  const yearR = R.filter(r => {
+    const ry = r.year || parseInt((r.fecha||'').slice(0,4)) || 2026;
+    return ry === year;
+  });
+  const yearPL = PL.filter(p => (p.year || 2026) === year);
+  const activePE = PE.filter(p => wasActive(p, year));
+
+  $('gr-subtitle').textContent = 'Año ' + year + ' · datos al ' + today.toLocaleDateString('es-UY');
+
+  // ═══ KPI 1: CUMPLIMIENTO DEL PLAN ANUAL ═══
+  const activePL = yearPL.filter(p => p.e !== 'suspendida' && p.e !== 'reprogramada');
+  const cumpl = activePL.filter(p => p.e === 'cumplida').length;
+  const parc = activePL.filter(p => p.e === 'parcial').length;
+  const pctPlan = activePL.length > 0 ? Math.round(((cumpl + parc*0.5) / activePL.length) * 100) : 0;
+  const kpiPlanColor = pctPlan >= 80 ? 'gr-green' : pctPlan >= 60 ? 'gr-amber' : 'gr-red';
+  const kpiPlanIcon = pctPlan >= 80 ? '🟢' : pctPlan >= 60 ? '🟡' : '🔴';
+  const kpiPlanBarColor = pctPlan >= 80 ? '#16a34a' : pctPlan >= 60 ? '#d97706' : '#dc2626';
+  $('gr-cumpl').className = 'gr-kpi ' + kpiPlanColor;
+  $('gr-cumpl').innerHTML =
+    '<div class="gr-label">' + kpiPlanIcon + ' Cumplimiento del plan anual</div>' +
+    '<div class="gr-value">' + pctPlan + '%</div>' +
+    '<div class="gr-sub"><b>' + cumpl + '</b> cumplidas · <b>' + parc + '</b> parciales · <b>' + (activePL.length - cumpl - parc) + '</b> pendientes / total <b>' + activePL.length + '</b></div>' +
+    '<div class="gr-bar"><div class="gr-bar-fill" style="width:' + Math.min(pctPlan,100) + '%;background:' + kpiPlanBarColor + '"></div></div>';
+
+  // ═══ KPI 2: COBERTURA DE PERSONAL ═══
+  const capR = yearR.filter(r => !IND_TOPICS.includes(r.tema));
+  const personasCap = new Set();
+  capR.forEach(r => {
+    const fp = findPerson(r.nom);
+    personasCap.add(fp ? fp.n : r.nom.toUpperCase().trim());
+  });
+  const cobPct = activePE.length > 0 ? Math.round((personasCap.size / activePE.length) * 100) : 0;
+  const kpiCobColor = cobPct >= 80 ? 'gr-green' : cobPct >= 60 ? 'gr-amber' : 'gr-red';
+  const kpiCobIcon = cobPct >= 80 ? '🟢' : cobPct >= 60 ? '🟡' : '🔴';
+  const kpiCobBar = cobPct >= 80 ? '#16a34a' : cobPct >= 60 ? '#d97706' : '#dc2626';
+  $('gr-cobertura').className = 'gr-kpi ' + kpiCobColor;
+  $('gr-cobertura').innerHTML =
+    '<div class="gr-label">' + kpiCobIcon + ' Cobertura de personal</div>' +
+    '<div class="gr-value">' + cobPct + '%</div>' +
+    '<div class="gr-sub"><b>' + personasCap.size + '</b> de <b>' + activePE.length + '</b> personas activas capacitadas al menos 1 vez</div>' +
+    '<div class="gr-bar"><div class="gr-bar-fill" style="width:' + Math.min(cobPct,100) + '%;background:' + kpiCobBar + '"></div></div>';
+
+  // ═══ KPI 3: INDUCCIONES COMPLETAS ═══
+  const indR = yearR.filter(r => IND_TOPICS.includes(r.tema));
+  const indByPers = {};
+  indR.forEach(r => {
+    const fp = findPerson(r.nom);
+    const nm = fp ? fp.n : r.nom.toUpperCase().trim();
+    if (!indByPers[nm]) indByPers[nm] = new Set();
+    indByPers[nm].add(r.tema);
+  });
+  const totInd = Object.keys(indByPers).length;
+  const compInd = Object.values(indByPers).filter(t => t.size >= 3).length;
+  const indPct = totInd > 0 ? Math.round((compInd / totInd) * 100) : 0;
+  const kpiIndColor = indPct >= 90 ? 'gr-green' : indPct >= 70 ? 'gr-amber' : 'gr-red';
+  const kpiIndIcon = indPct >= 90 ? '🟢' : indPct >= 70 ? '🟡' : '🔴';
+  const kpiIndBar = indPct >= 90 ? '#16a34a' : indPct >= 70 ? '#d97706' : '#dc2626';
+  $('gr-induccion').className = 'gr-kpi ' + kpiIndColor;
+  $('gr-induccion').innerHTML =
+    '<div class="gr-label">' + kpiIndIcon + ' Inducciones completas</div>' +
+    '<div class="gr-value">' + indPct + '%</div>' +
+    '<div class="gr-sub"><b>' + compInd + '</b> de <b>' + totInd + '</b> nuevos ingresos con los 3 módulos (Reglamento + GMP + Seguridad)</div>' +
+    '<div class="gr-bar"><div class="gr-bar-fill" style="width:' + Math.min(indPct,100) + '%;background:' + kpiIndBar + '"></div></div>';
+
+  // ═══ VENCIDAS / CRÍTICAS ═══
+  const yStr = year.toString();
+  const vencidas = yearPL.filter(p => {
+    if (p.e === 'cumplida' || p.e === 'suspendida' || p.e === 'reprogramada') return false;
+    if (!p.m) return false; // sin mes asignado
+    const mIdx = MS.indexOf(p.m.toUpperCase());
+    if (mIdx < 0) return false;
+    return mIdx < currentMonthIdx; // pasó el mes esperado
+  });
+  const delMes = yearPL.filter(p => {
+    if (p.e === 'cumplida' || p.e === 'suspendida' || p.e === 'reprogramada') return false;
+    if (!p.m) return false;
+    return p.m.toUpperCase() === currentMonthName;
+  });
+  const vencidasHtml = (vencidas.length + delMes.length) === 0
+    ? '<div style="color:var(--green);font-size:13px;font-weight:700;margin-top:8px">✓ Sin capacitaciones vencidas ni urgentes</div>'
+    : vencidas.slice(0,3).map(p => '<div style="padding:6px 0;border-bottom:1px solid var(--g100);font-size:11px"><span style="color:var(--red);font-weight:700">⚠️ ' + h(p.m) + '</span> — ' + h(p.t) + '</div>').join('') +
+      delMes.slice(0,3).map(p => '<div style="padding:6px 0;border-bottom:1px solid var(--g100);font-size:11px"><span style="color:var(--amber);font-weight:700">📌 ESTE MES</span> — ' + h(p.t) + '</div>').join('');
+  $('gr-vencidas').innerHTML =
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
+      '<div style="font-size:12px;color:var(--g500);font-weight:700;text-transform:uppercase;letter-spacing:.4px">⏰ Capacitaciones críticas</div>' +
+      '<div style="font-size:26px;font-weight:800;color:' + (vencidas.length ? 'var(--red)' : delMes.length ? 'var(--amber)' : 'var(--green)') + '">' + (vencidas.length + delMes.length) + '</div>' +
+    '</div>' +
+    '<div style="font-size:11px;color:var(--g600);margin-bottom:6px"><b>' + vencidas.length + '</b> vencidas · <b>' + delMes.length + '</b> este mes</div>' +
+    vencidasHtml;
+
+  // ═══ SECTORES EN RIESGO ═══
+  const sectoresData = grComputeSectors(yearR, yearPL, activePE, year);
+  const enRiesgo = sectoresData.filter(s => s.pct < 60);
+  $('gr-sec-riesgo').innerHTML =
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
+      '<div style="font-size:12px;color:var(--g500);font-weight:700;text-transform:uppercase;letter-spacing:.4px">🎯 Sectores en riesgo</div>' +
+      '<div style="font-size:26px;font-weight:800;color:' + (enRiesgo.length ? 'var(--red)' : 'var(--green)') + '">' + enRiesgo.length + '</div>' +
+    '</div>' +
+    '<div style="font-size:11px;color:var(--g600);margin-bottom:6px">Sectores con cumplimiento <b>&lt;60%</b> del plan asignado</div>' +
+    (enRiesgo.length === 0
+      ? '<div style="color:var(--green);font-size:13px;font-weight:700;margin-top:8px">✓ Todos los sectores por encima del umbral</div>'
+      : enRiesgo.slice(0,4).map(s => '<div style="padding:5px 0;font-size:11px"><b>' + h(s.name) + '</b> — <span style="color:var(--red);font-weight:700">' + s.pct + '%</span> · ' + s.cumplida + '/' + s.total + ' capacitaciones cumplidas</div>').join(''));
+
+  // ═══ SEMÁFORO POR SECTOR ═══
+  $('gr-sectores').innerHTML = sectoresData.length === 0
+    ? '<div style="color:var(--g400);text-align:center;padding:20px">Sin datos suficientes para calcular</div>'
+    : sectoresData.map(s => {
+        const cls = s.pct >= 80 ? 'green' : s.pct >= 60 ? 'amber' : 'red';
+        const bg = s.pct >= 80 ? '#16a34a' : s.pct >= 60 ? '#d97706' : '#dc2626';
+        const icon = s.pct >= 80 ? '🟢' : s.pct >= 60 ? '🟡' : '🔴';
+        return '<div class="gr-sec-row">' +
+          '<div class="gr-sec-name">' + h(s.name) + '</div>' +
+          '<div class="gr-sec-count">' + s.personas + ' pers</div>' +
+          '<div class="gr-sec-bar"><div class="gr-sec-bar-fill" style="width:' + Math.max(s.pct,4) + '%;background:' + bg + '">' + (s.pct >= 15 ? s.pct + '%' : '') + '</div></div>' +
+          '<div class="gr-sec-pct" style="color:' + bg + '">' + s.pct + '%</div>' +
+          '<div class="gr-sec-status">' + icon + '</div>' +
+        '</div>';
+      }).join('');
+
+  // ═══ FOCO DE ESTE MES ═══
+  const delMesR = yearR.filter(r => r.mes === currentMonthName);
+  const capMes = delMesR.filter(r => !IND_TOPICS.includes(r.tema));
+  const indMes = delMesR.filter(r => IND_TOPICS.includes(r.tema));
+  const sesMes = sess(capMes).length;
+  const persMes = new Set(delMesR.map(r => {const fp = findPerson(r.nom); return fp?fp.n:r.nom.toUpperCase().trim()})).size;
+  const hrsMes = sess(delMesR).reduce((s,se)=>s+(+se.hrs||0),0);
+  $('gr-mes').innerHTML =
+    '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">' +
+      '<div style="text-align:center;padding:10px;background:var(--g50);border-radius:8px">' +
+        '<div style="font-size:24px;font-weight:800;color:var(--navy)">' + sesMes + '</div>' +
+        '<div style="font-size:10px;color:var(--g500);font-weight:700">SESIONES</div>' +
+      '</div>' +
+      '<div style="text-align:center;padding:10px;background:var(--g50);border-radius:8px">' +
+        '<div style="font-size:24px;font-weight:800;color:var(--teal)">' + persMes + '</div>' +
+        '<div style="font-size:10px;color:var(--g500);font-weight:700">PERSONAS</div>' +
+      '</div>' +
+      '<div style="text-align:center;padding:10px;background:var(--g50);border-radius:8px">' +
+        '<div style="font-size:24px;font-weight:800;color:var(--purple)">' + hrsMes.toFixed(1) + '</div>' +
+        '<div style="font-size:10px;color:var(--g500);font-weight:700">HORAS</div>' +
+      '</div>' +
+      '<div style="text-align:center;padding:10px;background:var(--g50);border-radius:8px">' +
+        '<div style="font-size:24px;font-weight:800;color:var(--amber)">' + delMes.length + '</div>' +
+        '<div style="font-size:10px;color:var(--g500);font-weight:700">PLANIFICADAS</div>' +
+      '</div>' +
+    '</div>' +
+    '<div style="font-size:10px;color:var(--g500);text-align:center;margin-top:8px">' + currentMonthName + ' ' + year + '</div>';
+
+  // ═══ NÚMEROS DEL AÑO ═══
+  const totalSess = sess(yearR).length;
+  const totalReg = yearR.length;
+  const totalHrs = sess(yearR).reduce((s,se)=>s+(+se.hrs||0),0);
+  const promHrsPers = personasCap.size > 0 ? (totalHrs / personasCap.size).toFixed(1) : '0';
+  $('gr-anio').innerHTML =
+    '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--g100)"><span style="color:var(--g600);font-size:12px">🎓 Sesiones dictadas</span><span style="font-weight:800;color:var(--navy)">' + totalSess + '</span></div>' +
+    '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--g100)"><span style="color:var(--g600);font-size:12px">📝 Asistencias totales</span><span style="font-weight:800;color:var(--teal)">' + totalReg + '</span></div>' +
+    '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--g100)"><span style="color:var(--g600);font-size:12px">⏱️ Horas de capacitación</span><span style="font-weight:800;color:var(--purple)">' + totalHrs.toFixed(1) + '</span></div>' +
+    '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--g100)"><span style="color:var(--g600);font-size:12px">📊 Promedio de hs / persona</span><span style="font-weight:800;color:var(--amber)">' + promHrsPers + '</span></div>' +
+    '<div style="display:flex;justify-content:space-between;padding:8px 0"><span style="color:var(--g600);font-size:12px">👥 Personas activas</span><span style="font-weight:800;color:var(--g700)">' + activePE.length + '</span></div>';
+};
+
+// Auxiliar: calcular data por sector para el semáforo
+function grComputeSectors(yearR, yearPL, activePE, year) {
+  const IND_TOPICS = ['REGLAMENTO','INDUCCION GMP','INDUCCION SEGURIDAD/SALUD'];
+  const persPorSector = {};
+  activePE.forEach(p => { persPorSector[p.s] = (persPorSector[p.s] || 0) + 1; });
+
+  // Para cada sector, calcular: personas × cuántas del plan tenían al sector como público → cumplidas
+  const sectorStats = {};
+  Object.keys(persPorSector).forEach(sec => {
+    sectorStats[sec] = { name: sec, personas: persPorSector[sec], total: 0, cumplida: 0, pct: 0 };
+  });
+
+  yearPL.filter(p => p.e !== 'suspendida' && p.e !== 'reprogramada').forEach(p => {
+    const secs = targetSectors(p.d);
+    secs.forEach(sec => {
+      if (!sectorStats[sec]) sectorStats[sec] = { name: sec, personas: persPorSector[sec] || 0, total: 0, cumplida: 0, pct: 0 };
+      sectorStats[sec].total++;
+      if (p.e === 'cumplida') sectorStats[sec].cumplida++;
+      else if (p.e === 'parcial') sectorStats[sec].cumplida += 0.5;
+    });
+  });
+
+  const result = Object.values(sectorStats)
+    .filter(s => s.total > 0)
+    .map(s => { s.pct = s.total > 0 ? Math.round((s.cumplida / s.total) * 100) : 0; return s; })
+    .sort((a,b) => a.pct - b.pct); // peores primero para foco de atención
+  return result;
+}
 
 function renderDot(){
   const yr=$('dot-year')?$('dot-year').value:new Date().getFullYear().toString();
@@ -4281,16 +4554,18 @@ function bulkRenderResults() {
   const sectorOpts = [...new Set(PE.map(p => p.s).filter(Boolean))].sort();
   const temaOpts = (TMS || []);
   list.innerHTML = bulkSessions.map((s, si) => {
-    const personSelectOpts = '<option value="">— Elegir persona del listado —</option>' +
+    const personSelectOpts = '<option value="">— Elegir de mi listado de Personal —</option>' +
       PE.filter(p => p.a !== false).map(p => '<option value="' + h(p.n) + '">' + h(p.n) + ' · ' + h(p.s) + '</option>').join('');
     const asisHtml = s.asistentes.map((a, ai) => {
-      let matchLine, personPickerLine = '';
+      let matchLine, personPickerLine = '', inputBorder;
       if (a.match) {
+        inputBorder = '1px solid var(--g200)';
         matchLine = '<div id="match-' + si + '-' + ai + '" style="font-size:10px;color:var(--green);margin-top:3px;padding-left:26px">✓ Match: <b>' + h(a.match.n) + '</b> · ' + h(a.match.s) + '</div>';
       } else {
-        matchLine = '<div id="match-' + si + '-' + ai + '" style="font-size:10px;color:var(--amber);margin-top:3px;padding-left:26px">⚠️ Sin match en Personal — editá el nombre o elegí de la lista abajo</div>';
+        inputBorder = '2px solid #fbbf24';
+        matchLine = '<div id="match-' + si + '-' + ai + '" style="font-size:10px;color:var(--amber);margin-top:3px;padding-left:26px">⚠️ Sin match en Personal — <b>podés dejarlo así</b> (se registra tal cual) o corregirlo:</div>';
         personPickerLine = '<div style="margin-top:4px;padding-left:26px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">' +
-          '<span style="font-size:10px;color:var(--g500)">Asignar a persona real:</span>' +
+          '<span style="font-size:10px;color:var(--g500)">→ Opción A: escribí el nombre correcto arriba ✏️ · Opción B: elegilo de la lista:</span>' +
           '<select onchange="bulkPickPerson(' + si + ',' + ai + ',this.value);this.value=\'\'" style="flex:1;min-width:200px;font-size:11px;padding:3px 6px;border:1px solid #fbbf24;border-radius:5px;background:#fffbeb">' +
             personSelectOpts +
           '</select>' +
@@ -4299,7 +4574,7 @@ function bulkRenderResults() {
       return '<div style="background:' + (a.useIt ? '#fff' : '#f9fafb') + ';border:1px solid var(--g200);border-radius:6px;margin-bottom:5px;padding:6px 8px;opacity:' + (a.useIt ? 1 : 0.55) + '">' +
         '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">' +
           '<input type="checkbox" ' + (a.useIt ? 'checked' : '') + ' onchange="bulkToggleAsist(' + si + ',' + ai + ',this.checked)" style="flex:0 0 auto;margin:0">' +
-          '<input list="dlp" value="' + h(a.nom) + '" oninput="bulkEditAsistNomLive(' + si + ',' + ai + ',this.value)" onchange="bulkEditAsistNom(' + si + ',' + ai + ',this.value)" style="flex:1 1 180px;min-width:0;font-size:12px;padding:4px 7px;border:1px solid var(--g200);border-radius:5px;font-weight:600" placeholder="Nombre del asistente">' +
+          '<input list="dlp" value="' + h(a.nom) + '" oninput="bulkEditAsistNomLive(' + si + ',' + ai + ',this.value)" onchange="bulkEditAsistNom(' + si + ',' + ai + ',this.value)" style="flex:1 1 180px;min-width:0;font-size:12px;padding:4px 7px;border:' + inputBorder + ';border-radius:5px;font-weight:600" placeholder="Nombre del asistente">' +
           '<select onchange="bulkEditAsistSec(' + si + ',' + ai + ',this.value)" style="flex:0 1 160px;min-width:120px;font-size:11px;padding:4px 6px;border:1px solid var(--g200);border-radius:5px">' +
             '<option value="">— Sector —</option>' +
             sectorOpts.map(x => '<option value="' + h(x) + '"' + (x === a.sec ? ' selected' : '') + '>' + h(x) + '</option>').join('') +
@@ -4401,6 +4676,27 @@ function bulkApply() {
   if (!totalRegs) { alert('Ninguna sesión seleccionada tiene asistentes marcados.'); return; }
   const missing = selected.filter(s => !s.fecha || !s.tema);
   if (missing.length) { alert(missing.length + ' sesión(es) sin FECHA o TEMA. Completá esos campos antes de registrar.'); return; }
+
+  // Advertir si hay asistentes sin match en Personal (permite continuar igual)
+  const sinMatch = [];
+  selected.forEach(s => {
+    s.asistentes.filter(a => a.useIt && !a.match).forEach(a => {
+      sinMatch.push({ nom: a.nom, sec: a.sec || '(sin sector)', tema: s.tema });
+    });
+  });
+  if (sinMatch.length > 0) {
+    const preview = sinMatch.slice(0, 8).map(x => '• ' + x.nom + ' (' + x.sec + ')').join('\n');
+    const extra = sinMatch.length > 8 ? '\n...y ' + (sinMatch.length - 8) + ' más' : '';
+    const ok = confirm(
+      '⚠️  ATENCIÓN: hay ' + sinMatch.length + ' asistente' + (sinMatch.length === 1 ? '' : 's') +
+      ' que NO figura' + (sinMatch.length === 1 ? '' : 'n') + ' en tu listado de Personal:\n\n' +
+      preview + extra + '\n\n' +
+      'Se van a registrar CON ESE NOMBRE tal cual (sin vincularlos al listado maestro).\n\n' +
+      '¿Continuar igual? [Aceptar] o [Cancelar] para volver y corregir.'
+    );
+    if (!ok) return;
+  }
+
   if (!confirm('Se van a crear ' + totalRegs + ' registro' + (totalRegs === 1 ? '' : 's') + ' distribuido' + (totalRegs === 1 ? '' : 's') + ' en ' + selected.length + ' sesion' + (selected.length === 1 ? '' : 'es') + '. ¿Confirmar?')) return;
 
   const usr = currentUser ? currentUser.nombre : '—';
@@ -4457,6 +4753,8 @@ document.addEventListener('DOMContentLoaded',function(){
   else{$('login-screen').classList.remove('hidden');setTimeout(()=>$('log-user').focus(),200)}
   _wireOcrModal();
   _wireBulkModal();
+  const btnGrPrint = document.getElementById('btn-gr-print');
+  if (btnGrPrint) btnGrPrint.addEventListener('click', () => window.print());
 });
 </script>
 </body>
