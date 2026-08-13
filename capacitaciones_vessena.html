@@ -546,10 +546,11 @@ input:focus,select:focus{outline:none;border-color:var(--navy-light);box-shadow:
       </div>
       <select id="plan-year" style="display:none"></select>
     </div>
-    <div style="display:flex;gap:6px;align-items:center">
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
       <input id="psrch" placeholder="🔍 Buscar..." style="max-width:200px">
       <button class="btn btn-s" id="btn-add-plan" data-role="admin" style="font-size:11px">＋ Nueva capacitación</button>
       <button class="btn btn-o" id="btn-add-year" data-role="admin" style="font-size:11px">＋ Nuevo año</button>
+      <button class="btn btn-o" id="btn-setup-reminders" data-role="admin" style="font-size:11px;background:#fefce8;border-color:#fcd34d;color:#92400e" title="Instalar el trigger que envía mails 7 días y 1 día antes de cada capacitación con fecha programada">🔔 Recordatorios auto</button>
     </div>
   </div>
   <div class="card" style="padding:0;overflow:hidden">
@@ -723,14 +724,16 @@ input:focus,select:focus{outline:none;border-color:var(--navy-light);box-shadow:
         </select>
       </div>
       <div class="fg"><label>Fecha realización</label><input id="m-fr" placeholder="ej: 17/04/2026"></div>
+      <div class="fg"><label>📅 Fecha programada</label><input type="date" id="m-fp" title="Si la seteás, se manda mail al responsable 7 días y 1 día antes"><div style="font-size:9px;color:var(--g400);margin-top:2px">Setear para activar recordatorios automáticos por mail</div></div>
     </div>
     <div id="m-susp-info" style="display:none;margin-top:10px"></div>
     <div class="fg" style="margin-top:10px"><label>Meses planificados (ej: 4,5,6)</label><input id="m-meses" placeholder="1,2,3..."></div>
     <div class="fg"><label>Personas estimadas (dejar vacío = todo el sector)</label><input type="number" id="m-pers-est" placeholder="Ej: 5" min="1"><div id="m-pers-count" style="font-size:10px;color:var(--teal);margin-top:2px;font-weight:600"></div><div style="font-size:9px;color:var(--g400);margin-top:2px">Para casos como: todo Fabricación + solo jefes de Envasado, poné el número real</div></div>
     <div style="margin-top:16px;display:flex;gap:6px;justify-content:space-between;flex-wrap:wrap">
       <button class="btn btn-s" id="m-save" data-role="admin">🔒 Guardar cambios</button>
-      <div style="display:flex;gap:6px">
-        <button class="btn btn-o" id="m-notify">📧 Notificar</button>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-o" id="m-notify-now" title="Enviar mail al responsable YA (por Gmail del backend)">🔔 Enviar recordatorio ya</button>
+        <button class="btn btn-o" id="m-notify" title="Abrir cliente de email con el mensaje pre-armado">📧 Mailto</button>
         <button class="btn btn-o" id="m-close">Cerrar</button>
       </div>
     </div>
@@ -1685,10 +1688,14 @@ V.gerencia = function(){
     '<div class="gr-bar"><div class="gr-bar-fill" style="width:' + Math.min(cobPct,100) + '%;background:' + kpiCobBar + '"></div></div>';
 
   // ═══ KPI 3: INDUCCIONES COMPLETAS ═══
+  // Solo cuenta personas ACTIVAS (no incluye bajas/inactivos que se fueron)
   const indR = yearR.filter(r => IND_TOPICS.includes(r.tema));
   const indByPers = {};
+  let inactivosOmitidos = 0;
   indR.forEach(r => {
     const fp = findPerson(r.nom);
+    // Filtro: si la persona figura en Personal pero está INACTIVA, no la cuento
+    if (fp && fp.a === false) { inactivosOmitidos++; return; }
     const nm = fp ? fp.n : r.nom.toUpperCase().trim();
     if (!indByPers[nm]) indByPers[nm] = new Set();
     indByPers[nm].add(r.tema);
@@ -1699,30 +1706,34 @@ V.gerencia = function(){
   const kpiIndColor = indPct >= 90 ? 'gr-green' : indPct >= 70 ? 'gr-amber' : 'gr-red';
   const kpiIndIcon = indPct >= 90 ? '🟢' : indPct >= 70 ? '🟡' : '🔴';
   const kpiIndBar = indPct >= 90 ? '#16a34a' : indPct >= 70 ? '#d97706' : '#dc2626';
+  const inactNote = inactivosOmitidos > 0 ? '<div style="font-size:9px;color:var(--g400);margin-top:4px">Se omitieron ' + inactivosOmitidos + ' registros de personas que ya no están activas</div>' : '';
   $('gr-induccion').className = 'gr-kpi ' + kpiIndColor;
   $('gr-induccion').innerHTML =
     '<div class="gr-label">' + kpiIndIcon + ' Inducciones completas</div>' +
     '<div class="gr-value">' + indPct + '%</div>' +
-    '<div class="gr-sub"><b>' + compInd + '</b> de <b>' + totInd + '</b> nuevos ingresos con los 3 módulos (Reglamento + GMP + Seguridad)</div>' +
-    '<div class="gr-bar"><div class="gr-bar-fill" style="width:' + Math.min(indPct,100) + '%;background:' + kpiIndBar + '"></div></div>';
+    '<div class="gr-sub"><b>' + compInd + '</b> de <b>' + totInd + '</b> personas activas con los 3 módulos (Reglamento + GMP + Seguridad)</div>' +
+    '<div class="gr-bar"><div class="gr-bar-fill" style="width:' + Math.min(indPct,100) + '%;background:' + kpiIndBar + '"></div></div>' +
+    inactNote;
 
   // ═══ VENCIDAS / CRÍTICAS ═══
-  const yStr = year.toString();
+  // p.m es un ARRAY de números de mes (1-12), ej [4,5,6]
   const vencidas = yearPL.filter(p => {
     if (p.e === 'cumplida' || p.e === 'suspendida' || p.e === 'reprogramada') return false;
-    if (!p.m) return false; // sin mes asignado
-    const mIdx = MS.indexOf(p.m.toUpperCase());
-    if (mIdx < 0) return false;
-    return mIdx < currentMonthIdx; // pasó el mes esperado
+    if (!Array.isArray(p.m) || !p.m.length) return false;
+    // Vencida si su ÚLTIMO mes planificado ya pasó
+    const lastMonth = Math.max(...p.m);
+    return (lastMonth - 1) < currentMonthIdx;
   });
   const delMes = yearPL.filter(p => {
     if (p.e === 'cumplida' || p.e === 'suspendida' || p.e === 'reprogramada') return false;
-    if (!p.m) return false;
-    return p.m.toUpperCase() === currentMonthName;
+    if (!Array.isArray(p.m) || !p.m.length) return false;
+    // De este mes si tiene el mes actual entre sus meses planificados
+    return p.m.some(mNum => (mNum - 1) === currentMonthIdx);
   });
+  const mesesFmt = ms => Array.isArray(ms) ? ms.map(mi => (MS[mi-1] || '').slice(0,3)).join(', ') : '—';
   const vencidasHtml = (vencidas.length + delMes.length) === 0
     ? '<div style="color:var(--green);font-size:13px;font-weight:700;margin-top:8px">✓ Sin capacitaciones vencidas ni urgentes</div>'
-    : vencidas.slice(0,3).map(p => '<div style="padding:6px 0;border-bottom:1px solid var(--g100);font-size:11px"><span style="color:var(--red);font-weight:700">⚠️ ' + h(p.m) + '</span> — ' + h(p.t) + '</div>').join('') +
+    : vencidas.slice(0,3).map(p => '<div style="padding:6px 0;border-bottom:1px solid var(--g100);font-size:11px"><span style="color:var(--red);font-weight:700">⚠️ VENCIDA (' + h(mesesFmt(p.m)) + ')</span> — ' + h(p.t) + '</div>').join('') +
       delMes.slice(0,3).map(p => '<div style="padding:6px 0;border-bottom:1px solid var(--g100);font-size:11px"><span style="color:var(--amber);font-weight:700">📌 ESTE MES</span> — ' + h(p.t) + '</div>').join('');
   $('gr-vencidas').innerHTML =
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
@@ -2523,7 +2534,7 @@ window.editPlan=function(id){
   renderDirRules('m');
   
   $('m-eval').value=p.ev;$('m-hrs').value=p.h;
-  $('m-resp').value=p.resp||'';$('m-email').value=p.email||'';$('m-est').value=p.e;$('m-fr').value=p.fr||'';
+  $('m-resp').value=p.resp||'';$('m-email').value=p.email||'';$('m-est').value=p.e;$('m-fr').value=p.fr||'';$('m-fp').value=p.fp||'';
   if(p.e==='suspendida'){$('m-susp-info').style.display='block';$('m-susp-info').innerHTML='<div style="background:#faf5ff;border:1px solid #c084fc;border-radius:8px;padding:8px 12px;font-size:11px;color:#7c3aed">⏸️ <b>Suspendida</b> el '+(p.suspFecha||'?')+' — Motivo: '+h(p.suspMotivo||'?')+'</div>'}
   else if(p.ronda){$('m-susp-info').style.display='block';$('m-susp-info').innerHTML='<div style="background:#dbeafe;border:1px solid #93c5fd;border-radius:8px;padding:8px 12px;font-size:11px;color:#1e40af">🔄 <b>Ronda '+p.ronda+'</b>'+(p.motivoRepeticion?' — Motivo: '+h(p.motivoRepeticion):'')+'</div>'}
   else{$('m-susp-info').style.display='none'}
@@ -2543,6 +2554,7 @@ $('m-save').onclick=()=>{
   const nD=$('m-dir').value;if(nD&&nD!==p.d)cambios.push('Dirigido: "'+p.d+'" → "'+nD+'"');
   const nE=$('m-est').value;if(nE!==p.e)cambios.push('Estado: '+p.e+' → '+nE);
   const nFr=$('m-fr').value;if(nFr!==(p.fr||''))cambios.push('Fecha realización: "'+(p.fr||'—')+'" → "'+nFr+'"');
+  const nFp=$('m-fp').value;if(nFp!==(p.fp||''))cambios.push('Fecha programada: "'+(p.fp||'—')+'" → "'+nFp+'"');
   const nR=$('m-resp').value;if(nR!==(p.resp||''))cambios.push('Responsable: "'+(p.resp||'—')+'" → "'+nR+'"');
   const nH=parseFloat($('m-hrs').value);if(nH&&nH!==p.h)cambios.push('Horas: '+p.h+' → '+nH);
   const nDc=$('m-doc').value;if(nDc&&nDc!==p.dc)cambios.push('Docente cambiado');
@@ -2554,7 +2566,7 @@ $('m-save').onclick=()=>{
     const dirVal=$('m-dir').value;
     p.t=$('m-tema').value||p.t;p.o=$('m-obj').value||p.o;p.d=dirVal||p.d;
     p.dc=$('m-doc').value||p.dc;p.ev=$('m-eval').value||p.ev;p.h=parseFloat($('m-hrs').value)||p.h;
-    p.resp=$('m-resp').value;p.email=$('m-email').value;p.e=$('m-est').value;p.fr=$('m-fr').value;
+    p.resp=$('m-resp').value;p.email=$('m-email').value;p.e=$('m-est').value;p.fr=$('m-fr').value;p.fp=$('m-fp').value;
     p.persEst=parseInt($('m-pers-est').value)||0;
     const mStr=$('m-meses').value;if(mStr){
       const newM=mStr.split(',').map(Number).filter(n=>n>=1&&n<=12);
@@ -2587,6 +2599,29 @@ $('m-notify').onclick=()=>{
   const subj='Vessena S.A. - Capacitación asignada: '+p.t;
   const body='Estimado/a '+resp+',\n\nSe le ha asignado como responsable de la capacitación:\n\n• Tema: '+p.t+'\n• Objetivo: '+p.o+'\n• Dirigido a: '+p.d+'\n• Meses planificados: '+p.m.map(mi=>MS[mi-1].slice(0,3)).join(', ')+'\n• Horas: '+p.h+'\n\nPor favor coordinar con anticipación.\n\nSaludos,\nVessena S.A. - Calidad';
   window.open('mailto:'+email+'?subject='+encodeURIComponent(subj)+'&body='+encodeURIComponent(body));
+};
+
+// Enviar recordatorio YA via backend GAS (usa MailApp/Gmail del dueño del script)
+$('m-notify-now').onclick=async ()=>{
+  const p=PL.find(x=>x.id===editPlanId);if(!p){alert('Item no encontrado');return}
+  if(!$('m-email').value){alert('Falta email del responsable — cargalo primero en el modal.');return}
+  if(!GAS_URL){alert('Configurá primero la conexión al Sheet (⚪ Sheets arriba).');return}
+  if(!confirm('Se va a enviar un mail de recordatorio a:\n\n'+$('m-email').value+'\n\n¿Confirmar?'))return;
+  // Guardar cambios primero (email/fp/etc) para que el backend tenga la versión actualizada
+  p.email=$('m-email').value; p.fp=$('m-fp').value; p.resp=$('m-resp').value;
+  sv();
+  const btn=$('m-notify-now');const orig=btn.textContent;btn.textContent='⏳ Enviando...';btn.disabled=true;
+  try{
+    // Esperar a que se sincronice al Sheet antes de mandar
+    await new Promise(r=>setTimeout(r,2500));
+    const resp=await gasPost('sendReminderNow',{planId:p.id});
+    if(!resp)throw new Error('Sin respuesta del backend');
+    if(!resp.ok)throw new Error(resp.error||'Error desconocido');
+    alert('✓ Mail enviado a '+resp.to+'\n\nAsunto: '+resp.subject);
+    logAudit('EMAIL MANUAL','Recordatorio enviado a '+resp.to+' — '+p.t,currentUser?currentUser.nombre:'admin');
+  }catch(e){
+    alert('❌ Error al enviar mail:\n\n'+(e.message||e)+'\n\nRevisá que el backend esté actualizado y que tenga permiso para enviar mails (MailApp).');
+  }finally{btn.textContent=orig;btn.disabled=false}
 };
 $('modal-bg').onclick=function(e){if(e.target===this)this.classList.remove('show')};
 
@@ -4755,6 +4790,31 @@ document.addEventListener('DOMContentLoaded',function(){
   _wireBulkModal();
   const btnGrPrint = document.getElementById('btn-gr-print');
   if (btnGrPrint) btnGrPrint.addEventListener('click', () => window.print());
+  const btnSetupRem = document.getElementById('btn-setup-reminders');
+  if (btnSetupRem) btnSetupRem.addEventListener('click', async () => {
+    if (!GAS_URL) { alert('Primero configurá la conexión al Sheet.'); return; }
+    const withFp = PL.filter(p => p.fp && p.email && p.e !== 'cumplida' && p.e !== 'suspendida' && p.e !== 'reprogramada').length;
+    if (!confirm(
+      '🔔 Configurar recordatorios automáticos\n\n' +
+      'Se va a instalar un trigger diario que corre a las 8:00 AM (Montevideo) y para cada item del plan con FECHA PROGRAMADA + EMAIL DEL RESPONSABLE:\n\n' +
+      '• Manda mail 7 días antes\n' +
+      '• Manda mail 1 día antes (mañana)\n\n' +
+      'En este momento hay ' + withFp + ' items del plan configurados (con fecha programada + email).\n\n' +
+      '¿Instalar?'
+    )) return;
+    const btn = document.getElementById('btn-setup-reminders'); const orig = btn.textContent;
+    btn.textContent = '⏳ Instalando...'; btn.disabled = true;
+    try {
+      const resp = await gasPost('setupReminders', {});
+      if (!resp) throw new Error('Sin respuesta del backend');
+      if (!resp.ok) throw new Error(resp.error || 'Error');
+      alert('✓ Recordatorios instalados.\n\n• Corre diariamente a las ' + resp.hour + ':00 (' + resp.timezone + ')\n• Trigger ID: ' + resp.triggerId + '\n\nA partir de ahora, cualquier item del plan con fecha programada + email va a recibir el aviso automático 7 y 1 días antes.');
+    } catch(e) {
+      alert('❌ Error al instalar recordatorios:\n\n' + (e.message || e) + '\n\nRevisá que el backend Codigo.gs esté actualizado a la versión con setupReminderTrigger_.');
+    } finally {
+      btn.textContent = orig; btn.disabled = false;
+    }
+  });
 });
 </script>
 </body>
