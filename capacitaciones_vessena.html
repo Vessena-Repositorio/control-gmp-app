@@ -4282,17 +4282,19 @@ function bulkRenderResults() {
   const temaOpts = (TMS || []);
   list.innerHTML = bulkSessions.map((s, si) => {
     const asisHtml = s.asistentes.map((a, ai) => {
-      let matchBadge = a.match
-        ? '<span class="bg bg-green" style="font-size:9px">✓ ' + h(a.match.n) + '</span>'
-        : '<span class="bg bg-amber" style="font-size:9px">⚠️ sin match</span>';
-      return '<div style="display:flex;gap:5px;align-items:center;padding:4px 6px;background:' + (a.useIt ? '#fff' : '#f9fafb') + ';border:1px solid var(--g200);border-radius:6px;margin-bottom:3px;opacity:' + (a.useIt ? 1 : 0.55) + '">' +
-        '<input type="checkbox" ' + (a.useIt ? 'checked' : '') + ' onchange="bulkToggleAsist(' + si + ',' + ai + ',this.checked)" style="flex:0 0 auto">' +
-        '<input list="dlp" value="' + h(a.nom) + '" onchange="bulkEditAsistNom(' + si + ',' + ai + ',this.value)" style="flex:1;min-width:110px;font-size:11px;padding:3px 6px;border:1px solid var(--g200);border-radius:5px;font-weight:600" placeholder="Nombre">' +
-        '<select onchange="bulkEditAsistSec(' + si + ',' + ai + ',this.value)" style="min-width:110px;font-size:11px;padding:3px 6px;border:1px solid var(--g200);border-radius:5px">' +
-          '<option value="">— Sector —</option>' +
-          sectorOpts.map(x => '<option value="' + h(x) + '"' + (x === a.sec ? ' selected' : '') + '>' + h(x) + '</option>').join('') +
-        '</select>' +
-        matchBadge +
+      let matchLine = a.match
+        ? '<div style="font-size:10px;color:var(--green);margin-top:3px;padding-left:26px">✓ Match: <b>' + h(a.match.n) + '</b> · ' + h(a.match.s) + '</div>'
+        : '<div style="font-size:10px;color:var(--amber);margin-top:3px;padding-left:26px">⚠️ Sin match en Personal — se registra tal cual</div>';
+      return '<div style="background:' + (a.useIt ? '#fff' : '#f9fafb') + ';border:1px solid var(--g200);border-radius:6px;margin-bottom:5px;padding:6px 8px;opacity:' + (a.useIt ? 1 : 0.55) + '">' +
+        '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">' +
+          '<input type="checkbox" ' + (a.useIt ? 'checked' : '') + ' onchange="bulkToggleAsist(' + si + ',' + ai + ',this.checked)" style="flex:0 0 auto;margin:0">' +
+          '<input list="dlp" value="' + h(a.nom) + '" onchange="bulkEditAsistNom(' + si + ',' + ai + ',this.value)" style="flex:1 1 180px;min-width:0;font-size:12px;padding:4px 7px;border:1px solid var(--g200);border-radius:5px;font-weight:600" placeholder="Nombre del asistente">' +
+          '<select onchange="bulkEditAsistSec(' + si + ',' + ai + ',this.value)" style="flex:0 1 160px;min-width:120px;font-size:11px;padding:4px 6px;border:1px solid var(--g200);border-radius:5px">' +
+            '<option value="">— Sector —</option>' +
+            sectorOpts.map(x => '<option value="' + h(x) + '"' + (x === a.sec ? ' selected' : '') + '>' + h(x) + '</option>').join('') +
+          '</select>' +
+        '</div>' +
+        matchLine +
       '</div>';
     }).join('');
 
