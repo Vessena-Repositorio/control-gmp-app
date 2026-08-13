@@ -408,8 +408,8 @@
             { key: 'sin_deform',   label: 'Sin deformación' }
         ];
 
-        // Perfil de espesor (LCC semanal · REG-SOP-PR-138-H)
-        // 20 puntos por cavidad, 3 botellas por punto, spec en mm
+        // Perfil de espesor (LCC · REG-SOP-PR-138-H / -C)
+        // 20 puntos por cavidad, N botellas por punto según tipo (semanal=3, quincenal=6), spec en mm
         const PERFIL_ESPESOR_PUNTOS = [
             // Tabla 1
             { key: 'A1_11',  label: 'A1/11', spec: 0.15 },
@@ -434,9 +434,33 @@
             { key: 'D4',     label: 'D4',    spec: 0.15 },
             { key: 'B4',     label: 'B4',    spec: 0.15 }
         ];
-        const PERFIL_ESPESOR_BOTELLAS = 3;
+        // Cantidad de botellas por punto según tipo de control LCC
+        const PERFIL_ESPESOR_BOTELLAS_POR_TIPO = { semanal: 3, quincenal: 6 };
         // Envases donde aplica el perfil de espesor
         const ENVASES_PERFIL_ESPESOR = ['FAB-1L', 'FAB-2L'];
+
+        // === Drop Impact (quincenal) ===
+        // 20 botellas, altura de caída 1m, evaluar 3 zonas
+        const DROP_IMPACT_BOTELLAS = 20;
+        const DROP_IMPACT_ZONAS = [
+            { key: 'fondo',    label: 'Fondo' },
+            { key: 'esq_inf',  label: 'Esquina inferior' },
+            { key: 'lateral',  label: 'Lateral' }
+        ];
+
+        // === Hermeticidad (quincenal) ===
+        // 3 muestras por cada condición de temperatura, torque inicial 0.5-3.0 Nm
+        const HERMETICIDAD_CONDICIONES = [
+            { key: 'heladera', label: 'Heladera (4°C)' },
+            { key: 'ambiente', label: 'Ambiente (25°C)' },
+            { key: 'estufa',   label: 'Estufa (40°C)' }
+        ];
+        const HERMETICIDAD_MUESTRAS_POR_COND = 3;
+        const HERMETICIDAD_TORQUE_MIN = 0.5;
+        const HERMETICIDAD_TORQUE_MAX = 3.0;
+
+        // Envases donde aplican Drop Impact y Hermeticidad (por ahora Fabuloso 1/2 L)
+        const ENVASES_DROP_HERMET = ['FAB-1L', 'FAB-2L'];
 
         // Slots horarios de muestreo cada 2 h
         const HORARIOS_SLOTS = ['06:00', '08:00', '10:00', '12:00', '14:00', '16:30'];
@@ -609,6 +633,7 @@
 
             const [ordenesSoplado, setOrdenesSoplado] = useState([]);
             const [controlesLCC, setControlesLCC] = useState([]);
+            const [editandoLCCId, setEditandoLCCId] = useState(null);
             const [mensaje, setMensaje] = useState(null);
             const [cargando, setCargando] = useState(true);
             const [guardando, setGuardando] = useState(false);
@@ -1081,15 +1106,15 @@
                 resetFormularios();
             };
 
-            const registrarControlLCC = async () => {
+            const registrarControlLCC = async (estado = 'completo') => {
                 if (guardando) return; // guardia anti-doble-click
                 if (!nuevoControlLCC.envase || !tipoControlLCC || !nuevoControlLCC.operador) {
                     setMensaje({ tipo: 'warning', texto: 'Complete todos los campos obligatorios (incluyendo operador de máquina)' });
                     return;
                 }
 
-                // Verificación anti-duplicado
-                if (controlesLCC && controlesLCC.length > 0) {
+                // Verificación anti-duplicado (solo cuando es nuevo, no en edición)
+                if (!editandoLCCId && controlesLCC && controlesLCC.length > 0) {
                     const ult = controlesLCC[0];
                     if (ult.tipo === tipoControlLCC
                         && ult.envase === nuevoControlLCC.envase
@@ -1105,28 +1130,68 @@
                         }
                     }
                 }
+                // Preparo mediciones + metadata de estado
+                const medConEstado = { ...mediciones, _estado: estado };
+                if (estado === 'completo') {
+                    // Al pasar a completo se resetea el estado de aprobación
+                    medConEstado._aprobado = 'pendiente';
+                    delete medConEstado._aprobadoPor;
+                    delete medConEstado._fechaAprobacion;
+                }
+
                 const nuevoControl = {
-                    id: Date.now(), tipo: tipoControlLCC, ...nuevoControlLCC,
+                    id: editandoLCCId || Date.now(),
+                    tipo: tipoControlLCC,
+                    ...nuevoControlLCC,
                     analista: usuarioLogueado.nombre,
                     createdBy: usuarioLogueado.username,
                     hora: new Date().toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' }),
-                    mediciones: { ...mediciones }, observaciones, timestamp: new Date().toISOString()
+                    mediciones: medConEstado,
+                    observaciones,
+                    timestamp: new Date().toISOString()
                 };
                 setGuardando(true);
-                guardarControlesLCC([nuevoControl, ...controlesLCC]);
-                
+
+                // Guardado local: si es edición reemplazo, si es nuevo agrego al inicio
+                if (editandoLCCId) {
+                    guardarControlesLCC(controlesLCC.map(c => c.id === editandoLCCId ? nuevoControl : c));
+                } else {
+                    guardarControlesLCC([nuevoControl, ...controlesLCC]);
+                }
+
                 // Enviar a Google Sheets
                 if (configurado) {
                     try {
-                        await apiCall('saveLCC', nuevoControl);
+                        await apiCall(editandoLCCId ? 'updateLCC' : 'saveLCC', nuevoControl);
                     } catch (err) {
                         console.error('Error guardando LCC en Sheets:', err);
                     }
                 }
                 setGuardando(false);
-                setMensaje({ tipo: 'success', texto: `✓ Control ${tipoControlLCC} registrado` });
+                const msgEstado = estado === 'borrador' ? 'guardado como borrador' : 'guardado y enviado para aprobación';
+                setMensaje({ tipo: 'success', texto: `✓ Control ${tipoControlLCC} ${msgEstado}` });
+                setEditandoLCCId(null);
                 resetFormularios();
                 setMostrarNuevoLCC(false);
+            };
+
+            // Cargar un control LCC existente en el formulario para editarlo
+            const editarControlLCC = (control) => {
+                setEditandoLCCId(control.id);
+                setTipoControlLCC(control.tipo);
+                setNuevoControlLCC({
+                    envase: control.envase,
+                    fecha: control.fecha,
+                    operador: control.operador || '',
+                    turno: control.turno || getTurnoActual()
+                });
+                // Rellenar mediciones (sin los metadatos internos)
+                const medLimpias = { ...(control.mediciones || {}) };
+                setMediciones(medLimpias);
+                setObservaciones(control.observaciones || '');
+                setMostrarNuevoLCC(true);
+                setActiveTab('lcc');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
             };
 
             const resetFormularios = () => {
@@ -2489,12 +2554,14 @@
                                                     </div>
                                                 )}
 
-                                                {/* PERFIL DE ESPESOR — solo en semanal y solo si aplica */}
-                                                {tipoControlLCC === 'semanal' && spec && ENVASES_PERFIL_ESPESOR.includes(nuevoControlLCC.envase) && (
+                                                {/* PERFIL DE ESPESOR — semanal (3 botellas) o quincenal (6 botellas) */}
+                                                {(tipoControlLCC === 'semanal' || tipoControlLCC === 'quincenal') && spec && ENVASES_PERFIL_ESPESOR.includes(nuevoControlLCC.envase) && (() => {
+                                                    const nBotellas = PERFIL_ESPESOR_BOTELLAS_POR_TIPO[tipoControlLCC] || 3;
+                                                    return (
                                                     <div style={{marginTop: '30px', background: '#f7fafc', padding: '20px', borderRadius: '8px', border: '1px solid #e2e8f0'}}>
-                                                        <h3 style={{marginBottom: '5px', color: '#2d3748'}}>Perfil de Espesor</h3>
+                                                        <h3 style={{marginBottom: '5px', color: '#2d3748'}}>📏 Perfil de Espesor</h3>
                                                         <div style={{fontSize: '13px', color: '#4a5568', marginBottom: '15px'}}>
-                                                            REG-SOP-PR-138-H · {PERFIL_ESPESOR_PUNTOS.length} puntos por cavidad · {PERFIL_ESPESOR_BOTELLAS} botellas por punto · {spec.cavidades || 2} cavidades
+                                                            {tipoControlLCC === 'semanal' ? 'REG-SOP-PR-138-H' : 'REG-SOP-PR-138-C'} · {PERFIL_ESPESOR_PUNTOS.length} puntos por cavidad · {nBotellas} botellas por punto · {spec.cavidades || 2} cavidades
                                                         </div>
 
                                                         {Array.from({length: spec.cavidades || 2}, (_, i) => i + 1).map(cav => (
@@ -2524,7 +2591,7 @@
                                                                                 </tr>
                                                                             </thead>
                                                                             <tbody>
-                                                                                {Array.from({length: PERFIL_ESPESOR_BOTELLAS}, (_, b) => b + 1).map(bot => (
+                                                                                {Array.from({length: nBotellas}, (_, b) => b + 1).map(bot => (
                                                                                     <tr key={bot}>
                                                                                         <td style={{padding: '4px', border: '1px solid #cbd5e0', fontWeight: 'bold', textAlign: 'center'}}>{bot}</td>
                                                                                         {PERFIL_ESPESOR_PUNTOS.slice(sliceStart, sliceStart + 10).map(pt => {
@@ -2561,6 +2628,156 @@
                                                             Los valores en rojo están por debajo de la especificación mínima. Se registran igual pero es un OOS.
                                                         </div>
                                                     </div>
+                                                    );
+                                                })()}
+
+                                                {/* DROP IMPACT — solo quincenal */}
+                                                {tipoControlLCC === 'quincenal' && spec && ENVASES_DROP_HERMET.includes(nuevoControlLCC.envase) && (
+                                                    <div style={{marginTop: '30px', background: '#f7fafc', padding: '20px', borderRadius: '8px', border: '1px solid #e2e8f0'}}>
+                                                        <h3 style={{marginBottom: '5px', color: '#2d3748'}}>💥 Drop Impact</h3>
+                                                        <div style={{fontSize: '13px', color: '#4a5568', marginBottom: '15px'}}>
+                                                            REG-SOP-PR-138-C · Altura de caída 1 m · {DROP_IMPACT_BOTELLAS} botellas · {DROP_IMPACT_ZONAS.length} zonas por botella
+                                                        </div>
+
+                                                        <details open style={{marginBottom: '15px', border: '1px solid #cbd5e0', borderRadius: '6px', background: 'white'}}>
+                                                            <summary style={{padding: '10px 14px', cursor: 'pointer', fontWeight: 'bold', color: '#2d3748', background: '#edf2f7', borderRadius: '6px 6px 0 0'}}>
+                                                                Tabla de {DROP_IMPACT_BOTELLAS} botellas
+                                                            </summary>
+                                                            <div style={{padding: '10px', overflowX: 'auto'}}>
+                                                                <table style={{width: '100%', borderCollapse: 'collapse', fontSize: '12px'}}>
+                                                                    <thead>
+                                                                        <tr style={{background: '#e2e8f0'}}>
+                                                                            <th rowSpan="2" style={{padding: '6px', border: '1px solid #cbd5e0', minWidth: '60px'}}>Botella</th>
+                                                                            {DROP_IMPACT_ZONAS.map(z => (
+                                                                                <th key={z.key} colSpan="2" style={{padding: '6px', border: '1px solid #cbd5e0', textAlign: 'center'}}>
+                                                                                    {z.label}
+                                                                                </th>
+                                                                            ))}
+                                                                        </tr>
+                                                                        <tr style={{background: '#edf2f7'}}>
+                                                                            {DROP_IMPACT_ZONAS.map(z => (
+                                                                                <React.Fragment key={z.key + '-h'}>
+                                                                                    <th style={{padding: '4px', border: '1px solid #cbd5e0', fontSize: '11px', textAlign: 'center'}}>Ok/No</th>
+                                                                                    <th style={{padding: '4px', border: '1px solid #cbd5e0', fontSize: '11px', textAlign: 'center'}}>Obs</th>
+                                                                                </React.Fragment>
+                                                                            ))}
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody>
+                                                                        {Array.from({length: DROP_IMPACT_BOTELLAS}, (_, i) => i + 1).map(bot => (
+                                                                            <tr key={bot}>
+                                                                                <td style={{padding: '4px', border: '1px solid #cbd5e0', fontWeight: 'bold', textAlign: 'center'}}>{bot}</td>
+                                                                                {DROP_IMPACT_ZONAS.map(z => {
+                                                                                    const kOk = `drop_${z.key}_b${bot}`;
+                                                                                    const kObs = `drop_${z.key}_b${bot}_obs`;
+                                                                                    return (
+                                                                                        <React.Fragment key={z.key}>
+                                                                                            <td style={{padding: '2px', border: '1px solid #cbd5e0', textAlign: 'center'}}>
+                                                                                                <select value={mediciones[kOk] || ''}
+                                                                                                    onChange={(e) => setMediciones({...mediciones, [kOk]: e.target.value})}
+                                                                                                    style={{
+                                                                                                        width: '100%', padding: '3px', fontSize: '11px',
+                                                                                                        background: mediciones[kOk] === 'No' ? '#fff5f5' : (mediciones[kOk] === 'Ok' ? '#f0fff4' : 'white')
+                                                                                                    }}>
+                                                                                                    <option value="">—</option>
+                                                                                                    <option value="Ok">Ok</option>
+                                                                                                    <option value="No">No</option>
+                                                                                                </select>
+                                                                                            </td>
+                                                                                            <td style={{padding: '2px', border: '1px solid #cbd5e0'}}>
+                                                                                                <input type="text"
+                                                                                                    value={mediciones[kObs] || ''}
+                                                                                                    onChange={(e) => setMediciones({...mediciones, [kObs]: e.target.value})}
+                                                                                                    placeholder="Obs..."
+                                                                                                    style={{width: '100%', minWidth: '80px', padding: '3px', fontSize: '11px', border: '1px solid #cbd5e0'}} />
+                                                                                            </td>
+                                                                                        </React.Fragment>
+                                                                                    );
+                                                                                })}
+                                                                            </tr>
+                                                                        ))}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        </details>
+                                                    </div>
+                                                )}
+
+                                                {/* HERMETICIDAD — solo quincenal */}
+                                                {tipoControlLCC === 'quincenal' && spec && ENVASES_DROP_HERMET.includes(nuevoControlLCC.envase) && (
+                                                    <div style={{marginTop: '30px', background: '#f7fafc', padding: '20px', borderRadius: '8px', border: '1px solid #e2e8f0'}}>
+                                                        <h3 style={{marginBottom: '5px', color: '#2d3748'}}>🔐 Hermeticidad</h3>
+                                                        <div style={{fontSize: '13px', color: '#4a5568', marginBottom: '15px'}}>
+                                                            REG-SOP-PR-138-C · {HERMETICIDAD_MUESTRAS_POR_COND} muestras por condición · Lectura de torque <strong>a las 24 h</strong> de exposición · Spec torque: {HERMETICIDAD_TORQUE_MIN} – {HERMETICIDAD_TORQUE_MAX} Nm
+                                                        </div>
+
+                                                        {HERMETICIDAD_CONDICIONES.map(cond => (
+                                                            <details key={cond.key} open style={{marginBottom: '12px', border: '1px solid #cbd5e0', borderRadius: '6px', background: 'white'}}>
+                                                                <summary style={{padding: '10px 14px', cursor: 'pointer', fontWeight: 'bold', color: '#2d3748', background: '#edf2f7', borderRadius: '6px 6px 0 0'}}>
+                                                                    {cond.label}
+                                                                </summary>
+                                                                <div style={{padding: '10px'}}>
+                                                                    <table style={{width: '100%', borderCollapse: 'collapse', fontSize: '12px'}}>
+                                                                        <thead>
+                                                                            <tr style={{background: '#e2e8f0'}}>
+                                                                                <th style={{padding: '6px', border: '1px solid #cbd5e0', width: '80px'}}>Botella</th>
+                                                                                <th style={{padding: '6px', border: '1px solid #cbd5e0'}}>Torque a 24 h (Nm)</th>
+                                                                                <th style={{padding: '6px', border: '1px solid #cbd5e0', width: '130px'}}>¿Pierde?</th>
+                                                                                <th style={{padding: '6px', border: '1px solid #cbd5e0'}}>Observaciones</th>
+                                                                            </tr>
+                                                                        </thead>
+                                                                        <tbody>
+                                                                            {Array.from({length: HERMETICIDAD_MUESTRAS_POR_COND}, (_, i) => i + 1).map(bot => {
+                                                                                const kTorque = `herm_${cond.key}_b${bot}_torque24h`;
+                                                                                const kPierde = `herm_${cond.key}_b${bot}_pierde`;
+                                                                                const kObs = `herm_${cond.key}_b${bot}_obs`;
+                                                                                const val = mediciones[kTorque] || '';
+                                                                                const numVal = parseFloat(val);
+                                                                                const fueraSpec = val !== '' && !isNaN(numVal) &&
+                                                                                    (numVal < HERMETICIDAD_TORQUE_MIN || numVal > HERMETICIDAD_TORQUE_MAX);
+                                                                                const pierdeVal = mediciones[kPierde];
+                                                                                return (
+                                                                                    <tr key={bot}>
+                                                                                        <td style={{padding: '4px', border: '1px solid #cbd5e0', fontWeight: 'bold', textAlign: 'center'}}>{bot}</td>
+                                                                                        <td style={{padding: '2px', border: '1px solid #cbd5e0'}}>
+                                                                                            <input type="number" step="0.01"
+                                                                                                value={val}
+                                                                                                onChange={(e) => setMediciones({...mediciones, [kTorque]: e.target.value})}
+                                                                                                placeholder="Nm"
+                                                                                                style={{
+                                                                                                    width: '100%', padding: '4px', fontSize: '12px',
+                                                                                                    border: '1px solid ' + (fueraSpec ? '#e53e3e' : '#cbd5e0'),
+                                                                                                    background: fueraSpec ? '#fff5f5' : 'white'
+                                                                                                }} />
+                                                                                        </td>
+                                                                                        <td style={{padding: '2px', border: '1px solid #cbd5e0', textAlign: 'center'}}>
+                                                                                            <select value={pierdeVal || ''}
+                                                                                                onChange={(e) => setMediciones({...mediciones, [kPierde]: e.target.value})}
+                                                                                                style={{
+                                                                                                    width: '100%', padding: '3px', fontSize: '12px',
+                                                                                                    background: pierdeVal === 'Pierde' ? '#fff5f5' : (pierdeVal === 'No pierde' ? '#f0fff4' : 'white')
+                                                                                                }}>
+                                                                                                <option value="">—</option>
+                                                                                                <option value="No pierde">No pierde</option>
+                                                                                                <option value="Pierde">Pierde</option>
+                                                                                            </select>
+                                                                                        </td>
+                                                                                        <td style={{padding: '2px', border: '1px solid #cbd5e0'}}>
+                                                                                            <input type="text"
+                                                                                                value={mediciones[kObs] || ''}
+                                                                                                onChange={(e) => setMediciones({...mediciones, [kObs]: e.target.value})}
+                                                                                                placeholder="Obs..."
+                                                                                                style={{width: '100%', padding: '4px', fontSize: '12px', border: '1px solid #cbd5e0'}} />
+                                                                                        </td>
+                                                                                    </tr>
+                                                                                );
+                                                                            })}
+                                                                        </tbody>
+                                                                    </table>
+                                                                </div>
+                                                            </details>
+                                                        ))}
+                                                    </div>
                                                 )}
 
                                                 <div className="form-group" style={{marginTop: '25px'}}>
@@ -2571,14 +2788,29 @@
                                                         placeholder="Detallar cualquier inconformidad o acción correctiva..." />
                                                 </div>
 
-                                                <div className="button-group">
-                                                    <button className="btn btn-primary" onClick={registrarControlLCC} disabled={guardando}>
-                                                        {guardando ? '⏳ Guardando...' : '💾 Guardar Control LCC'}
+                                                <div className="button-group" style={{flexWrap: 'wrap', gap: '10px'}}>
+                                                    <button className="btn btn-primary"
+                                                        onClick={() => registrarControlLCC('completo')}
+                                                        disabled={guardando}
+                                                        style={{background: '#22543d'}}>
+                                                        {guardando ? '⏳ Guardando...' : (editandoLCCId ? '✓ Guardar cambios y notificar aprobación' : '✓ Guardar y solicitar aprobación')}
                                                     </button>
-                                                    <button className="btn btn-secondary" onClick={resetFormularios} disabled={guardando}>
+                                                    <button className="btn btn-secondary"
+                                                        onClick={() => registrarControlLCC('borrador')}
+                                                        disabled={guardando}
+                                                        style={{background: '#d69e2e', color: 'white'}}
+                                                        title="Guarda el control para completarlo después. No manda email a Antonella.">
+                                                        📝 Guardar como borrador
+                                                    </button>
+                                                    <button className="btn btn-secondary" onClick={() => { setEditandoLCCId(null); resetFormularios(); }} disabled={guardando}>
                                                         Cancelar
                                                     </button>
                                                 </div>
+                                                {editandoLCCId && (
+                                                    <div style={{marginTop: '10px', padding: '10px', background: '#fefcbf', borderRadius: '6px', fontSize: '13px', color: '#744210'}}>
+                                                        ✏️ Estás editando un control existente (ID: {editandoLCCId})
+                                                    </div>
+                                                )}
                                             </div>
                                         );
                                     })()}
@@ -2947,7 +3179,17 @@
                                                 const aprobEstado = (control.mediciones && control.mediciones._aprobado) || 'pendiente';
                                                 const aprobadoPor = (control.mediciones && control.mediciones._aprobadoPor) || '';
                                                 const fechaAprob = (control.mediciones && control.mediciones._fechaAprobacion) || '';
+                                                const estadoCtrl = (control.mediciones && control.mediciones._estado) || 'completo';
                                                 const esAprobado = aprobEstado === 'aprobado';
+                                                const esBorrador = estadoCtrl === 'borrador';
+
+                                                // Estilos según estado
+                                                const chipStyle = esBorrador
+                                                    ? { background: '#feebc8', color: '#7b341e' }
+                                                    : (esAprobado ? { background: '#c6f6d5', color: '#22543d' } : { background: '#fefcbf', color: '#744210' });
+                                                const chipTexto = esBorrador
+                                                    ? '📝 Borrador · seguir cargando'
+                                                    : (esAprobado ? `✓ Aprobado por ${aprobadoPor || 'Antonella'}` : '⏳ Pendiente aprobación LCC');
 
                                                 return (
                                                     <div key={control.id} className="control-card">
@@ -2955,15 +3197,20 @@
                                                             <div className="control-title">
                                                                 {tipoLabel} - {spec?.nombre}
                                                             </div>
-                                                            <span style={{
-                                                                padding: '4px 12px', borderRadius: '12px', fontSize: '12px', fontWeight: 700,
-                                                                background: esAprobado ? '#c6f6d5' : '#fefcbf',
-                                                                color:      esAprobado ? '#22543d' : '#744210'
-                                                            }}>
-                                                                {esAprobado
-                                                                    ? `✓ Aprobado por ${aprobadoPor || 'Antonella'}`
-                                                                    : '⏳ Pendiente aprobación LCC'}
-                                                            </span>
+                                                            <div style={{display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap'}}>
+                                                                <span style={{
+                                                                    padding: '4px 12px', borderRadius: '12px', fontSize: '12px', fontWeight: 700,
+                                                                    ...chipStyle
+                                                                }}>
+                                                                    {chipTexto}
+                                                                </span>
+                                                                <button className="btn btn-secondary"
+                                                                    onClick={() => editarControlLCC(control)}
+                                                                    style={{fontSize: '12px', padding: '4px 10px'}}
+                                                                    title="Editar / continuar este control">
+                                                                    ✏️ Editar
+                                                                </button>
+                                                            </div>
                                                         </div>
 
                                                         <div className="control-info-grid">
