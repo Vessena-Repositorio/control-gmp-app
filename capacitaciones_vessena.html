@@ -4281,20 +4281,32 @@ function bulkRenderResults() {
   const sectorOpts = [...new Set(PE.map(p => p.s).filter(Boolean))].sort();
   const temaOpts = (TMS || []);
   list.innerHTML = bulkSessions.map((s, si) => {
+    const personSelectOpts = '<option value="">— Elegir persona del listado —</option>' +
+      PE.filter(p => p.a !== false).map(p => '<option value="' + h(p.n) + '">' + h(p.n) + ' · ' + h(p.s) + '</option>').join('');
     const asisHtml = s.asistentes.map((a, ai) => {
-      let matchLine = a.match
-        ? '<div style="font-size:10px;color:var(--green);margin-top:3px;padding-left:26px">✓ Match: <b>' + h(a.match.n) + '</b> · ' + h(a.match.s) + '</div>'
-        : '<div style="font-size:10px;color:var(--amber);margin-top:3px;padding-left:26px">⚠️ Sin match en Personal — se registra tal cual</div>';
+      let matchLine, personPickerLine = '';
+      if (a.match) {
+        matchLine = '<div id="match-' + si + '-' + ai + '" style="font-size:10px;color:var(--green);margin-top:3px;padding-left:26px">✓ Match: <b>' + h(a.match.n) + '</b> · ' + h(a.match.s) + '</div>';
+      } else {
+        matchLine = '<div id="match-' + si + '-' + ai + '" style="font-size:10px;color:var(--amber);margin-top:3px;padding-left:26px">⚠️ Sin match en Personal — editá el nombre o elegí de la lista abajo</div>';
+        personPickerLine = '<div style="margin-top:4px;padding-left:26px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">' +
+          '<span style="font-size:10px;color:var(--g500)">Asignar a persona real:</span>' +
+          '<select onchange="bulkPickPerson(' + si + ',' + ai + ',this.value);this.value=\'\'" style="flex:1;min-width:200px;font-size:11px;padding:3px 6px;border:1px solid #fbbf24;border-radius:5px;background:#fffbeb">' +
+            personSelectOpts +
+          '</select>' +
+        '</div>';
+      }
       return '<div style="background:' + (a.useIt ? '#fff' : '#f9fafb') + ';border:1px solid var(--g200);border-radius:6px;margin-bottom:5px;padding:6px 8px;opacity:' + (a.useIt ? 1 : 0.55) + '">' +
         '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">' +
           '<input type="checkbox" ' + (a.useIt ? 'checked' : '') + ' onchange="bulkToggleAsist(' + si + ',' + ai + ',this.checked)" style="flex:0 0 auto;margin:0">' +
-          '<input list="dlp" value="' + h(a.nom) + '" onchange="bulkEditAsistNom(' + si + ',' + ai + ',this.value)" style="flex:1 1 180px;min-width:0;font-size:12px;padding:4px 7px;border:1px solid var(--g200);border-radius:5px;font-weight:600" placeholder="Nombre del asistente">' +
+          '<input list="dlp" value="' + h(a.nom) + '" oninput="bulkEditAsistNomLive(' + si + ',' + ai + ',this.value)" onchange="bulkEditAsistNom(' + si + ',' + ai + ',this.value)" style="flex:1 1 180px;min-width:0;font-size:12px;padding:4px 7px;border:1px solid var(--g200);border-radius:5px;font-weight:600" placeholder="Nombre del asistente">' +
           '<select onchange="bulkEditAsistSec(' + si + ',' + ai + ',this.value)" style="flex:0 1 160px;min-width:120px;font-size:11px;padding:4px 6px;border:1px solid var(--g200);border-radius:5px">' +
             '<option value="">— Sector —</option>' +
             sectorOpts.map(x => '<option value="' + h(x) + '"' + (x === a.sec ? ' selected' : '') + '>' + h(x) + '</option>').join('') +
           '</select>' +
         '</div>' +
         matchLine +
+        personPickerLine +
       '</div>';
     }).join('');
 
@@ -4349,6 +4361,35 @@ function bulkEditAsistNom(si, ai, v) {
   const m = findPerson(v);
   a.match = m;
   if (m) { a.nom = m.n; if (!a.sec) a.sec = m.s; }
+  bulkRenderResults();
+}
+// Live update: solo actualiza el estado y la línea de match sin re-renderizar todo (mantiene foco)
+function bulkEditAsistNomLive(si, ai, v) {
+  if (!bulkSessions[si] || !bulkSessions[si].asistentes[ai]) return;
+  const a = bulkSessions[si].asistentes[ai];
+  a.nom = v.toUpperCase().trim();
+  const m = findPerson(v);
+  a.match = m;
+  const line = document.getElementById('match-' + si + '-' + ai);
+  if (line) {
+    if (m) {
+      line.style.color = 'var(--green)';
+      line.innerHTML = '✓ Match: <b>' + h(m.n) + '</b> · ' + h(m.s);
+    } else {
+      line.style.color = 'var(--amber)';
+      line.innerHTML = '⚠️ Sin match en Personal — editá el nombre o elegí de la lista abajo';
+    }
+  }
+}
+// Asignar a una persona existente del listado (viene del dropdown "asignar a persona real")
+function bulkPickPerson(si, ai, personName) {
+  if (!personName || !bulkSessions[si] || !bulkSessions[si].asistentes[ai]) return;
+  const person = PE.find(p => p.n === personName);
+  if (!person) return;
+  const a = bulkSessions[si].asistentes[ai];
+  a.nom = person.n;
+  a.sec = person.s;
+  a.match = person;
   bulkRenderResults();
 }
 function bulkEditAsistSec(si, ai, v) { if (bulkSessions[si] && bulkSessions[si].asistentes[ai]) bulkSessions[si].asistentes[ai].sec = v; }
