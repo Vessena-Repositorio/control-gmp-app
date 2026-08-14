@@ -1762,18 +1762,19 @@ V.gerencia = function(){
     sinCapNote;
 
   // ═══ KPI 3: INDUCCIONES COMPLETAS ═══
-  // Base: personas ACTIVAS que en algún momento (cualquier año) recibieron al menos 1 registro
-  // de inducción. Los antiguos que nunca necesitaron inducción formal quedan afuera.
-  // Numerador: de esas personas activas, cuántas tienen los 3 módulos.
-  // En infracción: base - completos (empezaron y no terminaron los 3 módulos).
+  // Alineada 100% con la lógica del Dashboard: personas con 1+ registro de inducción
+  // en el año seleccionado. Se excluyen SOLO las bajas explícitas.
+  // Los "sin match en Personal" se incluyen agrupados por nombre tal cual (misma lógica que Dashboard).
   const modulosPorPersona = {};
-  R.forEach(r => {
+  yearR.forEach(r => {
     if (!IND_TOPICS.includes(r.tema)) return;
     const fp = findPerson(r.nom);
-    if (!fp) return;               // sin match en Personal → no cuenta (probablemente externos)
-    if (fp.a === false) return;    // dados de baja no cuentan
-    if (!modulosPorPersona[fp.n]) modulosPorPersona[fp.n] = new Set();
-    modulosPorPersona[fp.n].add(r.tema);
+    // Excluir solo si está explícitamente marcado como inactivo
+    if (fp && fp.a === false) return;
+    // Agrupar por nombre canónico si hay match, sino por el nombre tal como está en el registro
+    const key = fp ? fp.n : r.nom.toUpperCase().trim();
+    if (!modulosPorPersona[key]) modulosPorPersona[key] = new Set();
+    modulosPorPersona[key].add(r.tema);
   });
   const totInd = Object.keys(modulosPorPersona).length;
   const compInd = Object.values(modulosPorPersona).filter(t => t.size >= 3).length;
@@ -1781,12 +1782,16 @@ V.gerencia = function(){
   // Guardar detalle globalmente para el modal debug
   window._grInfractoresDetail = Object.entries(modulosPorPersona)
     .filter(([n, t]) => t.size < 3)
-    .map(([n, t]) => ({
-      nombre: n,
-      modulos: [...t],
-      falta: IND_TOPICS.filter(x => !t.has(x)),
-      persona: PE.find(p => p.n === n)
-    }))
+    .map(([n, t]) => {
+      const persona = PE.find(p => p.n === n);
+      return {
+        nombre: n,
+        modulos: [...t],
+        falta: IND_TOPICS.filter(x => !t.has(x)),
+        persona: persona,
+        sinMatch: !persona   // marcador para el modal: no está en Personal
+      };
+    })
     .sort((a,b) => a.falta.length - b.falta.length);
   window._grCompletosDetail = Object.entries(modulosPorPersona)
     .filter(([n, t]) => t.size >= 3)
@@ -1936,11 +1941,13 @@ window.showInfractoresModal = function() {
   const rowsHtml = list.map(x => {
     const modsTiene = x.modulos.map(m => '<span style="background:#dcfce7;color:#166534;padding:2px 6px;border-radius:4px;font-size:10px;margin-right:3px">✓ ' + (modules_es[m] || m) + '</span>').join('');
     const modsFalta = x.falta.map(m => '<span style="background:#fee2e2;color:#991b1b;padding:2px 6px;border-radius:4px;font-size:10px;margin-right:3px">✗ ' + (modules_es[m] || m) + '</span>').join('');
-    const sector = x.persona ? x.persona.s : '(sin sector)';
+    const sector = x.persona ? x.persona.s : '(no está en Personal)';
     const alta = x.persona && x.persona.fechaAlta ? x.persona.fechaAlta : '';
-    return '<div style="padding:10px;border-bottom:1px solid var(--g100)">' +
+    const rowBg = x.sinMatch ? '#fffbeb' : '#fff';
+    const sinMatchBadge = x.sinMatch ? '<span style="background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:700;margin-left:6px" title="El nombre en el registro no coincide con nadie del listado de Personal. Puede ser un typo o un externo.">⚠ sin match</span>' : '';
+    return '<div style="padding:10px;border-bottom:1px solid var(--g100);background:' + rowBg + '">' +
       '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">' +
-        '<b style="font-size:13px">' + h(x.nombre) + '</b>' +
+        '<div><b style="font-size:13px">' + h(x.nombre) + '</b>' + sinMatchBadge + '</div>' +
         '<span style="font-size:10px;color:var(--g500)">' + h(sector) + (alta ? ' · Alta: ' + h(alta) : '') + '</span>' +
       '</div>' +
       '<div style="font-size:11px;color:var(--g600);margin-bottom:3px">Tiene: ' + (modsTiene || '<i>ninguno</i>') + '</div>' +
