@@ -1761,20 +1761,19 @@ V.gerencia = function(){
     '<div class="gr-bar"><div class="gr-bar-fill" style="width:' + Math.min(cobPct,100) + '%;background:' + kpiCobBar + '"></div></div>' +
     sinCapNote;
 
-  // ═══ KPI 3: INDUCCIONES COMPLETAS ═══
-  // Alineada 100% con la lógica del Dashboard: personas con 1+ registro de inducción
-  // en el año seleccionado. Se excluyen SOLO las bajas explícitas.
-  // Los "sin match en Personal" se incluyen agrupados por nombre tal cual (misma lógica que Dashboard).
+  // ═══ KPI 3: INDUCCIONES COMPLETAS (vista de gerencia — solo activos actuales) ═══
+  // Base = personas ACTIVAS con match en Personal que tienen 1+ registro de inducción
+  //        en el año seleccionado.
+  // Diferencia con Dashboard: excluye bajas y externos porque el KPI de gerencia mide
+  // compliance REAL del equipo actual, no productividad de dictado.
   const modulosPorPersona = {};
   yearR.forEach(r => {
     if (!IND_TOPICS.includes(r.tema)) return;
     const fp = findPerson(r.nom);
-    // Excluir solo si está explícitamente marcado como inactivo
-    if (fp && fp.a === false) return;
-    // Agrupar por nombre canónico si hay match, sino por el nombre tal como está en el registro
-    const key = fp ? fp.n : r.nom.toUpperCase().trim();
-    if (!modulosPorPersona[key]) modulosPorPersona[key] = new Set();
-    modulosPorPersona[key].add(r.tema);
+    if (!fp) return;               // sin match en Personal → probablemente externo
+    if (fp.a === false) return;    // dado de baja → no es equipo actual
+    if (!modulosPorPersona[fp.n]) modulosPorPersona[fp.n] = new Set();
+    modulosPorPersona[fp.n].add(r.tema);
   });
   const totInd = Object.keys(modulosPorPersona).length;
   const compInd = Object.values(modulosPorPersona).filter(t => t.size >= 3).length;
@@ -1808,7 +1807,7 @@ V.gerencia = function(){
   $('gr-induccion').innerHTML =
     '<div class="gr-label">' + kpiIndIcon + ' Inducciones completas</div>' +
     '<div class="gr-value">' + indPct + '%</div>' +
-    '<div class="gr-sub"><b>' + compInd + '</b> de <b>' + totInd + '</b> personas activas con inducción tienen los 3 módulos</div>' +
+    '<div class="gr-sub"><b>' + compInd + '</b> de <b>' + totInd + '</b> personas activas con al menos 1 inducción tienen los 3 módulos <span style="color:var(--g400);font-size:10px" title="Excluye bajas y externos. El Dashboard incluye todos.">(vista compliance)</span></div>' +
     '<div class="gr-bar"><div class="gr-bar-fill" style="width:' + Math.min(indPct,100) + '%;background:' + kpiIndBar + '"></div></div>' +
     infracNote;
 
