@@ -622,23 +622,11 @@ input:focus,select:focus{outline:none;border-color:var(--navy-light);box-shadow:
     <div class="gr-kpi" id="gr-induccion"></div>
   </div>
 
-  <!-- Fila 2: alertas críticas -->
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-bottom:20px">
-    <div id="gr-vencidas" style="background:#fff;border:2px solid var(--g200);border-radius:12px;padding:16px"></div>
-    <div id="gr-sec-riesgo" style="background:#fff;border:2px solid var(--g200);border-radius:12px;padding:16px"></div>
-  </div>
-
   <!-- Nuevos ingresos con inducción pendiente > 30 días -->
   <div style="background:#fff;border:2px solid var(--g200);border-radius:12px;padding:16px;margin-bottom:16px" id="gr-nuevos-container">
     <div style="font-size:14px;font-weight:800;color:var(--navy);margin-bottom:6px">🚨 Nuevos ingresos con inducción pendiente</div>
     <div style="font-size:11px;color:var(--g500);margin-bottom:10px">Personas activas con más de 30 días de antigüedad y les falta algún módulo de inducción (Reglamento, GMP, Seguridad/Salud). El sistema manda mail semanal a Gloria y a vos con esta lista.</div>
     <div id="gr-nuevos"></div>
-  </div>
-
-  <!-- Semáforo por sector -->
-  <div style="background:#fff;border:1px solid var(--g200);border-radius:12px;padding:16px;margin-bottom:16px">
-    <div style="font-size:14px;font-weight:800;color:var(--navy);margin-bottom:10px">🚦 Semáforo por sector — Cumplimiento del plan anual</div>
-    <div id="gr-sectores"></div>
   </div>
 
   <!-- Foco de este mes + KPIs secundarios -->
@@ -1460,8 +1448,26 @@ function renderAlerts(){
     const bgCol=a.tipo==='now'?'#fef2f2;border-left:4px solid var(--red)':'#fefce8;border-left:4px solid var(--amber)';
     const resp=a.p.resp?' · Resp: <b>'+h(a.p.resp)+'</b>':'';
     const dirigido=a.p.d?' · Dirigido a: '+h(a.p.d):'';
-    const email=a.p.email?'<a href="mailto:'+h(a.p.email)+'?subject=Vessena - Capacitación: '+encodeURIComponent(a.p.t)+'" style="font-size:10px;color:var(--navy);text-decoration:underline;margin-left:8px">📧 Avisar</a>':'';
+    const email=a.p.email?'<button onclick="avisarResponsable('+a.p.id+')" style="font-size:10px;background:#dbeafe;color:#1e40af;border:1px solid #93c5fd;border-radius:4px;padding:2px 8px;margin-left:8px;cursor:pointer;font-weight:600" title="Envía un mail a '+h(a.p.email)+'">📧 Avisar</button>':'<span style="font-size:10px;color:var(--g400);margin-left:8px" title="No hay email de responsable cargado">(sin email)</span>';
     return '<div style="background:'+bgCol+';border-radius:8px;padding:10px 12px;margin-bottom:6px"><div style="font-weight:700;font-size:12px;color:var(--navy)">'+h(a.p.t)+'</div><div style="font-size:11px;color:var(--g600);margin-top:2px">'+a.msg+resp+dirigido+email+'</div></div>'}).join('');
+}
+
+// Enviar recordatorio al responsable desde una alerta del dashboard (usa el endpoint GAS)
+window.avisarResponsable=async function(planId){
+  const p=PL.find(x=>x.id===planId);
+  if(!p){alert('No encontré la capacitación en el plan');return}
+  if(!p.email||!p.email.includes('@')){alert('Falta email del responsable. Cargalo desde Plan → editar el item.');return}
+  if(!GAS_URL){alert('Configurá primero la conexión al Sheet.');return}
+  if(!confirm('Se va a enviar un mail de recordatorio a:\n\n'+p.email+'\n\nSobre: '+p.t+'\n\n¿Confirmar?'))return;
+  try{
+    const resp=await gasPost('sendReminderNow',{planId:p.id});
+    if(!resp)throw new Error('Sin respuesta del backend (revisá GAS)');
+    if(!resp.ok)throw new Error(resp.error||'Error desconocido');
+    alert('✓ Mail enviado a '+resp.to);
+    logAudit('EMAIL MANUAL','Recordatorio enviado desde alertas del dashboard a '+resp.to+' — '+p.t);
+  }catch(e){
+    alert('❌ Error al enviar:\n\n'+(e.message||e));
+  }
 }
 
 // ══════════ DASHBOARD ══════════
@@ -1818,31 +1824,6 @@ V.gerencia = function(){
     return p.m.some(mNum => (mNum - 1) === currentMonthIdx);
   });
   const mesesFmt = ms => Array.isArray(ms) ? ms.map(mi => (MS[mi-1] || '').slice(0,3)).join(', ') : '—';
-  const vencidasHtml = (vencidas.length + delMes.length) === 0
-    ? '<div style="color:var(--green);font-size:13px;font-weight:700;margin-top:8px">✓ Sin capacitaciones vencidas ni urgentes</div>'
-    : vencidas.slice(0,3).map(p => '<div style="padding:6px 0;border-bottom:1px solid var(--g100);font-size:11px"><span style="color:var(--red);font-weight:700">⚠️ VENCIDA (' + h(mesesFmt(p.m)) + ')</span> — ' + h(p.t) + '</div>').join('') +
-      delMes.slice(0,3).map(p => '<div style="padding:6px 0;border-bottom:1px solid var(--g100);font-size:11px"><span style="color:var(--amber);font-weight:700">📌 ESTE MES</span> — ' + h(p.t) + '</div>').join('');
-  $('gr-vencidas').innerHTML =
-    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
-      '<div style="font-size:12px;color:var(--g500);font-weight:700;text-transform:uppercase;letter-spacing:.4px">⏰ Capacitaciones críticas</div>' +
-      '<div style="font-size:26px;font-weight:800;color:' + (vencidas.length ? 'var(--red)' : delMes.length ? 'var(--amber)' : 'var(--green)') + '">' + (vencidas.length + delMes.length) + '</div>' +
-    '</div>' +
-    '<div style="font-size:11px;color:var(--g600);margin-bottom:6px"><b>' + vencidas.length + '</b> vencidas · <b>' + delMes.length + '</b> este mes</div>' +
-    vencidasHtml;
-
-  // ═══ SECTORES EN RIESGO ═══
-  const sectoresData = grComputeSectors(yearR, yearPL, activePE, year);
-  const enRiesgo = sectoresData.filter(s => s.pct < 60);
-  $('gr-sec-riesgo').innerHTML =
-    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
-      '<div style="font-size:12px;color:var(--g500);font-weight:700;text-transform:uppercase;letter-spacing:.4px">🎯 Sectores en riesgo</div>' +
-      '<div style="font-size:26px;font-weight:800;color:' + (enRiesgo.length ? 'var(--red)' : 'var(--green)') + '">' + enRiesgo.length + '</div>' +
-    '</div>' +
-    '<div style="font-size:11px;color:var(--g600);margin-bottom:6px">Sectores con cumplimiento <b>&lt;60%</b> del plan asignado</div>' +
-    (enRiesgo.length === 0
-      ? '<div style="color:var(--green);font-size:13px;font-weight:700;margin-top:8px">✓ Todos los sectores por encima del umbral</div>'
-      : enRiesgo.slice(0,4).map(s => '<div style="padding:5px 0;font-size:11px"><b>' + h(s.name) + '</b> — <span style="color:var(--red);font-weight:700">' + s.pct + '%</span> · ' + s.cumplida + '/' + s.total + ' capacitaciones cumplidas</div>').join(''));
-
   // ═══ NUEVOS INGRESOS CON INDUCCIÓN PENDIENTE (todas las categorías) ═══
   const nuevosPendientes = grComputeNuevosPendientes(year);
   window._grNuevosPendientes = nuevosPendientes;
@@ -1890,22 +1871,6 @@ V.gerencia = function(){
       '<div style="border:1px solid var(--g200);border-radius:8px;overflow:hidden">' + rowsHtml + extra + '</div>' +
       mailNote;
   }
-
-  // ═══ SEMÁFORO POR SECTOR ═══
-  $('gr-sectores').innerHTML = sectoresData.length === 0
-    ? '<div style="color:var(--g400);text-align:center;padding:20px">Sin datos suficientes para calcular</div>'
-    : sectoresData.map(s => {
-        const cls = s.pct >= 80 ? 'green' : s.pct >= 60 ? 'amber' : 'red';
-        const bg = s.pct >= 80 ? '#16a34a' : s.pct >= 60 ? '#d97706' : '#dc2626';
-        const icon = s.pct >= 80 ? '🟢' : s.pct >= 60 ? '🟡' : '🔴';
-        return '<div class="gr-sec-row">' +
-          '<div class="gr-sec-name">' + h(s.name) + '</div>' +
-          '<div class="gr-sec-count">' + s.personas + ' pers</div>' +
-          '<div class="gr-sec-bar"><div class="gr-sec-bar-fill" style="width:' + Math.max(s.pct,4) + '%;background:' + bg + '">' + (s.pct >= 15 ? s.pct + '%' : '') + '</div></div>' +
-          '<div class="gr-sec-pct" style="color:' + bg + '">' + s.pct + '%</div>' +
-          '<div class="gr-sec-status">' + icon + '</div>' +
-        '</div>';
-      }).join('');
 
   // ═══ FOCO DE ESTE MES ═══
   const delMesR = yearR.filter(r => r.mes === currentMonthName);
