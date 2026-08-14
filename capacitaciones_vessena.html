@@ -1700,12 +1700,27 @@ V.gerencia = function(){
   const kpiCobColor = cobPct >= 80 ? 'gr-green' : cobPct >= 60 ? 'gr-amber' : 'gr-red';
   const kpiCobIcon = cobPct >= 80 ? '🟢' : cobPct >= 60 ? '🟡' : '🔴';
   const kpiCobBar = cobPct >= 80 ? '#16a34a' : cobPct >= 60 ? '#d97706' : '#dc2626';
+  // Guardar lista de "sin capacitación" para el modal
+  window._grSinCapDetail = activePE
+    .filter(p => !personasCap.has(p.n))
+    .map(p => ({
+      persona: p,
+      fechaAlta: p.fechaAlta || '',
+      sector: p.s || '(sin sector)',
+      tipo: p.tipo || ''
+    }))
+    .sort((a,b) => (a.sector || '').localeCompare(b.sector || '') || a.persona.n.localeCompare(b.persona.n));
+  const sinCap = window._grSinCapDetail.length;
+  const sinCapNote = sinCap > 0
+    ? '<div style="font-size:11px;color:var(--red);font-weight:700;margin-top:8px;cursor:pointer;background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:6px 10px;display:inline-block" onclick="showSinCapModal()">⚠️ ' + sinCap + ' persona' + (sinCap===1?'':'s') + ' activa' + (sinCap===1?'':'s') + ' sin capacitación este año — <u>ver quiénes</u></div>'
+    : '<div style="font-size:10px;color:var(--green);font-weight:700;margin-top:6px">✓ Todos los activos recibieron al menos 1 capacitación</div>';
   $('gr-cobertura').className = 'gr-kpi ' + kpiCobColor;
   $('gr-cobertura').innerHTML =
     '<div class="gr-label">' + kpiCobIcon + ' Cobertura de personal</div>' +
     '<div class="gr-value">' + cobPct + '%</div>' +
     '<div class="gr-sub"><b>' + personasCap.size + '</b> de <b>' + activePE.length + '</b> personas activas capacitadas al menos 1 vez</div>' +
-    '<div class="gr-bar"><div class="gr-bar-fill" style="width:' + Math.min(cobPct,100) + '%;background:' + kpiCobBar + '"></div></div>';
+    '<div class="gr-bar"><div class="gr-bar-fill" style="width:' + Math.min(cobPct,100) + '%;background:' + kpiCobBar + '"></div></div>' +
+    sinCapNote;
 
   // ═══ KPI 3: INDUCCIONES COMPLETAS ═══
   // Base: personas ACTIVAS que en algún momento (cualquier año) recibieron al menos 1 registro
@@ -1903,6 +1918,78 @@ window.showInfractoresModal = function() {
       '<button class="btn btn-o" onclick="document.getElementById(\'modal-bg\').classList.remove(\'show\')">Cerrar</button>' +
     '</div>';
   modal.classList.add('show');
+};
+
+// Debug modal: mostrar detalle de "sin capacitación este año"
+window.showSinCapModal = function() {
+  const list = window._grSinCapDetail || [];
+  const year = parseInt(document.getElementById('global-year').value) || new Date().getFullYear();
+  const modal = document.getElementById('modal-bg');
+  if (!modal) return;
+  const inner = modal.querySelector('.modal');
+  if (!inner) return;
+
+  // Agrupar por sector
+  const porSector = {};
+  list.forEach(x => {
+    if (!porSector[x.sector]) porSector[x.sector] = [];
+    porSector[x.sector].push(x);
+  });
+
+  const gruposHtml = Object.entries(porSector)
+    .sort((a,b) => b[1].length - a[1].length)  // sectores con más al top
+    .map(([sec, gente]) => {
+      return '<div style="margin-bottom:12px">' +
+        '<div style="font-size:12px;font-weight:800;color:var(--navy);padding:6px 10px;background:#f0f9ff;border-radius:6px 6px 0 0;border:1px solid #bae6fd;border-bottom:none">' +
+          h(sec) + ' <span style="color:var(--g500);font-weight:600">(' + gente.length + ')</span>' +
+        '</div>' +
+        '<div style="border:1px solid #bae6fd;border-top:none;border-radius:0 0 6px 6px">' +
+          gente.map(x => {
+            const alta = x.fechaAlta ? ' · Alta: ' + h(x.fechaAlta) : '';
+            const tipo = x.tipo ? ' · ' + h(x.tipo) : '';
+            return '<div style="padding:6px 10px;border-bottom:1px solid var(--g100);font-size:12px;display:flex;justify-content:space-between">' +
+              '<b>' + h(x.persona.n) + '</b>' +
+              '<span style="font-size:10px;color:var(--g500)">' + tipo + alta + '</span>' +
+            '</div>';
+          }).join('') +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+  inner.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">' +
+      '<div>' +
+        '<div style="font-size:16px;font-weight:800;color:var(--navy)">⚠️ Personas activas sin capacitación en ' + year + '</div>' +
+        '<div style="font-size:11px;color:var(--g500)">No recibieron ningún registro de capacitación (excluyendo inducciones)</div>' +
+      '</div>' +
+      '<button class="btn-i" onclick="document.getElementById(\'modal-bg\').classList.remove(\'show\')" style="font-size:20px">✕</button>' +
+    '</div>' +
+    '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#7f1d1d">' +
+      '<b>' + list.length + ' persona' + (list.length === 1 ? '' : 's') + '</b> agrupada' + (list.length === 1 ? '' : 's') + ' por sector. Priorizar el sector con más faltantes.' +
+    '</div>' +
+    '<div style="max-height:60vh;overflow-y:auto">' +
+      (list.length ? gruposHtml : '<div style="padding:20px;text-align:center;color:var(--g400)">Sin faltantes</div>') +
+    '</div>' +
+    '<div style="margin-top:12px;text-align:right">' +
+      '<button class="btn btn-o" onclick="grExportSinCapCSV()" style="margin-right:6px">📥 Exportar CSV</button>' +
+      '<button class="btn btn-o" onclick="document.getElementById(\'modal-bg\').classList.remove(\'show\')">Cerrar</button>' +
+    '</div>';
+  modal.classList.add('show');
+};
+
+// Exportar sin capacitación a CSV
+window.grExportSinCapCSV = function() {
+  const list = window._grSinCapDetail || [];
+  const year = parseInt(document.getElementById('global-year').value) || new Date().getFullYear();
+  let csv = 'Nombre,Sector,Tipo,Fecha alta\n';
+  list.forEach(x => {
+    csv += '"' + x.persona.n + '","' + x.sector + '","' + (x.tipo || '') + '","' + (x.fechaAlta || '') + '"\n';
+  });
+  const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'sin_capacitacion_' + year + '.csv';
+  link.click();
 };
 
 // Auxiliar: calcular data por sector para el semáforo
