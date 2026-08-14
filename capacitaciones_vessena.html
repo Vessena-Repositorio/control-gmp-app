@@ -1655,10 +1655,26 @@ V.gerencia = function(){
   $('gr-subtitle').textContent = 'Año ' + year + ' · datos al ' + today.toLocaleDateString('es-UY');
 
   // ═══ KPI 1: CUMPLIMIENTO DEL PLAN ANUAL ═══
+  // Excluye suspendidas y reprogramadas del total activo
   const activePL = yearPL.filter(p => p.e !== 'suspendida' && p.e !== 'reprogramada');
   const cumpl = activePL.filter(p => p.e === 'cumplida').length;
   const parc = activePL.filter(p => p.e === 'parcial').length;
-  const pctPlan = activePL.length > 0 ? Math.round(((cumpl + parc*0.5) / activePL.length) * 100) : 0;
+  // Separar entre "vencidas/en tiempo" y "futuras" según el último mes planificado vs. mes actual
+  const vencidasPL = activePL.filter(p => {
+    if (p.e === 'cumplida' || p.e === 'parcial') return false;
+    if (!Array.isArray(p.m) || !p.m.length) return true; // sin mes → contarla como vencida
+    const lastMonth = Math.max(...p.m);
+    return (lastMonth - 1) <= currentMonthIdx;
+  }).length;
+  const futurasPL = activePL.filter(p => {
+    if (p.e === 'cumplida' || p.e === 'parcial') return false;
+    if (!Array.isArray(p.m) || !p.m.length) return false;
+    const lastMonth = Math.max(...p.m);
+    return (lastMonth - 1) > currentMonthIdx;
+  }).length;
+  // Base para el %: solo lo que YA debería estar (excluye futuras)
+  const baseDeberia = cumpl + parc + vencidasPL;
+  const pctPlan = baseDeberia > 0 ? Math.round(((cumpl + parc*0.5) / baseDeberia) * 100) : 0;
   const kpiPlanColor = pctPlan >= 80 ? 'gr-green' : pctPlan >= 60 ? 'gr-amber' : 'gr-red';
   const kpiPlanIcon = pctPlan >= 80 ? '🟢' : pctPlan >= 60 ? '🟡' : '🔴';
   const kpiPlanBarColor = pctPlan >= 80 ? '#16a34a' : pctPlan >= 60 ? '#d97706' : '#dc2626';
@@ -1666,8 +1682,9 @@ V.gerencia = function(){
   $('gr-cumpl').innerHTML =
     '<div class="gr-label">' + kpiPlanIcon + ' Cumplimiento del plan anual</div>' +
     '<div class="gr-value">' + pctPlan + '%</div>' +
-    '<div class="gr-sub"><b>' + cumpl + '</b> cumplidas · <b>' + parc + '</b> parciales · <b>' + (activePL.length - cumpl - parc) + '</b> pendientes / total <b>' + activePL.length + '</b></div>' +
-    '<div class="gr-bar"><div class="gr-bar-fill" style="width:' + Math.min(pctPlan,100) + '%;background:' + kpiPlanBarColor + '"></div></div>';
+    '<div class="gr-sub"><b>' + cumpl + '</b> cumplidas · <b>' + parc + '</b> parciales · <b style="color:var(--red)">' + vencidasPL + '</b> vencidas / <b>' + baseDeberia + '</b> que ya debían estar</div>' +
+    '<div class="gr-bar"><div class="gr-bar-fill" style="width:' + Math.min(pctPlan,100) + '%;background:' + kpiPlanBarColor + '"></div></div>' +
+    (futurasPL > 0 ? '<div style="font-size:10px;color:var(--g500);margin-top:6px">+ ' + futurasPL + ' futuras (aún no vencidas) · ' + activePL.length + ' total del plan</div>' : '');
 
   // ═══ KPI 2: COBERTURA DE PERSONAL ═══
   // Solo cuenta personas que HOY están activas (excluye bajas y externos sin match)
