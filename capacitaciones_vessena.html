@@ -1842,30 +1842,52 @@ V.gerencia = function(){
       ? '<div style="color:var(--green);font-size:13px;font-weight:700;margin-top:8px">✓ Todos los sectores por encima del umbral</div>'
       : enRiesgo.slice(0,4).map(s => '<div style="padding:5px 0;font-size:11px"><b>' + h(s.name) + '</b> — <span style="color:var(--red);font-weight:700">' + s.pct + '%</span> · ' + s.cumplida + '/' + s.total + ' capacitaciones cumplidas</div>').join(''));
 
-  // ═══ NUEVOS INGRESOS CON INDUCCIÓN PENDIENTE > 30 DÍAS ═══
+  // ═══ NUEVOS INGRESOS CON INDUCCIÓN PENDIENTE (todas las categorías) ═══
   const nuevosPendientes = grComputeNuevosPendientes(year);
   window._grNuevosPendientes = nuevosPendientes;
   if (nuevosPendientes.length === 0) {
-    $('gr-nuevos').innerHTML = '<div style="padding:12px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;color:#166534;font-size:13px;font-weight:600;text-align:center">✓ Ningún nuevo ingreso con inducción pendiente</div>';
+    $('gr-nuevos').innerHTML = '<div style="padding:12px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;color:#166534;font-size:13px;font-weight:600;text-align:center">✓ Todos los ingresos del último año tienen inducción completa</div>';
   } else {
-    const rowsHtml = nuevosPendientes.slice(0,8).map(x => {
-      const daysColor = x.dias >= 60 ? 'var(--red)' : x.dias >= 45 ? '#d97706' : 'var(--amber)';
+    const infracciones = nuevosPendientes.filter(x => x.categoria === 'infraccion');
+    const proximos = nuevosPendientes.filter(x => x.categoria === 'proximo');
+    const periodo = nuevosPendientes.filter(x => x.categoria === 'periodo');
+    const renderRow = (x) => {
+      let daysColor, badgeIcon;
+      if (x.categoria === 'infraccion') { daysColor = 'var(--red)'; badgeIcon = '🔴'; }
+      else if (x.categoria === 'proximo') { daysColor = '#d97706'; badgeIcon = '🟡'; }
+      else { daysColor = '#0d9488'; badgeIcon = '🟢'; }
       const faltaTxt = x.falta.map(m => m.replace('INDUCCION ', '').replace('SEGURIDAD/SALUD','Seg/Salud')).join(' + ');
       return '<div style="padding:8px 12px;border-bottom:1px solid var(--g100);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">' +
         '<div>' +
-          '<b style="font-size:13px">' + h(x.persona.n) + '</b> · <span style="font-size:11px;color:var(--g500)">' + h(x.persona.s || 'sin sector') + '</span>' +
+          badgeIcon + ' <b style="font-size:13px">' + h(x.persona.n) + '</b> · <span style="font-size:11px;color:var(--g500)">' + h(x.persona.s || 'sin sector') + '</span>' +
           '<div style="font-size:11px;color:var(--g600);margin-top:2px">Alta: ' + h(x.persona.fechaAlta || '?') + ' · Le falta: <b style="color:var(--red)">' + h(faltaTxt) + '</b></div>' +
         '</div>' +
-        '<div style="text-align:right"><span style="font-size:14px;font-weight:800;color:' + daysColor + '">' + x.dias + ' días</span></div>' +
+        '<div style="text-align:right"><span style="font-size:14px;font-weight:800;color:' + daysColor + '">' + x.dias + ' día' + (x.dias === 1 ? '' : 's') + '</span></div>' +
       '</div>';
-    }).join('');
-    const extra = nuevosPendientes.length > 8 ? '<div style="padding:8px 12px;text-align:center;font-size:11px;color:var(--g500)">... y ' + (nuevosPendientes.length - 8) + ' más</div>' : '';
-    $('gr-nuevos').innerHTML =
-      '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:12px;color:#7f1d1d;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">' +
-        '<span><b>' + nuevosPendientes.length + '</b> persona' + (nuevosPendientes.length === 1 ? '' : 's') + ' con inducción incompleta.</span>' +
-        '<button class="btn btn-o" style="font-size:11px;padding:4px 10px" onclick="showNuevosPendientesModal()">Ver todos</button>' +
-      '</div>' +
-      '<div style="border:1px solid var(--g200);border-radius:8px;overflow:hidden">' + rowsHtml + extra + '</div>';
+    };
+    const summaryHtml =
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:10px">' +
+        '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:8px 10px;text-align:center">' +
+          '<div style="font-size:22px;font-weight:800;color:var(--red)">' + infracciones.length + '</div>' +
+          '<div style="font-size:10px;font-weight:700;color:#7f1d1d">🔴 EN INFRACCIÓN (>30 días)</div>' +
+        '</div>' +
+        '<div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:8px 10px;text-align:center">' +
+          '<div style="font-size:22px;font-weight:800;color:#d97706">' + proximos.length + '</div>' +
+          '<div style="font-size:10px;font-weight:700;color:#92400e">🟡 PRÓXIMOS A VENCER (16-30 días)</div>' +
+        '</div>' +
+        '<div style="background:#f0fdfa;border:1px solid #5eead4;border-radius:8px;padding:8px 10px;text-align:center">' +
+          '<div style="font-size:22px;font-weight:800;color:#0d9488">' + periodo.length + '</div>' +
+          '<div style="font-size:10px;font-weight:700;color:#115e59">🟢 EN PERÍODO (0-15 días)</div>' +
+        '</div>' +
+      '</div>';
+    const rowsHtml = nuevosPendientes.slice(0,10).map(renderRow).join('');
+    const extra = nuevosPendientes.length > 10 ? '<div style="padding:8px 12px;text-align:center;font-size:11px;color:var(--g500)"><button class="btn btn-o" style="font-size:11px;padding:4px 10px" onclick="showNuevosPendientesModal()">Ver los ' + nuevosPendientes.length + ' completos</button></div>' : '';
+    const mailNote = infracciones.length > 0
+      ? '<div style="font-size:10px;color:var(--g500);margin-top:6px">📧 El mail semanal se envía a Gloria y a vos solo cuando hay personas <b>en infracción</b>.</div>'
+      : '';
+    $('gr-nuevos').innerHTML = summaryHtml +
+      '<div style="border:1px solid var(--g200);border-radius:8px;overflow:hidden">' + rowsHtml + extra + '</div>' +
+      mailNote;
   }
 
   // ═══ SEMÁFORO POR SECTOR ═══
@@ -2051,7 +2073,8 @@ window.grExportSinCapCSV = function() {
   link.click();
 };
 
-// Computar nuevos ingresos con inducción pendiente > 30 días
+// Computar nuevos ingresos con inducción pendiente (TODOS los que no completaron los 3 módulos,
+// con o sin sobrepasar los 30 días — se categorizan por urgencia)
 function grComputeNuevosPendientes(year) {
   const IND_TOPICS = ['REGLAMENTO','INDUCCION GMP','INDUCCION SEGURIDAD/SALUD'];
   const today = new Date();
@@ -2065,9 +2088,11 @@ function grComputeNuevosPendientes(year) {
     try { alta = new Date(p.fechaAlta); if (isNaN(alta.getTime())) return; } catch(e) { return; }
     const altaOnly = new Date(alta.getFullYear(), alta.getMonth(), alta.getDate());
     const dias = Math.floor((todayOnly - altaOnly) / 86400000);
-    if (dias < 30) return;
+    // Solo excluir bajas o muy antiguos (más de 1 año), para no llenar de gente vieja
+    if (dias > 365) return;
+    if (dias < 0) return;
 
-    // Buscar módulos de inducción registrados para esta persona (histórico, cualquier año)
+    // Buscar módulos de inducción registrados (histórico, cualquier año)
     const modulos = new Set();
     R.forEach(r => {
       if (!IND_TOPICS.includes(r.tema)) return;
@@ -2078,9 +2103,16 @@ function grComputeNuevosPendientes(year) {
     const falta = IND_TOPICS.filter(t => !modulos.has(t));
     if (falta.length === 0) return;
 
-    result.push({ persona: p, dias: dias, falta: falta, tiene: [...modulos] });
+    // Categorizar urgencia
+    let categoria, orden;
+    if (dias > 30) { categoria = 'infraccion'; orden = 0; }        // 🔴 vencido — dispara mail
+    else if (dias > 15) { categoria = 'proximo'; orden = 1; }      // 🟡 se acerca el vencimiento
+    else { categoria = 'periodo'; orden = 2; }                     // 🟢 dentro del período de inducción
+
+    result.push({ persona: p, dias: dias, falta: falta, tiene: [...modulos], categoria: categoria, orden: orden });
   });
-  return result.sort((a,b) => b.dias - a.dias);
+  // Orden: primero los de infracción (más días), después próximos, después en período
+  return result.sort((a,b) => a.orden - b.orden || b.dias - a.dias);
 }
 
 // Modal: ver todos los nuevos ingresos con inducción pendiente
@@ -2202,12 +2234,13 @@ function renderDot(){
     if(p.fechaBaja&&p.fechaBaja.startsWith(selYr))secData[sec].bajas++;
   });
   
-  // Totals
+  // Totals — misma lógica que el detalle por sector:
+  // MANPOWER = tipo exactamente 'MANPOWER'; VESSENA = todo el resto (incluye personas sin tipo cargado)
   const totAct=PE.filter(p=>p.a!==false).length;
   const totAltas=Object.values(secData).reduce((s,d)=>s+d.altas,0);
   const totBajas=Object.values(secData).reduce((s,d)=>s+d.bajas,0);
   const totMP=PE.filter(p=>p.a!==false&&p.tipo==='MANPOWER').length;
-  const totVE=PE.filter(p=>p.a!==false&&p.tipo==='VESSENA').length;
+  const totVE=totAct-totMP;
   
   // Summary KPIs
   $('dot-kpi').innerHTML=
@@ -3594,11 +3627,19 @@ $('import-confirm').addEventListener('click',function(){
     p.a=false;p.fechaBaja=p.fechaBaja||new Date().toISOString().slice(0,10);deactCount++;
   });
   
-  // Reactivate matched that were inactive + update tipo
+  // Reactivate matched + update tipo. fechaAlta se PRESERVA (regla: siempre la primera).
+  // Al reactivar limpiamos fechaBaja para no dejar contradicción (activo con fecha de baja vieja).
   matched.forEach((ep,appName)=>{
     const p=PE.find(x=>x.n===appName);
-    if(p&&p.a===false){p.a=true;reactCount++}
-    if(p){p.tipo=ep.tipo;if(ep.tags&&ep.tags.length)p.tags=ep.tags}
+    if(!p) return;
+    if(p.a===false){
+      p.a=true;
+      p.fechaBaja='';  // Limpiar fecha de baja al reactivar (persona volvió)
+      reactCount++;
+    }
+    p.tipo=ep.tipo;
+    if(ep.tags&&ep.tags.length)p.tags=ep.tags;
+    // Nota: p.fechaAlta NO se toca — mantiene la primera fecha de ingreso original
   });
   
   // Add new people with user-selected sectors
