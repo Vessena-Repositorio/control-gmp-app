@@ -1650,7 +1650,9 @@ V.gerencia = function(){
     return ry === year;
   });
   const yearPL = PL.filter(p => (p.year || 2026) === year);
-  const activePE = PE.filter(p => wasActive(p, year));
+  // Personas activas: fecha válida en el año Y flag a !== false
+  // (algunos registros pueden estar marcados a:false sin fechaBaja — se los excluye)
+  const activePE = PE.filter(p => wasActive(p, year) && p.a !== false);
 
   $('gr-subtitle').textContent = 'Año ' + year + ' · datos al ' + today.toLocaleDateString('es-UY');
 
