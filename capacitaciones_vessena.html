@@ -1670,11 +1670,14 @@ V.gerencia = function(){
     '<div class="gr-bar"><div class="gr-bar-fill" style="width:' + Math.min(pctPlan,100) + '%;background:' + kpiPlanBarColor + '"></div></div>';
 
   // ═══ KPI 2: COBERTURA DE PERSONAL ═══
+  // Solo cuenta personas que HOY están activas (excluye bajas y externos sin match)
   const capR = yearR.filter(r => !IND_TOPICS.includes(r.tema));
   const personasCap = new Set();
   capR.forEach(r => {
     const fp = findPerson(r.nom);
-    personasCap.add(fp ? fp.n : r.nom.toUpperCase().trim());
+    if (!fp) return;                       // externos/sin match no cuentan
+    if (fp.a === false) return;            // bajas no cuentan
+    personasCap.add(fp.n);
   });
   const cobPct = activePE.length > 0 ? Math.round((personasCap.size / activePE.length) * 100) : 0;
   const kpiCobColor = cobPct >= 80 ? 'gr-green' : cobPct >= 60 ? 'gr-amber' : 'gr-red';
@@ -1704,11 +1707,27 @@ V.gerencia = function(){
   const totInd = Object.keys(modulosPorPersona).length;
   const compInd = Object.values(modulosPorPersona).filter(t => t.size >= 3).length;
   const infrac = totInd - compInd;
+  // Guardar detalle globalmente para el modal debug
+  window._grInfractoresDetail = Object.entries(modulosPorPersona)
+    .filter(([n, t]) => t.size < 3)
+    .map(([n, t]) => ({
+      nombre: n,
+      modulos: [...t],
+      falta: IND_TOPICS.filter(x => !t.has(x)),
+      persona: PE.find(p => p.n === n)
+    }))
+    .sort((a,b) => a.falta.length - b.falta.length);
+  window._grCompletosDetail = Object.entries(modulosPorPersona)
+    .filter(([n, t]) => t.size >= 3)
+    .map(([n, t]) => ({nombre: n, persona: PE.find(p => p.n === n)}));
+
   const indPct = totInd > 0 ? Math.round((compInd / totInd) * 100) : 0;
   const kpiIndColor = indPct >= 90 ? 'gr-green' : indPct >= 70 ? 'gr-amber' : 'gr-red';
   const kpiIndIcon = indPct >= 90 ? '🟢' : indPct >= 70 ? '🟡' : '🔴';
   const kpiIndBar = indPct >= 90 ? '#16a34a' : indPct >= 70 ? '#d97706' : '#dc2626';
-  const infracNote = infrac > 0 ? '<div style="font-size:10px;color:var(--red);font-weight:700;margin-top:6px">⚠️ ' + infrac + ' persona' + (infrac===1?'':'s') + ' en infracción (les falta al menos 1 módulo)</div>' : '<div style="font-size:10px;color:var(--green);font-weight:700;margin-top:6px">✓ Sin personas en infracción</div>';
+  const infracNote = infrac > 0
+    ? '<div style="font-size:11px;color:var(--red);font-weight:700;margin-top:8px;cursor:pointer;background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:6px 10px;display:inline-block" onclick="showInfractoresModal()">⚠️ ' + infrac + ' persona' + (infrac===1?'':'s') + ' en infracción — <u>ver quiénes</u></div>'
+    : '<div style="font-size:10px;color:var(--green);font-weight:700;margin-top:6px">✓ Sin personas en infracción</div>';
   $('gr-induccion').className = 'gr-kpi ' + kpiIndColor;
   $('gr-induccion').innerHTML =
     '<div class="gr-label">' + kpiIndIcon + ' Inducciones completas</div>' +
@@ -1779,7 +1798,14 @@ V.gerencia = function(){
   const capMes = delMesR.filter(r => !IND_TOPICS.includes(r.tema));
   const indMes = delMesR.filter(r => IND_TOPICS.includes(r.tema));
   const sesMes = sess(capMes).length;
-  const persMes = new Set(delMesR.map(r => {const fp = findPerson(r.nom); return fp?fp.n:r.nom.toUpperCase().trim()})).size;
+  // Personas del mes: solo activas
+  const persMesSet = new Set();
+  delMesR.forEach(r => {
+    const fp = findPerson(r.nom);
+    if (!fp || fp.a === false) return;
+    persMesSet.add(fp.n);
+  });
+  const persMes = persMesSet.size;
   const hrsMes = sess(delMesR).reduce((s,se)=>s+(+se.hrs||0),0);
   $('gr-mes').innerHTML =
     '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">' +
@@ -1813,6 +1839,53 @@ V.gerencia = function(){
     '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--g100)"><span style="color:var(--g600);font-size:12px">⏱️ Horas de capacitación</span><span style="font-weight:800;color:var(--purple)">' + totalHrs.toFixed(1) + '</span></div>' +
     '<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--g100)"><span style="color:var(--g600);font-size:12px">📊 Promedio de hs / persona</span><span style="font-weight:800;color:var(--amber)">' + promHrsPers + '</span></div>' +
     '<div style="display:flex;justify-content:space-between;padding:8px 0"><span style="color:var(--g600);font-size:12px">👥 Personas activas</span><span style="font-weight:800;color:var(--g700)">' + activePE.length + '</span></div>';
+};
+
+// Debug modal: mostrar detalle de los "en infracción" para verificar el cálculo
+window.showInfractoresModal = function() {
+  const list = window._grInfractoresDetail || [];
+  const modules_es = {
+    'REGLAMENTO': 'Reglamento',
+    'INDUCCION GMP': 'Inducción GMP',
+    'INDUCCION SEGURIDAD/SALUD': 'Inducción Seg./Salud'
+  };
+  // Reusar el modal-bg existente
+  const modal = document.getElementById('modal-bg');
+  if (!modal) return;
+  const inner = modal.querySelector('.modal');
+  if (!inner) return;
+  const rowsHtml = list.map(x => {
+    const modsTiene = x.modulos.map(m => '<span style="background:#dcfce7;color:#166534;padding:2px 6px;border-radius:4px;font-size:10px;margin-right:3px">✓ ' + (modules_es[m] || m) + '</span>').join('');
+    const modsFalta = x.falta.map(m => '<span style="background:#fee2e2;color:#991b1b;padding:2px 6px;border-radius:4px;font-size:10px;margin-right:3px">✗ ' + (modules_es[m] || m) + '</span>').join('');
+    const sector = x.persona ? x.persona.s : '(sin sector)';
+    const alta = x.persona && x.persona.fechaAlta ? x.persona.fechaAlta : '';
+    return '<div style="padding:10px;border-bottom:1px solid var(--g100)">' +
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">' +
+        '<b style="font-size:13px">' + h(x.nombre) + '</b>' +
+        '<span style="font-size:10px;color:var(--g500)">' + h(sector) + (alta ? ' · Alta: ' + h(alta) : '') + '</span>' +
+      '</div>' +
+      '<div style="font-size:11px;color:var(--g600);margin-bottom:3px">Tiene: ' + (modsTiene || '<i>ninguno</i>') + '</div>' +
+      '<div style="font-size:11px;color:var(--g600)">Le falta: ' + modsFalta + '</div>' +
+    '</div>';
+  }).join('');
+  inner.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">' +
+      '<div>' +
+        '<div style="font-size:16px;font-weight:800;color:var(--navy)">⚠️ Personas en infracción de inducción</div>' +
+        '<div style="font-size:11px;color:var(--g500)">Personas activas con al menos 1 registro de inducción PERO que no completaron los 3 módulos</div>' +
+      '</div>' +
+      '<button class="btn-i" onclick="document.getElementById(\'modal-bg\').classList.remove(\'show\')" style="font-size:20px">✕</button>' +
+    '</div>' +
+    '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#7f1d1d">' +
+      '<b>' + list.length + ' persona' + (list.length === 1 ? '' : 's') + '</b> en infracción. Módulos requeridos: Reglamento, Inducción GMP, Inducción Seguridad/Salud.' +
+    '</div>' +
+    '<div style="max-height:60vh;overflow-y:auto;border:1px solid var(--g200);border-radius:8px">' +
+      (list.length ? rowsHtml : '<div style="padding:20px;text-align:center;color:var(--g400)">Sin infractores</div>') +
+    '</div>' +
+    '<div style="margin-top:12px;text-align:right">' +
+      '<button class="btn btn-o" onclick="document.getElementById(\'modal-bg\').classList.remove(\'show\')">Cerrar</button>' +
+    '</div>';
+  modal.classList.add('show');
 };
 
 // Auxiliar: calcular data por sector para el semáforo
