@@ -1688,32 +1688,34 @@ V.gerencia = function(){
     '<div class="gr-bar"><div class="gr-bar-fill" style="width:' + Math.min(cobPct,100) + '%;background:' + kpiCobBar + '"></div></div>';
 
   // ═══ KPI 3: INDUCCIONES COMPLETAS ═══
-  // Solo cuenta personas ACTIVAS (no incluye bajas/inactivos que se fueron)
-  const indR = yearR.filter(r => IND_TOPICS.includes(r.tema));
-  const indByPers = {};
-  let inactivosOmitidos = 0;
-  indR.forEach(r => {
+  // Base: personas ACTIVAS que en algún momento (cualquier año) recibieron al menos 1 registro
+  // de inducción. Los antiguos que nunca necesitaron inducción formal quedan afuera.
+  // Numerador: de esas personas activas, cuántas tienen los 3 módulos.
+  // En infracción: base - completos (empezaron y no terminaron los 3 módulos).
+  const modulosPorPersona = {};
+  R.forEach(r => {
+    if (!IND_TOPICS.includes(r.tema)) return;
     const fp = findPerson(r.nom);
-    // Filtro: si la persona figura en Personal pero está INACTIVA, no la cuento
-    if (fp && fp.a === false) { inactivosOmitidos++; return; }
-    const nm = fp ? fp.n : r.nom.toUpperCase().trim();
-    if (!indByPers[nm]) indByPers[nm] = new Set();
-    indByPers[nm].add(r.tema);
+    if (!fp) return;               // sin match en Personal → no cuenta (probablemente externos)
+    if (fp.a === false) return;    // dados de baja no cuentan
+    if (!modulosPorPersona[fp.n]) modulosPorPersona[fp.n] = new Set();
+    modulosPorPersona[fp.n].add(r.tema);
   });
-  const totInd = Object.keys(indByPers).length;
-  const compInd = Object.values(indByPers).filter(t => t.size >= 3).length;
+  const totInd = Object.keys(modulosPorPersona).length;
+  const compInd = Object.values(modulosPorPersona).filter(t => t.size >= 3).length;
+  const infrac = totInd - compInd;
   const indPct = totInd > 0 ? Math.round((compInd / totInd) * 100) : 0;
   const kpiIndColor = indPct >= 90 ? 'gr-green' : indPct >= 70 ? 'gr-amber' : 'gr-red';
   const kpiIndIcon = indPct >= 90 ? '🟢' : indPct >= 70 ? '🟡' : '🔴';
   const kpiIndBar = indPct >= 90 ? '#16a34a' : indPct >= 70 ? '#d97706' : '#dc2626';
-  const inactNote = inactivosOmitidos > 0 ? '<div style="font-size:9px;color:var(--g400);margin-top:4px">Se omitieron ' + inactivosOmitidos + ' registros de personas que ya no están activas</div>' : '';
+  const infracNote = infrac > 0 ? '<div style="font-size:10px;color:var(--red);font-weight:700;margin-top:6px">⚠️ ' + infrac + ' persona' + (infrac===1?'':'s') + ' en infracción (les falta al menos 1 módulo)</div>' : '<div style="font-size:10px;color:var(--green);font-weight:700;margin-top:6px">✓ Sin personas en infracción</div>';
   $('gr-induccion').className = 'gr-kpi ' + kpiIndColor;
   $('gr-induccion').innerHTML =
     '<div class="gr-label">' + kpiIndIcon + ' Inducciones completas</div>' +
     '<div class="gr-value">' + indPct + '%</div>' +
-    '<div class="gr-sub"><b>' + compInd + '</b> de <b>' + totInd + '</b> personas activas con los 3 módulos (Reglamento + GMP + Seguridad)</div>' +
+    '<div class="gr-sub"><b>' + compInd + '</b> de <b>' + totInd + '</b> personas activas con inducción tienen los 3 módulos</div>' +
     '<div class="gr-bar"><div class="gr-bar-fill" style="width:' + Math.min(indPct,100) + '%;background:' + kpiIndBar + '"></div></div>' +
-    inactNote;
+    infracNote;
 
   // ═══ VENCIDAS / CRÍTICAS ═══
   // p.m es un ARRAY de números de mes (1-12), ej [4,5,6]
