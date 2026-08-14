@@ -1803,17 +1803,18 @@ V.gerencia = function(){
 
   // ═══ VENCIDAS / CRÍTICAS ═══
   // p.m es un ARRAY de números de mes (1-12), ej [4,5,6]
+  // Excluimos inducciones continuas (RI, Inducción Seg., etc.) porque no son calendarizadas
   const vencidas = yearPL.filter(p => {
     if (p.e === 'cumplida' || p.e === 'suspendida' || p.e === 'reprogramada') return false;
+    if (isInductionPlanItem(p)) return false;
     if (!Array.isArray(p.m) || !p.m.length) return false;
-    // Vencida si su ÚLTIMO mes planificado ya pasó
     const lastMonth = Math.max(...p.m);
     return (lastMonth - 1) < currentMonthIdx;
   });
   const delMes = yearPL.filter(p => {
     if (p.e === 'cumplida' || p.e === 'suspendida' || p.e === 'reprogramada') return false;
+    if (isInductionPlanItem(p)) return false;
     if (!Array.isArray(p.m) || !p.m.length) return false;
-    // De este mes si tiene el mes actual entre sus meses planificados
     return p.m.some(mNum => (mNum - 1) === currentMonthIdx);
   });
   const mesesFmt = ms => Array.isArray(ms) ? ms.map(mi => (MS[mi-1] || '').slice(0,3)).join(', ') : '—';
@@ -2491,7 +2492,7 @@ function saveEdit(){
   if(cambios.length)logAudit('EDICIÓN REG.','['+r.nom+'] '+r.tema+' '+r.fecha+' — '+cambios.join(' | '),'—');
   eId=null;sv();cf();V.reg();
 }
-window.dR=function(id){if(!canDo('delete_reg')){alert('No tenés permisos para eliminar registros.');return}if(!confirm('¿Eliminar?'))return;const r=R.find(x=>x.id===id);if(r)logAudit('ELIMINACIÓN REG.','Eliminado: '+r.nom+' — '+r.tema+' — '+r.desc+' ('+r.fecha+')','—');R=R.filter(r=>r.id!==id);sv();V.reg()};
+window.dR=function(id){if(!canDo('delete_reg')){alert('No tenés permisos para eliminar registros.');return}if(!confirm('¿Eliminar?'))return;const r=R.find(x=>x.id===id);if(r)logAudit('ELIMINACIÓN REG.','Eliminado: '+r.nom+' — '+r.tema+' — '+r.desc+' ('+r.fecha+')');R=R.filter(r=>r.id!==id);sv();V.reg()};
 
 // ══════════ PLAN GANTT ══════════
 let editPlanId=null;
@@ -3207,7 +3208,7 @@ window.transferSector=function(idx){
     // Add a color
     const newColors=['#b91c1c','#a16207','#4f46e5','#0369a1','#9333ea','#c2410c','#047857','#6d28d9','#be185d','#0f766e'];
     SCOLORS.push(newColors[SCS.length%newColors.length]);
-    logAudit('PERSONAL','Nuevo sector creado: '+secFinal,'—');
+    logAudit('PERSONAL','Nuevo sector creado: '+secFinal);
   }
   if(secFinal===p.s){alert('Ya está en ese sector.');return}
   const hoy=new Date().toISOString().slice(0,10);
@@ -3216,7 +3217,7 @@ window.transferSector=function(idx){
   const prevSec=p.s;
   p.s=secFinal;
   p.sectorDesde=hoy;
-  logAudit('PERSONAL','TRANSFERENCIA: '+p.n+' de '+prevSec+' → '+secFinal,'—');
+  logAudit('PERSONAL','TRANSFERENCIA: '+p.n+' de '+prevSec+' → '+secFinal);
   sv();V.pers();
 };
 window.expandPers=function(idx){persExpanded=persExpanded===idx?null:idx;V.pers()}
@@ -3396,7 +3397,7 @@ $('csv-input').addEventListener('change',function(e){
     if(reactivated)msg+='• '+reactivated+' reactivados\n';
     if(updated)msg+='• '+updated+' con sector actualizado';
     const auditDet='Carga CSV: '+csvNames.size+' personas'+(added?' · +'+added+' nuevos':'')+(deactivated?' · -'+deactivated+' inactivos':'')+(reactivated?' · ↻'+reactivated+' reactivados':'')+(updated?' · ✎'+updated+' sector actualizado':'');
-    logAudit('PERSONAL',auditDet,'—');
+    logAudit('PERSONAL',auditDet);
     alert(msg);
     V.pers();V.dash();
   };
@@ -3667,7 +3668,7 @@ $('import-confirm').addEventListener('click',function(){
   
   // Audit
   const det='Importación Admin: '+pendingImport.file+' — '+matched.size+' existentes, +'+addedCount+' nuevos, -'+deactCount+' inactivos'+(reactCount?', ↻'+reactCount+' reactivados':'')+(newSectors.length?', nuevos sectores: '+newSectors.join(', '):'');
-  logAudit('PERSONAL',det,'Sistema');
+  logAudit('PERSONAL',det);
   
   sv();V.pers();V.dash();
   $('import-modal').classList.remove('show');
