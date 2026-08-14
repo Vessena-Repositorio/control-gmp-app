@@ -628,6 +628,13 @@ input:focus,select:focus{outline:none;border-color:var(--navy-light);box-shadow:
     <div id="gr-sec-riesgo" style="background:#fff;border:2px solid var(--g200);border-radius:12px;padding:16px"></div>
   </div>
 
+  <!-- Nuevos ingresos con inducción pendiente > 30 días -->
+  <div style="background:#fff;border:2px solid var(--g200);border-radius:12px;padding:16px;margin-bottom:16px" id="gr-nuevos-container">
+    <div style="font-size:14px;font-weight:800;color:var(--navy);margin-bottom:6px">🚨 Nuevos ingresos con inducción pendiente</div>
+    <div style="font-size:11px;color:var(--g500);margin-bottom:10px">Personas activas con más de 30 días de antigüedad y les falta algún módulo de inducción (Reglamento, GMP, Seguridad/Salud). El sistema manda mail semanal a Gloria y a vos con esta lista.</div>
+    <div id="gr-nuevos"></div>
+  </div>
+
   <!-- Semáforo por sector -->
   <div style="background:#fff;border:1px solid var(--g200);border-radius:12px;padding:16px;margin-bottom:16px">
     <div style="font-size:14px;font-weight:800;color:var(--navy);margin-bottom:10px">🚦 Semáforo por sector — Cumplimiento del plan anual</div>
@@ -1258,7 +1265,10 @@ function targetSectors(d){
 // targetPeopleCount moved to rules system
 // Check if person was active during a given year
 function wasActive(p,year){
-  if(!year)return p.a!==false;
+  // Regla siempre: si la persona está marcada como inactiva (a===false), no cuenta
+  // (aún cuando no tenga fechaBaja cargada — evita inflar totales)
+  if(p.a===false)return false;
+  if(!year)return true;
   const altaY=p.fechaAlta?parseInt(p.fechaAlta.slice(0,4)):0;
   const bajaY=p.fechaBaja?parseInt(p.fechaBaja.slice(0,4)):9999;
   // Active in year if: joined in or before that year AND left in or after that year
@@ -1644,6 +1654,22 @@ V.gerencia = function(){
 
   const IND_TOPICS = ['REGLAMENTO','INDUCCION GMP','INDUCCION SEGURIDAD/SALUD'];
 
+  // Helper: identificar items del plan que son inducciones "continuas" (se dan cada
+  // vez que ingresa alguien nuevo, no calendarizadas). Estos NO cuentan en el % de
+  // cumplimiento del plan anual porque siempre están "en curso".
+  function isInductionPlanItem(p) {
+    if (!p || !p.t) return false;
+    const t = p.t.toUpperCase();
+    return (
+      t.includes('INDUCCION') ||
+      t.includes('INDUCCIÓN') ||
+      t.startsWith('RI ') ||
+      t === 'RI' ||
+      t.includes('COMPORTAMIENTO GMP') ||
+      t.includes('REGLAMENTO')
+    );
+  }
+
   // Filtrar por año
   const yearR = R.filter(r => {
     const ry = r.year || parseInt((r.fecha||'').slice(0,4)) || 2026;
@@ -1657,8 +1683,13 @@ V.gerencia = function(){
   $('gr-subtitle').textContent = 'Año ' + year + ' · datos al ' + today.toLocaleDateString('es-UY');
 
   // ═══ KPI 1: CUMPLIMIENTO DEL PLAN ANUAL ═══
-  // Excluye suspendidas y reprogramadas del total activo
-  const activePL = yearPL.filter(p => p.e !== 'suspendida' && p.e !== 'reprogramada');
+  // Excluye: suspendidas, reprogramadas, e inducciones continuas (RI, Ind Seg, etc.)
+  // porque estas últimas se dictan cada vez que ingresa alguien y no tienen calendario fijo
+  const activePL = yearPL.filter(p =>
+    p.e !== 'suspendida' &&
+    p.e !== 'reprogramada' &&
+    !isInductionPlanItem(p)
+  );
   const cumpl = activePL.filter(p => p.e === 'cumplida').length;
   const parc = activePL.filter(p => p.e === 'parcial').length;
   // Separar entre "vencidas/en tiempo" y "futuras" según el último mes planificado vs. mes actual
@@ -1810,6 +1841,32 @@ V.gerencia = function(){
     (enRiesgo.length === 0
       ? '<div style="color:var(--green);font-size:13px;font-weight:700;margin-top:8px">✓ Todos los sectores por encima del umbral</div>'
       : enRiesgo.slice(0,4).map(s => '<div style="padding:5px 0;font-size:11px"><b>' + h(s.name) + '</b> — <span style="color:var(--red);font-weight:700">' + s.pct + '%</span> · ' + s.cumplida + '/' + s.total + ' capacitaciones cumplidas</div>').join(''));
+
+  // ═══ NUEVOS INGRESOS CON INDUCCIÓN PENDIENTE > 30 DÍAS ═══
+  const nuevosPendientes = grComputeNuevosPendientes(year);
+  window._grNuevosPendientes = nuevosPendientes;
+  if (nuevosPendientes.length === 0) {
+    $('gr-nuevos').innerHTML = '<div style="padding:12px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;color:#166534;font-size:13px;font-weight:600;text-align:center">✓ Ningún nuevo ingreso con inducción pendiente</div>';
+  } else {
+    const rowsHtml = nuevosPendientes.slice(0,8).map(x => {
+      const daysColor = x.dias >= 60 ? 'var(--red)' : x.dias >= 45 ? '#d97706' : 'var(--amber)';
+      const faltaTxt = x.falta.map(m => m.replace('INDUCCION ', '').replace('SEGURIDAD/SALUD','Seg/Salud')).join(' + ');
+      return '<div style="padding:8px 12px;border-bottom:1px solid var(--g100);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">' +
+        '<div>' +
+          '<b style="font-size:13px">' + h(x.persona.n) + '</b> · <span style="font-size:11px;color:var(--g500)">' + h(x.persona.s || 'sin sector') + '</span>' +
+          '<div style="font-size:11px;color:var(--g600);margin-top:2px">Alta: ' + h(x.persona.fechaAlta || '?') + ' · Le falta: <b style="color:var(--red)">' + h(faltaTxt) + '</b></div>' +
+        '</div>' +
+        '<div style="text-align:right"><span style="font-size:14px;font-weight:800;color:' + daysColor + '">' + x.dias + ' días</span></div>' +
+      '</div>';
+    }).join('');
+    const extra = nuevosPendientes.length > 8 ? '<div style="padding:8px 12px;text-align:center;font-size:11px;color:var(--g500)">... y ' + (nuevosPendientes.length - 8) + ' más</div>' : '';
+    $('gr-nuevos').innerHTML =
+      '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:12px;color:#7f1d1d;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">' +
+        '<span><b>' + nuevosPendientes.length + '</b> persona' + (nuevosPendientes.length === 1 ? '' : 's') + ' con inducción incompleta.</span>' +
+        '<button class="btn btn-o" style="font-size:11px;padding:4px 10px" onclick="showNuevosPendientesModal()">Ver todos</button>' +
+      '</div>' +
+      '<div style="border:1px solid var(--g200);border-radius:8px;overflow:hidden">' + rowsHtml + extra + '</div>';
+  }
 
   // ═══ SEMÁFORO POR SECTOR ═══
   $('gr-sectores').innerHTML = sectoresData.length === 0
@@ -1994,6 +2051,87 @@ window.grExportSinCapCSV = function() {
   link.click();
 };
 
+// Computar nuevos ingresos con inducción pendiente > 30 días
+function grComputeNuevosPendientes(year) {
+  const IND_TOPICS = ['REGLAMENTO','INDUCCION GMP','INDUCCION SEGURIDAD/SALUD'];
+  const today = new Date();
+  const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const result = [];
+
+  PE.forEach(p => {
+    if (p.a === false) return;
+    if (!p.fechaAlta) return;
+    let alta;
+    try { alta = new Date(p.fechaAlta); if (isNaN(alta.getTime())) return; } catch(e) { return; }
+    const altaOnly = new Date(alta.getFullYear(), alta.getMonth(), alta.getDate());
+    const dias = Math.floor((todayOnly - altaOnly) / 86400000);
+    if (dias < 30) return;
+
+    // Buscar módulos de inducción registrados para esta persona (histórico, cualquier año)
+    const modulos = new Set();
+    R.forEach(r => {
+      if (!IND_TOPICS.includes(r.tema)) return;
+      const fp = findPerson(r.nom);
+      if (!fp) return;
+      if (fp.n === p.n) modulos.add(r.tema);
+    });
+    const falta = IND_TOPICS.filter(t => !modulos.has(t));
+    if (falta.length === 0) return;
+
+    result.push({ persona: p, dias: dias, falta: falta, tiene: [...modulos] });
+  });
+  return result.sort((a,b) => b.dias - a.dias);
+}
+
+// Modal: ver todos los nuevos ingresos con inducción pendiente
+window.showNuevosPendientesModal = function() {
+  const list = window._grNuevosPendientes || [];
+  const modal = document.getElementById('modal-bg');
+  if (!modal) return;
+  const inner = modal.querySelector('.modal');
+  if (!inner) return;
+
+  const modules_es = {
+    'REGLAMENTO': 'Reglamento',
+    'INDUCCION GMP': 'Inducción GMP',
+    'INDUCCION SEGURIDAD/SALUD': 'Inducción Seg./Salud'
+  };
+
+  const rowsHtml = list.map(x => {
+    const daysColor = x.dias >= 60 ? 'var(--red)' : x.dias >= 45 ? '#d97706' : 'var(--amber)';
+    const modsTiene = x.tiene.map(m => '<span style="background:#dcfce7;color:#166534;padding:2px 6px;border-radius:4px;font-size:10px;margin-right:3px">✓ ' + (modules_es[m] || m) + '</span>').join('');
+    const modsFalta = x.falta.map(m => '<span style="background:#fee2e2;color:#991b1b;padding:2px 6px;border-radius:4px;font-size:10px;margin-right:3px">✗ ' + (modules_es[m] || m) + '</span>').join('');
+    return '<div style="padding:10px;border-bottom:1px solid var(--g100)">' +
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;flex-wrap:wrap;gap:4px">' +
+        '<b style="font-size:13px">' + h(x.persona.n) + '</b>' +
+        '<span style="font-size:11px;color:var(--g500)">' + h(x.persona.s || 'sin sector') + ' · Alta: ' + h(x.persona.fechaAlta) + '</span>' +
+      '</div>' +
+      '<div style="font-size:11px;color:var(--g600);margin-bottom:3px">Tiene: ' + (modsTiene || '<i>ninguno</i>') + '</div>' +
+      '<div style="font-size:11px;color:var(--g600);margin-bottom:3px">Le falta: ' + modsFalta + '</div>' +
+      '<div style="font-size:11px;color:' + daysColor + ';font-weight:700;margin-top:4px">' + x.dias + ' días desde el alta</div>' +
+    '</div>';
+  }).join('');
+
+  inner.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">' +
+      '<div>' +
+        '<div style="font-size:16px;font-weight:800;color:var(--navy)">🚨 Nuevos ingresos con inducción pendiente</div>' +
+        '<div style="font-size:11px;color:var(--g500)">Más de 30 días desde el alta y no completaron los 3 módulos</div>' +
+      '</div>' +
+      '<button class="btn-i" onclick="document.getElementById(\'modal-bg\').classList.remove(\'show\')" style="font-size:20px">✕</button>' +
+    '</div>' +
+    '<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#7f1d1d">' +
+      '<b>' + list.length + '</b> persona' + (list.length === 1 ? '' : 's') + '. El sistema envía este listado por mail semanalmente a Gloria y Claudia.' +
+    '</div>' +
+    '<div style="max-height:60vh;overflow-y:auto;border:1px solid var(--g200);border-radius:8px">' +
+      (list.length ? rowsHtml : '<div style="padding:20px;text-align:center;color:var(--g400)">Sin nuevos ingresos con inducción pendiente</div>') +
+    '</div>' +
+    '<div style="margin-top:12px;text-align:right">' +
+      '<button class="btn btn-o" onclick="document.getElementById(\'modal-bg\').classList.remove(\'show\')">Cerrar</button>' +
+    '</div>';
+  modal.classList.add('show');
+};
+
 // Auxiliar: calcular data por sector para el semáforo
 function grComputeSectors(yearR, yearPL, activePE, year) {
   const IND_TOPICS = ['REGLAMENTO','INDUCCION GMP','INDUCCION SEGURIDAD/SALUD'];
@@ -2006,7 +2144,13 @@ function grComputeSectors(yearR, yearPL, activePE, year) {
     sectorStats[sec] = { name: sec, personas: persPorSector[sec], total: 0, cumplida: 0, pct: 0 };
   });
 
-  yearPL.filter(p => p.e !== 'suspendida' && p.e !== 'reprogramada').forEach(p => {
+  // Excluye suspendidas, reprogramadas Y las inducciones continuas (no calendarizadas)
+  function isIndItem(p) {
+    if (!p || !p.t) return false;
+    const t = p.t.toUpperCase();
+    return t.includes('INDUCCION') || t.includes('INDUCCIÓN') || t.startsWith('RI ') || t === 'RI' || t.includes('COMPORTAMIENTO GMP') || t.includes('REGLAMENTO');
+  }
+  yearPL.filter(p => p.e !== 'suspendida' && p.e !== 'reprogramada' && !isIndItem(p)).forEach(p => {
     const secs = targetSectors(p.d);
     secs.forEach(sec => {
       if (!sectorStats[sec]) sectorStats[sec] = { name: sec, personas: persPorSector[sec] || 0, total: 0, cumplida: 0, pct: 0 };
