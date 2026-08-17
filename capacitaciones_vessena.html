@@ -3562,9 +3562,9 @@ $('xlsx-admin').addEventListener('change',function(e){
       
       // Build modal content
       let summ='<b>Archivo:</b> '+h(file.name)+' — '+excelPeople.length+' personas en '+wb.SheetNames.length+' hojas<br>';
-      summ+='✅ <b>'+matched.size+'</b> existentes (se mantienen sus sectores) &nbsp;·&nbsp; ';
-      summ+='➕ <b>'+newPeople.length+'</b> nuevos &nbsp;·&nbsp; ';
-      summ+='➖ <b>'+inactivePeople.length+'</b> a marcar inactivos';
+      summ+='✅ <b>'+matched.size+'</b> existentes <span style="color:var(--g500);font-size:10px">(se mantiene sector y fecha de alta original)</span> &nbsp;·&nbsp; ';
+      summ+='➕ <b>'+newPeople.length+'</b> nuevos <span style="color:var(--g500);font-size:10px">(fecha alta = hoy)</span> &nbsp;·&nbsp; ';
+      summ+='➖ <b>'+inactivePeople.length+'</b> a marcar inactivos <span style="color:var(--g500);font-size:10px">(fecha baja = hoy)</span>';
       $('import-summary').innerHTML=summ;
       
       // Inactive section
@@ -3678,7 +3678,11 @@ $('import-confirm').addEventListener('click',function(){
   $('import-modal').classList.remove('show');
   pendingImport=null;
   
-  alert('✓ Importación completada:\n• '+matched.size+' personas existentes (sectores mantenidos)\n• '+addedCount+' incorporaciones\n• '+deactCount+' marcados inactivos'+(reactCount?'\n• '+reactCount+' reactivados':'')+(newSectors.length?'\n• Nuevos sectores: '+newSectors.join(', '):''));
+  alert('✓ Importación completada:\n' +
+    '• '+matched.size+' personas existentes (sector y fecha alta original preservadas)\n' +
+    '• '+addedCount+' incorporaciones (fecha alta = hoy)\n' +
+    '• '+deactCount+' marcados inactivos'+(reactCount?'\n• '+reactCount+' reactivados (se les limpió la fecha de baja)':'')+
+    (newSectors.length?'\n• Nuevos sectores: '+newSectors.join(', '):''));
 });
 
 // Export personnel
