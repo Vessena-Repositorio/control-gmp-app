@@ -1336,14 +1336,18 @@ function kpiByTraining(target,year){
     const bySec={};
     tgtSecs.forEach(s=>{bySec[s]={total:sc[s]||0,attended:new Set()}});
     
-    // Count attendance per sector
+    // Count attendance per sector.
+    // Prioridad: sector del REGISTRO (donde estaba cuando hizo la capacitación) sobre sector actual.
+    // Esto garantiza que si alguien transfiere de sector, sus capacitaciones históricas
+    // sigan contando para el sector donde las hizo.
     linked.forEach(r=>{
       const sec=r.sec?r.sec.toUpperCase().trim():'';
-      // Check if person is in PE
       const fp=findPerson(r.nom);
       const persName=r.nom.toUpperCase().trim();
       if(fp){
-        if(bySec[fp.s])bySec[fp.s].attended.add(persName);
+        // 1º intentar con el sector del registro (histórico), 2º con el actual
+        if(sec && bySec[sec]) bySec[sec].attended.add(persName);
+        else if(bySec[fp.s]) bySec[fp.s].attended.add(persName);
       } else {
         // External person
         if(bySec[sec]){
@@ -2829,7 +2833,10 @@ window.editPlan=function(id){
       const match=kw.some(k=>rd.includes(k));
       if(match){
         const fp=findPerson(r.nom);
-        const sec=fp?fp.s:r.sec.toUpperCase().trim();
+        // Prioridad: sector del REGISTRO (donde estaba cuando asistió) sobre sector actual.
+        // Así los transferidos mantienen las capacitaciones vinculadas a su sector histórico.
+        const recSec=r.sec?r.sec.toUpperCase().trim():'';
+        const sec=(recSec&&tSecs.includes(recSec))?recSec:(fp?fp.s:recSec);
         if(tSecs.includes(sec))attended.add(fp?fp.n:r.nom.toUpperCase().trim());
       }
     });
