@@ -3114,10 +3114,11 @@ V.pers=function(){
     if(isExp){
       detail='<div style="margin-top:10px;border-top:2px solid var(--navy-light);padding-top:10px">';
       // Person info
-      detail+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;font-size:10px">';
+      detail+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;font-size:10px;align-items:center">';
       detail+='<span style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:4px;padding:2px 8px">📋 '+(p.tipo||'VESSENA')+'</span>';
       if(p.fechaAlta)detail+='<span style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:4px;padding:2px 8px">📅 Alta: '+p.fechaAlta+'</span>';
       if(p.fechaBaja)detail+='<span style="background:#fef2f2;border:1px solid #fecaca;border-radius:4px;padding:2px 8px">🚪 Baja: '+p.fechaBaja+'</span>';
+      detail+='<button class="btn-i" style="font-size:10px;background:#fef3c7;color:#92400e;padding:2px 8px;border:1px solid #fcd34d;border-radius:4px;cursor:pointer" onclick="event.stopPropagation();editFechaAlta('+idx+')" title="Corregir fecha de alta (para veteranos que aparecen como nuevos ingresos)">✏️ Editar alta</button>';
       detail+='</div>';
       // Sector history
       if(p.sectorHist&&p.sectorHist.length){
@@ -3162,6 +3163,31 @@ V.pers=function(){
       +'</div></div>'+detail+'</div>';
   }).join('');
 };
+// Editar fecha de alta manual — para veteranos que se agregaron al Excel/app y quedaron
+// con fechaAlta = hoy pero en realidad trabajan hace años. Sirve para que no aparezcan
+// en el listado de "nuevos ingresos con inducción pendiente".
+window.editFechaAlta=function(idx){
+  const p=PE[idx];if(!p){alert('Persona no encontrada');return}
+  const cur=p.fechaAlta||'';
+  const nueva=prompt(
+    'Fecha de alta REAL de '+p.n+'\n\n' +
+    '(cuando ingresó a Vessena, no cuando se cargó a la app)\n' +
+    'Formato: yyyy-mm-dd (ej: 2019-03-15)\n\n' +
+    'Actual: '+(cur||'(sin fecha)'),
+    cur
+  );
+  if(nueva===null)return;
+  const trimmed=nueva.trim();
+  if(trimmed&&!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)){
+    alert('Formato inválido. Usá yyyy-mm-dd (ej: 2019-03-15).');
+    return;
+  }
+  const prevAlta=p.fechaAlta||'(sin fecha)';
+  p.fechaAlta=trimmed;
+  logAudit('PERSONAL','Fecha de alta editada: '+p.n+' — de '+prevAlta+' → '+(trimmed||'(sin fecha)'));
+  sv();V.pers();V.dash();
+};
+
 window.transferSector=function(idx){
   if(!canDo('transfer')){alert('No tenés permisos para transferir personal.');return}
   const p=PE[idx];if(!p)return;
