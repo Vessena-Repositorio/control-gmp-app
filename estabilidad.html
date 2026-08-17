@@ -816,18 +816,26 @@ function renderDetail(){
     render();
   };
   const spSave=q('#spSave');if(spSave)spSave.onclick=async()=>{
+    const antes=s.especificacion||'';
     // Compactar el string de especificación desde specParams
     s.especificacion=(s.specParams||[]).filter(sp=>sp.p||sp.e).map(sp=>`${sp.p}: ${sp.e}`).join('\n');
     s.stage=cS(s);
     await saveOneStudy(s);
+    if(antes!==s.especificacion){
+      const antesResumen=antes.length>200?antes.substring(0,200)+'...':antes;
+      const nuevoResumen=s.especificacion.length>200?s.especificacion.substring(0,200)+'...':s.especificacion;
+      await logAudit('edicion_especificacion',s.id,s.producto+' (Lote '+s.lote+')',antesResumen||'(vacío)',nuevoResumen||'(vacío)','Especificación técnica actualizada');
+    }
     toast('Especificación guardada ✓');
   };
-  const spLoad=q('#spLoad');if(spLoad)spLoad.onclick=()=>{
+  const spLoad=q('#spLoad');if(spLoad)spLoad.onclick=async()=>{
     if(!confirm('¿Recargar la especificación del catálogo? Se perderán cambios locales.'))return;
     const prod=productos.find(pr=>pr.codigo===s.codigoESP);
     if(prod&&prod.params){
+      const antes=s.especificacion||'';
       s.specParams=JSON.parse(JSON.stringify(prod.params));
       s.especificacion=s.specParams.map(sp=>`${sp.p}: ${sp.e}`).join('\n');
+      await logAudit('recarga_especificacion',s.id,s.producto+' (Lote '+s.lote+')',antes||'(vacío)',s.especificacion,'Recarga desde catálogo');
       render();toast('Especificación recargada del catálogo');
     } else {toast('Producto no encontrado en catálogo');}
   };
@@ -862,7 +870,16 @@ function renderDetail(){
     if(s.emailCreador&&s.emailCreador!==s.emailAnalista)await gSendEmail(s.emailCreador,'✗ RECHAZADO: '+s.producto+' (Lote '+s.lote+')',body2);
     render();toast('Estudio rechazado — notificación enviada');
   };
-  q('#bSvMail').onclick=async()=>{s.emailAnalista=q('#eAn').value.trim();s.emailCreador=q('#eCr').value.trim();await saveOneStudy(s);toast('Emails guardados');};
+  q('#bSvMail').onclick=async()=>{
+    const antesA=s.emailAnalista||'',antesC=s.emailCreador||'';
+    s.emailAnalista=q('#eAn').value.trim();s.emailCreador=q('#eCr').value.trim();
+    await saveOneStudy(s);
+    const cambios=[];
+    if(antesA!==s.emailAnalista)cambios.push('Analista: '+(antesA||'vacío')+' → '+(s.emailAnalista||'vacío'));
+    if(antesC!==s.emailCreador)cambios.push('Creador: '+(antesC||'vacío')+' → '+(s.emailCreador||'vacío'));
+    if(cambios.length)await logAudit('edicion_asignacion',s.id,s.producto+' (Lote '+s.lote+')','','',cambios.join(' · '));
+    toast('Emails guardados');
+  };
   q('#bSendAssign').onclick=async()=>{
     s.emailAnalista=q('#eAn').value.trim();s.emailCreador=q('#eCr').value.trim();
     if(!s.emailAnalista){toast('Completá el email del analista');return;}
@@ -882,23 +899,44 @@ function renderDetail(){
       saveOneStudy(s).then(()=>{render();toast('Checkpoint eliminado');});
     });
   });
-  document.querySelectorAll('[data-cp]:not(.cp-del)').forEach(el=>el.onchange=async()=>{
-    const i=parseInt(el.dataset.cp),f=el.dataset.f,cond=el.dataset.cond;
-    if(cond){
-      // Campo dentro de una condición acelerada
-      if(!s.checkpoints[i].condiciones)s.checkpoints[i].condiciones={estufa:emptyCondResult(),heladera:emptyCondResult(),luz:emptyCondResult(),patron:emptyCondResult()};
-      if(!s.checkpoints[i].condiciones[cond])s.checkpoints[i].condiciones[cond]=emptyCondResult();
-      s.checkpoints[i].condiciones[cond][f]=el.value;
-    } else {
-      // Campo normal (natural o fecha)
-      s.checkpoints[i][f]=el.value;
-    }
-    rS(s);await saveOneStudy(s);if(f==='fechaReal')render();
+  document.querySelectorAll('[data-cp]:not(.cp-del)').forEach(el=>{
+    // Capturar valor original al enfocar el campo
+    el.addEventListener('focus',(ev)=>{el.dataset.origValue=el.value;});
+    el.onchange=async()=>{
+      const i=parseInt(el.dataset.cp),f=el.dataset.f,cond=el.dataset.cond;
+      const origValue=el.dataset.origValue||'';
+      const newValue=el.value;
+      // Si no hubo cambio real, no auditar
+      if(origValue===newValue){rS(s);await saveOneStudy(s);if(f==='fechaReal')render();return;}
+      const cpRef=s.checkpoints[i];
+      const cpLabel=cpRef?cpRef.codigo+' (Mes '+cpRef.mes+')':'?';
+      const fieldLabel=cond?cond+' → '+f:f;
+      if(cond){
+        if(!s.checkpoints[i].condiciones)s.checkpoints[i].condiciones={estufa:emptyCondResult(),heladera:emptyCondResult(),luz:emptyCondResult(),patron:emptyCondResult()};
+        if(!s.checkpoints[i].condiciones[cond])s.checkpoints[i].condiciones[cond]=emptyCondResult();
+        s.checkpoints[i].condiciones[cond][f]=newValue;
+      } else {
+        s.checkpoints[i][f]=newValue;
+      }
+      rS(s);
+      await saveOneStudy(s);
+      await logAudit('edicion_checkpoint',s.id,s.producto+' (Lote '+s.lote+')',origValue||'(vacío)',newValue||'(vacío)',cpLabel+' · campo: '+fieldLabel);
+      if(f==='fechaReal')render();
+    };
   });
-  const addCpBtn=q('#addCp');if(addCpBtn)addCpBtn.onclick=async()=>{const lm=s.checkpoints.length?s.checkpoints[s.checkpoints.length-1].mes:0;s.checkpoints.push({codigo:`${lm+3}N`,mes:lm+3,fechaProgramada:addM(s.fechaInicio,lm+3),fechaReal:''});await saveStudies();render();};
-  const addNatBtn=q('[data-addnat]');if(addNatBtn)addNatBtn.onclick=async()=>{const nats=s.checkpoints.filter(c=>c.fase==='natural');const lm=nats.length?nats[nats.length-1].mes:0;const nm=lm+3;s.checkpoints.push({codigo:`${nm}N`,mes:nm,fase:'natural',fechaProgramada:addM(s.fechaInicio,nm),fechaReal:''});await saveStudies();render();};
+  const addCpBtn=q('#addCp');if(addCpBtn)addCpBtn.onclick=async()=>{const lm=s.checkpoints.length?s.checkpoints[s.checkpoints.length-1].mes:0;const nuevo={codigo:`${lm+3}N`,mes:lm+3,fechaProgramada:addM(s.fechaInicio,lm+3),fechaReal:''};s.checkpoints.push(nuevo);await saveStudies();await logAudit('agregar_checkpoint',s.id,s.producto+' (Lote '+s.lote+')','',nuevo.codigo+' Mes '+nuevo.mes,'Fecha programada: '+nuevo.fechaProgramada);render();};
+  const addNatBtn=q('[data-addnat]');if(addNatBtn)addNatBtn.onclick=async()=>{const nats=s.checkpoints.filter(c=>c.fase==='natural');const lm=nats.length?nats[nats.length-1].mes:0;const nm=lm+3;const nuevo={codigo:`${nm}N`,mes:nm,fase:'natural',fechaProgramada:addM(s.fechaInicio,nm),fechaReal:''};s.checkpoints.push(nuevo);await saveStudies();await logAudit('agregar_checkpoint',s.id,s.producto+' (Lote '+s.lote+')','',nuevo.codigo+' Mes '+nuevo.mes,'Fase natural — Fecha programada: '+nuevo.fechaProgramada);render();};
   document.querySelectorAll('.tc').forEach(ch=>ch.onclick=()=>{s.vidaUtilMeses=q('#tfVU')?.value||s.vidaUtilMeses;s.condAlm=q('#tfCA')?.value||s.condAlm;const txt=xT(TPL[ch.dataset.tpl][ch.dataset.k],s);const map={alcance:'tfA',metodos:'tfM',criterios:'tfCr',conclusion:'tfCo',rotulacion:'tfR'};const ta=q('#'+map[ch.dataset.tpl]);if(ta)ta.value=ta.value.trim()?ta.value.trim()+'\n'+txt:txt;});
-  q('#bSI').onclick=async()=>{s.alcance=q('#tfA').value;s.metodosAnaliticos=q('#tfM').value;s.criteriosAceptacion=q('#tfCr').value;s.conclusion=q('#tfCo').value;s.rotulacion=q('#tfR').value;s.vidaUtilMeses=q('#tfVU')?.value||'';s.condAlm=q('#tfCA')?.value||'';rS(s);await saveOneStudy(s);render();toast('Guardado');};
+  q('#bSI').onclick=async()=>{
+    const orig={alcance:s.alcance||'',metodos:s.metodosAnaliticos||'',criterios:s.criteriosAceptacion||'',conclusion:s.conclusion||'',rotulacion:s.rotulacion||'',vidaUtil:s.vidaUtilMeses||'',condAlm:s.condAlm||''};
+    s.alcance=q('#tfA').value;s.metodosAnaliticos=q('#tfM').value;s.criteriosAceptacion=q('#tfCr').value;s.conclusion=q('#tfCo').value;s.rotulacion=q('#tfR').value;s.vidaUtilMeses=q('#tfVU')?.value||'';s.condAlm=q('#tfCA')?.value||'';
+    const nuevo={alcance:s.alcance,metodos:s.metodosAnaliticos,criterios:s.criteriosAceptacion,conclusion:s.conclusion,rotulacion:s.rotulacion,vidaUtil:s.vidaUtilMeses,condAlm:s.condAlm};
+    const cambios=[];
+    Object.keys(orig).forEach(k=>{if(orig[k]!==nuevo[k])cambios.push(k);});
+    rS(s);await saveOneStudy(s);
+    if(cambios.length)await logAudit('edicion_informe',s.id,s.producto+' (Lote '+s.lote+')','','','Campos modificados: '+cambios.join(', '));
+    render();toast('Guardado');
+  };
   q('#bVI').onclick=()=>{selRep=s.id;activeTab='informe';render();};
 }
 function tfs(t,sec,val,id){return`<fieldset><legend>${t}</legend><div class="tb">${Object.keys(TPL[sec]).map(k=>`<button class="tc" data-tpl="${sec}" data-k="${k}">${CHL[k]||k}</button>`).join('')}</div><textarea id="${id}" rows="2">${E(val||'')}</textarea></fieldset>`;}
@@ -995,6 +1033,9 @@ function renderNuevo(){
     }
 
     await saveStudies();
+    for(const ns of created){
+      await logAudit('creacion_estudio',ns.id,ns.producto+' (Lote '+ns.lote+')','',ns.tipoLote+' / '+ns.tipoEstudio,'Analista: '+(emailAn||'sin asignar')+' · Fecha inicio: '+fi);
+    }
     if(q('#nSendMail').checked&&emailAn){
       for(const ns of created){await gSendEmail(emailAn,'Asignación: '+ns.producto+' ('+ns.tipoEstudio+', Lote '+ns.lote+')',buildAssignEmail(ns));}
     }
@@ -1175,6 +1216,13 @@ function renderAuditoria(){
     logout:{l:'🔒 Logout',c:'#64748b'},
     aprobacion:{l:'✓ Aprobación',c:'#059669'},
     rechazo:{l:'✗ Rechazo',c:'#dc2626'},
+    creacion_estudio:{l:'➕ Creación estudio',c:'#0891b2'},
+    edicion_checkpoint:{l:'✎ Edición checkpoint',c:'#0284c7'},
+    edicion_informe:{l:'✎ Edición informe',c:'#7c3aed'},
+    edicion_especificacion:{l:'✎ Edición espec.',c:'#6366f1'},
+    edicion_asignacion:{l:'✎ Cambio asignación',c:'#0d9488'},
+    recarga_especificacion:{l:'↻ Recarga espec.',c:'#0891b2'},
+    agregar_checkpoint:{l:'➕ Agregar checkpoint',c:'#059669'},
     eliminacion_estudio:{l:'🗑 Eliminación estudio',c:'#7c2d12'},
     eliminacion_checkpoint:{l:'🗑 Eliminación checkpoint',c:'#9a3412'},
     alta_usuario:{l:'👤➕ Alta usuario',c:'#7c3aed'},
@@ -1184,16 +1232,38 @@ function renderAuditoria(){
     cambio_pin:{l:'🔑 Cambio PIN',c:'#4338ca'}
   };
   const sorted=[...auditLog].sort((a,b)=>b.ts.localeCompare(a.ts));
+  // Aplicar filtros
+  const filterAction=window._auditFilterAction||'';
+  const filterUser=window._auditFilterUser||'';
+  const filterText=window._auditFilterText||'';
+  const filtered=sorted.filter(e=>{
+    if(filterAction&&e.action!==filterAction)return false;
+    if(filterUser&&e.user!==filterUser)return false;
+    if(filterText){
+      const t=filterText.toLowerCase();
+      if(!(e.studyLabel||'').toLowerCase().includes(t)&&!(e.extra||'').toLowerCase().includes(t))return false;
+    }
+    return true;
+  });
+  const uniqUsers=[...new Set(sorted.map(e=>e.user))].sort();
+  const uniqActions=[...new Set(sorted.map(e=>e.action))].sort();
   document.getElementById('mc').innerHTML=`
     <div class="panel pp">
       <h2 class="st">📋 Registro de auditoría <span style="font-size:12px;font-weight:400;color:var(--ink2)">— Cumplimiento GMP / trazabilidad</span></h2>
-      <p class="sd">Registro cronológico de todas las acciones críticas y accesos al sistema. Los registros no pueden editarse ni borrarse.</p>
+      <p class="sd">Registro cronológico de todas las acciones críticas, ediciones y accesos al sistema. Los registros no pueden editarse ni borrarse.</p>
       ${sorted.length?`
+        <div style="display:grid;grid-template-columns:1.5fr 1.5fr 2fr auto;gap:8px;margin-bottom:14px;padding:10px;background:#f8fafc;border-radius:6px;align-items:end">
+          <div><label style="font-size:11px;color:var(--ink2);font-weight:600">Acción</label><select id="fltAction" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:12px"><option value="">Todas</option>${uniqActions.map(a=>`<option value="${E(a)}" ${filterAction===a?'selected':''}>${E((ACT[a]||{l:a}).l)}</option>`).join('')}</select></div>
+          <div><label style="font-size:11px;color:var(--ink2);font-weight:600">Usuario</label><select id="fltUser" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:12px"><option value="">Todos</option>${uniqUsers.map(u=>`<option value="${E(u)}" ${filterUser===u?'selected':''}>${E(u)}</option>`).join('')}</select></div>
+          <div><label style="font-size:11px;color:var(--ink2);font-weight:600">Buscar en estudio / detalle</label><input type="text" id="fltText" value="${E(filterText)}" placeholder="ej: lote, producto..." style="width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:12px"></div>
+          <button class="btn sm ghost" onclick="window._auditFilterAction='';window._auditFilterUser='';window._auditFilterText='';render();">Limpiar</button>
+        </div>
         <div style="margin-bottom:10px;display:flex;gap:12px;flex-wrap:wrap;font-size:12px">
-          <span><strong>Total:</strong> ${sorted.length}</span>
+          <span><strong>Mostrando:</strong> ${filtered.length} de ${sorted.length} eventos</span>
           <span><strong>Logins:</strong> ${sorted.filter(e=>e.action==='login').length}</span>
           <span><strong>Aprobaciones:</strong> ${sorted.filter(e=>e.action==='aprobacion').length}</span>
           <span><strong>Rechazos:</strong> ${sorted.filter(e=>e.action==='rechazo').length}</span>
+          <span><strong>Ediciones:</strong> ${sorted.filter(e=>e.action.startsWith('edicion')).length}</span>
           <span><strong>Eliminaciones:</strong> ${sorted.filter(e=>e.action.includes('eliminacion')||e.action.includes('eliminar')).length}</span>
         </div>
         <table style="width:100%;font-size:12px">
@@ -1209,7 +1279,7 @@ function renderAuditoria(){
             </tr>
           </thead>
           <tbody>
-            ${sorted.map(e=>{
+            ${filtered.map(e=>{
               const a=ACT[e.action]||{l:e.action,c:'#666'};
               const dt=new Date(e.ts);
               const fecha=dt.toLocaleDateString('es-UY')+' '+dt.toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
@@ -1218,18 +1288,21 @@ function renderAuditoria(){
                 <td style="font-size:11px">${E(e.user)}</td>
                 <td><span style="background:${a.c}15;color:${a.c};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">${a.l}</span></td>
                 <td>${E(e.studyLabel)}</td>
-                <td style="font-size:11px;color:var(--ink2)">${E(e.before)}</td>
-                <td style="font-size:11px;color:var(--ink2)">${E(e.after)}</td>
+                <td style="font-size:11px;color:var(--ink2);max-width:200px;overflow:hidden;text-overflow:ellipsis" title="${E(e.before)}">${E(e.before)}</td>
+                <td style="font-size:11px;color:var(--ink2);max-width:200px;overflow:hidden;text-overflow:ellipsis" title="${E(e.after)}">${E(e.after)}</td>
                 <td style="font-size:11px">${E(e.extra)}</td>
               </tr>`;
             }).join('')}
           </tbody>
         </table>
         <div style="margin-top:12px;padding-top:12px;border-top:1px solid #eee;display:flex;gap:8px">
-          <button class="btn sm ghost" onclick="exportAuditCSV()">📥 Exportar CSV</button>
+          <button class="btn sm ghost" onclick="exportAuditCSV()">📥 Exportar CSV (todos)</button>
         </div>
       `:`<div class="empty">Sin eventos registrados aún.</div>`}
     </div>`;
+  const fA=q('#fltAction');if(fA)fA.onchange=()=>{window._auditFilterAction=fA.value;render();};
+  const fU=q('#fltUser');if(fU)fU.onchange=()=>{window._auditFilterUser=fU.value;render();};
+  const fT=q('#fltText');if(fT)fT.oninput=()=>{clearTimeout(window._auditFilterTimer);window._auditFilterTimer=setTimeout(()=>{window._auditFilterText=fT.value;render();},400);};
 }
 
 // Export CSV del audit log
