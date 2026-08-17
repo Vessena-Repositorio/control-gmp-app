@@ -4417,8 +4417,11 @@ $('log-user').addEventListener('keydown',e=>{if(e.key==='Enter')$('log-pass').fo
 
 
 // ══════════ GOOGLE SHEETS SYNC ══════════
-// Instrucciones de configuración en SETUP_GSHEETS.md
-const GAS_URL = localStorage.getItem('vc3_gas_url') || '';
+// URL del backend Google Apps Script (Web App /exec)
+// Hardcodeada para que todo el equipo se conecte sin configurar nada.
+// Si querés cambiarla, hacelo acá o desde la app (⚙️ Sheets).
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbztHgoYblBahz1DEw2MeHkx2cplCDfFCGCnTJz8Rt1Opwt64v4x7Mayt3eML0i1pqJF/exec';
+const GAS_URL = localStorage.getItem('vc3_gas_url') || DEFAULT_GAS_URL;
 let syncBusy = false;
 let lastSync = null;
 let pushTimer = null;
@@ -4896,6 +4899,9 @@ function bulkPrepareSession(s, idx) {
     resp: String(s.responsable || '').trim(),
     asistentes: asistentes,
     pagina: s.pagina || (idx + 1),
+    planId: 0,            // 0 = no vinculada al plan
+    dirigido: '',         // se completa desde el plan al vincular
+    persEst: 0,           // se completa desde el plan al vincular
     _expanded: (idx === 0) // primera abierta por defecto
   };
 }
@@ -4971,6 +4977,18 @@ function bulkRenderResults() {
       // Body (colapsable)
       (s._expanded ? (
         '<div style="padding:12px">' +
+          // Selector de plan item (VINCULACIÓN) — arriba de todo
+          '<div style="background:' + (s.planId ? '#f0fdf4' : '#f0f9ff') + ';border:1px solid ' + (s.planId ? '#86efac' : '#bae6fd') + ';border-radius:8px;padding:8px 10px;margin-bottom:10px">' +
+            '<label style="font-size:11px;font-weight:700;color:' + (s.planId ? 'var(--green)' : 'var(--navy)') + ';margin-bottom:4px;display:block">' + (s.planId ? '✓ VINCULADA AL PLAN' : '🔗 ¿Es una capacitación del plan anual?') + '</label>' +
+            '<select onchange="bulkPickPlanItem(' + si + ',this.value)" style="width:100%;font-size:12px;padding:5px 8px;border:1px solid ' + (s.planId ? '#86efac' : '#bae6fd') + ';border-radius:5px;background:#fff">' +
+              '<option value="">— No vincular (queda como fuera del plan) —</option>' +
+              PL.filter(p => (p.year||2026) === (parseInt((s.fecha||'').slice(0,4)) || new Date().getFullYear()) && p.e !== 'suspendida' && p.e !== 'reprogramada').sort((a,b) => (a.t||'').localeCompare(b.t||'')).map(p => {
+                const badge = p.e === 'cumplida' ? '✓' : p.e === 'parcial' ? '↻' : p.e === 'pendiente' ? '⚠' : '○';
+                return '<option value="' + p.id + '"' + (p.id === s.planId ? ' selected' : '') + '>' + badge + ' ' + h(p.t) + (p.dc ? ' (' + h(p.dc) + ')' : '') + '</option>';
+              }).join('') +
+            '</select>' +
+            (s.planId ? '<div style="font-size:10px;color:var(--green);margin-top:4px">Al registrar, esta sesión queda vinculada al plan y actualiza su estado (cumplida/parcial).</div>' : '<div style="font-size:10px;color:var(--g500);margin-top:4px">Si la elegís, se copia el tema/código/horas del plan y se marca como plan al registrar.</div>') +
+          '</div>' +
           // Metadata editable
           '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-bottom:12px">' +
             '<div><label style="font-size:9px;color:var(--g500);font-weight:700">FECHA</label><input type="date" value="' + h(s.fecha) + '" onchange="bulkEditField(' + si + ',\'fecha\',this.value)" style="width:100%;font-size:11px;padding:4px 6px;border:1px solid var(--g200);border-radius:5px"></div>' +
@@ -5029,6 +5047,34 @@ function bulkEditAsistNomLive(si, ai, v) {
     }
   }
 }
+// Vincular una sesión detectada a un item del plan anual.
+// Auto-completa tema/desc/cod/hrs/tipo/ev/resp/dirigido/persEst desde el plan item.
+function bulkPickPlanItem(si, planId) {
+  if (!bulkSessions[si]) return;
+  const s = bulkSessions[si];
+  const pid = parseInt(planId) || 0;
+  if (!pid) { s.planId = 0; bulkRenderResults(); return; }
+  const p = PL.find(x => x.id === pid);
+  if (!p) { s.planId = 0; bulkRenderResults(); return; }
+  s.planId = pid;
+  // Auto-fill (respeta lo que ya venía si el plan no tiene el campo)
+  if (p.t) s.tema = p.t;
+  if (p.o && !s.desc) s.desc = p.o;
+  if (p.dc && !s.cod) s.cod = p.dc;
+  if (p.h && (!s.hrs || s.hrs === 0)) s.hrs = parseFloat(p.h) || s.hrs;
+  if (p.ev) {
+    const evUp = String(p.ev).toUpperCase();
+    if (evUp.includes('ESCRITA')) s.ev = 'ESCRITA';
+    else if (evUp.includes('ORAL')) s.ev = 'ORAL';
+    else if (evUp.includes('PRACTICA')) s.ev = 'PRACTICA';
+    else if (evUp === 'NO' || evUp.includes('NO APLICA')) s.ev = 'NO APLICA';
+  }
+  if (p.resp && !s.resp) s.resp = p.resp;
+  if (p.d) s.dirigido = p.d;
+  if (p.persEst) s.persEst = p.persEst;
+  bulkRenderResults();
+}
+
 // Asignar a una persona existente del listado (viene del dropdown "asignar a persona real")
 function bulkPickPerson(si, ai, personName) {
   if (!personName || !bulkSessions[si] || !bulkSessions[si].asistentes[ai]) return;
@@ -5074,26 +5120,47 @@ function bulkApply() {
 
   const usr = currentUser ? currentUser.nombre : '—';
   let created = 0;
+  let planItemsUpdated = 0;
   selected.forEach(s => {
     const asis = s.asistentes.filter(a => a.useIt && a.nom.trim());
     if (!asis.length) return;
     const ms = MS[new Date(s.fecha).getMonth()];
     const regYear = parseInt((s.fecha || '').slice(0,4)) || new Date().getFullYear();
+    const planId = parseInt(s.planId) || 0;
+    const isFromPlan = planId > 0;
     const base = {
       fecha: s.fecha, mes: ms, tema: s.tema, desc: s.desc || s.tema, cod: s.cod,
-      hrs: s.hrs, tipo: s.tipo, ev: s.ev, plan: 'NO', resp: s.resp,
-      puntajeMin: s.puntajeMin, planId: 0, dirigido: '', persEst: 0, year: regYear
+      hrs: s.hrs, tipo: s.tipo, ev: s.ev, plan: isFromPlan ? 'SI' : 'NO', resp: s.resp,
+      puntajeMin: s.puntajeMin, planId: planId, dirigido: s.dirigido || '', persEst: s.persEst || 0, year: regYear
     };
     asis.forEach(a => {
       R.push({...base, id: Date.now() + Math.random(), nom: a.nom, sec: a.sec, nota: a.nota || ''});
       created++;
     });
-    logAudit('IMPORT PDF', 'Sesión importada: ' + s.tema + ' — ' + (s.desc || '') + ' (' + s.fecha + ') · ' + asis.length + ' asistentes · pág. ' + s.pagina + ' de ' + h(bulkFileName), usr);
+    // Actualizar estado del plan item vinculado según cobertura (cumplida/parcial)
+    if (isFromPlan) {
+      const planItem = PL.find(x => x.id === planId);
+      if (planItem) {
+        planItem.fr = s.fecha;
+        const tgtTotal = planItem.persEst > 0 ? planItem.persEst : targetPeopleCount(planItem.d, regYear);
+        // Contar todos los asistentes únicos entre TODOS los registros vinculados a este plan item
+        const linkedRecs = R.filter(r => r.planId === planId);
+        const attended = new Set(linkedRecs.map(r => r.nom.toUpperCase().trim()));
+        const pct = tgtTotal > 0 ? Math.round((attended.size / tgtTotal) * 100) : 0;
+        const prevEstado = planItem.e;
+        if (pct >= 80) planItem.e = 'cumplida';
+        else if (attended.size > 0) planItem.e = 'parcial';
+        if (planItem.e !== prevEstado) planItemsUpdated++;
+        logAudit('EDICIÓN PLAN', '[' + planItem.t + '] Estado actualizado a ' + planItem.e + ' (' + attended.size + '/' + tgtTotal + ' = ' + pct + '%) por importación de PDF', usr);
+      }
+    }
+    logAudit('IMPORT PDF', 'Sesión importada: ' + s.tema + ' — ' + (s.desc || '') + ' (' + s.fecha + ') · ' + asis.length + ' asistentes' + (isFromPlan ? ' · vinculada a plan #' + planId : '') + ' · pág. ' + s.pagina + ' de ' + h(bulkFileName), usr);
   });
   sv();
   V.reg();
   closeBulkModal();
-  alert('✓ Se importaron ' + selected.length + ' sesion' + (selected.length === 1 ? '' : 'es') + ' con ' + created + ' registro' + (created === 1 ? '' : 's') + ' en total.');
+  const planMsg = planItemsUpdated > 0 ? '\n📅 ' + planItemsUpdated + ' item' + (planItemsUpdated === 1 ? '' : 's') + ' del plan actualizado' + (planItemsUpdated === 1 ? '' : 's') + '.' : '';
+  alert('✓ Se importaron ' + selected.length + ' sesion' + (selected.length === 1 ? '' : 'es') + ' con ' + created + ' registro' + (created === 1 ? '' : 's') + ' en total.' + planMsg);
 }
 
 function _wireBulkModal() {
