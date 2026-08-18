@@ -96,6 +96,16 @@
             background: #f7fafc; border: 2px solid #e2e8f0; border-radius: 12px;
             padding: 20px; margin-bottom: 20px;
         }
+        /* Cards colapsables (details) — ocultar el marker nativo del navegador */
+        details.control-card, details.orden-card { padding: 0 !important; }
+        details.control-card > summary, details.orden-card > summary { list-style: none; }
+        details.control-card > summary::-webkit-details-marker,
+        details.orden-card > summary::-webkit-details-marker { display: none; }
+        details.control-card[open] > summary > div > span:first-child,
+        details.orden-card[open] > summary > div > span:first-child { transform: rotate(90deg); display: inline-block; transition: transform .15s; }
+        details.control-card > summary > div > span:first-child,
+        details.orden-card > summary > div > span:first-child { transition: transform .15s; display: inline-block; }
+        details.control-card > summary:hover, details.orden-card > summary:hover { background: #f7fafc; }
         .orden-header, .control-header {
             display: flex; justify-content: space-between; align-items: center;
             margin-bottom: 15px; padding-bottom: 15px; border-bottom: 2px solid #e2e8f0;
@@ -217,27 +227,27 @@
                 nombre: 'Fabuloso 2L', tipo: 'PEAD', codigo: 'ESP-COM-033',
                 cavidades: 6,
                 parametros: {
-                    'brimful': { min: 2029.00, max: 2069.00, unidad: 'mL', nombre: 'Brimful' },
-                    'altura_h': { min: 299.40, max: 305.40, unidad: 'mm', nombre: 'Altura H' },
-                    'ancho_pie_hw': { min: 112.90, max: 115.10, unidad: 'mm', nombre: 'Ancho HW' },
-                    'profundidad_pie_hd': { min: 93.80, max: 97.30, unidad: 'mm', nombre: 'Prof. HD' },
-                    'ancho_hombro_sw': { min: 111.60, max: 113.80, unidad: 'mm', nombre: 'Ancho SW' },
-                    'profundidad_hombro_sd': { min: 82.30, max: 85.80, unidad: 'mm', nombre: 'Prof. SD' }
+                    'brimful':                { min: 2056.00, max: 2080.00, unidad: 'mL', nombre: 'Brimful' },
+                    'altura_h':               { min: 302.10, max: 304.90, unidad: 'mm', nombre: 'Altura H' },
+                    'ancho_pie_hw':           { min: 114.60, max: 116.60, unidad: 'mm', nombre: 'Ancho HW' },
+                    'profundidad_pie_hd':     { min:  95.20, max:  96.80, unidad: 'mm', nombre: 'Prof. HD' },
+                    'ancho_hombro_sw':        { min: 109.50, max: 113.80, unidad: 'mm', nombre: 'Ancho SW' },
+                    'profundidad_hombro_sd':  { min:  82.30, max:  85.80, unidad: 'mm', nombre: 'Prof. SD' }
                 },
                 espesorHombroMin: 0.200
             },
             'FAB-1L': {
-                nombre: 'Fabuloso 1L', tipo: 'PEAD', codigo: 'ESP-COM-060',
+                nombre: 'Fabuloso 1L', tipo: 'PEAD', codigo: 'ESP-COM-032',
                 cavidades: 6,
                 parametros: {
-                    'brimful': { min: 1018, max: 1042, unidad: 'mL', nombre: 'Brimful' },
-                    'altura_h': { min: 267.2, max: 269.9, unidad: 'mm', nombre: 'Altura H' },
-                    'ancho_pie_hw': { min: 100.8, max: 102.8, unidad: 'mm', nombre: 'Ancho HW' },
-                    'profundidad_pie_hd': { min: 61.2, max: 62.8, unidad: 'mm', nombre: 'Prof. HD' },
-                    'ancho_hombro_sw': { min: 96.1, max: 98.1, unidad: 'mm', nombre: 'Ancho SW' },
-                    'profundidad_hombro_sd': { min: 51.4, max: 53.0, unidad: 'mm', nombre: 'Prof. SD' }
+                    'brimful':                { min: 1058.00, max: 1082.00, unidad: 'mL', nombre: 'Brimful' },
+                    'altura_h':               { min: 267.20, max: 270.00, unidad: 'mm', nombre: 'Altura H' },
+                    'ancho_pie_hw':           { min: 101.20, max: 103.20, unidad: 'mm', nombre: 'Ancho HW' },
+                    'profundidad_pie_hd':     { min:  61.20, max:  62.80, unidad: 'mm', nombre: 'Prof. HD' },
+                    'ancho_hombro_sw':        { min:  96.10, max:  98.10, unidad: 'mm', nombre: 'Ancho SW' },
+                    'profundidad_hombro_sd':  { min:  51.40, max:  53.00, unidad: 'mm', nombre: 'Prof. SD' }
                 },
-                espesorHombroMin: 0.200
+                espesorHombroMin: 0.160
             },
             'PET-1800': {
                 nombre: 'PET 1800 ML', tipo: 'PET', codigo: 'ESP-COM-056',
@@ -334,10 +344,10 @@
                 nombre: 'Hipoclorito 4L', tipo: 'PEAD', codigo: 'ESP-COM-254',
                 cavidades: 1,
                 parametros: {
-                    'altura_h': { min: 318, max: 322, unidad: 'mm', nombre: 'Altura' },
-                    'ancho_pie_hw': { min: 140, max: 144, unidad: 'mm', nombre: 'Ancho base' },
-                    'brimful': { min: 4562, max: 4567, unidad: 'mL', nombre: 'Brimful' },
-                    'peso': { min: 138, max: 145, unidad: 'g', nombre: 'Peso' }
+                    'altura_h':     { min: 318,  max: 322,  unidad: 'mm', nombre: 'Altura' },
+                    'ancho_pie_hw': { min: 140,  max: 144,  unidad: 'mm', nombre: 'Ancho base' },
+                    'brimful':      { min: 4562, max: 4567, unidad: 'g',  nombre: 'Brimful (desborde)' },
+                    'peso':         { min: 138,  max: 145,  unidad: 'g',  nombre: 'Peso' }
                 }
             },
             'BIDON-10L': {
@@ -409,31 +419,63 @@
         ];
 
         // Perfil de espesor (LCC · REG-SOP-PR-138-H / -C)
-        // 20 puntos por cavidad, N botellas por punto según tipo (semanal=3, quincenal=6), spec en mm
+        // 20 puntos por cavidad, N botellas por punto según tipo (semanal=3, quincenal=6)
+        // Spec por envase: FAB-2L = 0.20 mm para todos los puntos;
+        // FAB-1L = 0.16 mm por defecto salvo excepciones (0.17 y 0.18)
         const PERFIL_ESPESOR_PUNTOS = [
             // Tabla 1
-            { key: 'A1_11',  label: 'A1/11', spec: 0.15 },
-            { key: 'C1_12',  label: 'C1/12', spec: 0.15 },
-            { key: 'B1',     label: 'B1',    spec: 0.16 },
-            { key: 'D1',     label: 'D1',    spec: 0.16 },
-            { key: '1_A2',   label: '1/A2',  spec: 0.16 },
-            { key: '6_C2',   label: '6/C2',  spec: 0.16 },
-            { key: 'B2',     label: 'B2',    spec: 0.16 },
-            { key: 'D2',     label: 'D2',    spec: 0.16 },
-            { key: '2_A3',   label: '2/A3',  spec: 0.18 },
-            { key: '7_C3',   label: '7/C3',  spec: 0.18 },
+            { key: 'A1_11',  label: 'A1/11' },
+            { key: 'C1_12',  label: 'C1/12' },
+            { key: 'B1',     label: 'B1'    },
+            { key: 'D1',     label: 'D1'    },
+            { key: '1_A2',   label: '1/A2'  },
+            { key: '6_C2',   label: '6/C2'  },
+            { key: 'B2',     label: 'B2'    },
+            { key: 'D2',     label: 'D2'    },
+            { key: '2_A3',   label: '2/A3'  },
+            { key: '7_C3',   label: '7/C3'  },
             // Tabla 2
-            { key: 'B3',     label: 'B3',    spec: 0.17 },
-            { key: 'D3',     label: 'D3',    spec: 0.17 },
-            { key: '3_A4',   label: '3/A4',  spec: 0.15 },
-            { key: '8_C4',   label: '8/C4',  spec: 0.15 },
-            { key: 'P4',     label: '4',     spec: 0.15 },
-            { key: 'P9',     label: '9',     spec: 0.15 },
-            { key: 'P5',     label: '5',     spec: 0.15 },
-            { key: 'P10',    label: '10',    spec: 0.15 },
-            { key: 'D4',     label: 'D4',    spec: 0.15 },
-            { key: 'B4',     label: 'B4',    spec: 0.15 }
+            { key: 'B3',     label: 'B3'    },
+            { key: 'D3',     label: 'D3'    },
+            { key: '3_A4',   label: '3/A4'  },
+            { key: '8_C4',   label: '8/C4'  },
+            { key: 'P4',     label: '4'     },
+            { key: 'P9',     label: '9'     },
+            { key: 'P5',     label: '5'     },
+            { key: 'P10',    label: '10'    },
+            { key: 'D4',     label: 'D4'    },
+            { key: 'B4',     label: 'B4'    }
         ];
+        // Excepciones para FAB-1L (spec por punto según ESP-COM-032 V4.0 y captura de Q.F.)
+        // Todos los puntos tienen un valor definido (ver getEspesorSpec abajo)
+        const PERFIL_ESPESOR_FAB1L = {
+            'A1_11': 0.24,
+            'C1_12': 0.24,
+            'B1':    0.17,
+            'D1':    0.17,
+            '1_A2':  0.21,
+            '6_C2':  0.21,
+            'B2':    0.16,
+            'D2':    0.16,
+            '2_A3':  0.21,
+            '7_C3':  0.21,
+            'B3':    0.16,
+            'D3':    0.16,
+            '3_A4':  0.21,
+            '8_C4':  0.21,
+            'P4':    0.23,
+            'P9':    0.23,
+            'P5':    0.23,
+            'P10':   0.23,
+            'D4':    0.17,
+            'B4':    0.17
+        };
+        // Devuelve la spec mínima de espesor para un envase y punto dados
+        function getEspesorSpec(envase, puntoKey) {
+            if (envase === 'FAB-2L') return 0.20;    // Todos los puntos = 0.20 mm
+            if (envase === 'FAB-1L') return PERFIL_ESPESOR_FAB1L[puntoKey] ?? 0.16;
+            return 0.15;   // fallback histórico
+        }
         // Cantidad de botellas por punto según tipo de control LCC
         const PERFIL_ESPESOR_BOTELLAS_POR_TIPO = { semanal: 3, quincenal: 6 };
         // Envases donde aplica el perfil de espesor
@@ -659,8 +701,7 @@
             const [mostrarNuevoLCC, setMostrarNuevoLCC] = useState(false);
             const [tipoControlLCC, setTipoControlLCC] = useState('');
             const [nuevoControlLCC, setNuevoControlLCC] = useState({
-                envase: '', fecha: new Date().toISOString().split('T')[0],
-                operador: '', turno: getTurnoActual()
+                envase: '', fecha: new Date().toISOString().split('T')[0]
             });
             
             // Estados comunes
@@ -1108,8 +1149,8 @@
 
             const registrarControlLCC = async (estado = 'completo') => {
                 if (guardando) return; // guardia anti-doble-click
-                if (!nuevoControlLCC.envase || !tipoControlLCC || !nuevoControlLCC.operador) {
-                    setMensaje({ tipo: 'warning', texto: 'Complete todos los campos obligatorios (incluyendo operador de máquina)' });
+                if (!nuevoControlLCC.envase || !tipoControlLCC) {
+                    setMensaje({ tipo: 'warning', texto: 'Complete todos los campos obligatorios (envase y tipo de control)' });
                     return;
                 }
 
@@ -1118,7 +1159,7 @@
                     const ult = controlesLCC[0];
                     if (ult.tipo === tipoControlLCC
                         && ult.envase === nuevoControlLCC.envase
-                        && ult.operador === nuevoControlLCC.operador
+                        && ult.analista === usuarioLogueado.nombre
                         && ult.timestamp) {
                         const hace = Date.now() - new Date(ult.timestamp).getTime();
                         if (hace < 15000) {
@@ -1181,9 +1222,7 @@
                 setTipoControlLCC(control.tipo);
                 setNuevoControlLCC({
                     envase: control.envase,
-                    fecha: control.fecha,
-                    operador: control.operador || '',
-                    turno: control.turno || getTurnoActual()
+                    fecha: control.fecha
                 });
                 // Rellenar mediciones (sin los metadatos internos)
                 const medLimpias = { ...(control.mediciones || {}) };
@@ -1205,8 +1244,7 @@
                 setCampanaFiltroProceso(null);
                 setEnvaseFiltroProceso(null);
                 setNuevoControlLCC({
-                    envase: '', fecha: new Date().toISOString().split('T')[0],
-                    operador: '', turno: getTurnoActual()
+                    envase: '', fecha: new Date().toISOString().split('T')[0]
                 });
                 window.scrollTo({ top: 0, behavior: 'smooth' });
             };
@@ -1282,9 +1320,8 @@
                         'Tipo': c.tipo || '',
                         'Envase (código)': c.envase || '',
                         'Envase (nombre)': spec?.nombre || '',
-                        'Operador máquina': c.operador || '',
                         'Analista': c.analista || (c.mediciones?._analista) || '',
-                        'Turno': c.turno || '',
+                        'Estado': (c.mediciones?._estado) || 'completo',
                         'Aprobado': (c.mediciones?._aprobado) || 'pendiente',
                         'Aprobado por': (c.mediciones?._aprobadoPor) || '',
                         'Fecha aprobación': (c.mediciones?._fechaAprobacion) || '',
@@ -2426,15 +2463,6 @@
                                                             onChange={(e) => setNuevoControlLCC({...nuevoControlLCC, fecha: e.target.value})} />
                                                     </div>
                                                     <div className="form-group">
-                                                        <label>Operador de máquina *</label>
-                                                        <input type="text" value={nuevoControlLCC.operador || ''}
-                                                            onChange={(e) => setNuevoControlLCC({...nuevoControlLCC, operador: e.target.value})}
-                                                            placeholder="Ej: Hector, Adrian, Juan..." />
-                                                        <div className="spec-info" style={{fontSize: '11px'}}>
-                                                            Operador de la máquina
-                                                        </div>
-                                                    </div>
-                                                    <div className="form-group">
                                                         <label>Analista (vos)</label>
                                                         <input type="text" value={usuarioLogueado.nombre}
                                                             readOnly
@@ -2443,16 +2471,6 @@
                                                         <div className="spec-info" style={{fontSize: '11px'}}>
                                                             🔒 Registrado con tu sesión
                                                         </div>
-                                                    </div>
-                                                    <div className="form-group">
-                                                        <label>Turno</label>
-                                                        <select value={nuevoControlLCC.turno}
-                                                            onChange={(e) => setNuevoControlLCC({...nuevoControlLCC, turno: e.target.value})}>
-                                                            <option value="">Seleccione...</option>
-                                                            <option value="mañana">Mañana</option>
-                                                            <option value="tarde">Tarde</option>
-                                                            <option value="noche">Noche</option>
-                                                        </select>
                                                     </div>
                                                 </div>
 
@@ -2585,7 +2603,7 @@
                                                                                     <th style={{padding: '4px', textAlign: 'left', border: '1px solid #cbd5e0', fontSize: '10px', color: '#718096'}}>Spec (mm)</th>
                                                                                     {PERFIL_ESPESOR_PUNTOS.slice(sliceStart, sliceStart + 10).map(pt => (
                                                                                         <th key={pt.key + '-spec'} style={{padding: '4px', border: '1px solid #cbd5e0', fontSize: '10px', color: '#718096', textAlign: 'center', fontWeight: 'normal'}}>
-                                                                                            ≥ {pt.spec}
+                                                                                            ≥ {getEspesorSpec(nuevoControlLCC.envase, pt.key)}
                                                                                         </th>
                                                                                     ))}
                                                                                 </tr>
@@ -2598,7 +2616,8 @@
                                                                                             const key = `esp_cav${cav}_${pt.key}_b${bot}`;
                                                                                             const val = mediciones[key] || '';
                                                                                             const numVal = parseFloat(val);
-                                                                                            const fueraSpec = val !== '' && !isNaN(numVal) && numVal < pt.spec;
+                                                                                            const specMin = getEspesorSpec(nuevoControlLCC.envase, pt.key);
+                                                                                            const fueraSpec = val !== '' && !isNaN(numVal) && numVal < specMin;
                                                                                             return (
                                                                                                 <td key={pt.key} style={{padding: '2px', border: '1px solid #cbd5e0'}}>
                                                                                                     <input type="number" step="0.01"
@@ -2821,19 +2840,36 @@
                             {activeTab === 'historico' && (
                                 <>
                                     <div className="stats-grid">
-                                        <div className="stat-card">
-                                            <div className="stat-label">Órdenes Soplado</div>
+                                        <div className="stat-card"
+                                            onClick={() => document.getElementById('historico-ordenes')?.scrollIntoView({behavior: 'smooth', block: 'start'})}
+                                            style={{cursor: 'pointer', transition: 'transform .15s, box-shadow .15s'}}
+                                            onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 8px 20px rgba(102,126,234,0.4)'; }}
+                                            onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
+                                            title="Ir al listado de órdenes de abajo">
+                                            <div className="stat-label">{esModoTapas ? 'Órdenes Tapas' : 'Órdenes Soplado'} ↓</div>
                                             <div className="stat-value">{ordenesSoplado.length}</div>
                                         </div>
-                                        <div className="stat-card">
-                                            <div className="stat-label">Órdenes Activas</div>
+                                        <div className="stat-card"
+                                            onClick={() => { setFiltroEstado('activa'); document.getElementById('historico-ordenes')?.scrollIntoView({behavior: 'smooth', block: 'start'}); }}
+                                            style={{cursor: 'pointer', transition: 'transform .15s, box-shadow .15s'}}
+                                            onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 8px 20px rgba(102,126,234,0.4)'; }}
+                                            onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
+                                            title="Filtrar por órdenes activas y bajar al listado">
+                                            <div className="stat-label">Órdenes Activas ↓</div>
                                             <div className="stat-value">{ordenesSoplado.filter(o => o.estado === 'activa').length}</div>
                                         </div>
-                                        <div className="stat-card">
-                                            <div className="stat-label">Controles LCC</div>
-                                            <div className="stat-value">{controlesLCC.length}</div>
-                                        </div>
-                                        <div className="stat-card">
+                                        {!esModoTapas && (
+                                            <div className="stat-card"
+                                                onClick={() => document.getElementById('historico-lcc')?.scrollIntoView({behavior: 'smooth', block: 'start'})}
+                                                style={{cursor: 'pointer', transition: 'transform .15s, box-shadow .15s'}}
+                                                onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 8px 20px rgba(102,126,234,0.4)'; }}
+                                                onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
+                                                title="Ir al listado de Controles LCC de abajo">
+                                                <div className="stat-label">Controles LCC ↓</div>
+                                                <div className="stat-value">{controlesLCC.length}</div>
+                                            </div>
+                                        )}
+                                        <div className="stat-card" title="Suma de controles de soplado + LCC">
                                             <div className="stat-label">Total Controles</div>
                                             <div className="stat-value">
                                                 {ordenesSoplado.reduce((sum, o) => sum + o.controles.length, 0) + controlesLCC.length}
@@ -2885,7 +2921,7 @@
                                     </div>
 
                                     {/* ÓRDENES DE SOPLADO */}
-                                    <div className="form-section">
+                                    <div className="form-section" id="historico-ordenes">
                                         <h2 className="section-title">🏭 Órdenes de Soplado</h2>
                                         {(() => {
                                             // Primero filtrar por envase y búsqueda (a nivel orden)
@@ -3045,79 +3081,111 @@
                                                 const dias = calcularDiasActiva(orden.fecha);
                                                 const controlesArranque = orden.controles.filter(c => c.tipo === 'arranque');
                                                 const controlesProceso = orden.controles.filter(c => c.tipo === 'proceso');
+                                                const bordeColor = orden.estado === 'activa' ? '#38a169' : '#a0aec0';
 
                                                 return (
-                                                    <div key={orden.id} className="orden-card">
-                                                        <div className="orden-header">
-                                                            <div className="orden-title">
-                                                                📦 {orden.numeroOrden}
+                                                    <details key={orden.id}
+                                                        className="orden-card"
+                                                        style={{marginBottom: '8px', padding: 0, border: `1px solid ${bordeColor}`, borderLeftWidth: '4px', borderRadius: '6px', background: 'white'}}>
+                                                        <summary style={{
+                                                            padding: '10px 14px', cursor: 'pointer', listStyle: 'none',
+                                                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                                            flexWrap: 'wrap', gap: '10px', userSelect: 'none'
+                                                        }}>
+                                                            <div style={{display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', flex: 1, minWidth: 0}}>
+                                                                <span style={{fontSize: '13px', color: '#a0aec0', fontFamily: 'monospace'}}>▸</span>
+                                                                <span style={{fontWeight: 700, color: '#2d3748'}}>📦 {orden.numeroOrden}</span>
+                                                                <span style={{color: '#4a5568'}}>·</span>
+                                                                <span style={{color: '#4a5568', fontSize: '13px'}}>{formatearFecha(orden.fecha)}</span>
+                                                                {orden.operador && (
+                                                                    <>
+                                                                        <span style={{color: '#4a5568'}}>·</span>
+                                                                        <span style={{color: '#718096', fontSize: '13px'}}>Op: {orden.operador}</span>
+                                                                    </>
+                                                                )}
+                                                                {orden.maquina && (
+                                                                    <>
+                                                                        <span style={{color: '#4a5568'}}>·</span>
+                                                                        <span style={{color: '#718096', fontSize: '13px'}}>🏭 {orden.maquina}</span>
+                                                                    </>
+                                                                )}
+                                                                <span style={{color: '#4a5568'}}>·</span>
+                                                                <span style={{color: '#718096', fontSize: '13px'}}>{orden.controles.length} ctrl</span>
+                                                            </div>
+                                                            <div style={{display: 'flex', gap: '6px', alignItems: 'center'}}>
+                                                                {orden.estado === 'activa' && dias > 3 && (
+                                                                    <span style={{fontSize: '11px', color: '#dd6b20'}}>📅 {dias}d ⚠️</span>
+                                                                )}
                                                                 <span className={`status-badge ${orden.estado === 'activa' ? 'status-active' : 'status-ok'}`}
-                                                                    style={{marginLeft: '10px'}}>
+                                                                    style={{fontSize: '11px'}}>
                                                                     {orden.estado === 'activa' ? '🟢 Activa' : '✓ Finalizada'}
                                                                 </span>
-                                                                {orden.estado === 'activa' && (
-                                                                    <span className={`dias-activa ${dias > 3 ? 'warning' : ''}`}>
-                                                                        📅 {dias} día{dias !== 1 ? 's' : ''}{dias > 3 && ' ⚠️'}
-                                                                    </span>
+                                                            </div>
+                                                        </summary>
+
+                                                        <div style={{padding: '0 14px 14px 14px', borderTop: '1px solid #edf2f7'}}>
+                                                            <div className="orden-info" style={{marginTop: '10px'}}>
+                                                                <div className="orden-detail"><strong>Envase:</strong> {spec?.nombre}</div>
+                                                                <div className="orden-detail"><strong>Fecha:</strong> {formatearFecha(orden.fecha)}</div>
+                                                                <div className="orden-detail"><strong>Operador:</strong> {orden.operador}</div>
+                                                                {orden.analista && (
+                                                                    <div className="orden-detail"><strong>Analista:</strong> {orden.analista}</div>
                                                                 )}
+                                                                {orden.maquina && (
+                                                                    <div className="orden-detail"><strong>Máquina:</strong> {orden.maquina}</div>
+                                                                )}
+                                                                <div className="orden-detail"><strong>Controles:</strong> {orden.controles.length}</div>
                                                             </div>
-                                                        </div>
 
-                                                        <div className="orden-info">
-                                                            <div className="orden-detail"><strong>Envase:</strong> {spec?.nombre}</div>
-                                                            <div className="orden-detail"><strong>Fecha:</strong> {formatearFecha(orden.fecha)}</div>
-                                                            <div className="orden-detail"><strong>Operador:</strong> {orden.operador}</div>
-                                                            <div className="orden-detail"><strong>Controles:</strong> {orden.controles.length}</div>
-                                                        </div>
+                                                            {orden.controles.length > 0 && (
+                                                                <div className="controles-list">
+                                                                    <h4 style={{marginBottom: '10px', color: '#4a5568', marginTop: '15px'}}>Controles:</h4>
 
-                                                        {orden.controles.length > 0 && (
-                                                            <div className="controles-list">
-                                                                <h4 style={{marginBottom: '10px', color: '#4a5568'}}>Controles:</h4>
-                                                                
-                                                                {controlesArranque.map(c => (
-                                                                    <div key={c.id} className="control-item arranque"
-                                                                        onClick={() => setControlDetalle({control: c, orden, tipo: 'soplado'})}>
-                                                                        <div className="control-info">
-                                                                            <span className="control-hora">🚀 Arranque</span>
-                                                                            <span className="control-tipo">{formatearFecha(c.fecha)} - {c.hora}</span>
+                                                                    {controlesArranque.map(c => (
+                                                                        <div key={c.id} className="control-item arranque"
+                                                                            onClick={() => setControlDetalle({control: c, orden, tipo: 'soplado'})}>
+                                                                            <div className="control-info">
+                                                                                <span className="control-hora">🚀 Arranque</span>
+                                                                                <span className="control-tipo">{formatearFecha(c.fecha)} - {c.hora}</span>
+                                                                            </div>
+                                                                            <div style={{color: '#667eea', fontSize: '12px'}}>Ver →</div>
                                                                         </div>
-                                                                        <div style={{color: '#667eea', fontSize: '12px'}}>Ver →</div>
-                                                                    </div>
-                                                                ))}
+                                                                    ))}
 
-                                                                {controlesProceso.map(c => (
-                                                                    <div key={c.id} className="control-item proceso"
-                                                                        onClick={() => setControlDetalle({control: c, orden, tipo: 'soplado'})}>
-                                                                        <div className="control-info">
-                                                                            <span className="control-hora">⏱️ {c.hora}</span>
-                                                                            <span className="control-tipo">{formatearFecha(c.fecha)}</span>
+                                                                    {controlesProceso.map(c => (
+                                                                        <div key={c.id} className="control-item proceso"
+                                                                            onClick={() => setControlDetalle({control: c, orden, tipo: 'soplado'})}>
+                                                                            <div className="control-info">
+                                                                                <span className="control-hora">⏱️ {c.hora}</span>
+                                                                                <span className="control-tipo">{formatearFecha(c.fecha)}</span>
+                                                                            </div>
+                                                                            <div style={{color: '#38a169', fontSize: '12px'}}>Ver →</div>
                                                                         </div>
-                                                                        <div style={{color: '#38a169', fontSize: '12px'}}>Ver →</div>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        )}
-
-                                                        <div style={{marginTop: '15px', display: 'flex', gap: '10px', flexWrap: 'wrap'}}>
-                                                            <button className="btn btn-export"
-                                                                onClick={() => exportarOrdenExcel(orden)}
-                                                                style={{fontSize: '13px', padding: '8px 16px'}}>
-                                                                📊 Excel
-                                                            </button>
-                                                            {orden.estado === 'activa' && (
-                                                                <button className="btn btn-success"
-                                                                    onClick={() => finalizarOrden(orden.id)}
-                                                                    style={{fontSize: '13px', padding: '8px 16px'}}>
-                                                                    ✓ Finalizar
-                                                                </button>
+                                                                    ))}
+                                                                </div>
                                                             )}
-                                                            <button className="btn btn-danger"
-                                                                onClick={() => eliminarOrden(orden.id)}
-                                                                style={{fontSize: '13px', padding: '8px 16px'}}>
-                                                                🗑️ Eliminar
-                                                            </button>
+
+                                                            <div style={{marginTop: '15px', display: 'flex', gap: '10px', flexWrap: 'wrap'}}>
+                                                                <button className="btn btn-export"
+                                                                    onClick={() => exportarOrdenExcel(orden)}
+                                                                    style={{fontSize: '13px', padding: '8px 16px'}}>
+                                                                    📊 Excel
+                                                                </button>
+                                                                {orden.estado === 'activa' && (
+                                                                    <button className="btn btn-success"
+                                                                        onClick={() => finalizarOrden(orden.id)}
+                                                                        style={{fontSize: '13px', padding: '8px 16px'}}>
+                                                                        ✓ Finalizar
+                                                                    </button>
+                                                                )}
+                                                                <button className="btn btn-danger"
+                                                                    onClick={() => eliminarOrden(orden.id)}
+                                                                    style={{fontSize: '13px', padding: '8px 16px'}}>
+                                                                    🗑️ Eliminar
+                                                                </button>
+                                                            </div>
                                                         </div>
-                                                    </div>
+                                                    </details>
                                                 );
                                             })}
                                                         </div>
@@ -3130,7 +3198,7 @@
                                     <div className="separator"></div>
 
                                     {/* CONTROLES LCC */}
-                                    <div className="form-section">
+                                    <div className="form-section" id="historico-lcc">
                                         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '10px'}}>
                                             <h2 className="section-title" style={{margin: 0}}>🔬 Controles LCC (Liberación de Cambio de Calidad)</h2>
                                             <button className="btn btn-secondary"
@@ -3188,74 +3256,86 @@
                                                     ? { background: '#feebc8', color: '#7b341e' }
                                                     : (esAprobado ? { background: '#c6f6d5', color: '#22543d' } : { background: '#fefcbf', color: '#744210' });
                                                 const chipTexto = esBorrador
-                                                    ? '📝 Borrador · seguir cargando'
-                                                    : (esAprobado ? `✓ Aprobado por ${aprobadoPor || 'Antonella'}` : '⏳ Pendiente aprobación LCC');
+                                                    ? '📝 Borrador'
+                                                    : (esAprobado ? '✓ Aprobado' : '⏳ Pendiente');
+                                                const bordeColor = esBorrador ? '#dd6b20' : (esAprobado ? '#38a169' : '#d69e2e');
 
                                                 return (
-                                                    <div key={control.id} className="control-card">
-                                                        <div className="control-header" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px'}}>
-                                                            <div className="control-title">
-                                                                {tipoLabel} - {spec?.nombre}
+                                                    <details key={control.id}
+                                                        className="control-card"
+                                                        style={{marginBottom: '8px', padding: 0, border: `1px solid ${bordeColor}`, borderLeftWidth: '4px', borderRadius: '6px', background: 'white'}}>
+                                                        <summary style={{
+                                                            padding: '12px 16px', cursor: 'pointer', listStyle: 'none',
+                                                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                                            flexWrap: 'wrap', gap: '10px', userSelect: 'none'
+                                                        }}>
+                                                            <div style={{display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', flex: 1, minWidth: 0}}>
+                                                                <span style={{fontSize: '13px', color: '#a0aec0', fontFamily: 'monospace'}}>▸</span>
+                                                                <span style={{fontWeight: 600, color: '#2d3748'}}>{tipoLabel}</span>
+                                                                <span style={{color: '#4a5568'}}>·</span>
+                                                                <span style={{color: '#2d3748'}}>{spec?.nombre || control.envase}</span>
+                                                                <span style={{color: '#4a5568'}}>·</span>
+                                                                <span style={{color: '#4a5568', fontSize: '13px'}}>{formatearFecha(control.fecha)} {control.hora}</span>
+                                                                {control.analista && (
+                                                                    <>
+                                                                        <span style={{color: '#4a5568'}}>·</span>
+                                                                        <span style={{color: '#718096', fontSize: '13px'}}>{control.analista}</span>
+                                                                    </>
+                                                                )}
                                                             </div>
-                                                            <div style={{display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap'}}>
-                                                                <span style={{
-                                                                    padding: '4px 12px', borderRadius: '12px', fontSize: '12px', fontWeight: 700,
-                                                                    ...chipStyle
-                                                                }}>
-                                                                    {chipTexto}
-                                                                </span>
-                                                                <button className="btn btn-secondary"
-                                                                    onClick={() => editarControlLCC(control)}
-                                                                    style={{fontSize: '12px', padding: '4px 10px'}}
-                                                                    title="Editar / continuar este control">
-                                                                    ✏️ Editar
-                                                                </button>
+                                                            <span style={{
+                                                                padding: '3px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 700,
+                                                                whiteSpace: 'nowrap',
+                                                                ...chipStyle
+                                                            }}>
+                                                                {chipTexto}
+                                                            </span>
+                                                        </summary>
+
+                                                        <div style={{padding: '0 16px 16px 16px', borderTop: '1px solid #edf2f7'}}>
+                                                            <div className="control-info-grid" style={{marginTop: '10px'}}>
+                                                                <div className="orden-detail"><strong>Envase:</strong> {spec?.nombre} ({control.envase})</div>
+                                                                <div className="orden-detail"><strong>Fecha:</strong> {formatearFecha(control.fecha)}</div>
+                                                                <div className="orden-detail"><strong>Hora:</strong> {control.hora}</div>
+                                                                {control.analista && (
+                                                                    <div className="orden-detail"><strong>Analista:</strong> {control.analista}</div>
+                                                                )}
+                                                                {esAprobado && (
+                                                                    <>
+                                                                        <div className="orden-detail" style={{color: '#22543d'}}><strong>Aprobado por:</strong> {aprobadoPor || 'Antonella'}</div>
+                                                                        {fechaAprob && <div className="orden-detail" style={{color: '#22543d'}}><strong>Fecha aprobación:</strong> {formatearFecha(fechaAprob)}</div>}
+                                                                    </>
+                                                                )}
                                                             </div>
-                                                        </div>
 
-                                                        <div className="control-info-grid">
-                                                            <div className="orden-detail"><strong>Envase:</strong> {spec?.nombre}</div>
-                                                            <div className="orden-detail"><strong>Fecha:</strong> {formatearFecha(control.fecha)}</div>
-                                                            <div className="orden-detail"><strong>Hora:</strong> {control.hora}</div>
-                                                            <div className="orden-detail"><strong>Operador máquina:</strong> {control.operador}</div>
-                                                            {control.analista && (
-                                                                <div className="orden-detail"><strong>Analista:</strong> {control.analista}</div>
+                                                            {control.observaciones && (
+                                                                <div style={{marginTop: '15px', padding: '10px', background: '#f7fafc', borderRadius: '6px'}}>
+                                                                    <strong>Observaciones:</strong> {control.observaciones}
+                                                                </div>
                                                             )}
-                                                            {control.turno && (
-                                                                <div className="orden-detail"><strong>Turno:</strong> {control.turno}</div>
-                                                            )}
-                                                            {esAprobado && fechaAprob && (
-                                                                <div className="orden-detail" style={{color: '#22543d'}}><strong>Aprobado:</strong> {formatearFecha(fechaAprob)}</div>
-                                                            )}
-                                                        </div>
 
-                                                        {control.observaciones && (
-                                                            <div style={{marginTop: '15px', padding: '10px', background: '#f7fafc', borderRadius: '6px'}}>
-                                                                <strong>Observaciones:</strong> {control.observaciones}
-                                                            </div>
-                                                        )}
+                                                            {/* Mediciones LCC — filtramos claves internas (_estado, _aprobado, etc.) */}
+                                                            {control.mediciones && Object.keys(control.mediciones).filter(k => !k.startsWith('_')).length > 0 && (
+                                                                <div style={{marginTop: '15px'}}>
+                                                                    <h4 style={{marginBottom: '10px', color: '#2d3748', fontSize: '14px'}}>📏 Mediciones ({Object.keys(control.mediciones).filter(k => !k.startsWith('_')).length}):</h4>
+                                                                    <div className="measurement-table" style={{maxHeight: '400px', overflowY: 'auto'}}>
+                                                                        <table>
+                                                                            <thead>
+                                                                                <tr>
+                                                                                    <th>Parámetro</th>
+                                                                                    <th>Valores</th>
+                                                                                    {spec && <th>Especificación</th>}
+                                                                                    <th>Estado</th>
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody>
+                                                                                {Object.entries(control.mediciones).map(([key, value]) => {
+                                                                                    if (key.startsWith('_')) return null;
+                                                                                    if (value === '' || value === null || value === undefined) return null;
+                                                                                    if (Array.isArray(value) && value.every(v => v === '')) return null;
 
-                                                        {/* Mediciones LCC */}
-                                                        {control.mediciones && Object.keys(control.mediciones).length > 0 && (
-                                                            <div style={{marginTop: '15px'}}>
-                                                                <h4 style={{marginBottom: '10px', color: '#2d3748', fontSize: '14px'}}>📏 Mediciones:</h4>
-                                                                <div className="measurement-table">
-                                                                    <table>
-                                                                        <thead>
-                                                                            <tr>
-                                                                                <th>Parámetro</th>
-                                                                                <th>Valores</th>
-                                                                                {spec && <th>Especificación</th>}
-                                                                                <th>Estado</th>
-                                                                            </tr>
-                                                                        </thead>
-                                                                        <tbody>
-                                                                            {Object.entries(control.mediciones).map(([key, value]) => {
-                                                                                if (value === '' || value === null || value === undefined) return null;
-                                                                                if (Array.isArray(value) && value.every(v => v === '')) return null;
-                                                                                
-                                                                                const nombreParam = key
-                                                                                    .replace(/^(validacion_|quincenal_|semanal_)/, '')
+                                                                                    const nombreParam = key
+                                                                                        .replace(/^(validacion_|quincenal_|semanal_)/, '')
                                                                                     .replace(/_/g, ' ')
                                                                                     .replace(/cav(\d)/, 'Cav $1')
                                                                                     .replace(/\b\w/g, l => l.toUpperCase());
@@ -3305,14 +3385,21 @@
                                                             </div>
                                                         )}
 
-                                                        <div style={{marginTop: '15px', display: 'flex', gap: '10px'}}>
+                                                        <div style={{marginTop: '15px', display: 'flex', gap: '10px', flexWrap: 'wrap'}}>
+                                                            <button className="btn btn-primary"
+                                                                onClick={() => editarControlLCC(control)}
+                                                                style={{fontSize: '13px', padding: '8px 16px', background: esBorrador ? '#d69e2e' : '#028090'}}
+                                                                title="Editar / continuar este control">
+                                                                {esBorrador ? '📝 Seguir cargando' : '✏️ Editar'}
+                                                            </button>
                                                             <button className="btn btn-danger"
                                                                 onClick={() => eliminarControlLCC(control.id)}
                                                                 style={{fontSize: '13px', padding: '8px 16px'}}>
                                                                 🗑️ Eliminar
                                                             </button>
                                                         </div>
-                                                    </div>
+                                                        </div>
+                                                    </details>
                                                 );
                                             });
                                         })()}
