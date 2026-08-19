@@ -632,16 +632,48 @@
             };
 
             // === AUTENTICACIÓN ===
+            // Sesión expira automáticamente a las 12 h de haber iniciado
+            const SESION_MAX_HORAS = 12;
+
+            // Verifica si una sesión guardada aún es válida (no venció)
+            const sesionEsValida = (sesion) => {
+                if (!sesion || !sesion.loginAt) return false;
+                const inicioMs = new Date(sesion.loginAt).getTime();
+                if (isNaN(inicioMs)) return false;
+                const horasTranscurridas = (Date.now() - inicioMs) / 3600000;
+                return horasTranscurridas < SESION_MAX_HORAS;
+            };
+
             const [usuarioLogueado, setUsuarioLogueado] = useState(() => {
                 try {
                     const stored = localStorage.getItem('vessena_usuario_logueado');
-                    return stored ? JSON.parse(stored) : null;
+                    if (!stored) return null;
+                    const sesion = JSON.parse(stored);
+                    if (!sesionEsValida(sesion)) {
+                        // Sesión vencida: limpiar y forzar re-login
+                        localStorage.removeItem('vessena_usuario_logueado');
+                        return null;
+                    }
+                    return sesion;
                 } catch { return null; }
             });
             const [loginUsername, setLoginUsername] = useState('');
             const [loginPassword, setLoginPassword] = useState('');
             const [loginError, setLoginError] = useState('');
             const [loginProcesando, setLoginProcesando] = useState(false);
+
+            // Chequeo periódico (cada 1 min) para expirar sesión si ya venció
+            React.useEffect(() => {
+                if (!usuarioLogueado) return;
+                const intervalo = setInterval(() => {
+                    if (!sesionEsValida(usuarioLogueado)) {
+                        localStorage.removeItem('vessena_usuario_logueado');
+                        setUsuarioLogueado(null);
+                        alert('⏰ Tu sesión expiró (más de ' + SESION_MAX_HORAS + ' h). Ingresá nuevamente para continuar.');
+                    }
+                }, 60000); // cada 60 segundos
+                return () => clearInterval(intervalo);
+            }, [usuarioLogueado]);
 
             const handleLogin = async (e) => {
                 if (e && e.preventDefault) e.preventDefault();
@@ -1173,7 +1205,8 @@
                             tipoControl: nuevoControl.tipo,
                             fecha: nuevoControl.fecha,
                             hora: nuevoControl.hora,
-                            operador: ordenSeleccionada.operador,
+                            operador: ordenSeleccionada.operador,   // operador de máquina (heredado)
+                            analista: nuevoControl.analista,         // analista LOGUEADA que carga ESTE control
                             turno: ordenSeleccionada.turno || '',
                             observaciones: nuevoControl.observaciones,
                             mediciones: nuevoControl.mediciones,
@@ -3556,6 +3589,20 @@
                                                     <div className="detalle-label">Hora</div>
                                                     <div className="detalle-value">{controlDetalle.control.hora}</div>
                                                 </div>
+                                                {controlDetalle.control.operador && (
+                                                    <div className="detalle-item">
+                                                        <div className="detalle-label">Operador de máquina</div>
+                                                        <div className="detalle-value">{controlDetalle.control.operador}</div>
+                                                    </div>
+                                                )}
+                                                {controlDetalle.control.analista && (
+                                                    <div className="detalle-item">
+                                                        <div className="detalle-label">Analista (quien cargó)</div>
+                                                        <div className="detalle-value" style={{color: '#028090', fontWeight: 600}}>
+                                                            👤 {controlDetalle.control.analista}
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
 
                                             {/* MEDICIONES DEL CONTROL */}
