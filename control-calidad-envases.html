@@ -266,6 +266,16 @@
                     'brimful': { min: 915, max: 920, unidad: 'mL', nombre: 'Brimful' }
                 }
             },
+            'PET-1000': {
+                nombre: 'PET 1000 ML', tipo: 'PET', codigo: 'ESP-COM-060',
+                cavidades: 2,
+                parametros: {
+                    'altura_h':     { min: 278.00, max: 278.99, unidad: 'mm', nombre: 'Altura H' },
+                    'ancho_pie_hw': { min:  70.50, max:  70.70, unidad: 'mm', nombre: 'Ancho HW' },
+                    'brimful':      { min: 1050,   max: 9999,   unidad: 'mL', nombre: 'Brimful (≥ 1050 mL)' },
+                    'peso':         { min:  36.00, max:  36.00, unidad: 'g',  nombre: 'Peso del envase' }
+                }
+            },
             'DET-1.25L': {
                 nombre: 'Detergente Lavavajilla 1.25L', tipo: 'PET', codigo: 'ESP-COM-044',
                 parametros: {
@@ -604,7 +614,7 @@
                 : ['6 cavidades', '4 cavidades', 'HQ1', 'HQ2', 'Smargon', 'Power 3', 'Bidones'];
             const ENVASES_15_DIAS_ACTIVOS = esModoTapas
                 ? ['TAPA-28-AM', 'TAPA-FLIPTOP-HIPO']
-                : ['PET-900', 'PET-1800', 'DET-1.25L', 'FAB-1L', 'FAB-2L', 'HIPO-1000', 'HIPO-2000'];
+                : ['PET-900', 'PET-1000', 'PET-1800', 'DET-1.25L', 'FAB-1L', 'FAB-2L', 'HIPO-1000', 'HIPO-2000'];
 
             // Endpoint mapping: en modo tapas se agregan sufijos "Tapa"
             const endpoint = (base) => {
