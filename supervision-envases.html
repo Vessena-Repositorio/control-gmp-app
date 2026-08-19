@@ -523,7 +523,7 @@ const UMBRAL_CUMPL_WARN = 70; // % ≥ amarillo, sino rojo
 // Diccionario de nombres (compatible con la app de operadores)
 const NOMBRES_ENVASES = {
     'FAB-2L': 'Fabuloso 2L', 'FAB-1L': 'Fabuloso 1L',
-    'PET-1800': 'PET 1800 mL', 'PET-900': 'PET 900 mL',
+    'PET-1800': 'PET 1800 mL', 'PET-900': 'PET 900 mL', 'PET-1000': 'PET 1000 mL',
     'DET-1.25L': 'Detergente Lavavajilla 1.25L',
     'PET-1100': 'PET 1.1 L', 'PET-1350': 'PET 1.35 L',
     'PET-AXION-1250': 'PET Axion 1.25 L', 'PET-600': 'PET 600 mL',
@@ -1248,10 +1248,18 @@ function renderCampanas(activas) {
                         ${controlesHoy.length === 0
                             ? '<em style="color:#a0aec0;">Ninguno todavía</em>'
                             : controlesHoy.map(cH => {
+                                const parada = cH.mediciones && cH.mediciones._maquinaParada;
+                                const bandeja = cH.mediciones && cH.mediciones._controlBandeja;
                                 const partes = [cH.hora || '—', cH.tipo || '?'];
+                                if (bandeja) partes.push('🗃️ BANDEJA');
+                                else if (parada) partes.push('🔧 PARADA');
                                 if (cH.operador) partes.push(`Op: ${cH.operador}`);
                                 if (cH.analista) partes.push(`Q: ${cH.analista}`);
-                                return `<span style="display:inline-block;background:#edf2f7;padding:3px 8px;border-radius:6px;margin:2px;font-family:monospace;">${partes.join(' · ')}</span>`;
+                                let bgColor = '#edf2f7';
+                                let txtColor = '#2d3748';
+                                if (bandeja) { bgColor = '#e6f6ff'; txtColor = '#2c5282'; }
+                                else if (parada) { bgColor = '#feebc8'; txtColor = '#7b341e'; }
+                                return `<span style="display:inline-block;background:${bgColor};color:${txtColor};padding:3px 8px;border-radius:6px;margin:2px;font-family:monospace;">${partes.join(' · ')}</span>`;
                             }).join('')
                         }
                     </div>
