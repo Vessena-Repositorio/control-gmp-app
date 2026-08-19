@@ -748,7 +748,13 @@ function agruparPorCampana(ordenesArr) {
         (o.controles || []).forEach(c => grupos[cid].controles.push({
             ...c,
             fecha: c.fecha || normalizeFecha(c.fecha),
-            ordenId: o.id, operador: o.operador, analista: o.analista, turno: o.turno, maquina: o.maquina, numeroOrden: o.numeroOrden
+            ordenId: o.id,
+            operador: o.operador,
+            // Analista: la que cargó ESTE control (viene del control). Solo si el control no lo tiene, usa la de la orden como fallback.
+            analista: c.analista || o.analista || '',
+            turno: c.turno || o.turno,
+            maquina: o.maquina,
+            numeroOrden: o.numeroOrden
         }));
         if (o.estado === 'activa') grupos[cid].tieneActiva = true;
         if (fechaOrden && (!grupos[cid].primeraFecha || fechaOrden < grupos[cid].primeraFecha)) {
