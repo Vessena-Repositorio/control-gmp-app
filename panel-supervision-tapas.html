@@ -1567,16 +1567,32 @@ function abrirDetalleCampana(cid) {
                                     ? ` <span class="estado-pill estado-duplicado" title="Coincide con otro control del mismo día, hora, tipo y operador">🔁 DUPLICADO</span>`
                                     : '';
                                 const filaClase = ct._duplicado ? 'fila-duplicada' : '';
+
+                                const parada = ct.mediciones && ct.mediciones._maquinaParada;
+                                const bandeja = ct.mediciones && ct.mediciones._controlBandeja;
+                                const motivo = (ct.mediciones && ct.mediciones._motivoParada) || '';
+                                let paradaPill = '';
+                                let paradaMotivo = '';
+                                if (bandeja) {
+                                    paradaPill = ` <span style="display:inline-block;background:#e6f6ff;color:#2c5282;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">🗃️ BANDEJA</span>`;
+                                    paradaMotivo = motivo ? `<div style="margin-top:4px;padding:4px 8px;background:#e6f6ff;color:#2c5282;font-size:11px;border-radius:4px;font-style:italic;">Motivo: ${motivo}</div>` : '';
+                                } else if (parada) {
+                                    paradaPill = ` <span style="display:inline-block;background:#feebc8;color:#7b341e;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">🔧 PARADA</span>`;
+                                    paradaMotivo = motivo ? `<div style="margin-top:4px;padding:4px 8px;background:#feebc8;color:#7b341e;font-size:11px;border-radius:4px;font-style:italic;">Motivo: ${motivo}</div>` : '';
+                                }
+                                const filaBg = bandeja ? 'style="background:#f0f9ff !important;"' : (parada ? 'style="background:#fffaf0 !important;"' : '');
+                                const obsContent = ct.observaciones || (parada || bandeja ? '' : '<em style="color:#a0aec0;">—</em>');
+
                                 return `
-                                    <tr class="${filaClase}">
+                                    <tr class="${filaClase}" ${filaBg}>
                                         <td style="font-family:monospace;font-weight:700;color:#2d3748;">${ct.hora || '—'}${dupPill}</td>
-                                        <td>${ct.tipo || '—'}</td>
+                                        <td>${ct.tipo || '—'}${paradaPill}</td>
                                         <td>${ct.maquina ? `🏭 ${ct.maquina}` : '<em style="color:#a0aec0;">s/d</em>'}</td>
                                         <td>${ct.operador || '<em style="color:#a0aec0;">—</em>'}</td>
                                         <td>${ct.analista || '<em style="color:#a0aec0;">—</em>'}${ct.turno ? ` <span style="color:#a0aec0;">· ${ct.turno}</span>` : ''}</td>
                                         <td>${s.slot || '—'} <span class="estado-pill ${pillClass}">${pill}</span></td>
                                         <td>${meds}</td>
-                                        <td style="max-width:200px;font-size:11px;color:#4a5568;">${ct.observaciones || '<em style="color:#a0aec0;">—</em>'}</td>
+                                        <td style="max-width:220px;font-size:11px;color:#4a5568;">${obsContent}${paradaMotivo}</td>
                                     </tr>
                                 `;
                             }).join('')}
