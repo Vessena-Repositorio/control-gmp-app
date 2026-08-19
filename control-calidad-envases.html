@@ -717,6 +717,8 @@
             // Estados comunes
             const [hora, setHora] = useState('');
             const [mediciones, setMediciones] = useState({});
+            const [maquinaParada, setMaquinaParada] = useState(false);
+            const [motivoParada, setMotivoParada] = useState('');
             const [observaciones, setObservaciones] = useState('');
             const [controlDetalle, setControlDetalle] = useState(null);
             const [filtroEnvase, setFiltroEnvase] = useState('');
@@ -1078,6 +1080,12 @@
                     return;
                 }
 
+                // Si está marcada máquina parada, verificar que haya motivo
+                if (maquinaParada && !motivoParada.trim()) {
+                    setMensaje({ tipo: 'warning', texto: '🔧 Indicá el motivo de la parada antes de guardar.' });
+                    return;
+                }
+
                 // Verificación anti-duplicado: si el último control de esta orden
                 // es del mismo tipo y se guardó hace menos de 15 segundos, bloquear
                 const ordenActual = ordenesSoplado.find(o => o.id === ordenSeleccionada.id);
@@ -1095,9 +1103,11 @@
                     }
                 }
                 
-                // Validar peso si el envase lo requiere
+                // Validar peso SOLO si no es "arranque + máquina parada".
+                // En proceso con máquina parada, sí se cargan mediciones (de la última bandeja).
                 const specEnvase = SPECS_ACTIVAS[ordenSeleccionada.envase];
-                if (specEnvase?.parametros?.peso) {
+                const skipMediciones = maquinaParada && tipoControlSoplado === 'arranque';
+                if (!skipMediciones && specEnvase?.parametros?.peso) {
                     const cavidades = specEnvase.cavidades || 1;
                     const prefijo = tipoControlSoplado === 'arranque' ? 'arr_peso_cav' : 'proc_peso_cav';
                     const pesosCargados = [];
@@ -1106,18 +1116,39 @@
                         if (v !== undefined && v !== '' && v !== null) pesosCargados.push(i);
                     }
                     if (pesosCargados.length === 0) {
-                        setMensaje({ 
-                            tipo: 'warning', 
-                            texto: `⚖️ El peso es obligatorio para ${specEnvase.nombre}. Cargá al menos una cavidad.` 
+                        setMensaje({
+                            tipo: 'warning',
+                            texto: `⚖️ El peso es obligatorio para ${specEnvase.nombre}. Cargá al menos una cavidad.`
                         });
                         return;
                     }
                 }
+
+                // Construcción del dict de mediciones:
+                //  - arranque + parada  → solo metadatos (_maquinaParada + _motivoParada)
+                //  - proceso + parada   → mediciones normales + metadatos (_maquinaParada + _motivoParada + _controlBandeja)
+                //  - sin parada         → mediciones normales
+                let medicionesFinales;
+                if (skipMediciones) {
+                    medicionesFinales = { _maquinaParada: true, _motivoParada: motivoParada.trim() };
+                } else if (maquinaParada) {
+                    medicionesFinales = {
+                        ...mediciones,
+                        _maquinaParada: true,
+                        _motivoParada: motivoParada.trim(),
+                        _controlBandeja: true
+                    };
+                } else {
+                    medicionesFinales = { ...mediciones };
+                }
+
                 const nuevoControl = {
                     id: Date.now(), tipo: tipoControlSoplado,
                     fecha: new Date().toISOString().split('T')[0],
                     hora: new Date().toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' }),
-                    mediciones: { ...mediciones }, observaciones, timestamp: new Date().toISOString(),
+                    mediciones: medicionesFinales,
+                    observaciones,
+                    timestamp: new Date().toISOString(),
                     createdBy: usuarioLogueado.username,
                     analista: usuarioLogueado.nombre,
                     operador: ordenSeleccionada.operador  // heredado de la orden
@@ -1246,6 +1277,8 @@
             const resetFormularios = () => {
                 setMediciones({});
                 setObservaciones('');
+                setMaquinaParada(false);
+                setMotivoParada('');
                 setHora('');
                 setTipoControlSoplado('');
                 setTipoControlLCC('');
@@ -2050,6 +2083,53 @@
                                                     🕐 La hora se registra automáticamente del dispositivo al guardar
                                                 </div>
 
+                                                {/* MÁQUINA PARADA — comportamiento distinto según tipo de control */}
+                                                <div style={{
+                                                    marginTop: '15px',
+                                                    padding: '14px 16px',
+                                                    background: maquinaParada ? (tipoControlSoplado === 'arranque' ? '#feebc8' : '#e6f6ff') : '#f7fafc',
+                                                    border: `1px solid ${maquinaParada ? (tipoControlSoplado === 'arranque' ? '#dd6b20' : '#3182ce') : '#e2e8f0'}`,
+                                                    borderRadius: '8px',
+                                                    transition: 'all .15s'
+                                                }}>
+                                                    <label style={{display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontWeight: 600, color: maquinaParada ? (tipoControlSoplado === 'arranque' ? '#7b341e' : '#2c5282') : '#2d3748'}}>
+                                                        <input type="checkbox"
+                                                            checked={maquinaParada}
+                                                            onChange={(e) => {
+                                                                setMaquinaParada(e.target.checked);
+                                                                if (!e.target.checked) setMotivoParada('');
+                                                            }}
+                                                            style={{width: '20px', height: '20px', cursor: 'pointer'}} />
+                                                        <span style={{fontSize: '15px'}}>
+                                                            {tipoControlSoplado === 'arranque'
+                                                                ? '🔧 La máquina está parada — no hay producción para medir'
+                                                                : '🗃️ La máquina está parada — controlar envases de la última bandeja'}
+                                                        </span>
+                                                    </label>
+                                                    {maquinaParada && (
+                                                        <div style={{marginTop: '12px'}}>
+                                                            <label style={{display: 'block', fontSize: '13px', color: tipoControlSoplado === 'arranque' ? '#7b341e' : '#2c5282', marginBottom: '5px', fontWeight: 600}}>
+                                                                Motivo de la parada *
+                                                            </label>
+                                                            <textarea
+                                                                value={motivoParada}
+                                                                onChange={(e) => setMotivoParada(e.target.value)}
+                                                                placeholder="Ej: mantenimiento preventivo, cambio de molde, falta de materia prima, corte de energía, etc."
+                                                                rows={2}
+                                                                style={{width: '100%', padding: '8px 10px', border: `1px solid ${tipoControlSoplado === 'arranque' ? '#dd6b20' : '#3182ce'}`, borderRadius: '6px', fontSize: '13px', resize: 'vertical'}} />
+                                                            <div style={{marginTop: '6px', fontSize: '11px', color: tipoControlSoplado === 'arranque' ? '#7b341e' : '#2c5282', fontStyle: 'italic'}}>
+                                                                {tipoControlSoplado === 'arranque'
+                                                                    ? 'El control queda registrado con esta observación y sin mediciones. Cuenta para el cumplimiento del horario.'
+                                                                    : 'Cargá las mediciones de la última bandeja producida. El control queda marcado como "control de bandeja" en el panel de supervisión.'}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* En ARRANQUE con máquina parada se ocultan las mediciones.
+                                                    En PROCESO con máquina parada se mantienen visibles (control de bandeja). */}
+                                                {!(maquinaParada && tipoControlSoplado === 'arranque') && (
+                                                <>
                                                 {/* CONTROL DE ARRANQUE */}
                                                 {tipoControlSoplado === 'arranque' && spec.cavidadesArranque && (
                                                     /* --- MODO TAPAS: mediciones dimensionales por cavidad crítica --- */
@@ -2351,6 +2431,8 @@
                                                         </div>
                                                     </div>
                                                 )}
+                                                </>
+                                                )}
 
                                                 <div className="form-group">
                                                     <label>Observaciones / Remediación</label>
@@ -2360,8 +2442,16 @@
                                                 </div>
 
                                                 <div className="button-group">
-                                                    <button className="btn btn-primary" onClick={registrarControlSoplado} disabled={guardando}>
-                                                        {guardando ? '⏳ Guardando...' : '💾 Guardar Control'}
+                                                    <button className="btn btn-primary"
+                                                        onClick={registrarControlSoplado}
+                                                        disabled={guardando || (maquinaParada && !motivoParada.trim())}
+                                                        style={maquinaParada ? {background: tipoControlSoplado === 'arranque' ? '#dd6b20' : '#3182ce'} : {}}>
+                                                        {guardando ? '⏳ Guardando...' :
+                                                            (maquinaParada
+                                                                ? (tipoControlSoplado === 'arranque'
+                                                                    ? '🔧 Guardar (máquina parada)'
+                                                                    : '🗃️ Guardar (control de bandeja)')
+                                                                : '💾 Guardar Control')}
                                                     </button>
                                                     <button className="btn btn-secondary" onClick={resetFormularios} disabled={guardando}>
                                                         Cancelar
@@ -3151,27 +3241,48 @@
                                                                 <div className="controles-list">
                                                                     <h4 style={{marginBottom: '10px', color: '#4a5568', marginTop: '15px'}}>Controles:</h4>
 
-                                                                    {controlesArranque.map(c => (
+                                                                    {controlesArranque.map(c => {
+                                                                        const parada = c.mediciones?._maquinaParada;
+                                                                        const motivo = c.mediciones?._motivoParada || '';
+                                                                        return (
                                                                         <div key={c.id} className="control-item arranque"
-                                                                            onClick={() => setControlDetalle({control: c, orden, tipo: 'soplado'})}>
+                                                                            onClick={() => setControlDetalle({control: c, orden, tipo: 'soplado'})}
+                                                                            style={parada ? {background: '#feebc8', borderColor: '#dd6b20'} : {}}>
                                                                             <div className="control-info">
-                                                                                <span className="control-hora">🚀 Arranque</span>
-                                                                                <span className="control-tipo">{formatearFecha(c.fecha)} - {c.hora}</span>
+                                                                                <span className="control-hora">{parada ? '🔧 Arranque · Parada' : '🚀 Arranque'}</span>
+                                                                                <span className="control-tipo">
+                                                                                    {formatearFecha(c.fecha)} - {c.hora}
+                                                                                    {parada && motivo && <span style={{color: '#7b341e', marginLeft: '8px', fontStyle: 'italic'}}>· {motivo.slice(0, 40)}{motivo.length > 40 ? '…' : ''}</span>}
+                                                                                </span>
                                                                             </div>
-                                                                            <div style={{color: '#667eea', fontSize: '12px'}}>Ver →</div>
+                                                                            <div style={{color: parada ? '#dd6b20' : '#667eea', fontSize: '12px'}}>Ver →</div>
                                                                         </div>
-                                                                    ))}
+                                                                        );
+                                                                    })}
 
-                                                                    {controlesProceso.map(c => (
+                                                                    {controlesProceso.map(c => {
+                                                                        const bandeja = c.mediciones?._controlBandeja;
+                                                                        const parada = c.mediciones?._maquinaParada;
+                                                                        const motivo = c.mediciones?._motivoParada || '';
+                                                                        return (
                                                                         <div key={c.id} className="control-item proceso"
-                                                                            onClick={() => setControlDetalle({control: c, orden, tipo: 'soplado'})}>
+                                                                            onClick={() => setControlDetalle({control: c, orden, tipo: 'soplado'})}
+                                                                            style={bandeja
+                                                                                ? {background: '#e6f6ff', borderColor: '#3182ce'}
+                                                                                : (parada ? {background: '#feebc8', borderColor: '#dd6b20'} : {})}>
                                                                             <div className="control-info">
-                                                                                <span className="control-hora">⏱️ {c.hora}</span>
-                                                                                <span className="control-tipo">{formatearFecha(c.fecha)}</span>
+                                                                                <span className="control-hora">
+                                                                                    {bandeja ? `🗃️ ${c.hora} · Bandeja` : (parada ? `🔧 ${c.hora} · Parada` : `⏱️ ${c.hora}`)}
+                                                                                </span>
+                                                                                <span className="control-tipo">
+                                                                                    {formatearFecha(c.fecha)}
+                                                                                    {(bandeja || parada) && motivo && <span style={{color: bandeja ? '#2c5282' : '#7b341e', marginLeft: '8px', fontStyle: 'italic'}}>· {motivo.slice(0, 40)}{motivo.length > 40 ? '…' : ''}</span>}
+                                                                                </span>
                                                                             </div>
-                                                                            <div style={{color: '#38a169', fontSize: '12px'}}>Ver →</div>
+                                                                            <div style={{color: bandeja ? '#3182ce' : (parada ? '#dd6b20' : '#38a169'), fontSize: '12px'}}>Ver →</div>
                                                                         </div>
-                                                                    ))}
+                                                                        );
+                                                                    })}
                                                                 </div>
                                                             )}
 
