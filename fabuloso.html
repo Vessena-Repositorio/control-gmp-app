@@ -1,0 +1,2064 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b5cff" />
+  <title>Vessena LCC Fabuloso – Control de atributos en línea</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230b5cff'/><text x='50' y='68' text-anchor='middle' font-size='60' fill='white' font-family='Arial'>V</text></svg>" />
+  <style>
+/* Vessena LCC – styles.css */
+:root {
+  --primary: #0b5cff;
+  --primary-dark: #0847c9;
+  --bg: #f5f7fb;
+  --card: #ffffff;
+  --text: #1a2233;
+  --muted: #667085;
+  --border: #e4e7ec;
+  --danger: #d92d20;
+  --warn: #f79009;
+  --ok: #12b76a;
+  --shadow: 0 2px 10px rgba(16,24,40,0.06);
+}
+* { box-sizing: border-box; }
+html, body { margin:0; padding:0; height:100%; background:var(--bg); color:var(--text); font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-size:15px; }
+main { padding: 12px; padding-bottom: 40px; max-width: 780px; margin: 0 auto; }
+h1,h2,h3 { margin: 0 0 8px 0; }
+h1 { font-size: 20px; }
+h2 { font-size: 18px; margin-top: 12px; }
+h3 { font-size: 15px; color: var(--muted); }
+.hidden { display: none !important; }
+.spacer { flex: 1; }
+
+/* Header */
+#topbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; background: var(--primary); color: #fff;
+  position: sticky; top: 0; z-index: 10; box-shadow: var(--shadow);
+}
+#topbar #title { font-weight: 600; font-size: 16px; }
+#topbar .badge { background: rgba(255,255,255,.15); padding: 3px 8px; border-radius: 999px; font-size: 12px; }
+.btn-icon { background: transparent; color: #fff; border: none; font-size: 22px; padding: 4px 10px; cursor: pointer; border-radius: 8px; }
+.btn-icon:hover { background: rgba(255,255,255,.15); }
+
+/* Drawer */
+#drawer {
+  position: fixed; top: 0; right: 0; height: 100%; width: 280px;
+  background: #fff; box-shadow: -6px 0 16px rgba(16,24,40,.1);
+  padding: 16px; display: flex; flex-direction: column; gap: 6px; z-index: 20;
+  transform: translateX(0); transition: transform .2s;
+}
+#drawer.hidden { transform: translateX(120%); display: flex !important; }
+#drawer button { text-align: left; background: transparent; border: none; padding: 10px 12px; border-radius: 8px; cursor: pointer; font-size: 15px; }
+#drawer button:hover { background: #f0f4ff; }
+#drawer button.danger { color: var(--danger); }
+.drawer-header { padding: 6px 4px 12px 4px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+.drawer-header .badge { display: inline-block; margin-top: 4px; background: #eef2ff; color: var(--primary); padding: 2px 8px; border-radius: 999px; font-size: 11px; }
+.drawer-footer { margin-top: 10px; color: var(--muted); text-align: center; }
+
+/* Cards */
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; box-shadow: var(--shadow); margin-bottom: 12px; }
+.card h2 { margin-top: 0; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; }
+.row > * { flex: 1 1 220px; }
+.row-tight > * { flex: 1 1 140px; }
+
+/* Forms */
+label { display: block; font-size: 13px; color: var(--muted); margin: 8px 0 4px; }
+input[type=text], input[type=password], input[type=number], input[type=date], input[type=time], select, textarea {
+  width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); background: #fff;
+  font-size: 15px; font-family: inherit;
+}
+textarea { min-height: 76px; resize: vertical; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary); outline-offset: 1px; border-color: var(--primary); }
+
+button.primary, button.secondary, button.danger {
+  padding: 12px 16px; border-radius: 10px; border: none; font-size: 15px; cursor: pointer; font-weight: 600;
+}
+button.primary { background: var(--primary); color: #fff; }
+button.primary:hover { background: var(--primary-dark); }
+button.secondary { background: #eef2ff; color: var(--primary); }
+button.danger { background: var(--danger); color: #fff; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Login page */
+.login-wrap { max-width: 400px; margin: 40px auto 0; }
+.login-wrap .logo { text-align: center; margin-bottom: 20px; }
+.login-wrap .logo .dot { width: 60px; height: 60px; margin: 0 auto 8px; background: var(--primary); border-radius: 16px; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 34px; font-weight: 700; }
+
+/* Defect list */
+.defect-item { display: flex; align-items: center; gap: 10px; padding: 8px; border-bottom: 1px dashed var(--border); }
+.defect-item:last-child { border-bottom: none; }
+.defect-item .desc { flex: 1; font-size: 14px; }
+.defect-item .clas { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+.clas.Leve { background: #ecfdf3; color: #027a48; }
+.clas.Moderado { background: #fef0c7; color: #b54708; }
+.clas.Crítico, .clas.Critico { background: #fee4e2; color: #b42318; }
+.defect-item input[type=number] { width: 68px; }
+.defect-item .toggle { flex-shrink: 0; }
+
+/* Filter row */
+.filter { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.filter input { flex: 1 1 130px; }
+
+/* Barra de slots (horarios programados) */
+.schedule { display: flex; gap: 4px; margin: 8px 0; flex-wrap: wrap; }
+.schedule .slot { padding: 6px 8px; border-radius: 8px; font-size: 12px; font-weight: 600; text-align: center; min-width: 62px; display: flex; flex-direction: column; align-items: center; line-height: 1.15; border: 1px solid transparent; }
+.schedule .slot .t { font-size: 12px; font-weight: 700; }
+.schedule .slot .e { font-size: 14px; }
+.schedule .slot .h { font-size: 10px; opacity: .85; margin-top: 2px; }
+.schedule .slot.ok { background: #ecfdf3; color: #027a48; border-color: #a6f4c5; }
+.schedule .slot.warn { background: #fef0c7; color: #b54708; border-color: #fedf89; animation: pulse-bg 2s ease-in-out infinite; }
+.schedule .slot.danger { background: #fee4e2; color: #b42318; border-color: #fecdca; }
+.schedule .slot.muted { background: #f5f7fb; color: #667085; border-color: #e4e7ec; }
+@keyframes pulse-bg { 0%,100%{background:#fef0c7;} 50%{background:#fedf89;} }
+
+/* Grupos de defectos */
+.def-groups { display: flex; gap: 6px; overflow-x: auto; padding: 8px 0; margin-bottom: 6px; -webkit-overflow-scrolling: touch; }
+.def-groups button { flex: 0 0 auto; padding: 8px 12px; border: 1px solid var(--border); background: #fff; border-radius: 999px; cursor: pointer; font-size: 13px; font-weight: 500; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
+.def-groups button:hover { background: #f5f7fb; }
+.def-groups button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.def-groups button .total { color: var(--muted); font-weight: 400; margin-left: 2px; }
+.def-groups button.active .total { color: rgba(255,255,255,.7); }
+.def-groups .count-sel { display: inline-block; background: var(--danger); color: #fff; border-radius: 999px; padding: 1px 7px; font-size: 11px; font-weight: 700; margin-left: 4px; }
+.def-groups button.active .count-sel { background: rgba(255,255,255,.28); }
+
+/* QR summary */
+.qr-box { text-align: center; padding: 20px; border-radius: 14px; margin: 10px 0; color: #fff; }
+.qr-box .val { font-size: 44px; font-weight: 800; line-height: 1; }
+.qr-box .lbl { opacity: .9; }
+.qr-Perfecta, .qr-Muybuena { background: linear-gradient(135deg, #12b76a, #039855); }
+.qr-Aceptable { background: linear-gradient(135deg, #f79009, #dc6803); }
+.qr-Noaceptable { background: linear-gradient(135deg, #d92d20, #b42318); }
+
+/* Photo grid */
+.photos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
+.photos .thumb { position: relative; padding-top: 100%; border-radius: 8px; overflow: hidden; background: #eef2ff; }
+.photos .thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.photos .thumb .rm { position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,.55); color:#fff; border:none; border-radius: 999px; width: 24px; height: 24px; cursor:pointer; }
+.photo-input { display: none; }
+.photo-btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; background: #eef2ff; color: var(--primary); border: 1px dashed var(--primary); border-radius: 10px; cursor: pointer; font-weight: 600; }
+
+/* Table */
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+table th, table td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; }
+table th { background: #f5f7fb; font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+table tr:hover td { background: #fafbff; cursor: pointer; }
+
+/* Filas agrupadas por orden */
+.order-row td { font-weight: 500; background: #fff; }
+.order-row .chev { display: inline-block; transition: transform .15s; color: var(--muted); font-size: 13px; user-select: none; }
+.order-row.expanded .chev { transform: rotate(90deg); color: var(--primary); }
+.order-details table { background: #fafbff; }
+.order-details table td { border-bottom: 1px dashed #e4e7ec; padding: 6px 10px; font-size: 13px; }
+.order-details table tr:last-child td { border-bottom: none; }
+
+/* Chips */
+.chip { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.chip.ok { background: #ecfdf3; color: #027a48; }
+.chip.warn { background: #fef0c7; color: #b54708; }
+.chip.danger { background: #fee4e2; color: #b42318; }
+.chip.info { background: #eef2ff; color: #3538cd; }
+
+/* Toast */
+#toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #1a2233; color: #fff; padding: 10px 16px; border-radius: 10px; z-index: 100; box-shadow: var(--shadow); font-size: 14px; }
+#toast.err { background: var(--danger); }
+#toast.ok { background: var(--ok); }
+
+/* Spinner */
+#spinner { position: fixed; inset: 0; background: rgba(255,255,255,.55); display: flex; align-items: center; justify-content: center; z-index: 200; }
+.spin { width: 44px; height: 44px; border: 4px solid #d0d5dd; border-top-color: var(--primary); border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Small utilities */
+.muted { color: var(--muted); }
+.right { text-align: right; }
+.mt8 { margin-top: 8px; } .mt12 { margin-top: 12px; } .mt16 { margin-top: 16px; }
+.mb8 { margin-bottom: 8px; }
+.small { font-size: 12px; }
+.stat { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 6px; }
+.stat > div { background: #f5f7fb; border-radius: 8px; padding: 6px 10px; font-size: 13px; }
+.stat b { color: var(--primary); }
+.hr { height: 1px; background: var(--border); margin: 12px 0; }
+.mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
+
+/* Print */
+@media print {
+  #topbar, #drawer, #btnBack, #btnMenu, .photo-btn, button.primary, button.secondary { display: none !important; }
+}
+
+  </style>
+</head>
+<body>
+  <header id="topbar" class="hidden">
+    <button class="btn-icon" id="btnBack" title="Atrás" aria-label="Atrás">‹</button>
+    <div id="title">Vessena LCC Fabuloso</div>
+    <div class="spacer"></div>
+    <div id="who" class="badge"></div>
+    <button class="btn-icon" id="btnMenu" title="Menú" aria-label="Menú">☰</button>
+  </header>
+
+  <nav id="drawer" class="hidden">
+    <div class="drawer-header">
+      <strong id="drawerName">—</strong>
+      <span id="drawerRole" class="badge"></span>
+    </div>
+    <button data-view="home">🏠 Inicio</button>
+    <button data-view="new">➕ Nuevo muestreo</button>
+    <button data-view="orders_today">🕒 Órdenes de hoy</button>
+    <button data-view="list">📋 Muestreos</button>
+    <button data-view="admin_users" data-min-role="Admin">👥 Usuarios</button>
+    <button data-view="admin_defects" data-min-role="QA">🏷️ Catálogo defectos</button>
+    <button data-view="admin_audit" data-min-role="Coordinador">📜 Auditoría</button>
+    <button data-view="signature">✍️ Mi firma</button>
+    <button data-view="change_pwd">🔐 Cambiar contraseña</button>
+    <div class="spacer"></div>
+    <button id="btnLogout" class="danger">🚪 Cerrar sesión</button>
+    <div class="drawer-footer">
+      <small>Vessena LCC Fabuloso – SOPLCC200 v3.0</small><br/>
+      <small id="verLabel">v1.0.0</small>
+    </div>
+  </nav>
+
+  <main id="app"></main>
+
+  <div id="toast" class="hidden"></div>
+  <div id="spinner" class="hidden"><div class="spin"></div></div>
+
+  <script>
+/**
+ * Vessena LCC – Configuración del frontend
+ * URL ya configurada con el Apps Script de Vessena (19/08/2026).
+ */
+window.APP_CONFIG = {
+  API_URL: "https://script.google.com/macros/s/AKfycbxkMcaTX5xXKaPuy5PRzQBQs678qtA4zzGtxyeNYu7xRJwboNR3n2IBZMV2eOgyASqI/exec",
+  PHOTO_MAX_DIM: 800,
+  PHOTO_QUALITY: 0.72,
+  SESSION_KEY: "vessena_lcc_session",
+  APP_TITLE: "Vessena LCC Fabuloso – Control de atributos en línea",
+  LINEAS: ["Fabuloso"],
+  DEFAULT_LINE: "Fabuloso",
+  DEFAULT_N_MUESTRAS: 5
+};
+
+</script>
+  <script>
+/**
+ * Vessena LCC – SPA frontend
+ * Depende de assets/config.js (window.APP_CONFIG).
+ */
+(function(){
+  const CFG = window.APP_CONFIG || {};
+  const app = document.getElementById('app');
+  const topbar = document.getElementById('topbar');
+  const drawer = document.getElementById('drawer');
+  const spinner = document.getElementById('spinner');
+  const toastEl = document.getElementById('toast');
+  const whoEl = document.getElementById('who');
+  const titleEl = document.getElementById('title');
+  const drawerName = document.getElementById('drawerName');
+  const drawerRole = document.getElementById('drawerRole');
+
+  const ROLES = { ANALISTA: 'Analista', COORDINADOR: 'Coordinador', QA: 'QA', ADMIN: 'Admin' };
+  const RANK  = { Analista:1, Coordinador:2, QA:3, Admin:4 };
+
+  // ---------- Estado ----------
+  const state = {
+    session: null,          // { token, user }
+    catalog: [],            // defectos
+    currentView: null,
+    editingMuestreo: null,  // draft del formulario
+    currentGroup: null      // null = no elegido; '' = Todos; 'Envase' etc = un grupo
+  };
+
+  // Horarios de control programados (según turno) — cada control se asocia al slot
+  // más cercano dentro de la tolerancia. Editable acá si cambian los horarios.
+  const SCHEDULE_TIMES = ['06:30', '09:00', '11:00', '13:30', '15:00', '16:30'];
+  const SCHEDULE_TOLERANCE_MIN = 60; // ±60 minutos
+
+  const DEFECT_GROUPS_UI = [
+    { key: '',            label: 'Todos',        emoji: '📋' },
+    { key: 'Envase',      label: 'Envase',       emoji: '🧴' },
+    { key: 'Etiqueta',    label: 'Etiqueta',     emoji: '🏷️' },
+    { key: 'Tapa',        label: 'Tapa',         emoji: '🔵' },
+    { key: 'Palletizado', label: 'Palletizado',  emoji: '📦' },
+    { key: 'Producto',    label: 'Producto',     emoji: '🧪' },
+    { key: 'Trazabilidad',label: 'Trazabilidad', emoji: '🔍' }
+  ];
+
+  // ---------- Utils UI ----------
+  function toast(msg, kind='') {
+    toastEl.textContent = msg;
+    toastEl.className = kind ? kind : '';
+    toastEl.classList.remove('hidden');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => toastEl.classList.add('hidden'), 2600);
+  }
+  function loading(on) { spinner.classList.toggle('hidden', !on); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function fmtDate(v){ if(!v) return ''; const d = (v instanceof Date)? v : new Date(v); return d.toLocaleString('es-UY',{ dateStyle:'short', timeStyle:'short' }); }
+  function fmtDay(v){ if(!v) return ''; const d = (v instanceof Date)? v : new Date(v); return d.toLocaleDateString('es-UY'); }
+  function today(){ const d=new Date(); const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; }
+  function nowTime(){ const d=new Date(); const p=n=>String(n).padStart(2,'0'); return `${p(d.getHours())}:${p(d.getMinutes())}`; }
+
+  // ---------- API ----------
+  async function api(action, payload={}) {
+    if (!CFG.API_URL || CFG.API_URL.startsWith('PEGAR_AQUI')) {
+      throw new Error('Falta configurar API_URL en assets/config.js');
+    }
+    payload = Object.assign({ action, user_agent: navigator.userAgent }, payload);
+    if (state.session && state.session.token && payload.token === undefined) {
+      payload.token = state.session.token;
+    }
+    const res = await fetch(CFG.API_URL, {
+      method: 'POST',
+      // Content-Type text/plain evita el preflight CORS con Apps Script
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error('Error HTTP ' + res.status);
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Error del servidor');
+    return data;
+  }
+
+  // ---------- Sesión (persistida en localStorage) ----------
+  function loadSession() {
+    try { state.session = JSON.parse(localStorage.getItem(CFG.SESSION_KEY) || 'null'); }
+    catch(e) { state.session = null; }
+  }
+  function saveSession(s) { state.session = s; localStorage.setItem(CFG.SESSION_KEY, JSON.stringify(s)); }
+  function clearSession() { state.session = null; localStorage.removeItem(CFG.SESSION_KEY); }
+
+  // ---------- Comprimir foto en el navegador ----------
+  function compressImage(file, maxDim, quality) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('No se pudo leer el archivo'));
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          let w = img.naturalWidth, h = img.naturalHeight;
+          const scale = Math.min(1, maxDim / Math.max(w, h));
+          w = Math.round(w * scale); h = Math.round(h * scale);
+          const cvs = document.createElement('canvas');
+          cvs.width = w; cvs.height = h;
+          const ctx = cvs.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          cvs.toBlob(blob => {
+            if (!blob) return reject(new Error('No se pudo comprimir'));
+            const fr = new FileReader();
+            fr.onload = () => {
+              const dataUrl = fr.result;
+              const base64 = String(dataUrl).split(',')[1];
+              resolve({ blob, base64, mime: 'image/jpeg', size: blob.size, dataUrl });
+            };
+            fr.readAsDataURL(blob);
+          }, 'image/jpeg', quality);
+        };
+        img.onerror = () => reject(new Error('Archivo de imagen inválido'));
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // ---------- Roles ----------
+  function hasRole(minRole) {
+    if (!state.session) return false;
+    return RANK[state.session.user.rol] >= RANK[minRole];
+  }
+  function refreshDrawer() {
+    if (!state.session) return;
+    drawerName.textContent = state.session.user.nombre || state.session.user.username;
+    drawerRole.textContent = state.session.user.rol;
+    whoEl.textContent = state.session.user.username;
+    drawer.querySelectorAll('button[data-min-role]').forEach(b => {
+      b.classList.toggle('hidden', !hasRole(b.dataset.minRole));
+    });
+  }
+
+  // ---------- Router ----------
+  function nav(view, params) {
+    state.currentView = { view, params };
+    render();
+  }
+
+  function render() {
+    if (!state.session) { renderLogin(); return; }
+    topbar.classList.remove('hidden');
+    refreshDrawer();
+    const v = state.currentView && state.currentView.view || 'home';
+    const p = state.currentView && state.currentView.params || {};
+    switch (v) {
+      case 'home': renderHome(); break;
+      case 'new': renderNew(p); break;
+      case 'orders_today': renderOrdersToday(); break;
+      case 'order_detail': renderOrderDetail(p.orden); break;
+      case 'list': renderList(); break;
+      case 'detail': renderDetail(p.id); break;
+      case 'change_pwd': renderChangePwd(); break;
+      case 'signature': renderSignature(); break;
+      case 'admin_users': renderUsers(); break;
+      case 'admin_defects': renderDefects(); break;
+      case 'admin_audit': renderAudit(); break;
+      default: renderHome();
+    }
+  }
+
+  // ---------- LOGIN ----------
+  function renderLogin() {
+    topbar.classList.add('hidden');
+    drawer.classList.add('hidden');
+    app.innerHTML = `
+      <div class="login-wrap">
+        <div class="logo">
+          <div class="dot">V</div>
+          <h1>Vessena LCC Fabuloso</h1>
+          <div class="muted small">Control de atributos en línea – SOPLCC200 v3.0</div>
+        </div>
+        <div class="card">
+          <label>Usuario</label>
+          <input id="lg_user" type="text" autocomplete="username" placeholder="usuario">
+          <label>Contraseña</label>
+          <input id="lg_pass" type="password" autocomplete="current-password" placeholder="••••••••">
+          <div class="mt12">
+            <button class="primary" id="lg_btn" style="width:100%">Ingresar</button>
+          </div>
+          <div class="muted small mt8 right">
+            ¿No tenés cuenta? Pedile al administrador que te dé de alta.
+          </div>
+        </div>
+      </div>
+    `;
+    document.getElementById('lg_btn').addEventListener('click', doLogin);
+    document.getElementById('lg_pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+  }
+
+  async function doLogin() {
+    const username = document.getElementById('lg_user').value.trim();
+    const password = document.getElementById('lg_pass').value;
+    if (!username || !password) return toast('Usuario y contraseña requeridos', 'err');
+    try {
+      loading(true);
+      const r = await api('login', { username, password, token: null });
+      saveSession({ token: r.token, user: r.user });
+      await loadCatalog();
+      nav('home');
+    } catch(e) {
+      toast(e.message, 'err');
+    } finally { loading(false); }
+  }
+
+  async function loadCatalog() {
+    try {
+      const r = await api('getCatalog');
+      state.catalog = r.defectos;
+    } catch(e) { toast('No se pudo cargar catálogo de defectos: ' + e.message, 'err'); }
+  }
+
+  async function doLogout() {
+    try { loading(true); await api('logout'); } catch(e) {}
+    finally { loading(false); clearSession(); render(); toast('Sesión cerrada', 'ok'); }
+  }
+
+  // ---------- HOME ----------
+  function renderHome() {
+    titleEl.textContent = 'Inicio';
+    app.innerHTML = `
+      <div class="card">
+        <h2>Hola ${esc(state.session.user.nombre || state.session.user.username)} 👋</h2>
+        <div class="muted small">Rol: ${esc(state.session.user.rol)}</div>
+      </div>
+      <div class="card">
+        <h3>Acciones rápidas</h3>
+        <div class="row mt8">
+          <button class="primary" data-go="new">➕ Nuevo muestreo</button>
+          <button class="secondary" data-go="orders_today">🕒 Órdenes de hoy</button>
+          <button class="secondary" data-go="list">📋 Ver muestreos</button>
+        </div>
+      </div>
+      <div class="card" id="quickList">
+        <h3>Últimos muestreos</h3>
+        <div class="muted small">Cargando…</div>
+      </div>
+    `;
+    app.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', ()=> nav(b.dataset.go)));
+    loadQuickList();
+  }
+
+  async function loadQuickList() {
+    try {
+      const r = await api('listMuestreos', { limit: 5 });
+      const rows = r.rows || [];
+      const c = document.getElementById('quickList');
+      if (!rows.length) { c.innerHTML += '<div class="muted small">Todavía no hay muestreos.</div>'; return; }
+      c.innerHTML = '<h3>Últimos muestreos</h3>' + renderMuestreoTable(rows);
+      wireMuestreoTableClicks_();
+    } catch(e) {
+      document.getElementById('quickList').innerHTML += `<div class="muted small">Error: ${esc(e.message)}</div>`;
+    }
+  }
+
+  function renderMuestreoTable(rows) {
+    // Agrupar por orden_envasado
+    const groups = {};
+    rows.forEach(r => {
+      const k = (String(r.orden||'').trim()) || '(sin orden)';
+      (groups[k] = groups[k] || []).push(r);
+    });
+    const claves = Object.keys(groups).sort((a,b) => {
+      const ma = Math.max.apply(null, groups[a].map(x => new Date(x.timestamp).getTime()));
+      const mb = Math.max.apply(null, groups[b].map(x => new Date(x.timestamp).getTime()));
+      return mb - ma;
+    });
+
+    function summarizeState_(g) {
+      const states = new Set(g.map(x => x.estado));
+      if (states.has('Rechazado')) return 'Rechazado';
+      if (states.has('Retenido')) return 'Retenido';
+      if (states.size === 1 && states.has('Aprobado')) return 'Aprobado';
+      if (states.has('Aprobado')) return 'Aprobado';
+      if (states.has('Controlado')) return 'Controlado';
+      return Array.from(states)[0] || '';
+    }
+
+    return `
+      <table>
+        <thead><tr>
+          <th style="width:24px;"></th>
+          <th>Orden</th>
+          <th>Lote</th>
+          <th>Controles</th>
+          <th>Peor QR</th>
+          <th>Estado</th>
+        </tr></thead>
+        <tbody>
+          ${claves.map(k => {
+            const g = groups[k].slice().sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+            const last = g[0];
+            const worst = Math.min.apply(null, g.map(x => Number(x.QR||0)));
+            const worstRow = g.find(x => Number(x.QR||0) === worst) || last;
+            const stEstado = summarizeState_(g);
+            return `
+              <tr class="order-row" data-expand="${esc(k)}">
+                <td><span class="chev">▶</span></td>
+                <td><a href="#" data-orden="${esc(k)}" style="color:var(--primary); text-decoration:underline; font-weight:600;">${esc(k)}</a></td>
+                <td>${esc(last.lote||'-')}<div class="muted small">${esc(last.codigo_pt||'')}</div></td>
+                <td>${g.length}</td>
+                <td><b>${esc(worst)}</b><div class="muted small">${esc(worstRow.rango||'')}</div></td>
+                <td>${estadoChip(stEstado)}</td>
+              </tr>
+              <tr class="order-details" data-body="${esc(k)}" style="display:none;">
+                <td></td>
+                <td colspan="5" style="padding:0;">
+                  <table style="margin:0;">
+                    <thead><tr>
+                      <th>Fecha / hora</th><th>Analista</th><th>QR</th><th>Estado</th>
+                    </tr></thead>
+                    <tbody>
+                      ${g.map(r => `
+                        <tr data-id="${esc(r.id)}">
+                          <td>${esc(fmtDate(r.timestamp))}</td>
+                          <td>${esc(r.analista||'')}</td>
+                          <td><b>${esc(r.QR)}</b> <span class="muted small">${esc(r.rango||'')}</span></td>
+                          <td>${estadoChip(r.estado)}</td>
+                        </tr>`).join('')}
+                    </tbody>
+                  </table>
+                </td>
+              </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+  }
+
+  function wireMuestreoTableClicks_() {
+    // Toggle expand/collapse en la fila de la orden (excepto si tocás el link a "Ver orden")
+    document.querySelectorAll('tr.order-row[data-expand]').forEach(row => {
+      row.addEventListener('click', (e) => {
+        if (e.target && e.target.dataset && e.target.dataset.orden !== undefined) return; // deja pasar al link
+        const k = row.dataset.expand;
+        const body = document.querySelector(`tr.order-details[data-body="${cssEscape_(k)}"]`);
+        if (!body) return;
+        const shown = body.style.display !== 'none';
+        body.style.display = shown ? 'none' : '';
+        row.classList.toggle('expanded', !shown);
+      });
+    });
+    // Filas de controles dentro del cuerpo: navegan al detalle del control
+    document.querySelectorAll('tr.order-details tr[data-id]').forEach(tr => tr.addEventListener('click', (e) => {
+      e.stopPropagation();
+      nav('detail', { id: tr.dataset.id });
+    }));
+    // Link en el número de orden: detalle de la orden
+    document.querySelectorAll('a[data-orden]').forEach(a => a.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const o = a.dataset.orden;
+      if (o) nav('order_detail', { orden: o });
+    }));
+  }
+
+  function cssEscape_(s) {
+    // Escape simple para usar en atributos CSS
+    return String(s).replace(/(["\\])/g, '\\$1');
+  }
+  function estadoChip(e) {
+    if (!e) return '';
+    const map = { 'Aprobado':'ok', 'Liberado':'ok', 'Controlado':'info', 'Retenido':'warn', 'Rechazado':'danger' };
+    return `<span class="chip ${map[e]||'info'}">${esc(e)}</span>`;
+  }
+
+  // ---------- NUEVO MUESTREO ----------
+  function renderNew(prefill) {
+    titleEl.textContent = 'Nuevo muestreo';
+    // Si vienen datos de "Órdenes de hoy", arrancamos con esos datos
+    if (prefill && (prefill.orden_envasado || prefill.lote)) {
+      state.editingMuestreo = {
+        linea: prefill.linea || CFG.DEFAULT_LINE || 'Fabuloso',
+        orden_envasado: prefill.orden_envasado || '',
+        lote: prefill.lote || '',
+        codigo_pt: prefill.codigo_pt || '',
+        fecha_muestreo: today(),
+        hora_muestreo: nowTime(),
+        n_muestras: CFG.DEFAULT_N_MUESTRAS || 5,
+        defectos: [],
+        unidades_retiradas: 0,
+        motivo_retiro: '',
+        acciones_correctivas: '',
+        fotos: [],
+        foto_rotulo: null,
+        foto_lote: null
+      };
+    } else if (!state.editingMuestreo) {
+      state.editingMuestreo = {
+        linea: CFG.DEFAULT_LINE || 'Fabuloso',
+        orden_envasado: '',
+        lote: '',
+        codigo_pt: '',
+        fecha_muestreo: today(),
+        hora_muestreo: nowTime(),
+        n_muestras: CFG.DEFAULT_N_MUESTRAS || 5,
+        defectos: [],
+        unidades_retiradas: 0,
+        motivo_retiro: '',
+        acciones_correctivas: '',
+        fotos: [],
+        foto_rotulo: null,
+        foto_lote: null
+      };
+    }
+    const m = state.editingMuestreo;
+    app.innerHTML = `
+      <div class="card">
+        <h2>Datos de la producción</h2>
+        <div class="row">
+          <div>
+            <label>Línea</label>
+            <select id="m_linea">${(CFG.LINEAS||['Fabuloso']).map(l => `<option ${l===m.linea?'selected':''}>${esc(l)}</option>`).join('')}</select>
+          </div>
+          <div>
+            <label>N° Orden de envasado</label>
+            <input id="m_orden" type="text" value="${esc(m.orden_envasado)}" placeholder="OE-…" />
+          </div>
+        </div>
+        <div class="row">
+          <div><label>Lote</label><input id="m_lote" value="${esc(m.lote)}" placeholder="Lote" /></div>
+          <div><label>Código PT</label><input id="m_pt" value="${esc(m.codigo_pt)}" placeholder="Código de producto" /></div>
+        </div>
+        <div class="row">
+          <div><label>Fecha</label><input id="m_fecha" type="date" value="${esc(m.fecha_muestreo)}" /></div>
+          <div><label>Hora</label><input id="m_hora" type="time" value="${esc(m.hora_muestreo)}" /></div>
+          <div><label>N° muestras</label><input id="m_n" type="number" min="1" max="50" value="${esc(m.n_muestras)}" /></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Defectos detectados</h2>
+        <div class="muted small mb8">Elegí un grupo y tocá los defectos observados. Indicá cuántas unidades presentan cada uno.</div>
+        <div id="def_groups" class="def-groups"></div>
+        <div class="filter">
+          <input id="def_search" placeholder="Buscar dentro del grupo…" />
+          <select id="def_filter">
+            <option value="">Todas las severidades</option>
+            <option>Leve</option>
+            <option>Moderado</option>
+            <option>Crítico</option>
+          </select>
+        </div>
+        <div id="def_list"></div>
+        <div class="hr"></div>
+        <div id="qr_preview"></div>
+      </div>
+
+      <div class="card">
+        <h2>Fotos obligatorias <span class="chip danger">Requeridas</span></h2>
+        <div class="muted small mb8">Las fotos se comprimen automáticamente a ${CFG.PHOTO_MAX_DIM}px (~100-150 KB). Sin estas 2 fotos, el control no se puede guardar.</div>
+
+        <div class="row">
+          <div id="req_rotulo_wrap"></div>
+          <div id="req_lote_wrap"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Otras fotos (evidencia de defectos)</h2>
+        <div class="muted small mb8">Opcional. Sumá tantas fotos de defectos como quieras.</div>
+        <label for="photo_in" class="photo-btn">📷 Tomar / elegir foto</label>
+        <input id="photo_in" class="photo-input" type="file" accept="image/*" capture="environment" multiple />
+        <div id="photos" class="photos"></div>
+      </div>
+
+      <div class="card">
+        <h2>Acciones y retiros</h2>
+        <label>Unidades defectuosas retiradas</label>
+        <input id="m_retira" type="number" min="0" value="${esc(m.unidades_retiradas)}" />
+        <label>Motivo del retiro</label>
+        <textarea id="m_motivo" placeholder="Motivo por el que se retiran unidades…">${esc(m.motivo_retiro)}</textarea>
+        <label>Acciones correctivas</label>
+        <textarea id="m_acc" placeholder="¿Qué medidas se tomaron?">${esc(m.acciones_correctivas)}</textarea>
+      </div>
+
+      <div class="card">
+        <div class="row">
+          <button class="secondary" id="m_reset">🗑️ Cancelar</button>
+          <button class="primary" id="m_save">💾 Guardar muestreo</button>
+        </div>
+      </div>
+    `;
+    hookNewForm();
+    renderGroups();
+    renderDefectList();
+    renderPhotos();
+    updateQrPreview();
+  }
+
+  function hookNewForm() {
+    const m = state.editingMuestreo;
+    const bind = (id, key, prop='value') => {
+      const el = document.getElementById(id);
+      el.addEventListener('input', () => { m[key] = prop==='value' ? el.value : el[prop]; if (key==='n_muestras') updateQrPreview(); });
+    };
+    bind('m_linea','linea'); bind('m_orden','orden_envasado'); bind('m_lote','lote'); bind('m_pt','codigo_pt');
+    bind('m_fecha','fecha_muestreo'); bind('m_hora','hora_muestreo'); bind('m_n','n_muestras');
+    bind('m_retira','unidades_retiradas'); bind('m_motivo','motivo_retiro'); bind('m_acc','acciones_correctivas');
+
+    document.getElementById('def_search').addEventListener('input', renderDefectList);
+    document.getElementById('def_filter').addEventListener('change', renderDefectList);
+    document.getElementById('photo_in').addEventListener('change', onPickPhoto);
+    // Renderizar los 2 slots de fotos obligatorias
+    renderRequiredSlot_('req_rotulo_wrap', 'foto_rotulo', '📦', 'Rótulo de caja');
+    renderRequiredSlot_('req_lote_wrap',   'foto_lote',   '🏷️', 'Lote del envase');
+
+    document.getElementById('m_reset').addEventListener('click', () => {
+      if (confirm('¿Descartar el muestreo actual?')) { state.editingMuestreo = null; nav('home'); }
+    });
+    document.getElementById('m_save').addEventListener('click', saveMuestreo);
+    // Actualizar el estado del botón guardar
+    updateSaveBtn_();
+  }
+
+  // Estados del slot: 'empty' | 'uploading' | 'uploaded' | 'error'
+  function renderRequiredSlot_(wrapId, stateKey, emoji, title) {
+    const m = state.editingMuestreo;
+    const photo = m[stateKey];
+    const inputId = 'inp_' + stateKey;
+    const wrap = document.getElementById(wrapId);
+    if (!wrap) return;
+
+    let status = 'empty';
+    if (photo && photo.status) status = photo.status;
+    else if (photo && photo.url) status = 'uploaded';
+
+    const statusHtml = ({
+      empty:    '<div class="chip warn">📸 Sin foto todavía</div>',
+      uploading:'<div class="chip info">⏳ Subiendo…</div>',
+      uploaded: `<div class="chip ok">✅ Subida ${photo && photo.size ? '('+Math.round(photo.size/1024)+' KB)':''}</div>`,
+      error:    `<div class="chip danger">❌ Error: ${esc((photo && photo.error) || 'no se pudo subir')}</div>`
+    })[status];
+
+    const preview = photo && (photo.preview || photo.url)
+      ? `<img src="${esc(photo.preview || photo.url)}" alt="foto" style="width:100%; max-height:120px; object-fit:cover; border-radius:8px; display:block; background:#eef2ff;"/>`
+      : '';
+
+    wrap.innerHTML = `
+      <div class="card" style="margin:0; padding:10px; border: 2px solid ${status==='uploaded'?'var(--ok)':status==='error'?'var(--danger)':'var(--warn)'};">
+        <div style="font-weight:600; margin-bottom:4px;">${emoji} ${esc(title)} <span style="color:var(--danger)">*</span></div>
+        <div style="margin-bottom:6px;">${statusHtml}</div>
+        ${preview}
+        <label for="${inputId}" class="photo-btn" style="margin-top:6px; display:block; text-align:center;">
+          📷 ${photo ? 'Cambiar foto' : 'Tomar / elegir foto'}
+        </label>
+        <input id="${inputId}" class="photo-input" type="file" accept="image/*" capture="environment" />
+      </div>
+    `;
+    document.getElementById(inputId).addEventListener('change', ev => onPickRequiredPhoto(ev, stateKey, wrapId, emoji, title));
+  }
+
+  async function onPickRequiredPhoto(ev, stateKey, wrapId, emoji, title) {
+    const f = (ev.target.files || [])[0];
+    ev.target.value = '';
+    if (!f) return;
+    const m = state.editingMuestreo;
+    // Estado "subiendo"
+    m[stateKey] = { status: 'uploading', name: f.name, size: f.size };
+    renderRequiredSlot_(wrapId, stateKey, emoji, title);
+    updateSaveBtn_();
+    try {
+      const c = await compressImage(f, CFG.PHOTO_MAX_DIM, CFG.PHOTO_QUALITY);
+      // Mientras se sube, mostramos el preview ya
+      m[stateKey] = { status: 'uploading', preview: c.dataUrl };
+      renderRequiredSlot_(wrapId, stateKey, emoji, title);
+      const r = await api('uploadPhoto', {
+        filename: stateKey + '_' + Date.now() + '.jpg',
+        mime: c.mime, dataBase64: c.base64,
+        muestreo_ref: (m.orden_envasado||'') + '/' + stateKey
+      });
+      // Éxito
+      m[stateKey] = { status: 'uploaded', url: r.url, id: r.id, size: r.size, preview: c.dataUrl };
+      toast(`✅ ${title} subida (${Math.round(r.size/1024)} KB)`, 'ok');
+    } catch(e) {
+      m[stateKey] = { status: 'error', error: e.message, preview: (m[stateKey] && m[stateKey].preview) || null };
+      toast('❌ No se pudo subir la foto: ' + e.message, 'err');
+    } finally {
+      renderRequiredSlot_(wrapId, stateKey, emoji, title);
+      updateSaveBtn_();
+    }
+  }
+
+  function updateSaveBtn_() {
+    const btn = document.getElementById('m_save');
+    if (!btn) return;
+    const m = state.editingMuestreo || {};
+    const okR = m.foto_rotulo && m.foto_rotulo.status === 'uploaded' && m.foto_rotulo.url;
+    const okL = m.foto_lote   && m.foto_lote.status   === 'uploaded' && m.foto_lote.url;
+    if (!okR || !okL) {
+      btn.disabled = true;
+      btn.innerHTML = '⚠ Faltan fotos obligatorias';
+      btn.title = 'Cargá foto de rótulo de caja y de lote de envase';
+    } else {
+      btn.disabled = false;
+      btn.innerHTML = '💾 Guardar muestreo';
+      btn.title = '';
+    }
+  }
+
+  function renderGroups() {
+    const wrap = document.getElementById('def_groups');
+    if (!wrap) return;
+    // Si el catálogo no tiene "grupo" cargado, ocultamos los botones y mostramos aviso
+    const hasGroups = state.catalog.some(d => d.grupo);
+    if (!hasGroups) {
+      wrap.innerHTML = '<div class="muted small">Catálogo sin agrupar todavía. Corré <code>setup()</code> en Apps Script.</div>';
+      return;
+    }
+    const selected = new Set((state.editingMuestreo.defectos || []).map(d => d.codigo));
+    const countsTotal = {}, countsSel = {};
+    state.catalog.forEach(d => {
+      const g = d.grupo || '';
+      countsTotal[g] = (countsTotal[g]||0) + 1;
+      if (selected.has(d.codigo)) countsSel[g] = (countsSel[g]||0) + 1;
+    });
+    wrap.innerHTML = DEFECT_GROUPS_UI.map(g => {
+      const total = g.key === '' ? state.catalog.length : (countsTotal[g.key]||0);
+      const sel = g.key === '' ? selected.size : (countsSel[g.key]||0);
+      if (g.key !== '' && total === 0) return ''; // ocultá grupos vacíos
+      const active = state.currentGroup === g.key ? 'active' : '';
+      return `<button data-group="${esc(g.key)}" class="${active}">${g.emoji} ${esc(g.label)} <span class="total">(${total})</span>${sel ? `<span class="count-sel">${sel}</span>` : ''}</button>`;
+    }).join('');
+    wrap.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+      state.currentGroup = b.dataset.group;
+      renderGroups();
+      renderDefectList();
+    }));
+  }
+
+  function renderDefectList() {
+    // Si no eligió grupo todavía, mostrá el placeholder y ocultá el buscador
+    const searchWrap = document.getElementById('def_search')?.closest('.filter');
+    if (state.currentGroup === null) {
+      if (searchWrap) searchWrap.style.display = 'none';
+      document.getElementById('def_list').innerHTML = `
+        <div class="muted small" style="padding: 20px; text-align:center; border:1px dashed var(--border); border-radius:10px;">
+          👆 Elegí un grupo arriba para ver los defectos disponibles
+        </div>`;
+      return;
+    }
+    if (searchWrap) searchWrap.style.display = '';
+    const q = (document.getElementById('def_search')?.value || '').toLowerCase();
+    const f = document.getElementById('def_filter')?.value || '';
+    const g = state.currentGroup || '';
+    const list = state.catalog.filter(d =>
+      (g === '' || (d.grupo === g)) &&
+      (!q || d.descripcion.toLowerCase().includes(q) || d.codigo.toLowerCase().includes(q)) &&
+      (!f || d.clasificacion === f)
+    );
+    const map = {};
+    (state.editingMuestreo.defectos||[]).forEach(d => map[d.codigo] = d.cantidad);
+    const html = list.map(d => {
+      const on = map[d.codigo] !== undefined;
+      const cnt = map[d.codigo] || 1;
+      const cls = String(d.clasificacion).replace('í','i');
+      return `
+        <div class="defect-item">
+          <input class="toggle" type="checkbox" data-cod="${esc(d.codigo)}" ${on?'checked':''} />
+          <div class="desc">
+            <div>${esc(d.descripcion)}</div>
+            <div class="muted small">${esc(d.codigo)}</div>
+          </div>
+          <span class="clas ${cls}">${esc(d.clasificacion)}</span>
+          <input type="number" min="1" max="99" data-cnt="${esc(d.codigo)}" value="${cnt}" ${on?'':'style="opacity:.3"'} />
+        </div>`;
+    }).join('') || '<div class="muted small">Sin defectos que coincidan con el filtro.</div>';
+    document.getElementById('def_list').innerHTML = html;
+    document.getElementById('def_list').querySelectorAll('input[data-cod]').forEach(cb =>
+      cb.addEventListener('change', () => toggleDefect(cb.dataset.cod, cb.checked)));
+    document.getElementById('def_list').querySelectorAll('input[data-cnt]').forEach(inp =>
+      inp.addEventListener('input', () => setDefCantidad(inp.dataset.cnt, Number(inp.value)||1)));
+  }
+  function toggleDefect(cod, on) {
+    const list = state.editingMuestreo.defectos = state.editingMuestreo.defectos || [];
+    const idx = list.findIndex(d => d.codigo === cod);
+    if (on && idx < 0) list.push({ codigo: cod, cantidad: 1 });
+    if (!on && idx >= 0) list.splice(idx,1);
+    updateQrPreview();
+    renderDefectList();
+    renderGroups(); // actualizar contadores de los grupos
+  }
+  function setDefCantidad(cod, cantidad) {
+    const list = state.editingMuestreo.defectos || [];
+    const d = list.find(x => x.codigo === cod);
+    if (d) { d.cantidad = Math.max(1, cantidad); updateQrPreview(); }
+  }
+
+  function updateQrPreview() {
+    const cat = {}; state.catalog.forEach(d => cat[d.codigo] = d.clasificacion);
+    let DC=0,DM=0,DL=0;
+    (state.editingMuestreo.defectos||[]).forEach(d => {
+      const c = cat[d.codigo];
+      if (c==='Crítico') DC += d.cantidad;
+      else if (c==='Moderado') DM += d.cantidad;
+      else if (c==='Leve') DL += d.cantidad;
+    });
+    const N = Number(state.editingMuestreo.n_muestras) || 5;
+    const QR = Math.round((100 - (750*DC+140*DM+5*DL)/N)*100)/100;
+    let rango, kind;
+    if (QR >= 100) { rango='Perfecta'; kind='Perfecta'; }
+    else if (QR >= 95) { rango='Muy buena'; kind='Muybuena'; }
+    else if (QR >= 90) { rango='Aceptable'; kind='Aceptable'; }
+    else { rango='No aceptable'; kind='Noaceptable'; }
+    const box = document.getElementById('qr_preview');
+    if (!box) return;
+    box.innerHTML = `
+      <div class="qr-box qr-${kind}">
+        <div class="val">${QR}</div>
+        <div class="lbl">QR – ${rango}</div>
+        <div class="stat" style="justify-content:center; margin-top:10px;">
+          <div>Críticos: <b>${DC}</b></div>
+          <div>Moderados: <b>${DM}</b></div>
+          <div>Leves: <b>${DL}</b></div>
+          <div>Muestras: <b>${N}</b></div>
+        </div>
+      </div>
+      <div class="muted small">QR = 100 − (750·DC + 140·DM + 5·DL) / N</div>
+    `;
+  }
+
+  // ---- Fotos ----
+  async function onPickPhoto(ev) {
+    const files = Array.from(ev.target.files || []);
+    ev.target.value = '';
+    for (const f of files) {
+      try {
+        loading(true);
+        const c = await compressImage(f, CFG.PHOTO_MAX_DIM, CFG.PHOTO_QUALITY);
+        // Subimos ya al Drive: obtenemos url y guardamos la miniatura local
+        const r = await api('uploadPhoto', {
+          filename: f.name.replace(/\.[^.]+$/,'') + '.jpg',
+          mime: c.mime,
+          dataBase64: c.base64,
+          muestreo_ref: (state.editingMuestreo.lote||'') + '/' + (state.editingMuestreo.orden_envasado||'')
+        });
+        state.editingMuestreo.fotos.push({ url: r.url, id: r.id, size: r.size, name: r.name, preview: c.dataUrl });
+        toast(`Foto subida (${Math.round(r.size/1024)} KB)`, 'ok');
+        renderPhotos();
+      } catch(e) {
+        toast('No se pudo subir: ' + e.message, 'err');
+      } finally { loading(false); }
+    }
+  }
+
+  function renderPhotos() {
+    const el = document.getElementById('photos');
+    if (!el) return;
+    const items = state.editingMuestreo.fotos || [];
+    if (!items.length) { el.innerHTML = '<div class="muted small">Sin fotos.</div>'; return; }
+    el.innerHTML = items.map((p,i) => `
+      <div class="thumb">
+        <img src="${esc(p.preview || p.url)}" alt="foto" />
+        <button class="rm" data-rm="${i}" title="Quitar">✕</button>
+      </div>`).join('');
+    el.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', () => {
+      state.editingMuestreo.fotos.splice(Number(b.dataset.rm), 1);
+      renderPhotos();
+    }));
+  }
+
+  async function saveMuestreo() {
+    const m = state.editingMuestreo;
+    if (!m.lote || !m.orden_envasado) return toast('Lote y orden de envasado son requeridos', 'err');
+    if (!m.n_muestras || m.n_muestras < 1) return toast('N° de muestras inválido', 'err');
+    const rotOk = m.foto_rotulo && m.foto_rotulo.status === 'uploaded' && m.foto_rotulo.url;
+    const loteOk = m.foto_lote  && m.foto_lote.status  === 'uploaded' && m.foto_lote.url;
+    if (!rotOk)  return toast('Falta la foto del rótulo de caja (o hubo error al subirla)', 'err');
+    if (!loteOk) return toast('Falta la foto del lote del envase (o hubo error al subirla)', 'err');
+    try {
+      loading(true);
+      const r = await api('saveMuestreo', {
+        data: {
+          linea: m.linea, orden_envasado: m.orden_envasado, lote: m.lote, codigo_pt: m.codigo_pt,
+          fecha_muestreo: m.fecha_muestreo, hora_muestreo: m.hora_muestreo, n_muestras: Number(m.n_muestras),
+          defectos: m.defectos, unidades_retiradas: Number(m.unidades_retiradas)||0,
+          motivo_retiro: m.motivo_retiro, acciones_correctivas: m.acciones_correctivas,
+          fotos_urls: (m.fotos||[]).map(f => f.url),
+          foto_rotulo_url: m.foto_rotulo.url,
+          foto_lote_url:   m.foto_lote.url
+        }
+      });
+      toast(`Guardado. QR=${r.QR} (${r.rango})`, 'ok');
+      state.editingMuestreo = null;
+      nav('detail', { id: r.id });
+    } catch(e) { toast(e.message, 'err'); }
+    finally { loading(false); }
+  }
+
+  // ---------- HORARIOS PROGRAMADOS (schedule) ----------
+  /**
+   * Dado un array de controles del día, devuelve los 6 slots con su estado:
+   *   status: 'done' | 'current' | 'missed' | 'future'
+   *   control: el control asignado a ese slot (o null)
+   */
+  function computeScheduleSlots_(controles, refDate) {
+    const now = refDate || new Date();
+    const y = now.getFullYear(), M = now.getMonth(), d = now.getDate();
+    const slots = SCHEDULE_TIMES.map(t => {
+      const [h, mi] = t.split(':').map(Number);
+      return { time: t, scheduled: new Date(y, M, d, h, mi), control: null, status: null };
+    });
+    const tolMs = SCHEDULE_TOLERANCE_MIN * 60000;
+    // Ordenar controles por timestamp ascendente
+    const cs = (controles || []).slice().sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+    // Asignar cada control al slot más cercano libre dentro de la tolerancia
+    const used = new Set();
+    cs.forEach(c => {
+      const ct = new Date(c.timestamp);
+      let bestIdx = -1, bestDist = Infinity;
+      slots.forEach((s, i) => {
+        if (used.has(i)) return;
+        const dist = Math.abs(ct - s.scheduled);
+        if (dist <= tolMs && dist < bestDist) { bestDist = dist; bestIdx = i; }
+      });
+      if (bestIdx >= 0) { slots[bestIdx].control = c; used.add(bestIdx); }
+    });
+    // Estado por slot
+    slots.forEach(s => {
+      if (s.control) { s.status = 'done'; return; }
+      const diff = (now - s.scheduled) / 60000;
+      if (diff < -SCHEDULE_TOLERANCE_MIN) s.status = 'future';
+      else if (diff > SCHEDULE_TOLERANCE_MIN) s.status = 'missed';
+      else s.status = 'current';
+    });
+    return slots;
+  }
+
+  function renderScheduleStrip_(slots) {
+    const iconOf = { done:'✅', current:'⏰', missed:'❌', future:'⏳' };
+    const clsOf  = { done:'ok', current:'warn', missed:'danger', future:'muted' };
+    return `<div class="schedule">${slots.map(s => {
+      const extra = s.status === 'done' && s.control ? `<div class="h">${esc(fmtHora_(s.control.timestamp))}</div>` : '';
+      return `<div class="slot ${clsOf[s.status]}" title="${esc(s.status)}">
+        <div class="e">${iconOf[s.status]}</div>
+        <div class="t">${esc(s.time)}</div>
+        ${extra}
+      </div>`;
+    }).join('')}</div>`;
+  }
+
+  function scheduleStatusChip_(slots) {
+    const current = slots.find(s => s.status === 'current');
+    if (current) {
+      const upper = new Date(current.scheduled.getTime() + SCHEDULE_TOLERANCE_MIN*60000);
+      const p = n => String(n).padStart(2,'0');
+      return `<span class="chip warn">⏰ Toca ahora (${current.time}) hasta ${p(upper.getHours())}:${p(upper.getMinutes())}</span>`;
+    }
+    const missed = slots.filter(s => s.status === 'missed').length;
+    if (missed) return `<span class="chip danger">❌ ${missed} control(es) faltante(s) del día</span>`;
+    const future = slots.find(s => s.status === 'future');
+    if (future) return `<span class="chip ok">🕒 Próx: ${esc(future.time)}</span>`;
+    return `<span class="chip ok">✅ Día completo</span>`;
+  }
+
+  // ---------- ÓRDENES DE HOY ----------
+  async function renderOrdersToday() {
+    titleEl.textContent = 'Órdenes de hoy';
+    app.innerHTML = '<div class="card"><div class="muted small">Cargando controles del día…</div></div>';
+    try {
+      const hoyStr = today();
+      // Traemos con margen (últimos 300) y filtramos por día en local
+      const r = await api('listMuestreos', { limit: 300 });
+      const rows = (r.rows || []).filter(m => {
+        // Coincide si el timestamp cae en hoy (hora local UY)
+        const d = new Date(m.timestamp);
+        const p = n => String(n).padStart(2,'0');
+        const s = `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+        return s === hoyStr;
+      });
+
+      // Agrupar por orden_envasado
+      const groups = {};
+      rows.forEach(m => {
+        const key = (m.orden || '(sin orden)').trim() || '(sin orden)';
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(m);
+      });
+      // Cada grupo, ordenado por hora asc
+      Object.values(groups).forEach(g => g.sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp)));
+
+      const claves = Object.keys(groups).sort((a,b) => {
+        // Última actividad más reciente primero
+        const la = groups[a][groups[a].length-1].timestamp;
+        const lb = groups[b][groups[b].length-1].timestamp;
+        return new Date(lb) - new Date(la);
+      });
+
+      if (!claves.length) {
+        app.innerHTML = `
+          <div class="card">
+            <h2>Órdenes de hoy</h2>
+            <div class="muted small">Todavía no se cargó ningún muestreo hoy.</div>
+            <div class="mt12"><button class="primary" id="ir_new">➕ Empezar el primer muestreo</button></div>
+          </div>`;
+        document.getElementById('ir_new').addEventListener('click', () => nav('new'));
+        return;
+      }
+
+      let html = `<div class="card">
+        <h2>Órdenes de hoy (${claves.length})</h2>
+        <div class="muted small">Cada tarjeta muestra la línea de tiempo de una orden y quién tomó cada muestra. El próximo control debería tomarse ~2 h después del último.</div>
+      </div>`;
+
+      const canApprove = hasRole(ROLES.COORDINADOR);
+      claves.forEach(k => {
+        const g = groups[k];
+        const last = g[g.length-1];
+
+        // ¿Está cerrada? (Basta que un control tenga orden_cerrada=true)
+        const cerrada = g.some(m => m.orden_cerrada === true);
+        const faltanFotos = g.filter(m => !m.foto_rotulo_url || !m.foto_lote_url);
+
+        // Slots del día (según horarios programados)
+        const slots = computeScheduleSlots_(g);
+        const alertChip = cerrada
+          ? `<span class="chip ok">🔒 Cerrada · aprobada por ${esc(g.find(x=>x.aprobado_por)?.aprobado_por || '')}</span>`
+          : scheduleStatusChip_(slots);
+
+        const nControles = g.length;
+        const nRetenidos = g.filter(m => m.estado === 'Retenido' || m.estado === 'Rechazado').length;
+
+        html += `
+          <div class="card">
+            <div style="display:flex; align-items:flex-start; gap:8px; flex-wrap:wrap;">
+              <div style="flex:1; min-width:180px;">
+                <h3 style="margin:0 0 4px 0; color:var(--text);">Orden ${esc(k)}</h3>
+                <div class="muted small">
+                  Lote <b>${esc(last.lote||'-')}</b> · Cod. <b>${esc(last.codigo_pt||'-')}</b> · Línea ${esc(last.linea||'-')}
+                </div>
+              </div>
+              <div style="text-align:right;">${alertChip}</div>
+            </div>
+
+            ${renderScheduleStrip_(slots)}
+
+            <div class="stat mt8">
+              <div>Controles hoy: <b>${nControles}</b> / ${SCHEDULE_TIMES.length}</div>
+              <div>Retenidos: <b>${nRetenidos}</b></div>
+              <div>Último: <b>${esc(fmtHora_(last.timestamp))}</b></div>
+              ${faltanFotos.length ? `<div style="color:var(--danger)">⚠ ${faltanFotos.length} control(es) sin fotos obligatorias</div>` : ''}
+            </div>
+
+            <div class="hr"></div>
+            <table>
+              <thead><tr><th>Hora</th><th>Analista</th><th>QR</th><th>Rotulo</th><th>Lote</th><th>Estado</th></tr></thead>
+              <tbody>
+                ${g.map(m => `
+                  <tr data-id="${esc(m.id)}">
+                    <td><b>${esc(fmtHora_(m.timestamp))}</b></td>
+                    <td>${esc(m.analista||'-')}</td>
+                    <td><b>${esc(m.QR)}</b> <span class="muted small">${esc(m.rango||'')}</span></td>
+                    <td>${m.foto_rotulo_url?'📦✅':'<span style="color:var(--danger)">📦❌</span>'}</td>
+                    <td>${m.foto_lote_url?'🏷️✅':'<span style="color:var(--danger)">🏷️❌</span>'}</td>
+                    <td>${estadoChip(m.estado)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+
+            <div class="row mt12">
+              <button class="secondary" data-viewone='${esc(k)}'>🔎 Ver esta orden</button>
+              ${!cerrada
+                ? `<button class="primary" data-cont='${escAttrJson_({ orden_envasado: k, lote: last.lote, codigo_pt: last.codigo_pt, linea: last.linea })}'>➕ Nuevo control para esta orden</button>`
+                : ''}
+              <button class="secondary" data-print='${esc(k)}'>🖨️ Imprimir</button>
+              ${canApprove && !cerrada
+                ? `<button class="danger" style="background:var(--ok)" data-approve='${esc(k)}'>✔ Aprobar y cerrar orden</button>`
+                : ''}
+            </div>
+          </div>`;
+      });
+
+      app.innerHTML = html;
+      // Click en fila -> detalle
+      app.querySelectorAll('tr[data-id]').forEach(tr => tr.addEventListener('click', () => nav('detail', { id: tr.dataset.id })));
+      // Botones "nuevo control para esta orden"
+      app.querySelectorAll('button[data-cont]').forEach(b => b.addEventListener('click', () => {
+        const p = JSON.parse(b.dataset.cont);
+        state.editingMuestreo = null;
+        nav('new', p);
+      }));
+      // Botones "imprimir"
+      app.querySelectorAll('button[data-print]').forEach(b => b.addEventListener('click', () => {
+        printOrder(b.dataset.print);
+      }));
+      // Botones "aprobar orden"
+      app.querySelectorAll('button[data-approve]').forEach(b => b.addEventListener('click', () => {
+        openApproveModal(b.dataset.approve);
+      }));
+      // Botones "ver esta orden"
+      app.querySelectorAll('button[data-viewone]').forEach(b => b.addEventListener('click', () => {
+        nav('order_detail', { orden: b.dataset.viewone });
+      }));
+    } catch(e) {
+      app.innerHTML = `<div class="card"><div class="chip danger">${esc(e.message)}</div></div>`;
+    }
+  }
+
+  // ---------- DETALLE DE UNA ORDEN ----------
+  async function renderOrderDetail(orden) {
+    titleEl.textContent = 'Orden ' + orden;
+    app.innerHTML = '<div class="card"><div class="muted small">Cargando…</div></div>';
+    try {
+      const r = await api('listOrder', { orden_envasado: orden });
+      const controles = r.rows || [];
+      const cerrada = r.cerrada;
+      if (!controles.length) {
+        app.innerHTML = `<div class="card"><div class="chip warn">No hay controles registrados para la orden "${esc(orden)}"</div></div>`;
+        return;
+      }
+      const last = controles[controles.length-1];
+      const canApprove = hasRole(ROLES.COORDINADOR);
+      const totalDC = controles.reduce((s,m)=>s+Number(m.DC||0),0);
+      const totalDM = controles.reduce((s,m)=>s+Number(m.DM||0),0);
+      const totalDL = controles.reduce((s,m)=>s+Number(m.DL||0),0);
+
+      if (!state.catalog || !state.catalog.length) await loadCatalog();
+      const cat = {}; state.catalog.forEach(d => cat[d.codigo] = d);
+
+      const slotsOD = computeScheduleSlots_(controles);
+      let html = `
+        <div class="card">
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <div style="flex:1;">
+              <h2 style="margin:0;">Orden ${esc(orden)}</h2>
+              <div class="muted small mt8">
+                Lote <b>${esc(last.lote||'-')}</b> · Cod. <b>${esc(last.codigo_pt||'-')}</b> · Línea ${esc(last.linea||'-')}
+              </div>
+            </div>
+            <div>${cerrada
+              ? `<span class="chip ok">🔒 Aprobada · ${esc(last.aprobado_por||'')}</span>`
+              : scheduleStatusChip_(slotsOD)}
+            </div>
+          </div>
+          ${!cerrada ? renderScheduleStrip_(slotsOD) : ''}
+          <div class="stat mt12">
+            <div>Controles: <b>${controles.length}</b> / ${SCHEDULE_TIMES.length}</div>
+            <div>Críticos: <b style="color:#b42318">${totalDC}</b></div>
+            <div>Moderados: <b style="color:#b54708">${totalDM}</b></div>
+            <div>Leves: <b style="color:#027a48">${totalDL}</b></div>
+          </div>
+          <div class="row mt12">
+            ${!cerrada ? `<button class="primary" id="od_cont">➕ Nuevo control</button>` : ''}
+            <button class="secondary" id="od_print">🖨️ Imprimir</button>
+            ${canApprove && !cerrada ? `<button class="danger" style="background:var(--ok)" id="od_approve">✔ Aprobar y cerrar</button>` : ''}
+          </div>
+        </div>
+      `;
+
+      controles.forEach((m, i) => {
+        const defs = (m.defectos||[]).map(d => {
+          const info = cat[d.codigo] || { descripcion: d.codigo, clasificacion: '?' };
+          const cls = String(info.clasificacion).replace('í','i');
+          return `<div class="defect-item"><span class="clas ${cls}">${esc(info.clasificacion)}</span><div class="desc">${esc(info.descripcion)}</div><b>x${esc(d.cantidad||1)}</b></div>`;
+        }).join('') || '<div class="muted small">Sin defectos.</div>';
+
+        const kind = m.rango === 'Perfecta' || m.rango === 'Muy buena' ? 'Muybuena'
+                   : m.rango === 'Aceptable' ? 'Aceptable' : 'Noaceptable';
+
+        html += `
+          <div class="card">
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <div style="flex:1;">
+                <h3 style="margin:0;">Control #${i+1} · ${esc(fmtHora_(m.timestamp))}</h3>
+                <div class="muted small">Analista: <b>${esc(m.analista||'-')}</b> · N° muestras: ${esc(m.n_muestras||'-')}</div>
+              </div>
+              ${estadoChip(m.estado)}
+            </div>
+
+            <div class="qr-box qr-${kind}" style="margin:10px 0; padding:12px;">
+              <div class="val" style="font-size:32px;">${esc(m.QR)}</div>
+              <div class="lbl">${esc(m.rango||'-')}</div>
+              <div class="stat" style="justify-content:center; margin-top:8px;">
+                <div>Críticos: <b>${esc(m.DC)}</b></div>
+                <div>Moderados: <b>${esc(m.DM)}</b></div>
+                <div>Leves: <b>${esc(m.DL)}</b></div>
+              </div>
+            </div>
+
+            <div class="row">
+              <div>
+                <label>📦 Rótulo caja</label>
+                ${m.foto_rotulo_url
+                  ? `<a href="${esc(m.foto_rotulo_url)}" target="_blank"><img src="${esc(m.foto_rotulo_url)}" style="width:100%; max-height:120px; object-fit:cover; border-radius:8px;"/></a>`
+                  : '<div class="chip danger">Falta foto</div>'}
+              </div>
+              <div>
+                <label>🏷️ Lote envase</label>
+                ${m.foto_lote_url
+                  ? `<a href="${esc(m.foto_lote_url)}" target="_blank"><img src="${esc(m.foto_lote_url)}" style="width:100%; max-height:120px; object-fit:cover; border-radius:8px;"/></a>`
+                  : '<div class="chip danger">Falta foto</div>'}
+              </div>
+            </div>
+
+            <h4 class="mt12" style="margin-bottom:4px;">Defectos</h4>
+            ${defs}
+
+            ${(m.fotos||[]).length ? `
+              <h4 class="mt12" style="margin-bottom:4px;">Otras evidencias</h4>
+              <div class="photos">${m.fotos.map(u=>`<div class="thumb"><a href="${esc(u)}" target="_blank"><img src="${esc(u)}"/></a></div>`).join('')}</div>
+            ` : ''}
+
+            <div class="hr"></div>
+            <div class="small">
+              <b>Unidades retiradas:</b> ${esc(m.unidades_retiradas||0)}<br/>
+              <b>Motivo del retiro:</b> ${esc(m.motivo_retiro||'-')}<br/>
+              <b>Acciones correctivas:</b> ${esc(m.acciones_correctivas||'-')}
+            </div>
+          </div>
+        `;
+      });
+
+      if (cerrada) {
+        html += `
+          <div class="card">
+            <h3>Aprobación de la orden</h3>
+            <div>Aprobada por: <b>${esc(last.aprobado_por||'-')}</b></div>
+            <div class="muted small">Fecha: ${esc(fmtDate(last.aprobado_ts))}</div>
+            ${last.notas_aprobador ? `<div class="mt8"><b>Notas:</b> ${esc(last.notas_aprobador)}</div>` : ''}
+          </div>`;
+      }
+
+      app.innerHTML = html;
+
+      const btnCont = document.getElementById('od_cont');
+      if (btnCont) btnCont.addEventListener('click', () => {
+        state.editingMuestreo = null;
+        nav('new', { orden_envasado: orden, lote: last.lote, codigo_pt: last.codigo_pt, linea: last.linea });
+      });
+      const btnPrint = document.getElementById('od_print');
+      if (btnPrint) btnPrint.addEventListener('click', () => printOrder(orden));
+      const btnApprove = document.getElementById('od_approve');
+      if (btnApprove) btnApprove.addEventListener('click', () => openApproveModal(orden));
+
+    } catch(e) {
+      app.innerHTML = `<div class="card"><div class="chip danger">${esc(e.message)}</div></div>`;
+    }
+  }
+
+  // ---------- APROBAR ORDEN (modal + checklist) ----------
+  async function openApproveModal(ordenEnvasado) {
+    try {
+      loading(true);
+      const r = await api('listOrder', { orden_envasado: ordenEnvasado });
+      loading(false);
+      const controles = r.rows || [];
+      const missing = controles.filter(m => !m.foto_rotulo_url || !m.foto_lote_url);
+      const modal = document.createElement('div');
+      modal.id = 'approve_modal';
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:150;display:flex;align-items:center;justify-content:center;padding:12px;';
+      modal.innerHTML = `
+        <div class="card" style="max-width:560px;width:100%;max-height:90vh;overflow:auto;margin:0;">
+          <h2>Aprobar y cerrar orden ${esc(ordenEnvasado)}</h2>
+          <div class="muted small">Al aprobar, todos los controles de esta orden quedan cerrados y no se pueden agregar más muestreos.</div>
+
+          <div class="hr"></div>
+          <h3>Controles a aprobar (${controles.length})</h3>
+          <table>
+            <thead><tr><th>Hora</th><th>Analista</th><th>QR</th><th>Rótulo</th><th>Lote</th></tr></thead>
+            <tbody>
+              ${controles.map(m => `
+                <tr>
+                  <td>${esc(fmtHora_(m.timestamp))}</td>
+                  <td>${esc(m.analista||'-')}</td>
+                  <td><b>${esc(m.QR)}</b></td>
+                  <td>${m.foto_rotulo_url?'✅':'<span style="color:var(--danger)">❌</span>'}</td>
+                  <td>${m.foto_lote_url?'✅':'<span style="color:var(--danger)">❌</span>'}</td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+          ${missing.length ? `<div class="chip danger mt8">⚠ Hay ${missing.length} control(es) sin fotos obligatorias. No se puede aprobar hasta cargarlas.</div>` : ''}
+
+          <div class="hr"></div>
+          <h3>Confirmación de rótulos</h3>
+          <div class="muted small mb8">¿Leyó el contenido de los rótulos y son <b>correctos</b>?</div>
+          <label style="display:flex;gap:8px;align-items:center;padding:8px 0;"><input type="checkbox" id="chk_lote"/> <span><b>LOTE</b> correcto en el rótulo</span></label>
+          <label style="display:flex;gap:8px;align-items:center;padding:8px 0;"><input type="checkbox" id="chk_vence"/> <span><b>VENCIMIENTO</b> correcto en el rótulo</span></label>
+          <label style="display:flex;gap:8px;align-items:center;padding:8px 0;"><input type="checkbox" id="chk_prod"/> <span><b>PRODUCTO</b> correcto en el rótulo</span></label>
+
+          <label>Notas del aprobador (opcional)</label>
+          <textarea id="ap_notas" placeholder="Observaciones..."></textarea>
+
+          <div class="row mt12">
+            <button class="secondary" id="ap_cancel">Cancelar</button>
+            <button class="primary" id="ap_confirm" ${missing.length ? 'disabled' : ''}>✔ Aprobar y cerrar</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+      document.getElementById('ap_cancel').addEventListener('click', () => modal.remove());
+      document.getElementById('ap_confirm').addEventListener('click', async () => {
+        const chk = {
+          lote: document.getElementById('chk_lote').checked,
+          vence: document.getElementById('chk_vence').checked,
+          producto: document.getElementById('chk_prod').checked
+        };
+        if (!chk.lote || !chk.vence || !chk.producto) return toast('Marcá los 3 puntos del checklist', 'err');
+        try {
+          loading(true);
+          await api('approveOrder', {
+            orden_envasado: ordenEnvasado,
+            checklist: chk,
+            notas: document.getElementById('ap_notas').value
+          });
+          modal.remove();
+          toast('Orden aprobada y cerrada ✔', 'ok');
+          renderOrdersToday();
+        } catch(e) { toast(e.message, 'err'); } finally { loading(false); }
+      });
+    } catch(e) { loading(false); toast(e.message, 'err'); }
+  }
+
+  // ---------- IMPRIMIR ORDEN ----------
+  async function printOrder(ordenEnvasado) {
+    try {
+      loading(true);
+      const r = await api('listOrder', { orden_envasado: ordenEnvasado });
+      loading(false);
+      const controles = r.rows || [];
+      if (!controles.length) return toast('No hay controles para imprimir', 'err');
+      const first = controles[0];
+      const last = controles[controles.length-1];
+      const cerrada = r.cerrada;
+      const firmas = r.firmas || {};
+      // Lista única de analistas que participaron, con su firma si tienen
+      const analistasSet = {};
+      controles.forEach(m => {
+        if (m.analista_username && !analistasSet[m.analista_username]) {
+          analistasSet[m.analista_username] = { username: m.analista_username, nombre: m.analista || m.analista_username };
+        }
+      });
+      const analistas = Object.values(analistasSet);
+      const totalDC = controles.reduce((s,m)=>s+Number(m.DC||0),0);
+      const totalDM = controles.reduce((s,m)=>s+Number(m.DM||0),0);
+      const totalDL = controles.reduce((s,m)=>s+Number(m.DL||0),0);
+
+      // Cargar catálogo si hace falta
+      if (!state.catalog || !state.catalog.length) await loadCatalog();
+      const cat = {}; state.catalog.forEach(d => cat[d.codigo] = d);
+
+      const win = window.open('', '_blank');
+      if (!win) return toast('El navegador bloqueó la ventana emergente. Habilitá pop-ups.', 'err');
+      const style = `
+        <style>
+          body { font-family: system-ui, Arial, sans-serif; color:#111; padding: 20px; max-width: 900px; margin: 0 auto; }
+          h1 { margin:0 0 6px 0; font-size: 20px; }
+          h2 { margin: 16px 0 6px 0; font-size: 15px; border-bottom: 1px solid #ccc; padding-bottom: 2px; }
+          .meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 20px; margin-bottom: 12px; }
+          .meta div { font-size: 12px; }
+          .meta b { color:#333; }
+          table { width:100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
+          th, td { border: 1px solid #999; padding: 4px 6px; text-align:left; vertical-align: top; }
+          th { background: #eee; }
+          .stamp { border: 2px solid ${cerrada?'#12b76a':'#f79009'}; color: ${cerrada?'#12b76a':'#f79009'}; padding: 6px 12px; display: inline-block; font-weight: bold; border-radius: 6px; text-transform: uppercase; letter-spacing: 1px; }
+          .foto { max-width: 140px; max-height: 140px; object-fit: cover; }
+          .grid-fotos { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+          .defect { font-size: 11px; margin: 2px 0; }
+          .clas-Critico { color: #b42318; font-weight: bold; }
+          .clas-Moderado { color: #b54708; font-weight: bold; }
+          .clas-Leve { color: #027a48; }
+          .firmas-grid { margin-top: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; page-break-inside: avoid; }
+          .firma-box { text-align: center; }
+          .firma-slot { border-bottom: 1px solid #444; height: 70px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 2px; }
+          .firma-slot img { max-height: 65px; max-width: 220px; object-fit: contain; }
+          .firma-empty { font-size: 10px; color: #999; font-style: italic; align-self: center; padding-bottom: 6px; }
+          .firma-caption { font-size: 12px; margin-top: 4px; }
+          @media print { .noprint { display:none; } body{ padding:0; } }
+        </style>
+      `;
+      const html = `
+        <!DOCTYPE html><html lang="es"><head><meta charset="utf-8"/>
+        <title>Muestreo orden ${esc(ordenEnvasado)}</title>${style}</head><body>
+        <div class="noprint" style="text-align:right;margin-bottom:8px;">
+          <button onclick="window.print()">🖨️ Imprimir</button>
+          <button onclick="window.close()">Cerrar</button>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;">
+          <div>
+            <h1>Vessena LCC – Registro Muestreo PT en línea</h1>
+            <div class="muted">REG-SOP-LCC-200-A · Línea Limpiadores Fabuloso</div>
+          </div>
+          <div class="stamp">${cerrada?'APROBADA':'PENDIENTE'}</div>
+        </div>
+
+        <div class="meta">
+          <div><b>Orden de envasado:</b> ${esc(ordenEnvasado)}</div>
+          <div><b>Lote:</b> ${esc(last.lote||'-')}</div>
+          <div><b>Código PT:</b> ${esc(last.codigo_pt||'-')}</div>
+          <div><b>Línea:</b> ${esc(last.linea||'-')}</div>
+          <div><b>Fecha:</b> ${esc(fmtDay(first.timestamp))}</div>
+          <div><b>Controles del día:</b> ${controles.length}</div>
+          ${cerrada ? `
+          <div><b>Aprobado por:</b> ${esc(last.aprobado_por||'-')}</div>
+          <div><b>Fecha aprobación:</b> ${esc(fmtDate(last.aprobado_ts))}</div>
+          <div><b>Notas:</b> ${esc(last.notas_aprobador||'-')}</div>` : ''}
+        </div>
+
+        <h2>Resumen de calidad</h2>
+        <div>Defectos totales del día: <b>Críticos ${totalDC} · Moderados ${totalDM} · Leves ${totalDL}</b></div>
+
+        <h2>Controles</h2>
+        ${controles.map((m,i) => {
+          const defs = (m.defectos||[]).map(d => {
+            const info = cat[d.codigo] || {descripcion:d.codigo, clasificacion:'?'};
+            return `<div class="defect clas-${(info.clasificacion||'').replace('í','i')}">• ${esc(info.descripcion)} (${esc(info.clasificacion)}) x${esc(d.cantidad||1)}</div>`;
+          }).join('') || '<div class="defect">Sin defectos</div>';
+          return `
+          <table>
+            <tr>
+              <th style="width:20%">Control #${i+1}</th>
+              <td colspan="3">
+                <b>${esc(fmtHora_(m.timestamp))}</b> – Analista: <b>${esc(m.analista||'-')}</b>
+                – QR: <b>${esc(m.QR)}</b> (${esc(m.rango||'-')})
+                – Estado: <b>${esc(m.estado||'-')}</b>
+                – Muestras: ${esc(m.n_muestras||'-')}
+              </td>
+            </tr>
+            <tr>
+              <th>Defectos</th>
+              <td colspan="3">${defs}</td>
+            </tr>
+            <tr>
+              <th>Retiros / acciones</th>
+              <td colspan="3">
+                <b>Unidades retiradas:</b> ${esc(m.unidades_retiradas||0)}<br/>
+                <b>Motivo:</b> ${esc(m.motivo_retiro||'-')}<br/>
+                <b>Acciones correctivas:</b> ${esc(m.acciones_correctivas||'-')}
+              </td>
+            </tr>
+            <tr>
+              <th>Fotos obligatorias</th>
+              <td colspan="3">
+                <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                  <div><div class="small">📦 Rótulo caja</div>${m.foto_rotulo_url?`<img class="foto" src="${esc(m.foto_rotulo_url)}"/>`:'<span style="color:red">Falta</span>'}</div>
+                  <div><div class="small">🏷️ Lote envase</div>${m.foto_lote_url?`<img class="foto" src="${esc(m.foto_lote_url)}"/>`:'<span style="color:red">Falta</span>'}</div>
+                </div>
+                ${(m.fotos||[]).length ? `<div class="small" style="margin-top:6px;">Otras evidencias:</div><div class="grid-fotos">${m.fotos.map(u=>`<img class="foto" src="${esc(u)}"/>`).join('')}</div>` : ''}
+              </td>
+            </tr>
+          </table>
+          <div style="page-break-inside:avoid;height:6px;"></div>`;
+        }).join('')}
+
+        ${cerrada ? `
+        <h2>Checklist del supervisor</h2>
+        <table>
+          <tr><td>✅ ¿Se leyó el rótulo? LOTE correcto</td></tr>
+          <tr><td>✅ ¿Se leyó el rótulo? VENCIMIENTO correcto</td></tr>
+          <tr><td>✅ ¿Se leyó el rótulo? PRODUCTO correcto</td></tr>
+        </table>` : ''}
+
+        <h2>Firmas</h2>
+        <div class="firmas-grid">
+          ${analistas.map(a => `
+            <div class="firma-box">
+              <div class="firma-slot">
+                ${firmas[a.username]
+                  ? `<img src="${esc(firmas[a.username])}" alt="firma"/>`
+                  : `<div class="firma-empty">firma manuscrita</div>`}
+              </div>
+              <div class="firma-caption">Analista: <b>${esc(a.nombre)}</b></div>
+            </div>
+          `).join('')}
+          <div class="firma-box">
+            <div class="firma-slot">
+              ${cerrada && firmas[last.aprobado_por]
+                ? `<img src="${esc(firmas[last.aprobado_por])}" alt="firma"/>`
+                : `<div class="firma-empty">firma manuscrita</div>`}
+            </div>
+            <div class="firma-caption">Supervisor / Aprobador${cerrada?': <b>'+esc(last.aprobado_por||'')+'</b>':''}</div>
+          </div>
+        </div>
+
+        <div style="margin-top:20px;font-size:10px;color:#666;text-align:center;">
+          Generado desde Vessena LCC Fabuloso – ${esc(new Date().toLocaleString('es-UY'))}
+        </div>
+        </body></html>
+      `;
+      win.document.write(html);
+      win.document.close();
+      // Esperar a que carguen las imágenes antes de mostrar diálogo de impresión
+      setTimeout(() => { try { win.focus(); } catch(e){} }, 500);
+    } catch(e) { loading(false); toast(e.message, 'err'); }
+  }
+  function fmtHora_(v) { if(!v) return ''; const d = (v instanceof Date)? v : new Date(v); const p=n=>String(n).padStart(2,'0'); return `${p(d.getHours())}:${p(d.getMinutes())}`; }
+  function escAttrJson_(o) { return esc(JSON.stringify(o)); }
+
+  // ---------- LIST ----------
+  async function renderList() {
+    titleEl.textContent = 'Muestreos';
+    app.innerHTML = `
+      <div class="card">
+        <div class="filter">
+          <input id="fl_search" placeholder="🔎 Buscar por lote, orden o código PT…" />
+          <input id="fl_desde" type="date" title="Desde" />
+          <input id="fl_hasta" type="date" title="Hasta" />
+          <button class="secondary" id="fl_apply">Recargar</button>
+        </div>
+        <div id="listBox"><div class="muted small">Cargando…</div></div>
+      </div>
+    `;
+    let allRows = [];
+    function applyFilter() {
+      const q = (document.getElementById('fl_search').value || '').toLowerCase().trim();
+      let filtered = allRows;
+      if (q) filtered = filtered.filter(r =>
+        String(r.lote||'').toLowerCase().includes(q) ||
+        String(r.orden||'').toLowerCase().includes(q) ||
+        String(r.codigo_pt||'').toLowerCase().includes(q) ||
+        String(r.analista||'').toLowerCase().includes(q)
+      );
+      const box = document.getElementById('listBox');
+      if (!filtered.length) {
+        box.innerHTML = `<div class="muted small">${allRows.length ? 'No hay resultados para "' + esc(q) + '".' : 'Sin muestreos.'}</div>`;
+        return;
+      }
+      box.innerHTML = `<div class="muted small mb8">${filtered.length} de ${allRows.length} muestreos${q?' (filtrado por "'+esc(q)+'")':''}</div>` + renderMuestreoTable(filtered);
+      wireMuestreoTableClicks_();
+    }
+    async function load() {
+      try {
+        loading(true);
+        const desde = document.getElementById('fl_desde').value;
+        const hasta = document.getElementById('fl_hasta').value;
+        const r = await api('listMuestreos', { filter: { desde, hasta } });
+        allRows = r.rows || [];
+        applyFilter();
+      } catch(e) { document.getElementById('listBox').innerHTML = `<div class="chip danger">${esc(e.message)}</div>`; }
+      finally { loading(false); }
+    }
+    document.getElementById('fl_apply').addEventListener('click', load);
+    document.getElementById('fl_search').addEventListener('input', applyFilter);
+    load();
+  }
+
+  // ---------- DETAIL ----------
+  async function renderDetail(id) {
+    titleEl.textContent = 'Detalle muestreo';
+    app.innerHTML = '<div class="card"><div class="muted small">Cargando…</div></div>';
+    try {
+      const r = await api('getMuestreo', { id });
+      const m = r.muestreo;
+      const cat = {}; state.catalog.forEach(d => cat[d.codigo] = d);
+      const defList = (m.defectos||[]).map(d => {
+        const info = cat[d.codigo] || { descripcion: d.codigo, clasificacion: '?' };
+        const cls = String(info.clasificacion).replace('í','i');
+        return `<div class="defect-item"><span class="clas ${cls}">${esc(info.clasificacion)}</span><div class="desc">${esc(info.descripcion)}</div><b>${esc(d.cantidad||1)}</b></div>`;
+      }).join('') || '<div class="muted small">Sin defectos registrados.</div>';
+      const kind = m.calidad_rango === 'Perfecta' || m.calidad_rango === 'Muy buena' ? 'Muybuena'
+                 : m.calidad_rango === 'Aceptable' ? 'Aceptable' : 'Noaceptable';
+      const fotos = (m.fotos||[]).map(u => `<div class="thumb"><a href="${esc(u)}" target="_blank"><img src="${esc(u)}" /></a></div>`).join('') || '<div class="muted small">Sin fotos.</div>';
+
+      const canApprove = hasRole(ROLES.COORDINADOR);
+      app.innerHTML = `
+        <div class="card">
+          <h2>Muestreo <span class="mono">${esc(m.id)}</span></h2>
+          <div class="muted small">${esc(fmtDate(m.timestamp))} · ${esc(m.analista_nombre)} (${esc(m.analista_username)})</div>
+          <div class="row mt12">
+            <div><label>Línea</label><div>${esc(m.linea||'-')}</div></div>
+            <div><label>Orden</label><div>${esc(m.orden_envasado||'-')}</div></div>
+            <div><label>Lote</label><div>${esc(m.lote||'-')}</div></div>
+            <div><label>Código PT</label><div>${esc(m.codigo_pt||'-')}</div></div>
+            <div><label>Fecha muestreo</label><div>${esc(m.fecha_muestreo||'-')}</div></div>
+            <div><label>Hora</label><div>${esc(m.hora_muestreo||'-')}</div></div>
+            <div><label>N° muestras</label><div>${esc(m.n_muestras)}</div></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="qr-box qr-${kind}">
+            <div class="val">${esc(m.QR)}</div>
+            <div class="lbl">QR – ${esc(m.calidad_rango)}</div>
+            <div class="stat" style="justify-content:center; margin-top:10px;">
+              <div>Críticos: <b>${esc(m.DC)}</b></div>
+              <div>Moderados: <b>${esc(m.DM)}</b></div>
+              <div>Leves: <b>${esc(m.DL)}</b></div>
+            </div>
+          </div>
+          <div class="right">Estado: ${estadoChip(m.estado)}</div>
+        </div>
+        <div class="card"><h3>Defectos</h3>${defList}</div>
+        <div class="card"><h3>Evidencia fotográfica</h3><div class="photos">${fotos}</div></div>
+        <div class="card">
+          <div class="row">
+            <button class="primary" id="btn_cont">➕ Nuevo control para esta orden</button>
+            <button class="secondary" data-go-orders="1">🕒 Ver toda la orden</button>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Acciones</h3>
+          <label>Unidades retiradas</label><div>${esc(m.unidades_retiradas||0)}</div>
+          <label>Motivo del retiro</label><div>${esc(m.motivo_retiro||'-')}</div>
+          <label>Acciones correctivas</label><div>${esc(m.acciones_correctivas||'-')}</div>
+        </div>
+        ${m.aprobado_por ? `
+        <div class="card">
+          <h3>Aprobación de la orden</h3>
+          <div class="muted small">Aprobada por: <b>${esc(m.aprobado_por)}</b> ${m.aprobado_ts?('· '+esc(fmtDate(m.aprobado_ts))):''}</div>
+          ${m.notas_aprobador ? `<div class="mt8"><b>Notas:</b> ${esc(m.notas_aprobador)}</div>` : ''}
+        </div>` : ''}
+      `;
+      // Botones "nuevo control para esta orden" / "ver toda la orden"
+      const btnCont = document.getElementById('btn_cont');
+      if (btnCont) btnCont.addEventListener('click', () => {
+        state.editingMuestreo = null;
+        nav('new', { orden_envasado: m.orden_envasado, lote: m.lote, codigo_pt: m.codigo_pt, linea: m.linea });
+      });
+      const btnAll = app.querySelector('[data-go-orders]');
+      if (btnAll) btnAll.addEventListener('click', () => nav('order_detail', { orden: m.orden_envasado }));
+    } catch(e) { app.innerHTML = `<div class="card"><div class="chip danger">${esc(e.message)}</div></div>`; }
+  }
+  async function doApprove(id, estado) {
+    try {
+      loading(true);
+      const notas = document.getElementById('ap_notas').value;
+      await api('approveMuestreo', { id, estado, notas });
+      toast('Muestreo ' + estado, 'ok');
+      renderDetail(id);
+    } catch(e) { toast(e.message, 'err'); } finally { loading(false); }
+  }
+
+  // ---------- MI FIRMA ----------
+  async function renderSignature() {
+    titleEl.textContent = 'Mi firma';
+    app.innerHTML = '<div class="card"><div class="muted small">Cargando…</div></div>';
+    try {
+      const r = await api('getMySignature');
+      const existing = r.url;
+      app.innerHTML = `
+        <div class="card">
+          <h2>✍️ Mi firma digital</h2>
+          <div class="muted small mb8">Firmá una sola vez y tu firma va a aparecer automáticamente en los reportes impresos donde aparezcas (como analista o como aprobador).</div>
+          ${existing ? `
+            <div class="mt8"><b>Firma actual:</b></div>
+            <div style="background:#fff; border:1px solid var(--border); padding:8px; border-radius:8px; display:inline-block; margin:8px 0;">
+              <img src="${esc(existing)}" style="max-height:80px; display:block;"/>
+            </div>
+            <div class="row">
+              <button class="danger" id="sig_delete">🗑️ Borrar firma actual</button>
+            </div>
+            <div class="hr"></div>
+          ` : '<div class="chip warn">Todavía no tenés firma cargada</div><div class="hr"></div>'}
+          <label>Dibujá tu firma abajo (con el dedo en el celular o con el mouse):</label>
+          <div style="background:#fff; border:2px dashed var(--border); border-radius:8px; touch-action: none; margin-top:6px;">
+            <canvas id="sig_canvas" width="900" height="260" style="width:100%; height:200px; display:block; border-radius:8px; cursor: crosshair;"></canvas>
+          </div>
+          <div class="row mt8">
+            <button class="secondary" id="sig_clear">🧹 Limpiar</button>
+            <button class="primary" id="sig_save">💾 Guardar firma</button>
+          </div>
+        </div>
+      `;
+      setupSignatureCanvas_();
+      const btnDel = document.getElementById('sig_delete');
+      if (btnDel) btnDel.addEventListener('click', async () => {
+        if (!confirm('¿Borrar tu firma actual?')) return;
+        try { loading(true); await api('clearMySignature'); toast('Firma borrada','ok'); renderSignature(); }
+        catch(e) { toast(e.message,'err'); } finally { loading(false); }
+      });
+    } catch(e) {
+      app.innerHTML = `<div class="card"><div class="chip danger">${esc(e.message)}</div></div>`;
+    }
+  }
+
+  function setupSignatureCanvas_() {
+    const canvas = document.getElementById('sig_canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    let drawing = false, hasContent = false, lastX = 0, lastY = 0;
+
+    function pos(e) {
+      const r = canvas.getBoundingClientRect();
+      const t = e.touches ? e.touches[0] : e;
+      const sx = canvas.width / r.width, sy = canvas.height / r.height;
+      return { x: (t.clientX - r.left) * sx, y: (t.clientY - r.top) * sy };
+    }
+    function start(e) { e.preventDefault(); drawing = true; hasContent = true; const p = pos(e); lastX = p.x; lastY = p.y; ctx.beginPath(); ctx.moveTo(p.x, p.y); }
+    function move(e)  { if (!drawing) return; e.preventDefault(); const p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); lastX = p.x; lastY = p.y; }
+    function end()    { drawing = false; }
+
+    canvas.addEventListener('mousedown', start);
+    canvas.addEventListener('mousemove', move);
+    canvas.addEventListener('mouseup', end);
+    canvas.addEventListener('mouseleave', end);
+    canvas.addEventListener('touchstart', start, { passive: false });
+    canvas.addEventListener('touchmove', move, { passive: false });
+    canvas.addEventListener('touchend', end);
+
+    document.getElementById('sig_clear').addEventListener('click', () => {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      hasContent = false;
+    });
+    document.getElementById('sig_save').addEventListener('click', async () => {
+      if (!hasContent) return toast('Dibujá tu firma primero', 'err');
+      const dataUrl = canvas.toDataURL('image/png');
+      const base64 = dataUrl.split(',')[1];
+      try {
+        loading(true);
+        await api('saveMySignature', { dataBase64: base64 });
+        toast('Firma guardada ✔', 'ok');
+        renderSignature();
+      } catch(e) { toast(e.message, 'err'); }
+      finally { loading(false); }
+    });
+  }
+
+  // ---------- CAMBIAR CONTRASEÑA ----------
+  function renderChangePwd() {
+    titleEl.textContent = 'Cambiar contraseña';
+    app.innerHTML = `
+      <div class="card">
+        <h2>Cambiar contraseña</h2>
+        <label>Contraseña actual</label>
+        <input id="pw_old" type="password" />
+        <label>Nueva contraseña (≥ 6)</label>
+        <input id="pw_new" type="password" />
+        <label>Repetir nueva</label>
+        <input id="pw_new2" type="password" />
+        <div class="mt12"><button class="primary" id="pw_save">Guardar</button></div>
+      </div>
+    `;
+    document.getElementById('pw_save').addEventListener('click', async () => {
+      const oldP = document.getElementById('pw_old').value;
+      const n1 = document.getElementById('pw_new').value;
+      const n2 = document.getElementById('pw_new2').value;
+      if (n1 !== n2) return toast('Las nuevas no coinciden', 'err');
+      try { loading(true); await api('changePassword', { oldPassword: oldP, newPassword: n1 }); toast('Contraseña actualizada','ok'); nav('home'); }
+      catch(e) { toast(e.message,'err'); } finally { loading(false); }
+    });
+  }
+
+  // ---------- ADMIN USUARIOS ----------
+  async function renderUsers() {
+    if (!hasRole(ROLES.ADMIN) && !hasRole(ROLES.COORDINADOR)) { nav('home'); return; }
+    titleEl.textContent = 'Usuarios';
+    app.innerHTML = '<div class="card"><div class="muted small">Cargando…</div></div>';
+    try {
+      const r = await api('listUsers');
+      const rows = r.rows || [];
+      const isAdmin = hasRole(ROLES.ADMIN);
+      app.innerHTML = `
+        <div class="card">
+          <h2>Usuarios (${rows.length})</h2>
+          ${isAdmin?`<div class="row mt8">
+            <button class="primary" id="u_new">➕ Nuevo usuario</button>
+          </div>`:''}
+        </div>
+        <div class="card">
+          <table>
+            <thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Estado</th><th></th></tr></thead>
+            <tbody>
+              ${rows.map(u => `
+                <tr>
+                  <td><b>${esc(u.username)}</b></td>
+                  <td>${esc(u.nombre||'')}</td>
+                  <td>${esc(u.rol)}</td>
+                  <td>${u.activo?'<span class="chip ok">Activo</span>':'<span class="chip warn">Inactivo</span>'}</td>
+                  <td>
+                    ${isAdmin?`
+                    <button class="secondary" data-reset="${esc(u.username)}">🔑 Reset</button>
+                    <button class="secondary" data-toggle="${esc(u.username)}">${u.activo?'Desactivar':'Activar'}</button>
+                    `:''}
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+      if (isAdmin) {
+        document.getElementById('u_new').addEventListener('click', openNewUserForm);
+        app.querySelectorAll('[data-reset]').forEach(b => b.addEventListener('click', ()=> resetPwd(b.dataset.reset)));
+        app.querySelectorAll('[data-toggle]').forEach(b => b.addEventListener('click', ()=> toggleUser(b.dataset.toggle)));
+      }
+    } catch(e) { app.innerHTML = `<div class="card"><div class="chip danger">${esc(e.message)}</div></div>`; }
+  }
+
+  function openNewUserForm() {
+    const html = `
+      <div class="card">
+        <h2>Nuevo usuario</h2>
+        <div class="row">
+          <div><label>Usuario</label><input id="nu_u" /></div>
+          <div><label>Nombre completo</label><input id="nu_n" /></div>
+        </div>
+        <div class="row">
+          <div><label>Rol</label>
+            <select id="nu_r">
+              <option>Analista</option><option>Coordinador</option><option>QA</option><option>Admin</option>
+            </select>
+          </div>
+          <div><label>Contraseña inicial (≥6)</label><input id="nu_p" type="text" /></div>
+        </div>
+        <div class="row mt8">
+          <button class="secondary" id="nu_cancel">Cancelar</button>
+          <button class="primary" id="nu_save">Crear</button>
+        </div>
+      </div>
+    `;
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    app.prepend(div);
+    document.getElementById('nu_cancel').addEventListener('click', ()=> div.remove());
+    document.getElementById('nu_save').addEventListener('click', async () => {
+      const data = {
+        username: document.getElementById('nu_u').value.trim(),
+        nombre: document.getElementById('nu_n').value.trim(),
+        rol: document.getElementById('nu_r').value,
+        password: document.getElementById('nu_p').value
+      };
+      try { loading(true); await api('createUser', { data }); toast('Usuario creado','ok'); renderUsers(); }
+      catch(e) { toast(e.message,'err'); } finally { loading(false); }
+    });
+  }
+
+  async function resetPwd(username) {
+    const np = prompt(`Nueva contraseña para ${username} (≥6):`);
+    if (!np) return;
+    try { loading(true); await api('resetPassword', { username, newPassword: np }); toast('Contraseña reseteada','ok'); }
+    catch(e) { toast(e.message,'err'); } finally { loading(false); }
+  }
+  async function toggleUser(username) {
+    if (!confirm(`Cambiar estado activo/inactivo de "${username}"?`)) return;
+    try { loading(true); await api('toggleUserActive', { username }); renderUsers(); }
+    catch(e) { toast(e.message,'err'); } finally { loading(false); }
+  }
+
+  // ---------- DEFECTS ADMIN ----------
+  async function renderDefects() {
+    if (!hasRole(ROLES.QA)) { nav('home'); return; }
+    titleEl.textContent = 'Catálogo de defectos';
+    await loadCatalog();
+    app.innerHTML = `
+      <div class="card">
+        <h2>Catálogo (${state.catalog.length})</h2>
+        <div class="muted small">Podés reclasificar cada defecto. Cambios quedan en la Google Sheet y en la auditoría.</div>
+      </div>
+      <div class="card">
+        ${state.catalog.map(d => {
+          const cls = String(d.clasificacion).replace('í','i');
+          return `<div class="defect-item">
+            <div class="desc"><b>${esc(d.codigo)}</b> — ${esc(d.descripcion)}</div>
+            <select data-cod="${esc(d.codigo)}">
+              <option ${d.clasificacion==='Leve'?'selected':''}>Leve</option>
+              <option ${d.clasificacion==='Moderado'?'selected':''}>Moderado</option>
+              <option ${d.clasificacion==='Crítico'?'selected':''}>Crítico</option>
+            </select>
+            <span class="clas ${cls}">${esc(d.clasificacion)}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    `;
+    app.querySelectorAll('select[data-cod]').forEach(s => s.addEventListener('change', async () => {
+      try { loading(true); await api('updateDefectClassification', { codigo: s.dataset.cod, clasificacion: s.value }); toast('Actualizado','ok'); await loadCatalog(); renderDefects(); }
+      catch(e) { toast(e.message,'err'); } finally { loading(false); }
+    }));
+  }
+
+  // ---------- AUDIT ----------
+  async function renderAudit() {
+    if (!hasRole(ROLES.COORDINADOR)) { nav('home'); return; }
+    titleEl.textContent = 'Auditoría';
+    app.innerHTML = '<div class="card"><div class="muted small">Cargando…</div></div>';
+    try {
+      const r = await api('getAuditLog');
+      const rows = r.rows || [];
+      app.innerHTML = `
+        <div class="card">
+          <h2>Auditoría (últimos ${rows.length})</h2>
+          <div class="muted small">Registro de todas las acciones ejecutadas por los usuarios.</div>
+        </div>
+        <div class="card">
+          <table>
+            <thead><tr><th>Fecha</th><th>Usuario</th><th>Rol</th><th>Acción</th><th>Entidad</th><th>Detalles</th></tr></thead>
+            <tbody>
+              ${rows.map(r => `<tr>
+                <td>${esc(fmtDate(r.timestamp))}</td>
+                <td>${esc(r.usuario||'')}</td>
+                <td>${esc(r.rol||'')}</td>
+                <td><span class="chip info">${esc(r.accion||'')}</span></td>
+                <td>${esc(r.entidad||'')} ${r.entidad_id?`<div class="mono muted small">${esc(r.entidad_id)}</div>`:''}</td>
+                <td>${esc(r.detalles||'')}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    } catch(e) { app.innerHTML = `<div class="card"><div class="chip danger">${esc(e.message)}</div></div>`; }
+  }
+
+  // ---------- BOOT ----------
+  document.getElementById('btnMenu').addEventListener('click', ()=> drawer.classList.toggle('hidden'));
+  document.getElementById('btnBack').addEventListener('click', ()=> nav('home'));
+  document.getElementById('btnLogout').addEventListener('click', doLogout);
+  drawer.querySelectorAll('button[data-view]').forEach(b => b.addEventListener('click', () => {
+    drawer.classList.add('hidden');
+    nav(b.dataset.view);
+  }));
+
+  loadSession();
+  if (state.session) {
+    // Verificamos token; si falla, volvemos al login
+    api('verify').then(async r => { await loadCatalog(); nav('home'); }).catch(() => { clearSession(); renderLogin(); });
+  } else {
+    renderLogin();
+  }
+})();
+
+</script>
+</body>
+</html>
