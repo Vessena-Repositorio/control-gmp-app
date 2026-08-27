@@ -182,6 +182,27 @@ curl -X POST http://192.168.30.15:3000/api/envases/sync -H "x-sync-token: TU_TOK
 Verificado el 27/08/2026: **0 diferencias** sobre 327 órdenes, 784 controles y
 2 LCC.
 
+### Los cuatro dominios en marcha
+
+Primera réplica completa de todos, el 27/08/2026:
+
+| Dominio | Replicó | Duración | Respuesta de la API |
+|---|---|---|---|
+| envases | 327 órdenes, 785 controles, 2 LCC, 7403 mediciones | 7,7 s | 35 ms |
+| tapas | vacío (el origen todavía no tiene datos) | — | 8 ms |
+| proceso | 2003 controles útiles, 6832 pesos, 4 duplicados | 4,5 s | 29 ms |
+| sao001 | 12080 muestras, 2391 parámetros, 1 fecha saneada | 14,7 s | 12 ms |
+| fabuloso | 1352 lotes, 15134 valores, 2 fechas descartadas | 4,3 s | 7 ms |
+
+Las réplicas tardan segundos y las respuestas milisegundos, contra los segundos
+que tardaba cada consulta a Apps Script. Todas quedan muy por debajo del
+intervalo de 15 minutos, así que no se solapan.
+
+Una advertencia para leer estos números: las variables `ORIGEN_*` solo entran al
+proceso cuando el contenedor **arranca**. Guardarlas en Coolify no alcanza —
+hace falta un redeploy o restart, o el sync sigue fallando con
+`Falta ORIGEN_…`.
+
 ## Dónde corre cada cosa
 
 Hay dos entornos, y no son "producción y staging" en el sentido habitual:
