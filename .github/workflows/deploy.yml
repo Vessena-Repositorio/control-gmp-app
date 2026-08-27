@@ -3,7 +3,7 @@ name: Deploy to Coolify
 on:
   push:
     branches:
-      - main
+      - migracion-postgres
 
 jobs:
   deploy:
