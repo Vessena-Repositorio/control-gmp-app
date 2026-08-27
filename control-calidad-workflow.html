@@ -265,7 +265,7 @@ const ApiService = {
     async sendToTeam(subject, body) { return await this.sendEmail(CONFIG.teamEmails.join(','), subject, body); },
     async sendTaskAssignment(responsible, taskType, materialName, deadline, supplier) {
         const subject = `📋 Nueva Tarea Asignada: ${taskType} - ${materialName}`;
-        const body = `Hola,\n\nSe te ha asignado automáticamente una nueva tarea de ${taskType}.\n\n📦 Materia Prima: ${materialName}\n🏢 Proveedor: ${supplier}\n🧪 Tipo de Evaluación: ${taskType}\n📅 Fecha Límite: ${formatDate(deadline)}\n\nPor favor revisa el sistema de Control de Calidad.\n\nSistema: https://claudiabarlocco-ctrl.github.io/control-gmp-app/control-calidad-workflow.html\n\n---\nSistema de Control de Calidad\n${CONFIG.fromEmail}`;
+        const body = `Hola,\n\nSe te ha asignado automáticamente una nueva tarea de ${taskType}.\n\n📦 Materia Prima: ${materialName}\n🏢 Proveedor: ${supplier}\n🧪 Tipo de Evaluación: ${taskType}\n📅 Fecha Límite: ${formatDate(deadline)}\n\nPor favor revisa el sistema de Control de Calidad.\n\nSistema: control-calidad-workflow.html\n\n---\nSistema de Control de Calidad\n${CONFIG.fromEmail}`;
         return await this.sendEmail(responsible, subject, body);
     },
     async sendCompletionNotification(item) {
@@ -287,7 +287,7 @@ const ApiService = {
         }
         if (item.resultObservations) resultDetails += `\n📝 Observaciones: ${item.resultObservations}\n`;
         
-        const body = `Hola equipo,\n\nSe ha completado la siguiente evaluación:\n\n📦 Materia Prima: ${item.name}\n🏢 Proveedor: ${item.supplier}\n🧪 Tipo: ${getTestTypeLabel(item.testType)}\n👤 Responsable: ${getResponsibleName(item.responsible)}\n${resultDetails}\n\nSistema: https://claudiabarlocco-ctrl.github.io/control-gmp-app/control-calidad-workflow.html\n\n---\nSistema de Control de Calidad\n${CONFIG.fromEmail}`;
+        const body = `Hola equipo,\n\nSe ha completado la siguiente evaluación:\n\n📦 Materia Prima: ${item.name}\n🏢 Proveedor: ${item.supplier}\n🧪 Tipo: ${getTestTypeLabel(item.testType)}\n👤 Responsable: ${getResponsibleName(item.responsible)}\n${resultDetails}\n\nSistema: control-calidad-workflow.html\n\n---\nSistema de Control de Calidad\n${CONFIG.fromEmail}`;
         return await this.sendToTeam(subject, body);
     }
 };
@@ -413,7 +413,7 @@ function generateSummaryEmail() {
         email += '\n';
     }
     if (activeItems.length === 0) email += '✅ ¡Excelente! No hay evaluaciones pendientes.\n\n';
-    email += `\nAccede al sistema: https://claudiabarlocco-ctrl.github.io/control-gmp-app/control-calidad-workflow.html\n\n---\nSistema de Control de Calidad\n${CONFIG.fromEmail}`;
+    email += `\nAccede al sistema: control-calidad-workflow.html\n\n---\nSistema de Control de Calidad\n${CONFIG.fromEmail}`;
     return email;
 }
 
@@ -439,7 +439,7 @@ function generateUrgentEmail(overdueItems, todayItems) {
             email += '\n';
         });
     }
-    email += `Por favor revisen y actualicen el estado de estas evaluaciones lo antes posible.\n\nAccede al sistema: https://claudiabarlocco-ctrl.github.io/control-gmp-app/control-calidad-workflow.html\n\n---\nSistema de Control de Calidad\n${CONFIG.fromEmail}`;
+    email += `Por favor revisen y actualicen el estado de estas evaluaciones lo antes posible.\n\nAccede al sistema: control-calidad-workflow.html\n\n---\nSistema de Control de Calidad\n${CONFIG.fromEmail}`;
     return email;
 }
 
@@ -470,7 +470,7 @@ async function testEmail() {
     btn.disabled = true; btn.textContent = '🧪 Enviando...';
     try {
         const subject = '🧪 Email de Prueba - Sistema Control de Calidad';
-        const body = `Hola equipo,\n\nEste es un email de prueba del Sistema de Control de Calidad.\n\nSi recibes este mensaje, las notificaciones automáticas están funcionando correctamente.\n\n📅 Fecha: ${new Date().toLocaleString('es-ES')}\n\n✅ Datos compartidos en Google Sheets\n✅ Resumen diario automático a las 09:00 AM\n✅ Alertas urgentes\n✅ Notificaciones de asignación\n✅ Resultados detallados al completar\n\nSistema: https://claudiabarlocco-ctrl.github.io/control-gmp-app/control-calidad-workflow.html\n\n---\nSistema de Control de Calidad\n${CONFIG.fromEmail}`;
+        const body = `Hola equipo,\n\nEste es un email de prueba del Sistema de Control de Calidad.\n\nSi recibes este mensaje, las notificaciones automáticas están funcionando correctamente.\n\n📅 Fecha: ${new Date().toLocaleString('es-ES')}\n\n✅ Datos compartidos en Google Sheets\n✅ Resumen diario automático a las 09:00 AM\n✅ Alertas urgentes\n✅ Notificaciones de asignación\n✅ Resultados detallados al completar\n\nSistema: control-calidad-workflow.html\n\n---\nSistema de Control de Calidad\n${CONFIG.fromEmail}`;
         await ApiService.sendToTeam(subject, body);
         showToast('✅ Email de prueba enviado');
     } catch (error) { showToast('❌ Error al enviar el email', true); }
@@ -810,7 +810,7 @@ async function saveStartStability() {
     
     // Email al equipo confirmando inicio
     const subject = `▶️ Estabilidad Iniciada: ${item.name}`;
-    const body = `Hola equipo,\n\nSe ha iniciado el estudio de estabilidad:\n\n📦 Materia Prima: ${item.name}\n🏢 Proveedor: ${item.supplier}\n👤 Responsable: ${getResponsibleName(item.responsible)}\n🌡️ Temperatura Inicial: ${temperature}\n📅 Tiempo Programado: ${programmedTime}\n📅 Fecha de Evaluación: ${formatDate(item.deadline)}\n\nSe enviará un recordatorio cuando sea momento de evaluar los resultados.\n\nSistema: https://claudiabarlocco-ctrl.github.io/control-gmp-app/control-calidad-workflow.html\n\n---\nSistema de Control de Calidad\n${CONFIG.fromEmail}`;
+    const body = `Hola equipo,\n\nSe ha iniciado el estudio de estabilidad:\n\n📦 Materia Prima: ${item.name}\n🏢 Proveedor: ${item.supplier}\n👤 Responsable: ${getResponsibleName(item.responsible)}\n🌡️ Temperatura Inicial: ${temperature}\n📅 Tiempo Programado: ${programmedTime}\n📅 Fecha de Evaluación: ${formatDate(item.deadline)}\n\nSe enviará un recordatorio cuando sea momento de evaluar los resultados.\n\nSistema: control-calidad-workflow.html\n\n---\nSistema de Control de Calidad\n${CONFIG.fromEmail}`;
     await ApiService.sendToTeam(subject, body);
     
     closeStartModal();
@@ -834,7 +834,7 @@ async function checkStabilityReminders() {
     
     for (const item of stabilitiesToEvaluate) {
         const subject = `⏰ Estabilidad Lista para Evaluar: ${item.name}`;
-        const body = `Hola Antonella,\n\nLa siguiente estabilidad está lista para ser evaluada:\n\n📦 Materia Prima: ${item.name}\n🏢 Proveedor: ${item.supplier}\n🌡️ Temperatura Inicial: ${item.initialTemperature || 'N/A'}\n📅 Tiempo Programado: ${item.programmedTime || 'N/A'}\n📅 Fecha de Evaluación: ${formatDate(item.deadline)}\n\nPor favor ingresa al sistema para cargar los resultados finales.\n\nSistema: https://claudiabarlocco-ctrl.github.io/control-gmp-app/control-calidad-workflow.html\n\n---\nSistema de Control de Calidad\n${CONFIG.fromEmail}`;
+        const body = `Hola Antonella,\n\nLa siguiente estabilidad está lista para ser evaluada:\n\n📦 Materia Prima: ${item.name}\n🏢 Proveedor: ${item.supplier}\n🌡️ Temperatura Inicial: ${item.initialTemperature || 'N/A'}\n📅 Tiempo Programado: ${item.programmedTime || 'N/A'}\n📅 Fecha de Evaluación: ${formatDate(item.deadline)}\n\nPor favor ingresa al sistema para cargar los resultados finales.\n\nSistema: control-calidad-workflow.html\n\n---\nSistema de Control de Calidad\n${CONFIG.fromEmail}`;
         
         await ApiService.sendToTeam(subject, body);
         sentReminders.push(item.id);
