@@ -12,20 +12,27 @@ on:
     branches:
       - main
       - migracion-postgres
+  # Permite dispararlo a mano desde la pestana Actions, sin tener que commitear
+  # algo para forzar un redeploy.
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: [self-hosted, linux, x64, coolify]
     steps:
-      # Necesario para el script de verificacion; el deploy en si es solo curl.
-      - uses: actions/checkout@v4
-
+      # El deploy va PRIMERO y sin depender de nada del repo: es un curl y nada
+      # mas. Si un paso previo fallara (checkout, red, permisos), el deploy no
+      # llegaria a ocurrir, que es peor que no verificarlo.
       - name: Disparar deploy en Coolify
         env:
           WEBHOOK: ${{ secrets.COOLIFY_WEBHOOK }}
           TOKEN: ${{ secrets.COOLIFY_TOKEN }}
         run: |
           curl --fail --request GET "$WEBHOOK" --header "Authorization: Bearer $TOKEN"
+
+      # Recien ahora se baja el repo, que solo hace falta para el script de
+      # verificacion.
+      - uses: actions/checkout@v4
 
       - name: Verificar que quedo sano
         env:
