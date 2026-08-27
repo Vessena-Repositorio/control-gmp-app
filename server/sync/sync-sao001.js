@@ -8,8 +8,7 @@
 import { consultar, enTransaccion, pool } from '../db.js';
 import { esEjecucionDirecta } from '../lib/entrypoint.js';
 import { parsearCsv, indicesPorEncabezado, celda, celdaNumero, celdaFecha } from '../lib/csv.js';
-
-const TIMEOUT_MS = 120_000;
+import { descargarTexto } from '../lib/origen.js';
 
 // Cada parametro sale de hasta tres columnas del CSV: el valor y sus limites.
 // Los nombres van en minuscula porque el indice de encabezados normaliza asi.
@@ -23,18 +22,6 @@ const PARAMETROS = [
     { nombre: 'dureza', valor: 'dureza', max: 'max dureza' },
 ];
 
-async function descargarTexto(url) {
-    const ctrl = new AbortController();
-    const reloj = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
-    try {
-        const r = await fetch(url, { redirect: 'follow', signal: ctrl.signal });
-        if (!r.ok) throw new Error(`el origen respondio HTTP ${r.status}`);
-        return await r.text();
-    } finally {
-        clearTimeout(reloj);
-    }
-}
-
 export async function sincronizarSao001() {
     const url = process.env.ORIGEN_SAO001;
     if (!url) throw new Error('Falta ORIGEN_SAO001 en las variables de entorno.');
@@ -47,13 +34,6 @@ export async function sincronizarSao001() {
 
     try {
         const csv = await descargarTexto(url);
-        const recortado = csv.trim();
-
-        // Apps Script devuelve una pagina de error con 200 cuando algo falla.
-        if (recortado.startsWith('<')) {
-            throw new Error('el origen devolvio HTML en vez de CSV (posible error de Apps Script)');
-        }
-
         const filas = parsearCsv(csv);
         if (filas.length < 2) {
             throw new Error('el CSV no trae filas de datos; no se toca la base');

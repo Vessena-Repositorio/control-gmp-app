@@ -20,6 +20,25 @@ export async function descargar(url) {
     }
 }
 
+/** GET con timeout que devuelve texto plano (los origenes que mandan CSV). */
+export async function descargarTexto(url) {
+    const ctrl = new AbortController();
+    const reloj = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+    try {
+        const r = await fetch(url, { redirect: 'follow', signal: ctrl.signal });
+        if (!r.ok) throw new Error(`el origen respondio HTTP ${r.status}`);
+        const texto = await r.text();
+
+        // Google devuelve una pagina de error con 200 cuando algo falla.
+        if (texto.trim().startsWith('<')) {
+            throw new Error('el origen devolvio HTML en vez de CSV (posible error del origen)');
+        }
+        return texto;
+    } finally {
+        clearTimeout(reloj);
+    }
+}
+
 /** Fecha ISO -> Date, o null si viene vacia o corrupta. */
 export function aFecha(valor) {
     if (!valor) return null;
