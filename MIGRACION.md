@@ -97,8 +97,9 @@ apps que no dependen de la base.
 
 ## Puesta en marcha en Coolify
 
-Conviene probarlo en un recurso aparte antes de tocar producción. Ver
-"Estrategia de deploy" más abajo.
+Ya está hecho en el recurso actual. Queda documentado para poder reconstruirlo,
+y porque los mismos pasos aplican al corte final. `MIGRACIONES_DESTRUCTIVAS` se
+deja sin configurar (ver "Automatización").
 
 1. **Cambiar el build pack** del recurso de estático a **Dockerfile**. El
    `Dockerfile` de la raíz ya está listo. El puerto es el 3000.
@@ -119,7 +120,7 @@ Conviene probarlo en un recurso aparte antes de tocar producción. Ver
 4. **Verificar** que la réplica quedó completa:
 
 ```bash
-curl https://TU-DOMINIO/api/envases/estado
+curl http://192.168.30.15:3000/api/envases/estado
 ```
 
 Con los datos de hoy tiene que dar 327 órdenes, 781 controles, 2 LCC y ~7.400
@@ -129,30 +130,39 @@ mediciones.
    nuevo y falla si difieren en algo:
 
 ```bash
-ORIGEN_ENVASES="https://script.google.com/macros/s/AKfycby0.../exec" npm run verificar https://TU-DOMINIO
+ORIGEN_ENVASES="https://script.google.com/macros/s/AKfycby0.../exec" npm run verificar http://192.168.30.15:3000
 ```
 
-## Estrategia de deploy
+## Dónde corre cada cosa
 
-El trabajo va en la rama **`migracion-postgres`**, no en `main`.
+Hay dos entornos, y no son "producción y staging" en el sentido habitual:
 
-`.github/workflows/deploy.yml` dispara el webhook de Coolify **solo en push a
-`main`**, así que empujar la rama no toca producción. Eso da lugar a validar el
-servicio Node completo antes de que nadie en planta vea el cambio.
+| | Sirve | Desde | Backend |
+|---|---|---|---|
+| **GitHub Pages** | producción, lo que usa la gente hoy | `main` | Apps Script + Sheets |
+| **Coolify** | el entorno donde se prueba la migración | `migracion-postgres` | Postgres |
 
-1. Push de `migracion-postgres`. Producción sigue igual: `main` no se movió.
-2. En Coolify, crear un **recurso nuevo** apuntando a esa rama, con build pack
-   Dockerfile, su propio dominio y las variables de entorno de arriba. El
-   recurso de producción no se toca.
-3. Validar contra ese dominio: `/api/envases/estado` y `npm run verificar`.
-4. Recién cuando dé bien, pasar producción a Dockerfile, cargarle las variables
-   y mergear a `main`.
+Producción **no pasa por Coolify**: Pages sirve `main` por su cuenta. Por eso
+mientras el trabajo viva en la rama, nadie en planta ve el cambio, y por eso
+`dashboard.html` mira el hostname — en `github.io` usa Apps Script, en Coolify
+usa `/api/envases`. El mismo archivo funciona bien en los dos lados.
 
-El orden del paso 4 importa: **primero las variables, después el merge**. Si se
-mergea antes, el deploy automático levanta el servicio sin `DATABASE_URL`; el
-sitio sigue en pie y las 21 apps andan, pero `dashboard.html` va a mostrar error
-hasta que se configure, porque en el dominio de Coolify pide `/api/envases` y no
-hay base detrás.
+Hay **un solo recurso de Coolify**. La rama que construye se elige en Coolify,
+no en el workflow: el webhook despliega la rama que ese recurso tenga
+configurada. Hoy es `migracion-postgres`.
+
+### El corte final
+
+Cuando la migración esté validada:
+
+1. Mergear `migracion-postgres` a `main`.
+2. Apuntar el recurso de Coolify a `main`.
+3. Decidir qué pasa con Pages. Es la decisión de fondo, porque hoy **es** la
+   producción: o se retira y Coolify pasa a serlo, o se queda como respaldo de
+   solo lectura contra Apps Script.
+
+Mientras Pages siga siendo producción, mergear a `main` es seguro: Pages sirve
+`dashboard.html`, que en `github.io` lee de Apps Script como siempre.
 
 ## Automatización
 
@@ -168,8 +178,13 @@ push -> GitHub Actions -> webhook Coolify -> build -> arranque
                                   Actions verifica que quedó sano
 ```
 
-`main` va a producción y `migracion-postgres` a staging, cada uno a su recurso
-de Coolify. Un push a la rama de trabajo no puede tocar producción.
+El workflow escucha `main` y `migracion-postgres`, pero **la rama que se
+construye la decide Coolify**, no el workflow: el webhook despliega la que el
+recurso tenga configurada. Por eso después del corte no hay que tocar nada acá,
+solo cambiar la rama en Coolify.
+
+Para agregar una migración: crear el `.sql` en `server/migrations/` y
+commitear. Nada más — se aplica sola en el deploy.
 
 ### Migraciones
 
@@ -199,7 +214,7 @@ y la API queda en error. Se ve en `GET /api/salud` y en rojo en Actions.
 que el último sync haya terminado en `ok`, con hasta ~7 min de margen. Sin esto,
 un deploy que rompe la base se vería igual de verde que uno exitoso.
 
-Necesita las variables de repositorio `URL_PROD` y `URL_STAGING` en
+Necesita la variable de repositorio `URL_APP` en
 *Settings > Secrets and variables > Actions > Variables*. Si no están, avisa y
 sigue sin fallar.
 
@@ -207,13 +222,13 @@ sigue sin fallar.
 
 | Nombre | Tipo | Para qué |
 |---|---|---|
-| `COOLIFY_WEBHOOK` | secret | deploy de producción (ya existía) |
+| `COOLIFY_WEBHOOK` | secret | dispara el deploy (ya existía) |
 | `COOLIFY_TOKEN` | secret | autenticación del webhook (ya existía) |
-| `COOLIFY_WEBHOOK_STAGING` | secret | deploy de staging — si falta, se omite |
-| `URL_PROD` / `URL_STAGING` | variable | verificación post-deploy |
+| `URL_APP` | variable | verificación post-deploy — si falta, se omite |
 
-Si Coolify ya vigila la rama por su cuenta, `COOLIFY_WEBHOOK_STAGING` sobra: el
-job avisa y se omite sin marcar error.
+`URL_APP` es la base del servicio en Coolify, sin barra final. Hoy
+`http://192.168.30.15:3000`. Va como *variable*, no como secreto: no es
+sensible y así se lee en los logs de Actions.
 
 ## Operación
 

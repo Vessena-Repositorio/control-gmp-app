@@ -1,8 +1,12 @@
 name: Deploy to Coolify
 
-# main -> produccion, migracion-postgres -> staging.
-# Cada rama pega en su propio recurso de Coolify: un push a la rama de trabajo
-# no puede tocar produccion.
+# Hay un solo recurso de Coolify. La rama que construye se elige en Coolify, no
+# aca: el webhook despliega la rama que ese recurso tenga configurada. Hoy es
+# migracion-postgres; cuando el corte termine sera main, y este workflow no
+# necesita cambiar.
+#
+# Ojo: produccion hoy es GitHub Pages, que sirve main por su cuenta y no pasa
+# por aca. Un push a main no toca Coolify mas que para reconstruirlo.
 on:
   push:
     branches:
@@ -10,14 +14,13 @@ on:
       - migracion-postgres
 
 jobs:
-  produccion:
-    if: github.ref_name == 'main'
+  deploy:
     runs-on: [self-hosted, linux, x64, coolify]
     steps:
       # Necesario para el script de verificacion; el deploy en si es solo curl.
       - uses: actions/checkout@v4
 
-      - name: Disparar deploy de produccion
+      - name: Disparar deploy en Coolify
         env:
           WEBHOOK: ${{ secrets.COOLIFY_WEBHOOK }}
           TOKEN: ${{ secrets.COOLIFY_TOKEN }}
@@ -26,28 +29,5 @@ jobs:
 
       - name: Verificar que quedo sano
         env:
-          URL: ${{ vars.URL_PROD }}
-        run: bash .github/scripts/verificar-deploy.sh
-
-  staging:
-    if: github.ref_name == 'migracion-postgres'
-    runs-on: [self-hosted, linux, x64, coolify]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Disparar deploy de staging
-        env:
-          WEBHOOK: ${{ secrets.COOLIFY_WEBHOOK_STAGING }}
-          TOKEN: ${{ secrets.COOLIFY_TOKEN }}
-        run: |
-          if [ -z "$WEBHOOK" ]; then
-            echo "COOLIFY_WEBHOOK_STAGING no esta configurado; se omite."
-            echo "Agregalo en Settings > Secrets and variables > Actions."
-            exit 0
-          fi
-          curl --fail --request GET "$WEBHOOK" --header "Authorization: Bearer $TOKEN"
-
-      - name: Verificar que quedo sano
-        env:
-          URL: ${{ vars.URL_STAGING }}
+          URL: ${{ vars.URL_APP }}
         run: bash .github/scripts/verificar-deploy.sh

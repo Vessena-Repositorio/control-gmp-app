@@ -12,7 +12,7 @@ INTENTOS=40
 ESPERA=10
 
 if [ -z "${URL:-}" ]; then
-    echo "No hay URL configurada para verificar (vars.URL_PROD / vars.URL_STAGING)."
+    echo "No hay URL configurada para verificar (vars.URL_APP)."
     echo "Cargala en Settings > Secrets and variables > Actions > Variables."
     echo "Se omite la verificacion."
     exit 0
