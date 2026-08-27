@@ -23,12 +23,16 @@ rutasEnvases.get('/', async (req, res, next) => {
             return res.status(400).json({ error: `accion no soportada: ${accion}` });
         }
 
+        // Se ordena por `pos`, la posicion que traia el origen. El orden de la
+        // hoja de calculo no siempre coincide con el cronologico: hay ordenes y
+        // controles con el createdAt/timestamp invertido respecto de su fila.
+        // Ordenar por fecha devolvia elementos intercambiados de lugar.
         const [ordenesRes, controlesRes] = await Promise.all([
-            consultar('SELECT id, raw FROM ordenes ORDER BY creado_en NULLS LAST, id'),
+            consultar('SELECT id, raw FROM ordenes ORDER BY pos NULLS LAST, creado_en NULLS LAST, id'),
             consultar(
                 `SELECT orden_id, origen, raw
                  FROM controles
-                 ORDER BY origen, orden_id NULLS LAST, ts`
+                 ORDER BY origen, orden_id NULLS LAST, pos NULLS LAST, ts`
             ),
         ]);
 
@@ -63,7 +67,7 @@ rutasEnvases.get('/estado', async (_req, res, next) => {
     try {
         const [ultimo, totales] = await Promise.all([
             consultar(
-                `SELECT iniciado_en, fin_en, estado, ordenes, controles, mediciones, error
+                `SELECT iniciado_en, fin_en, estado, ordenes, controles, lcc, mediciones, error
                  FROM sync_log
                  WHERE dominio = 'envases'
                  ORDER BY iniciado_en DESC

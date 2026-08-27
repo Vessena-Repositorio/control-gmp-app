@@ -46,7 +46,7 @@ async function descargar(url) {
 }
 
 /** Inserta o actualiza un control y reescribe sus mediciones. */
-async function guardarControl(cliente, ctrl, { origen, ordenId, envase }) {
+async function guardarControl(cliente, ctrl, { origen, ordenId, envase, pos }) {
     const ts = aFecha(ctrl.timestamp);
     if (!ts) return { control: 0, mediciones: 0 }; // sin timestamp no hay clave natural
 
@@ -58,15 +58,15 @@ async function guardarControl(cliente, ctrl, { origen, ordenId, envase }) {
 
     const { rows } = await cliente.query(
         `INSERT INTO controles (clave_natural, origen, orden_id, ext_id, envase, tipo,
-                                fecha, hora, operador, analista, turno, observaciones, ts, raw,
-                                sincronizado_en)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14, now())
+                                fecha, hora, operador, analista, turno, observaciones, ts, pos,
+                                raw, sincronizado_en)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15, now())
          ON CONFLICT (clave_natural) DO UPDATE SET
             origen = EXCLUDED.origen, orden_id = EXCLUDED.orden_id,
             ext_id = EXCLUDED.ext_id, envase = EXCLUDED.envase, tipo = EXCLUDED.tipo,
             fecha = EXCLUDED.fecha, hora = EXCLUDED.hora, operador = EXCLUDED.operador,
             analista = EXCLUDED.analista, turno = EXCLUDED.turno,
-            observaciones = EXCLUDED.observaciones, ts = EXCLUDED.ts,
+            observaciones = EXCLUDED.observaciones, ts = EXCLUDED.ts, pos = EXCLUDED.pos,
             raw = EXCLUDED.raw, sincronizado_en = now()
          RETURNING id`,
         [
@@ -83,6 +83,7 @@ async function guardarControl(cliente, ctrl, { origen, ordenId, envase }) {
             limpiar(ctrl.turno),
             limpiar(ctrl.observaciones),
             ts,
+            pos,
             JSON.stringify(ctrl),
         ]
     );
@@ -138,10 +139,10 @@ export async function sincronizarEnvases() {
             throw new Error('el origen no devolvio ordenes ni registros LCC; no se toca la base');
         }
 
-        const conteo = { ordenes: 0, controles: 0, mediciones: 0 };
+        const conteo = { ordenes: 0, controles: 0, lcc: 0, mediciones: 0 };
 
         await enTransaccion(async (cliente) => {
-            for (const orden of ordenes) {
+            for (const [posOrden, orden] of ordenes.entries()) {
                 const ordenId = aEntero(orden.id);
                 if (ordenId === null) continue;
 
@@ -151,16 +152,16 @@ export async function sincronizarEnvases() {
 
                 await cliente.query(
                     `INSERT INTO ordenes (id, numero_orden, envase, fecha, operador, analista,
-                                          maquina, turno, estado, campaign_id, creado_en, raw,
-                                          sincronizado_en)
-                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12, now())
+                                          maquina, turno, estado, campaign_id, creado_en, pos,
+                                          raw, sincronizado_en)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, now())
                      ON CONFLICT (id) DO UPDATE SET
                         numero_orden = EXCLUDED.numero_orden, envase = EXCLUDED.envase,
                         fecha = EXCLUDED.fecha, operador = EXCLUDED.operador,
                         analista = EXCLUDED.analista, maquina = EXCLUDED.maquina,
                         turno = EXCLUDED.turno, estado = EXCLUDED.estado,
                         campaign_id = EXCLUDED.campaign_id, creado_en = EXCLUDED.creado_en,
-                        raw = EXCLUDED.raw, sincronizado_en = now()`,
+                        pos = EXCLUDED.pos, raw = EXCLUDED.raw, sincronizado_en = now()`,
                     [
                         ordenId,
                         limpiar(orden.numeroOrden),
@@ -173,44 +174,47 @@ export async function sincronizarEnvases() {
                         limpiar(orden.estado),
                         aEntero(orden.campaign_id),
                         aFecha(orden.createdAt),
+                        posOrden,
                         JSON.stringify(ordenSinControles),
                     ]
                 );
                 conteo.ordenes++;
 
-                for (const ctrl of controles || []) {
+                for (const [posCtrl, ctrl] of (controles || []).entries()) {
                     const r = await guardarControl(cliente, ctrl, {
                         origen: 'orden',
                         ordenId,
                         envase: limpiar(orden.envase),
+                        pos: posCtrl,
                     });
                     conteo.controles += r.control;
                     conteo.mediciones += r.mediciones;
                 }
             }
 
-            for (const registro of lcc) {
+            for (const [posLcc, registro] of lcc.entries()) {
                 const r = await guardarControl(cliente, registro, {
                     origen: 'lcc',
                     ordenId: null,
                     envase: limpiar(registro.envase),
+                    pos: posLcc,
                 });
-                conteo.controles += r.control;
+                conteo.lcc += r.control;
                 conteo.mediciones += r.mediciones;
             }
         });
 
         await consultar(
             `UPDATE sync_log SET fin_en = now(), estado = 'ok',
-                    ordenes = $2, controles = $3, mediciones = $4
+                    ordenes = $2, controles = $3, lcc = $4, mediciones = $5
              WHERE id = $1`,
-            [logId, conteo.ordenes, conteo.controles, conteo.mediciones]
+            [logId, conteo.ordenes, conteo.controles, conteo.lcc, conteo.mediciones]
         );
 
         const seg = ((Date.now() - t0) / 1000).toFixed(1);
         console.log(
             `[sync:envases] ok en ${seg}s - ${conteo.ordenes} ordenes, ` +
-            `${conteo.controles} controles, ${conteo.mediciones} mediciones`
+            `${conteo.controles} controles, ${conteo.lcc} lcc, ${conteo.mediciones} mediciones`
         );
         return conteo;
     } catch (err) {
