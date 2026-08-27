@@ -21,17 +21,35 @@ les toque su turno.
 
 ## Estado
 
-| Dominio | Origen | Estado |
-|---|---|---|
-| Envases y tapas | `AKfycby0…` | replicado — `dashboard.html` migrado y verificado |
-| Control en proceso | `AKfycbxm…` | pendiente |
-| No conformidades / cambios | `AKfycbwi…` | pendiente |
-| Estabilidad, capacitaciones, fabuloso, devoluciones, SAO-001, workflow | 1 endpoint c/u | pendiente |
+Los cuatro dominios que alimentan dashboards están replicados. **Todos los
+dashboards leen de Postgres.**
 
-Aún leen de Apps Script: `panel-supervision-envases.html`,
-`panel-supervision-tapas.html` y `supervision-envases.html`. Comparten el
-endpoint de envases, así que ya podrían pasarse a `/api/envases` — se dejan para
-el paso siguiente, para que el primer corte tenga un solo archivo que revertir.
+| Dominio | Origen | Sirve a | Endpoint |
+|---|---|---|---|
+| Envases y tapas | Apps Script `AKfycby0…` | `dashboard.html` + 3 paneles | `/api/envases` |
+| Control en proceso | Apps Script `AKfycbxm…` | `informe-gerencial.html` | `/api/proceso` |
+| SAO-001 (agua) | Apps Script `AKfycbxx…`, CSV | `dashboard_sao001.html` | `/api/sao001` |
+| Fabuloso | Google Sheets gviz, CSV | `fabuloso_kpi_dashboard.html` | `/api/fabuloso` |
+
+Sin datos que migrar: `dashboard-calidad.html` y `dashboard_syso.html` traen los
+datos embebidos en el archivo, y `dashboard-calidad-moderno` / `-vessena` son
+portales, no consumidores de datos.
+
+Siguen en Apps Script las **apps de captura** (`control-en-proceso`,
+`control-calidad-envases`, `control-calidad-workflow`, `fabuloso`) y los
+registros de gestión (`no_conformidades`, `control_cambios`, `devoluciones`,
+`capacitaciones`, `estabilidad`). Eso es deliberado: la réplica va en una sola
+dirección y Sheets sigue siendo la fuente de verdad.
+
+### Página de inicio
+
+`index.html` es el selector de aplicaciones. La app de captura que estaba en la
+raíz se movió a `control-en-proceso.html`; **quien tenga la raíz marcada como
+favorito ahora cae en el portal** y llega a la captura con un clic más.
+
+Cada tarjeta indica de dónde salen sus datos, decidido en tiempo de ejecución:
+la misma app marcada como Postgres en Coolify aparece como Google Sheets
+servida desde Pages, porque ahí es lo que realmente hace.
 
 ## Arquitectura
 
@@ -40,15 +58,21 @@ no hay CORS y un commit sigue siendo un deploy.
 
 ```
 server/
-  index.js              servidor: API + estáticos + arranque del sync
+  index.js              servidor: API + estáticos + arranque de las réplicas
   db.js                 pool de Postgres
-  migrate.js            aplica server/migrations/*.sql una sola vez
+  migrate.js            aplica migrations/*.sql una sola vez, con lock
   verificar.js          compara Apps Script contra la API
-  lib/mediciones.js     parser de la bolsa dinámica de mediciones
-  routes/envases.js     GET /api/envases, /estado, POST /sync
-  sync/sync-envases.js  réplica Apps Script -> Postgres
-  migrations/001_envases.sql
+  lib/mediciones.js     parser de la bolsa dinámica de mediciones (envases)
+  lib/csv.js            parser de CSV, para los orígenes que no dan JSON
+  lib/origen.js         descarga y normalización de tipos de hoja de cálculo
+  lib/auth.js           token de los endpoints que disparan réplicas
+  routes/               un router por dominio: envases, proceso, sao001, fabuloso
+  sync/                 un replicador por dominio, con la misma estructura
+  migrations/*.sql      esquema; se aplican solas al arrancar
 ```
+
+Cada dominio replica y falla por separado: que un Apps Script esté caído no
+impide que se repliquen los demás.
 
 Solo se sirven archivos `.html` desde la raíz. `server/`, `package.json` y
 `.git` quedan fuera del alcance del servidor de estáticos.
@@ -109,10 +133,18 @@ deja sin configurar (ver "Automatización").
    | Variable | Valor |
    |---|---|
    | `DATABASE_URL` | la que expone el servicio Postgres de Coolify |
-   | `ORIGEN_ENVASES` | `https://script.google.com/macros/s/AKfycby0…/exec` |
+   | `ORIGEN_ENVASES` | Apps Script de envases y tapas |
+   | `ORIGEN_PROCESO` | Apps Script de control en proceso |
+   | `ORIGEN_SAO001` | Apps Script de SAO-001 (devuelve CSV) |
+   | `ORIGEN_FABULOSO` | hoja de Google gviz de Fabuloso (CSV) |
    | `SYNC_TOKEN` | uno largo y aleatorio, para el sync manual |
    | `SYNC_INTERVALO_MIN` | `15` |
    | `DATABASE_SSL` | `true` solo si tu Postgres exige TLS |
+
+   Los cuatro valores de `ORIGEN_*` están en `.env.example`. Si falta alguno,
+   ese dominio no replica y su dashboard queda sin datos — pero los demás
+   siguen funcionando, y se ve en `/api/<dominio>/estado` como
+   `ultimoSync: null`.
 
 3. **Deploy.** Al arrancar, el servidor aplica las migraciones y corre la primera
    réplica solo. No hace falta ningún paso manual.
@@ -252,9 +284,11 @@ sensible y así se lee en los logs de Actions.
 | Acción | Cómo |
 |---|---|
 | Salud del servicio | `GET /api/salud` |
-| Frescura del dato | `GET /api/envases/estado` |
-| Forzar una réplica | `POST /api/envases/sync` con header `x-sync-token` |
-| Réplica desde la consola | `npm run sync` |
+| Frescura del dato | `GET /api/<dominio>/estado` |
+| Forzar una réplica | `POST /api/<dominio>/sync` con header `x-sync-token` |
+| Réplica desde la consola | `npm run sync` (todas) o `npm run sync:<dominio>` |
+
+`<dominio>` es `envases`, `proceso`, `sao001` o `fabuloso`.
 
 Cada corrida queda registrada en la tabla `sync_log` con su duración, sus
 conteos y el error si falló.
@@ -275,6 +309,25 @@ const GOOGLE_SCRIPT_URL = APPS_SCRIPT_URL;
 
 Es un archivo y una línea. No hay fallback automático a propósito: si la API
 falla tiene que verse el error, no quedar tapado leyendo de la fuente vieja.
+
+## Hallazgos en los datos de origen
+
+Cosas que aparecieron al replicar y que **no se corrigieron**: arreglar datos de
+origen en silencio es peor que dejarlos a la vista, sobre todo en GMP. Se
+arreglan en la hoja, no acá.
+
+- **4 controles duplicados** en control en proceso: pares de registros idénticos
+  hasta la hora al segundo, sobre 2007. Son controles enviados dos veces, algo
+  que favorece el `POST` con `mode:'no-cors'` de la app de captura, que no puede
+  confirmar que guardó y lleva a reintentar.
+- **Una fecha corrupta** en SAO-001: `15/07//2026`, con doble barra. Queda como
+  `NULL` en la copia normalizada. No afecta al dashboard, que recibe el CSV
+  literal y lo parsea él mismo.
+- **`guia-entrenamiento-gmp (2).html` es idéntico** al original, byte a byte.
+  Es un artefacto de descarga; no está en el portal.
+- **`supervision-envases.html` y `panel-supervision-envases.html`** difieren en
+  54 líneas y tienen el mismo título. Parecen dos versiones vivas del mismo
+  panel. Ambas están en el portal hasta que se decida cuál queda.
 
 ## Lo que falta resolver
 
