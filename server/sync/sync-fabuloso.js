@@ -7,7 +7,10 @@
 // Uso:  npm run sync:fabuloso
 import { consultar, enTransaccion, pool } from '../db.js';
 import { esEjecucionDirecta } from '../lib/entrypoint.js';
-import { parsearCsv, indicesPorEncabezado, celda, celdaNumero, celdaFecha } from '../lib/csv.js';
+import {
+    parsearCsv, indicesPorEncabezado, celda, celdaNumero, celdaFecha,
+    avisarFechas, resumirFechas,
+} from '../lib/csv.js';
 import { descargarTexto } from '../lib/origen.js';
 
 // Columnas que identifican la fila; el resto pasa a fabuloso_valores.
@@ -39,6 +42,7 @@ export async function sincronizarFabuloso() {
 
         const iFechaEnv = Object.keys(idx).find((k) => k.startsWith('fecha envasado'));
         let valores = 0;
+        const fechasAnotadas = [];
 
         await enTransaccion(async (cliente) => {
             await cliente.query('DELETE FROM fabuloso_snapshot');
@@ -72,7 +76,7 @@ export async function sincronizarFabuloso() {
                         celda(fila, idx['código'] ?? idx['codigo']),
                         celda(fila, idx['descripcion'] ?? idx['descripción']),
                         celda(fila, idx['lote']),
-                        iFechaEnv ? celdaFecha(fila, idx[iFechaEnv]) : null,
+                        iFechaEnv ? celdaFecha(fila, idx[iFechaEnv], fechasAnotadas) : null,
                         JSON.stringify(objeto),
                     ]
                 );
@@ -120,7 +124,10 @@ export async function sincronizarFabuloso() {
 
         const seg = ((Date.now() - t0) / 1000).toFixed(1);
         console.log(`[sync:fabuloso] ok en ${seg}s - ${datos.length} lotes, ${valores} valores`);
-        return { lotes: datos.length, valores };
+
+        avisarFechas('fabuloso', fechasAnotadas);
+
+        return { lotes: datos.length, valores, fechas: resumirFechas(fechasAnotadas) };
     } catch (err) {
         await consultar(
             `UPDATE sync_log SET fin_en = now(), estado = 'error', error = $2 WHERE id = $1`,

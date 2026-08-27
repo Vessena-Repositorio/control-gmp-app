@@ -129,14 +129,71 @@ export function celdaFecha(fila, indice, saneadas) {
     // caso se acumula en `saneadas` para que quede en el log del sync. En la
     // hoja el error sigue estando; esto solo evita perder la fecha.
     const normalizado = v.replace(/\/{2,}/g, '/').replace(/-{2,}/g, '-').trim();
-    if (normalizado !== v && saneadas) saneadas.push(v);
+    const anotar = (accion) => { if (saneadas) saneadas.push({ valor: v, accion }); };
 
-    const m = normalizado.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    if (m) {
-        const [, d, mes, a] = m;
-        return `${a}-${String(+mes).padStart(2, '0')}-${String(+d).padStart(2, '0')}`;
+    const resultado = interpretar(normalizado);
+
+    // Ultima linea de defensa: solo sale de aca un AAAA-MM-DD con año plausible.
+    // Sin esto, un '05/06/20024' (typo real de la hoja de Fabuloso) llegaba a
+    // Postgres como '+020024-06' y volteaba el sync entero. Un dato raro tiene
+    // que perder esa celda, no la corrida.
+    const valido =
+        /^\d{4}-\d{2}-\d{2}$/.test(resultado || '') &&
+        +resultado.slice(0, 4) >= 1990 &&
+        +resultado.slice(0, 4) <= 2100;
+
+    if (!valido) {
+        // Se reporta cualquier celda no vacia que se descarte, haya producido
+        // basura o nada: en los dos casos se pierde un dato de la hoja.
+        anotar('descartada');
+        return null;
     }
 
-    const fecha = new Date(normalizado);
+    if (normalizado !== v) anotar('saneada');
+    return resultado;
+}
+
+/** Cuenta por accion, para devolverla en la respuesta del sync. */
+export function resumirFechas(anotaciones) {
+    return anotaciones.reduce(
+        (acc, a) => ({ ...acc, [a.accion]: (acc[a.accion] || 0) + 1 }),
+        {}
+    );
+}
+
+/**
+ * Avisa en el log de cada corrida. No una sola vez: el error sigue en la hoja
+ * de origen y el aviso solo desaparece cuando alguien lo corrige alla.
+ */
+export function avisarFechas(dominio, anotaciones) {
+    if (!anotaciones.length) return;
+
+    for (const accion of ['saneada', 'descartada']) {
+        const casos = anotaciones.filter((a) => a.accion === accion);
+        if (!casos.length) continue;
+
+        const unicos = [...new Set(casos.map((c) => c.valor))];
+        const que =
+            accion === 'saneada'
+                ? 'con formato raro, interpretadas igual'
+                : 'invalidas, DESCARTADAS (esas celdas quedan sin fecha)';
+        console.warn(
+            `[sync:${dominio}] ${casos.length} fecha(s) ${que}: ` +
+            `${unicos.join(', ')} — corregir en la hoja de origen`
+        );
+    }
+}
+
+function interpretar(texto) {
+    const partes = texto.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+    if (partes) {
+        const [, d, mes, a] = partes;
+        // Año de dos digitos: estas hojas usan dd/mm/aaaa en todo lo demas, asi
+        // que '24' es 2024. No hay ambiguedad de siglo en datos de produccion.
+        const anio = a.length === 2 ? 2000 + +a : +a;
+        return `${anio}-${String(+mes).padStart(2, '0')}-${String(+d).padStart(2, '0')}`;
+    }
+
+    const fecha = new Date(texto);
     return Number.isNaN(fecha.getTime()) ? null : fecha.toISOString().slice(0, 10);
 }

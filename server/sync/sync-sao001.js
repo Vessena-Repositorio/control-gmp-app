@@ -7,7 +7,10 @@
 // Uso:  npm run sync:sao001
 import { consultar, enTransaccion, pool } from '../db.js';
 import { esEjecucionDirecta } from '../lib/entrypoint.js';
-import { parsearCsv, indicesPorEncabezado, celda, celdaNumero, celdaFecha } from '../lib/csv.js';
+import {
+    parsearCsv, indicesPorEncabezado, celda, celdaNumero, celdaFecha,
+    avisarFechas, resumirFechas,
+} from '../lib/csv.js';
 import { descargarTexto } from '../lib/origen.js';
 
 // Cada parametro sale de hasta tres columnas del CSV: el valor y sus limites.
@@ -51,7 +54,7 @@ export async function sincronizarSao001() {
         const iFecha = Object.keys(idx).find((k) => k.startsWith('fecha'));
 
         let parametros = 0;
-        const fechasSaneadas = [];
+        const fechasAnotadas = [];
 
         await enTransaccion(async (cliente) => {
             await cliente.query('DELETE FROM sao001_snapshot');
@@ -75,7 +78,7 @@ export async function sincronizarSao001() {
                         celda(fila, iPunto),
                         celda(fila, idx['comentarios']),
                         celda(fila, idx['sistema']),
-                        iFecha ? celdaFecha(fila, idx[iFecha], fechasSaneadas) : null,
+                        iFecha ? celdaFecha(fila, idx[iFecha], fechasAnotadas) : null,
                         celda(fila, idx['fases']),
                         celda(fila, idx['observaciones']),
                     ]
@@ -128,17 +131,9 @@ export async function sincronizarSao001() {
             `[sync:sao001] ok en ${seg}s - ${datos.length} muestras, ${parametros} parametros`
         );
 
-        // Se avisa en cada corrida, no una sola vez: el error sigue en la hoja
-        // y solo desaparece del log cuando alguien lo corrige alla.
-        if (fechasSaneadas.length) {
-            const unicas = [...new Set(fechasSaneadas)];
-            console.warn(
-                `[sync:sao001] ${fechasSaneadas.length} fecha(s) con separadores repetidos, ` +
-                `interpretadas igual: ${unicas.join(', ')} — corregir en la hoja de origen`
-            );
-        }
+        avisarFechas('sao001', fechasAnotadas);
 
-        return { muestras: datos.length, parametros, fechasSaneadas: fechasSaneadas.length };
+        return { muestras: datos.length, parametros, fechas: resumirFechas(fechasAnotadas) };
     } catch (err) {
         await consultar(
             `UPDATE sync_log SET fin_en = now(), estado = 'error', error = $2 WHERE id = $1`,

@@ -63,11 +63,21 @@ export async function descargarTexto(url) {
     }
 }
 
-/** Fecha ISO -> Date, o null si viene vacia o corrupta. */
+/**
+ * Fecha ISO -> Date, o null si viene vacia o corrupta.
+ *
+ * Se descartan los años fuera de rango: un typo en la hoja puede producir un
+ * año como 20024, que Postgres rechaza con 'time zone displacement out of
+ * range' y voltea el sync entero. Una celda rara tiene que perder esa celda, no
+ * la corrida.
+ */
 export function aFecha(valor) {
     if (!valor) return null;
     const d = new Date(valor);
-    return Number.isNaN(d.getTime()) ? null : d;
+    if (Number.isNaN(d.getTime())) return null;
+
+    const anio = d.getUTCFullYear();
+    return anio >= 1990 && anio <= 2100 ? d : null;
 }
 
 /** Texto limpio, o null si queda vacio. */
