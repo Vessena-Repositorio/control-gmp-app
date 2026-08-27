@@ -5,8 +5,10 @@ import { pool, hayBase } from './db.js';
 import { migrar } from './migrate.js';
 import { rutasEnvases } from './routes/envases.js';
 import { rutasProceso } from './routes/proceso.js';
+import { rutasSao001 } from './routes/sao001.js';
 import { sincronizarEnvases } from './sync/sync-envases.js';
 import { sincronizarProceso } from './sync/sync-proceso.js';
+import { sincronizarSao001 } from './sync/sync-sao001.js';
 
 const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PUERTO = Number(process.env.PORT) || 3000;
@@ -39,6 +41,7 @@ app.get('/api/salud', async (_req, res) => {
 
 app.use('/api/envases', rutasEnvases);
 app.use('/api/proceso', rutasProceso);
+app.use('/api/sao001', rutasSao001);
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'endpoint inexistente' }));
 
@@ -114,6 +117,7 @@ function arrancar() {
             const replicas = [
                 ['envases', sincronizarEnvases],
                 ['proceso', sincronizarProceso],
+                ['sao001', sincronizarSao001],
             ];
             const replicarTodo = () => {
                 for (const [nombre, fn] of replicas) {
