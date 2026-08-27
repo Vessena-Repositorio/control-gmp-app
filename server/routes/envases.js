@@ -18,8 +18,12 @@ export const rutasEnvases = Router();
  */
 rutasEnvases.get('/', async (req, res, next) => {
     try {
+        // El origen expone los dos productos por acciones distintas.
+        const PRODUCTO_POR_ACCION = { getAll: 'envases', getAllTapas: 'tapas' };
+
         const accion = req.query.action || 'getAll';
-        if (accion !== 'getAll') {
+        const producto = PRODUCTO_POR_ACCION[accion];
+        if (!producto) {
             return res.status(400).json({ error: `accion no soportada: ${accion}` });
         }
 
@@ -28,11 +32,18 @@ rutasEnvases.get('/', async (req, res, next) => {
         // controles con el createdAt/timestamp invertido respecto de su fila.
         // Ordenar por fecha devolvia elementos intercambiados de lugar.
         const [ordenesRes, controlesRes] = await Promise.all([
-            consultar('SELECT id, raw FROM ordenes ORDER BY pos NULLS LAST, creado_en NULLS LAST, id'),
+            consultar(
+                `SELECT id, raw FROM ordenes
+                 WHERE producto = $1
+                 ORDER BY pos NULLS LAST, creado_en NULLS LAST, id`,
+                [producto]
+            ),
             consultar(
                 `SELECT orden_id, origen, raw
                  FROM controles
-                 ORDER BY origen, orden_id NULLS LAST, pos NULLS LAST, ts`
+                 WHERE producto = $1
+                 ORDER BY origen, orden_id NULLS LAST, pos NULLS LAST, ts`,
+                [producto]
             ),
         ]);
 
@@ -75,16 +86,32 @@ rutasEnvases.get('/estado', async (_req, res, next) => {
             ),
             consultar(
                 `SELECT
-                    (SELECT count(*) FROM ordenes)                          AS ordenes,
-                    (SELECT count(*) FROM controles WHERE origen = 'orden') AS controles,
-                    (SELECT count(*) FROM controles WHERE origen = 'lcc')   AS lcc,
-                    (SELECT count(*) FROM mediciones)                       AS mediciones`
+                    p.producto,
+                    (SELECT count(*) FROM ordenes o
+                      WHERE o.producto = p.producto)                        AS ordenes,
+                    (SELECT count(*) FROM controles c
+                      WHERE c.producto = p.producto AND c.origen = 'orden') AS controles,
+                    (SELECT count(*) FROM controles c
+                      WHERE c.producto = p.producto AND c.origen = 'lcc')   AS lcc,
+                    (SELECT count(*) FROM mediciones m
+                      JOIN controles c ON c.id = m.control_id
+                      WHERE c.producto = p.producto)                        AS mediciones
+                 FROM (VALUES ('envases'), ('tapas')) AS p(producto)
+                 ORDER BY p.producto`
             ),
         ]);
 
+        // Desglosado por producto: envases y tapas comparten tablas, y un total
+        // unico esconderia si tapas dejo de replicarse.
+        const porProducto = {};
+        for (const fila of totales.rows) {
+            const { producto, ...conteos } = fila;
+            porProducto[producto] = conteos;
+        }
+
         res.json({
             ultimoSync: ultimo.rows[0] || null,
-            totales: totales.rows[0],
+            totales: porProducto,
         });
     } catch (err) {
         next(err);

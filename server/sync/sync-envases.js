@@ -46,22 +46,26 @@ async function descargar(url) {
 }
 
 /** Inserta o actualiza un control y reescribe sus mediciones. */
-async function guardarControl(cliente, ctrl, { origen, ordenId, envase, pos }) {
+async function guardarControl(cliente, ctrl, { origen, ordenId, envase, pos, producto }) {
     const ts = aFecha(ctrl.timestamp);
     if (!ts) return { control: 0, mediciones: 0 }; // sin timestamp no hay clave natural
 
     const extId = origen === 'lcc' ? aEntero(ctrl.id) : null;
     if (origen === 'lcc' && extId === null) return { control: 0, mediciones: 0 };
 
+    // Envases no lleva prefijo a proposito: sus claves ya existen en la base y
+    // cambiarles el formato reinsertaria los 784 controles como filas nuevas.
+    const pref = producto === 'envases' ? '' : `${producto}:`;
     const claveNatural =
-        origen === 'lcc' ? `lcc:${extId}` : `orden:${ordenId}:${ts.toISOString()}`;
+        origen === 'lcc' ? `${pref}lcc:${extId}` : `${pref}orden:${ordenId}:${ts.toISOString()}`;
 
     const { rows } = await cliente.query(
-        `INSERT INTO controles (clave_natural, origen, orden_id, ext_id, envase, tipo,
+        `INSERT INTO controles (clave_natural, producto, origen, orden_id, ext_id, envase, tipo,
                                 fecha, hora, operador, analista, turno, observaciones, ts, pos,
                                 raw, sincronizado_en)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15, now())
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16, now())
          ON CONFLICT (clave_natural) DO UPDATE SET
+            producto = EXCLUDED.producto,
             origen = EXCLUDED.origen, orden_id = EXCLUDED.orden_id,
             ext_id = EXCLUDED.ext_id, envase = EXCLUDED.envase, tipo = EXCLUDED.tipo,
             fecha = EXCLUDED.fecha, hora = EXCLUDED.hora, operador = EXCLUDED.operador,
@@ -71,6 +75,7 @@ async function guardarControl(cliente, ctrl, { origen, ordenId, envase, pos }) {
          RETURNING id`,
         [
             claveNatural,
+            producto,
             origen,
             ordenId,
             extId,
@@ -129,19 +134,28 @@ export async function sincronizarEnvases() {
     const t0 = Date.now();
 
     try {
-        const datos = await descargar(`${url}?action=getAll`);
-        const ordenes = Array.isArray(datos?.ordenes) ? datos.ordenes : [];
-        const lcc = Array.isArray(datos?.lcc) ? datos.lcc : [];
+        // El mismo endpoint sirve dos productos por acciones distintas.
+        const porProducto = {
+            envases: await descargar(`${url}?action=getAll`),
+            tapas: await descargar(`${url}?action=getAllTapas`),
+        };
 
         // Un origen vacio casi siempre es una falla de Apps Script, no una purga
         // real. Abortar evita vaciar los dashboards por un error transitorio.
-        if (!ordenes.length && !lcc.length) {
+        // Se mira solo envases: tapas devuelve vacio de verdad hasta que
+        // empiecen a cargar, y no puede bloquear la replica del resto.
+        const base = porProducto.envases;
+        if (!base?.ordenes?.length && !base?.lcc?.length) {
             throw new Error('el origen no devolvio ordenes ni registros LCC; no se toca la base');
         }
 
         const conteo = { ordenes: 0, controles: 0, lcc: 0, mediciones: 0 };
 
         await enTransaccion(async (cliente) => {
+        for (const [producto, datos] of Object.entries(porProducto)) {
+            const ordenes = Array.isArray(datos?.ordenes) ? datos.ordenes : [];
+            const lcc = Array.isArray(datos?.lcc) ? datos.lcc : [];
+
             for (const [posOrden, orden] of ordenes.entries()) {
                 const ordenId = aEntero(orden.id);
                 if (ordenId === null) continue;
@@ -151,11 +165,11 @@ export async function sincronizarEnvases() {
                 const { controles, ...ordenSinControles } = orden;
 
                 await cliente.query(
-                    `INSERT INTO ordenes (id, numero_orden, envase, fecha, operador, analista,
-                                          maquina, turno, estado, campaign_id, creado_en, pos,
-                                          raw, sincronizado_en)
-                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, now())
-                     ON CONFLICT (id) DO UPDATE SET
+                    `INSERT INTO ordenes (id, producto, numero_orden, envase, fecha, operador,
+                                          analista, maquina, turno, estado, campaign_id,
+                                          creado_en, pos, raw, sincronizado_en)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14, now())
+                     ON CONFLICT (producto, id) DO UPDATE SET
                         numero_orden = EXCLUDED.numero_orden, envase = EXCLUDED.envase,
                         fecha = EXCLUDED.fecha, operador = EXCLUDED.operador,
                         analista = EXCLUDED.analista, maquina = EXCLUDED.maquina,
@@ -164,6 +178,7 @@ export async function sincronizarEnvases() {
                         pos = EXCLUDED.pos, raw = EXCLUDED.raw, sincronizado_en = now()`,
                     [
                         ordenId,
+                        producto,
                         limpiar(orden.numeroOrden),
                         limpiar(orden.envase),
                         aFecha(orden.fecha),
@@ -186,6 +201,7 @@ export async function sincronizarEnvases() {
                         ordenId,
                         envase: limpiar(orden.envase),
                         pos: posCtrl,
+                        producto,
                     });
                     conteo.controles += r.control;
                     conteo.mediciones += r.mediciones;
@@ -198,10 +214,12 @@ export async function sincronizarEnvases() {
                     ordenId: null,
                     envase: limpiar(registro.envase),
                     pos: posLcc,
+                    producto,
                 });
                 conteo.lcc += r.control;
                 conteo.mediciones += r.mediciones;
             }
+        }
         });
 
         await consultar(
