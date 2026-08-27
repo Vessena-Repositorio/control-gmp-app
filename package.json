@@ -1,0 +1,18 @@
+{
+  "name": "control-gmp-app",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Suite de control de calidad GMP - Vessena S.A.",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server/index.js",
+    "migrate": "node server/migrate.js",
+    "sync": "node server/sync/sync-envases.js",
+    "verificar": "node server/verificar.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "pg": "^8.13.1"
+  }
+}
