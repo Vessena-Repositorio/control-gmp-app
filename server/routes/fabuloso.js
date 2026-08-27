@@ -55,11 +55,15 @@ rutasFabuloso.get('/estado', async (_req, res, next) => {
 });
 
 /** POST /api/fabuloso/sync — dispara la replica a mano. */
-rutasFabuloso.post('/sync', exigirTokenSync, async (_req, res, next) => {
+rutasFabuloso.post('/sync', exigirTokenSync, async (_req, res) => {
     try {
         const conteo = await sincronizarFabuloso();
         res.json({ estado: 'ok', ...conteo });
     } catch (err) {
-        next(err);
+        // Endpoint autenticado y de diagnostico: se devuelve el motivo real.
+        // Ocultarlo obliga a entrar a los logs del contenedor para saber si
+        // falto una variable, si el origen no respondio o si fallo la base.
+        console.error('[sync] fallo por HTTP:', err.message);
+        res.status(500).json({ estado: 'error', error: err.message });
     }
 });

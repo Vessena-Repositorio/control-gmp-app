@@ -11,9 +11,9 @@ import { esEjecucionDirecta } from '../lib/entrypoint.js';
 import { descargar, aFecha, aNumero, aTexto, aBooleano, huellaDe } from '../lib/origen.js';
 
 export async function sincronizarProceso() {
-    const url = process.env.ORIGEN_PROCESO;
-    if (!url) throw new Error('Falta ORIGEN_PROCESO en las variables de entorno.');
-
+    // El log se abre antes de validar la configuracion: si falta la variable,
+    // el fallo tiene que quedar registrado y visible en /estado, no solo en los
+    // logs del contenedor.
     const { rows: logRows } = await consultar(
         `INSERT INTO sync_log (dominio) VALUES ('proceso') RETURNING id`
     );
@@ -21,6 +21,9 @@ export async function sincronizarProceso() {
     const t0 = Date.now();
 
     try {
+        const url = process.env.ORIGEN_PROCESO;
+        if (!url) throw new Error('Falta ORIGEN_PROCESO en las variables de entorno.');
+
         const datos = await descargar(url);
         const registros = Array.isArray(datos?.records) ? datos.records : [];
 

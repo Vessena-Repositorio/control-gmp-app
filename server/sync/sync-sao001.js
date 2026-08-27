@@ -23,9 +23,9 @@ const PARAMETROS = [
 ];
 
 export async function sincronizarSao001() {
-    const url = process.env.ORIGEN_SAO001;
-    if (!url) throw new Error('Falta ORIGEN_SAO001 en las variables de entorno.');
-
+    // El log se abre antes de validar la configuracion: si falta la variable,
+    // el fallo tiene que quedar registrado y visible en /estado, no solo en los
+    // logs del contenedor.
     const { rows: logRows } = await consultar(
         `INSERT INTO sync_log (dominio) VALUES ('sao001') RETURNING id`
     );
@@ -33,6 +33,9 @@ export async function sincronizarSao001() {
     const t0 = Date.now();
 
     try {
+        const url = process.env.ORIGEN_SAO001;
+        if (!url) throw new Error('Falta ORIGEN_SAO001 en las variables de entorno.');
+
         const csv = await descargarTexto(url);
         const filas = parsearCsv(csv);
         if (filas.length < 2) {

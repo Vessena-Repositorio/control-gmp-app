@@ -14,9 +14,9 @@ import { descargarTexto } from '../lib/origen.js';
 const IDENTIFICADORAS = new Set(['v', 'código', 'codigo', 'descripcion', 'descripción', 'lote']);
 
 export async function sincronizarFabuloso() {
-    const url = process.env.ORIGEN_FABULOSO;
-    if (!url) throw new Error('Falta ORIGEN_FABULOSO en las variables de entorno.');
-
+    // El log se abre antes de validar la configuracion: si falta la variable,
+    // el fallo tiene que quedar registrado y visible en /estado, no solo en los
+    // logs del contenedor.
     const { rows: logRows } = await consultar(
         `INSERT INTO sync_log (dominio) VALUES ('fabuloso') RETURNING id`
     );
@@ -24,6 +24,9 @@ export async function sincronizarFabuloso() {
     const t0 = Date.now();
 
     try {
+        const url = process.env.ORIGEN_FABULOSO;
+        if (!url) throw new Error('Falta ORIGEN_FABULOSO en las variables de entorno.');
+
         const csv = await descargarTexto(url);
         const filas = parsearCsv(csv);
         if (filas.length < 2) {

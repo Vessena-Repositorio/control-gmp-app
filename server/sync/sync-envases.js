@@ -89,9 +89,9 @@ async function guardarControl(cliente, ctrl, { origen, ordenId, envase, pos, pro
 }
 
 export async function sincronizarEnvases() {
-    const url = process.env.ORIGEN_ENVASES;
-    if (!url) throw new Error('Falta ORIGEN_ENVASES en las variables de entorno.');
-
+    // El log se abre antes de validar la configuracion: si falta la variable,
+    // el fallo tiene que quedar registrado y visible en /estado, no solo en los
+    // logs del contenedor.
     const { rows: logRows } = await consultar(
         `INSERT INTO sync_log (dominio) VALUES ('envases') RETURNING id`
     );
@@ -99,6 +99,9 @@ export async function sincronizarEnvases() {
     const t0 = Date.now();
 
     try {
+        const url = process.env.ORIGEN_ENVASES;
+        if (!url) throw new Error('Falta ORIGEN_ENVASES en las variables de entorno.');
+
         // El mismo endpoint sirve dos productos por acciones distintas.
         const porProducto = {
             envases: await descargar(`${url}?action=getAll`),
