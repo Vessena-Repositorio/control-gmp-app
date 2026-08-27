@@ -120,16 +120,23 @@ export function celdaNumero(fila, indice) {
  * medianoche UTC del 18 cae el 17 en una sesion en UTC-3, y la fecha de
  * muestreo se corre un dia. Un 'AAAA-MM-DD' no tiene esa ambiguedad.
  */
-export function celdaFecha(fila, indice) {
+export function celdaFecha(fila, indice, saneadas) {
     const v = celda(fila, indice);
     if (!v) return null;
 
-    const m = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    // Separadores repetidos son un error de tipeo en la hoja ('15/07//2026').
+    // Se toleran porque la intencion es inequivoca, pero NO en silencio: cada
+    // caso se acumula en `saneadas` para que quede en el log del sync. En la
+    // hoja el error sigue estando; esto solo evita perder la fecha.
+    const normalizado = v.replace(/\/{2,}/g, '/').replace(/-{2,}/g, '-').trim();
+    if (normalizado !== v && saneadas) saneadas.push(v);
+
+    const m = normalizado.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (m) {
         const [, d, mes, a] = m;
         return `${a}-${String(+mes).padStart(2, '0')}-${String(+d).padStart(2, '0')}`;
     }
 
-    const fecha = new Date(v);
+    const fecha = new Date(normalizado);
     return Number.isNaN(fecha.getTime()) ? null : fecha.toISOString().slice(0, 10);
 }

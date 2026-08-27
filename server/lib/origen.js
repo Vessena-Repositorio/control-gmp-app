@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 // Helpers compartidos por los sincronizadores. Los origenes son hojas de
 // calculo detras de Apps Script, asi que todo llega con el tipo que quedo en la
 // celda: numeros como texto, fechas vacias como '', booleanos como booleanos o
@@ -18,6 +20,28 @@ export async function descargar(url) {
     } finally {
         clearTimeout(reloj);
     }
+}
+
+/**
+ * Huella de contenido de un registro, para detectar el mismo dato enviado dos
+ * veces. Se ordenan las claves antes de serializar para que la huella no
+ * dependa del orden en que las mando el origen.
+ */
+export function huellaDe(valor) {
+    return createHash('sha256').update(canonico(valor)).digest('hex');
+}
+
+function canonico(v) {
+    if (v === null || typeof v !== 'object') return JSON.stringify(v) ?? 'null';
+    if (Array.isArray(v)) return '[' + v.map(canonico).join(',') + ']';
+    return (
+        '{' +
+        Object.keys(v)
+            .sort()
+            .map((k) => JSON.stringify(k) + ':' + canonico(v[k]))
+            .join(',') +
+        '}'
+    );
 }
 
 /** GET con timeout que devuelve texto plano (los origenes que mandan CSV). */

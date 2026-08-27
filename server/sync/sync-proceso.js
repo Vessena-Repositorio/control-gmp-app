@@ -8,7 +8,7 @@
 // Uso:  npm run sync:proceso
 import { consultar, enTransaccion, pool } from '../db.js';
 import { esEjecucionDirecta } from '../lib/entrypoint.js';
-import { descargar, aFecha, aNumero, aTexto, aBooleano } from '../lib/origen.js';
+import { descargar, aFecha, aNumero, aTexto, aBooleano, huellaDe } from '../lib/origen.js';
 
 export async function sincronizarProceso() {
     const url = process.env.ORIGEN_PROCESO;
@@ -34,15 +34,31 @@ export async function sincronizarProceso() {
 
         let pesos = 0;
 
+        // Dos registros con el mismo contenido son el mismo control enviado dos
+        // veces: no hay forma de que dos controles distintos coincidan en todos
+        // los campos, incluida la hora al segundo. Gana el primero; los
+        // siguientes quedan marcados apuntando a el.
+        const primeraAparicion = new Map();
+        const duplicados = [];
+
         await enTransaccion(async (cliente) => {
             for (const [pos, r] of registros.entries()) {
+                const huella = huellaDe(r);
+                const original = primeraAparicion.get(huella);
+                if (original === undefined) {
+                    primeraAparicion.set(huella, pos);
+                } else {
+                    duplicados.push({ pos, original });
+                }
+
                 const { rows } = await cliente.query(
                     `INSERT INTO proceso_controles
                         (pos, fecha, analista, orden, lote, vence, maquina, presentacion,
                          granel, cod_pt, control_num, hora, promedio, spec, ph, has_dev,
-                         dev_desc, dev_qty, is_rep, num_fotos, obs, raw, sincronizado_en)
+                         dev_desc, dev_qty, is_rep, num_fotos, obs, raw,
+                         huella, duplicado_de, sincronizado_en)
                      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
-                             $17,$18,$19,$20,$21,$22, now())
+                             $17,$18,$19,$20,$21,$22,$23,$24, now())
                      ON CONFLICT (pos) DO UPDATE SET
                         fecha = EXCLUDED.fecha, analista = EXCLUDED.analista,
                         orden = EXCLUDED.orden, lote = EXCLUDED.lote,
@@ -53,7 +69,8 @@ export async function sincronizarProceso() {
                         spec = EXCLUDED.spec, ph = EXCLUDED.ph, has_dev = EXCLUDED.has_dev,
                         dev_desc = EXCLUDED.dev_desc, dev_qty = EXCLUDED.dev_qty,
                         is_rep = EXCLUDED.is_rep, num_fotos = EXCLUDED.num_fotos,
-                        obs = EXCLUDED.obs, raw = EXCLUDED.raw, sincronizado_en = now()
+                        obs = EXCLUDED.obs, raw = EXCLUDED.raw, huella = EXCLUDED.huella,
+                        duplicado_de = EXCLUDED.duplicado_de, sincronizado_en = now()
                      RETURNING id`,
                     [
                         pos,
@@ -78,6 +95,8 @@ export async function sincronizarProceso() {
                         aNumero(r.numFotos),
                         aTexto(r.obs),
                         JSON.stringify(r),
+                        huella,
+                        original === undefined ? null : original,
                     ]
                 );
 
@@ -117,18 +136,35 @@ export async function sincronizarProceso() {
             ]);
         });
 
+        // El log guarda los controles utiles, que es el numero que ve el
+        // dashboard. Los duplicados van aparte para que la diferencia con la
+        // hoja sea explicable y no parezca que se perdieron filas.
+        const utiles = registros.length - duplicados.length;
+
         await consultar(
             `UPDATE sync_log SET fin_en = now(), estado = 'ok',
                     controles = $2, mediciones = $3
              WHERE id = $1`,
-            [logId, registros.length, pesos]
+            [logId, utiles, pesos]
         );
 
         const seg = ((Date.now() - t0) / 1000).toFixed(1);
         console.log(
-            `[sync:proceso] ok en ${seg}s - ${registros.length} controles, ${pesos} pesos`
+            `[sync:proceso] ok en ${seg}s - ${utiles} controles, ${pesos} pesos`
         );
-        return { controles: registros.length, pesos };
+
+        // Se avisa en cada corrida: los duplicados siguen en la hoja de origen
+        // y solo desaparecen del log cuando alguien los borra alla.
+        if (duplicados.length) {
+            console.warn(
+                `[sync:proceso] ${duplicados.length} control(es) duplicado(s), excluidos de la ` +
+                `API pero conservados en la base: ` +
+                duplicados.map((d) => `fila ${d.pos + 2} = fila ${d.original + 2}`).join(', ') +
+                ' — corregir en la hoja de origen'
+            );
+        }
+
+        return { controles: utiles, pesos, duplicados: duplicados.length };
     } catch (err) {
         await consultar(
             `UPDATE sync_log SET fin_en = now(), estado = 'error', error = $2 WHERE id = $1`,

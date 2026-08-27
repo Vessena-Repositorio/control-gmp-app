@@ -312,22 +312,52 @@ falla tiene que verse el error, no quedar tapado leyendo de la fuente vieja.
 
 ## Hallazgos en los datos de origen
 
-Cosas que aparecieron al replicar y que **no se corrigieron**: arreglar datos de
-origen en silencio es peor que dejarlos a la vista, sobre todo en GMP. Se
-arreglan en la hoja, no acá.
+Problemas que aparecieron al replicar. La réplica los maneja, pero **el error
+sigue en la hoja**: acá no se escribe al origen. Cada uno se avisa en el log en
+cada corrida, así que solo deja de aparecer cuando alguien lo corrige allá.
+
+El criterio es tolerar lo que tiene una única interpretación posible, y nunca en
+silencio: en GMP un saneamiento invisible es peor que el dato sucio.
 
 - **4 controles duplicados** en control en proceso: pares de registros idénticos
   hasta la hora al segundo, sobre 2007. Son controles enviados dos veces, algo
   que favorece el `POST` con `mode:'no-cors'` de la app de captura, que no puede
-  confirmar que guardó y lleva a reintentar.
-- **Una fecha corrupta** en SAO-001: `15/07//2026`, con doble barra. Queda como
-  `NULL` en la copia normalizada. No afecta al dashboard, que recibe el CSV
-  literal y lo parsea él mismo.
-- **`guia-entrenamiento-gmp (2).html` es idéntico** al original, byte a byte.
-  Es un artefacto de descarga; no está en el portal.
+  confirmar que guardó y lleva a reintentar. **Manejado**: se marcan y se
+  excluyen de la API, ver abajo.
+- **Una fecha corrupta** en SAO-001: `15/07//2026`, con doble barra.
+  **Manejado**: el parser tolera separadores repetidos y la interpreta como
+  `2026-07-15`, avisando en cada sync.
 - **`supervision-envases.html` y `panel-supervision-envases.html`** difieren en
   54 líneas y tienen el mismo título. Parecen dos versiones vivas del mismo
   panel. Ambas están en el portal hasta que se decida cuál queda.
+
+### Controles duplicados
+
+Se marcan, **no se borran**: la evidencia de que hubo un doble envío es parte de
+la trazabilidad, y borrarlos dejaría la réplica sin poder explicar por qué tiene
+menos filas que la hoja.
+
+Dos registros con el mismo contenido son el mismo control enviado dos veces —
+no hay forma de que dos controles distintos coincidan en todos los campos,
+incluida la hora al segundo. Se compara por un sha256 del contenido con las
+claves ordenadas, así que la huella no depende del orden en que llegan.
+
+`/api/proceso` los excluye, que es lo que corrige el KPI: contarlos dos veces
+inflaba los totales y sesgaba los promedios de `informe-gerencial`. Siguen en la
+base y se consultan:
+
+```bash
+curl http://192.168.30.15:3000/api/proceso/duplicados          # con fila de la hoja
+curl "http://192.168.30.15:3000/api/proceso?incluirDuplicados=1"
+```
+
+`/api/proceso/estado` distingue `controles` (útiles), `duplicados` y
+`filas_en_origen`, para que la diferencia contra la hoja sea explicable.
+
+Al 27/08/2026 son 4 sobre 2007 filas, todos en filas consecutivas de la hoja
+(418=417, 1104=1103, 1127=1126, 1145=1144). Esto significa que
+`informe-gerencial` muestra **2003 controles y no 2007**: es la única diferencia
+deliberada contra el origen en toda la migración.
 
 ## Lo que falta resolver
 

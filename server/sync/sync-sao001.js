@@ -48,6 +48,7 @@ export async function sincronizarSao001() {
         const iFecha = Object.keys(idx).find((k) => k.startsWith('fecha'));
 
         let parametros = 0;
+        const fechasSaneadas = [];
 
         await enTransaccion(async (cliente) => {
             await cliente.query('DELETE FROM sao001_snapshot');
@@ -71,7 +72,7 @@ export async function sincronizarSao001() {
                         celda(fila, iPunto),
                         celda(fila, idx['comentarios']),
                         celda(fila, idx['sistema']),
-                        iFecha ? celdaFecha(fila, idx[iFecha]) : null,
+                        iFecha ? celdaFecha(fila, idx[iFecha], fechasSaneadas) : null,
                         celda(fila, idx['fases']),
                         celda(fila, idx['observaciones']),
                     ]
@@ -123,7 +124,18 @@ export async function sincronizarSao001() {
         console.log(
             `[sync:sao001] ok en ${seg}s - ${datos.length} muestras, ${parametros} parametros`
         );
-        return { muestras: datos.length, parametros };
+
+        // Se avisa en cada corrida, no una sola vez: el error sigue en la hoja
+        // y solo desaparece del log cuando alguien lo corrige alla.
+        if (fechasSaneadas.length) {
+            const unicas = [...new Set(fechasSaneadas)];
+            console.warn(
+                `[sync:sao001] ${fechasSaneadas.length} fecha(s) con separadores repetidos, ` +
+                `interpretadas igual: ${unicas.join(', ')} — corregir en la hoja de origen`
+            );
+        }
+
+        return { muestras: datos.length, parametros, fechasSaneadas: fechasSaneadas.length };
     } catch (err) {
         await consultar(
             `UPDATE sync_log SET fin_en = now(), estado = 'error', error = $2 WHERE id = $1`,
