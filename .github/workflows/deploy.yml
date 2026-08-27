@@ -1,17 +1,53 @@
 name: Deploy to Coolify
 
+# main -> produccion, migracion-postgres -> staging.
+# Cada rama pega en su propio recurso de Coolify: un push a la rama de trabajo
+# no puede tocar produccion.
 on:
   push:
     branches:
+      - main
       - migracion-postgres
 
 jobs:
-  deploy:
+  produccion:
+    if: github.ref_name == 'main'
     runs-on: [self-hosted, linux, x64, coolify]
-
     steps:
-      - name: Trigger Coolify deployment
+      # Necesario para el script de verificacion; el deploy en si es solo curl.
+      - uses: actions/checkout@v4
+
+      - name: Disparar deploy de produccion
+        env:
+          WEBHOOK: ${{ secrets.COOLIFY_WEBHOOK }}
+          TOKEN: ${{ secrets.COOLIFY_TOKEN }}
         run: |
-          curl --fail \
-            --request GET "${{ secrets.COOLIFY_WEBHOOK }}" \
-            --header "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}"
+          curl --fail --request GET "$WEBHOOK" --header "Authorization: Bearer $TOKEN"
+
+      - name: Verificar que quedo sano
+        env:
+          URL: ${{ vars.URL_PROD }}
+        run: bash .github/scripts/verificar-deploy.sh
+
+  staging:
+    if: github.ref_name == 'migracion-postgres'
+    runs-on: [self-hosted, linux, x64, coolify]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Disparar deploy de staging
+        env:
+          WEBHOOK: ${{ secrets.COOLIFY_WEBHOOK_STAGING }}
+          TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+        run: |
+          if [ -z "$WEBHOOK" ]; then
+            echo "COOLIFY_WEBHOOK_STAGING no esta configurado; se omite."
+            echo "Agregalo en Settings > Secrets and variables > Actions."
+            exit 0
+          fi
+          curl --fail --request GET "$WEBHOOK" --header "Authorization: Bearer $TOKEN"
+
+      - name: Verificar que quedo sano
+        env:
+          URL: ${{ vars.URL_STAGING }}
+        run: bash .github/scripts/verificar-deploy.sh

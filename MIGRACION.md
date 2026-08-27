@@ -154,6 +154,67 @@ sitio sigue en pie y las 21 apps andan, pero `dashboard.html` va a mostrar error
 hasta que se configure, porque en el dominio de Coolify pide `/api/envases` y no
 hay base detrás.
 
+## Automatización
+
+El ciclo completo es automático. Un push dispara:
+
+```
+push -> GitHub Actions -> webhook Coolify -> build -> arranque
+                                                        │
+                                    migraciones pendientes (solas)
+                                                        │
+                                              primera réplica
+                                                        │
+                                  Actions verifica que quedó sano
+```
+
+`main` va a producción y `migracion-postgres` a staging, cada uno a su recurso
+de Coolify. Un push a la rama de trabajo no puede tocar producción.
+
+### Migraciones
+
+Se aplican solas al arrancar. Para agregar una: crear
+`server/migrations/003_loquesea.sql` y commitear. Se aplican en orden
+alfabético, una sola vez cada una, y quedan registradas en `_migraciones`.
+
+Tres cosas que hacen que sea seguro dejarlas automáticas:
+
+- **Cada una en su transacción.** Si la tercera falla, las dos anteriores quedan
+  aplicadas y registradas; no queda un esquema a medio aplicar.
+- **Advisory lock.** Si Coolify levanta dos contenedores a la vez o un redeploy
+  se superpone con el anterior, ambos verían `_migraciones` vacía y aplicarían
+  el mismo `.sql` dos veces. El segundo espera y después las encuentra hechas.
+- **Las destructivas no se aplican solas.** `DROP TABLE`, `DROP COLUMN`,
+  `TRUNCATE`, `DELETE FROM` y `ALTER COLUMN ... TYPE` cortan el arranque con un
+  mensaje. Para aplicar una hay que hacer backup y levantar el deploy con
+  `MIGRACIONES_DESTRUCTIVAS=true`. En un sistema GMP el histórico no se
+  recupera solo, y una migración se aplica sin que nadie la mire en ese momento.
+
+Si una migración falla, **el sitio no se cae**: los `.html` se siguen sirviendo
+y la API queda en error. Se ve en `GET /api/salud` y en rojo en Actions.
+
+### Verificación post-deploy
+
+`.github/scripts/verificar-deploy.sh` espera a que el servicio vuelva y exige
+que el último sync haya terminado en `ok`, con hasta ~7 min de margen. Sin esto,
+un deploy que rompe la base se vería igual de verde que uno exitoso.
+
+Necesita las variables de repositorio `URL_PROD` y `URL_STAGING` en
+*Settings > Secrets and variables > Actions > Variables*. Si no están, avisa y
+sigue sin fallar.
+
+### Secretos y variables
+
+| Nombre | Tipo | Para qué |
+|---|---|---|
+| `COOLIFY_WEBHOOK` | secret | deploy de producción (ya existía) |
+| `COOLIFY_TOKEN` | secret | autenticación del webhook (ya existía) |
+| `COOLIFY_WEBHOOK_STAGING` | secret | deploy de staging — si falta, se omite |
+| `URL_PROD` / `URL_STAGING` | variable | verificación post-deploy |
+
+Si Coolify ya vigila la rama por su cuenta, `COOLIFY_WEBHOOK_STAGING` sobra: el
+job avisa y se omite sin marcar error.
+
 ## Operación
 
 | Acción | Cómo |
