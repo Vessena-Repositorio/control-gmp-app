@@ -4,7 +4,9 @@ import { fileURLToPath } from 'node:url';
 import { pool, hayBase } from './db.js';
 import { migrar } from './migrate.js';
 import { rutasEnvases } from './routes/envases.js';
+import { rutasProceso } from './routes/proceso.js';
 import { sincronizarEnvases } from './sync/sync-envases.js';
+import { sincronizarProceso } from './sync/sync-proceso.js';
 
 const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PUERTO = Number(process.env.PORT) || 3000;
@@ -36,6 +38,7 @@ app.get('/api/salud', async (_req, res) => {
 });
 
 app.use('/api/envases', rutasEnvases);
+app.use('/api/proceso', rutasProceso);
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'endpoint inexistente' }));
 
@@ -106,13 +109,23 @@ function arrancar() {
                 console.log('[sync] replica periodica desactivada (SYNC_INTERVALO_MIN=0)');
                 return;
             }
+            // Cada dominio falla por separado: que un Apps Script este caido no
+            // puede impedir que se repliquen los demas.
+            const replicas = [
+                ['envases', sincronizarEnvases],
+                ['proceso', sincronizarProceso],
+            ];
+            const replicarTodo = () => {
+                for (const [nombre, fn] of replicas) {
+                    fn().catch((err) => console.error(`[sync:${nombre}]`, err.message));
+                }
+            };
+
             // Primera pasada al arrancar, para que un deploy nuevo no quede con
             // la base vacia hasta que venza el intervalo.
-            sincronizarEnvases().catch(() => {});
-            setInterval(() => {
-                sincronizarEnvases().catch(() => {});
-            }, minutos * 60_000);
-            console.log(`[sync] replica de envases cada ${minutos} min`);
+            replicarTodo();
+            setInterval(replicarTodo, minutos * 60_000);
+            console.log(`[sync] replicas cada ${minutos} min: ${replicas.map((r) => r[0]).join(', ')}`);
         })
         .catch((err) => {
             // Migracion fallida = la API queda inservible, pero el sitio sigue

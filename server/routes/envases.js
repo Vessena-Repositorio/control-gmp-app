@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { consultar } from '../db.js';
 import { sincronizarEnvases } from '../sync/sync-envases.js';
+import { exigirTokenSync } from '../lib/auth.js';
 
 export const rutasEnvases = Router();
 
@@ -122,17 +123,7 @@ rutasEnvases.get('/estado', async (_req, res, next) => {
  * POST /api/envases/sync
  * Dispara la replica a mano. Protegido por SYNC_TOKEN porque escribe en la base.
  */
-rutasEnvases.post('/sync', async (req, res, next) => {
-    const esperado = process.env.SYNC_TOKEN;
-    if (!esperado) {
-        return res.status(503).json({ error: 'SYNC_TOKEN no configurado en el servidor' });
-    }
-
-    const recibido = req.get('x-sync-token');
-    if (recibido !== esperado) {
-        return res.status(401).json({ error: 'token invalido' });
-    }
-
+rutasEnvases.post('/sync', exigirTokenSync, async (_req, res, next) => {
     try {
         const conteo = await sincronizarEnvases();
         res.json({ estado: 'ok', ...conteo });

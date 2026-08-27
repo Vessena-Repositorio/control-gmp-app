@@ -8,49 +8,14 @@
 import { pool, consultar, enTransaccion } from '../db.js';
 import { expandirMediciones } from '../lib/mediciones.js';
 import { esEjecucionDirecta } from '../lib/entrypoint.js';
-
-const TIMEOUT_MS = 120_000;
-
-/** Fecha ISO -> objeto Date, o null si viene vacia o corrupta. */
-function aFecha(valor) {
-    if (!valor) return null;
-    const d = new Date(valor);
-    return Number.isNaN(d.getTime()) ? null : d;
-}
-
-/** Texto -> BIGINT, o null. Los ids del origen son epoch en ms. */
-function aEntero(valor) {
-    if (valor === null || valor === undefined || valor === '') return null;
-    const n = Number(valor);
-    return Number.isSafeInteger(n) ? n : null;
-}
-
-function limpiar(valor) {
-    if (valor === null || valor === undefined) return null;
-    const t = String(valor).trim();
-    return t === '' ? null : t;
-}
-
-async function descargar(url) {
-    const ctrl = new AbortController();
-    const reloj = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
-    try {
-        const r = await fetch(url, { redirect: 'follow', signal: ctrl.signal });
-        if (!r.ok) throw new Error(`el origen respondio HTTP ${r.status}`);
-        const datos = await r.json();
-        if (datos && datos.error) throw new Error(`el origen respondio error: ${datos.error}`);
-        return datos;
-    } finally {
-        clearTimeout(reloj);
-    }
-}
+import { descargar, aFecha, aTexto, aEnteroSeguro } from '../lib/origen.js';
 
 /** Inserta o actualiza un control y reescribe sus mediciones. */
 async function guardarControl(cliente, ctrl, { origen, ordenId, envase, pos, producto }) {
     const ts = aFecha(ctrl.timestamp);
     if (!ts) return { control: 0, mediciones: 0 }; // sin timestamp no hay clave natural
 
-    const extId = origen === 'lcc' ? aEntero(ctrl.id) : null;
+    const extId = origen === 'lcc' ? aEnteroSeguro(ctrl.id) : null;
     if (origen === 'lcc' && extId === null) return { control: 0, mediciones: 0 };
 
     // Envases no lleva prefijo a proposito: sus claves ya existen en la base y
@@ -79,14 +44,14 @@ async function guardarControl(cliente, ctrl, { origen, ordenId, envase, pos, pro
             origen,
             ordenId,
             extId,
-            limpiar(ctrl.envase) ?? envase ?? null,
-            limpiar(ctrl.tipo),
+            aTexto(ctrl.envase) ?? envase ?? null,
+            aTexto(ctrl.tipo),
             aFecha(ctrl.fecha),
-            limpiar(ctrl.hora),
-            limpiar(ctrl.operador),
-            limpiar(ctrl.analista),
-            limpiar(ctrl.turno),
-            limpiar(ctrl.observaciones),
+            aTexto(ctrl.hora),
+            aTexto(ctrl.operador),
+            aTexto(ctrl.analista),
+            aTexto(ctrl.turno),
+            aTexto(ctrl.observaciones),
             ts,
             pos,
             JSON.stringify(ctrl),
@@ -157,7 +122,7 @@ export async function sincronizarEnvases() {
             const lcc = Array.isArray(datos?.lcc) ? datos.lcc : [];
 
             for (const [posOrden, orden] of ordenes.entries()) {
-                const ordenId = aEntero(orden.id);
+                const ordenId = aEnteroSeguro(orden.id);
                 if (ordenId === null) continue;
 
                 // El raw de la orden se guarda sin los controles: esos viven en
@@ -179,15 +144,15 @@ export async function sincronizarEnvases() {
                     [
                         ordenId,
                         producto,
-                        limpiar(orden.numeroOrden),
-                        limpiar(orden.envase),
+                        aTexto(orden.numeroOrden),
+                        aTexto(orden.envase),
                         aFecha(orden.fecha),
-                        limpiar(orden.operador),
-                        limpiar(orden.analista),
-                        limpiar(orden.maquina),
-                        limpiar(orden.turno),
-                        limpiar(orden.estado),
-                        aEntero(orden.campaign_id),
+                        aTexto(orden.operador),
+                        aTexto(orden.analista),
+                        aTexto(orden.maquina),
+                        aTexto(orden.turno),
+                        aTexto(orden.estado),
+                        aEnteroSeguro(orden.campaign_id),
                         aFecha(orden.createdAt),
                         posOrden,
                         JSON.stringify(ordenSinControles),
@@ -199,7 +164,7 @@ export async function sincronizarEnvases() {
                     const r = await guardarControl(cliente, ctrl, {
                         origen: 'orden',
                         ordenId,
-                        envase: limpiar(orden.envase),
+                        envase: aTexto(orden.envase),
                         pos: posCtrl,
                         producto,
                     });
@@ -212,7 +177,7 @@ export async function sincronizarEnvases() {
                 const r = await guardarControl(cliente, registro, {
                     origen: 'lcc',
                     ordenId: null,
-                    envase: limpiar(registro.envase),
+                    envase: aTexto(registro.envase),
                     pos: posLcc,
                     producto,
                 });

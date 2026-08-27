@@ -8,7 +8,9 @@
   "scripts": {
     "start": "node server/index.js",
     "migrate": "node server/migrate.js",
-    "sync": "node server/sync/sync-envases.js",
+    "sync": "node server/sync/sync-envases.js && node server/sync/sync-proceso.js",
+    "sync:envases": "node server/sync/sync-envases.js",
+    "sync:proceso": "node server/sync/sync-proceso.js",
     "verificar": "node server/verificar.js"
   },
   "dependencies": {
