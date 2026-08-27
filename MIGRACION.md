@@ -23,7 +23,7 @@ les toque su turno.
 
 | Dominio | Origen | Estado |
 |---|---|---|
-| Envases y tapas | `AKfycby0…` | replicado — `dashboard.html` migrado |
+| Envases y tapas | `AKfycby0…` | replicado — `dashboard.html` migrado y verificado |
 | Control en proceso | `AKfycbxm…` | pendiente |
 | No conformidades / cambios | `AKfycbwi…` | pendiente |
 | Estabilidad, capacitaciones, fabuloso, devoluciones, SAO-001, workflow | 1 endpoint c/u | pendiente |
@@ -123,8 +123,9 @@ deja sin configurar (ver "Automatización").
 curl http://192.168.30.15:3000/api/envases/estado
 ```
 
-Con los datos de hoy tiene que dar 327 órdenes, 781 controles, 2 LCC y ~7.400
-mediciones.
+Los conteos tienen que coincidir con los del origen. Al 27/08/2026 eran 327
+órdenes, 784 controles, 2 LCC y ~7.400 mediciones, pero crecen: en planta cargan
+todo el tiempo.
 
 5. **Confirmar que el corte es seguro** — compara el payload viejo contra el
    nuevo y falla si difieren en algo:
@@ -132,6 +133,22 @@ mediciones.
 ```bash
 ORIGEN_ENVASES="https://script.google.com/macros/s/AKfycby0.../exec" npm run verificar http://192.168.30.15:3000
 ```
+
+Compara **por clave, no byte a byte**. Los dos payloads no son binariamente
+idénticos: el origen pone `controles` antes de `createdAt` y la API lo agrega al
+final. El orden de claves en JSON no tiene significado y todo consumidor accede
+por nombre, así que no se replica. Un `cmp` daría un falso negativo; el
+verificador da OK.
+
+Si aparecen diferencias en `controles.length`, casi seguro es deriva: alguien
+cargó un control después del último sync. Forzá una réplica y repetí:
+
+```bash
+curl -X POST http://192.168.30.15:3000/api/envases/sync -H "x-sync-token: TU_TOKEN"
+```
+
+Verificado el 27/08/2026: **0 diferencias** sobre 327 órdenes, 784 controles y
+2 LCC.
 
 ## Dónde corre cada cosa
 
