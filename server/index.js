@@ -9,6 +9,7 @@ import { rutasSao001 } from './routes/sao001.js';
 import { rutasFabuloso } from './routes/fabuloso.js';
 import { rutasDocumentos } from './routes/documentos.js';
 import { rutasEstado } from './routes/estado.js';
+import { rutasUsuarios } from './routes/usuarios.js';
 import { REPLICAS } from './lib/dominios.js';
 
 const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -46,6 +47,7 @@ app.use('/api/sao001', rutasSao001);
 app.use('/api/fabuloso', rutasFabuloso);
 app.use('/api/documentos', rutasDocumentos);
 app.use('/api/estado', rutasEstado);
+app.use('/api/usuarios', rutasUsuarios);
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'endpoint inexistente' }));
 
