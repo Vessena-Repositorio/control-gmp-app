@@ -31,14 +31,18 @@ dashboards leen de Postgres.**
 | SAO-001 (agua) | Apps Script `AKfycbxx…`, CSV | `dashboard_sao001.html` | `/api/sao001` |
 | Fabuloso | Google Sheets gviz, CSV | `fabuloso_kpi_dashboard.html` | `/api/fabuloso` |
 
-`dashboard_syso.html` no tiene datos que migrar: los trae embebidos en el
-archivo.
+Además están replicados, sin que ningún dashboard los consuma todavía, los cinco
+dominios de gestión: `no_conformidades`, `control_cambios`, `estabilidad`,
+`capacitaciones` y `devoluciones`. Son **nueve dominios** en total, y
+`/api/estado` los reporta a todos.
 
-Siguen en Apps Script las **apps de captura** (`control-en-proceso`,
-`control-calidad-envases`, `control-calidad-workflow`, `fabuloso`) y los
-registros de gestión (`no_conformidades`, `control_cambios`, `devoluciones`,
-`capacitaciones`, `estabilidad`). Eso es deliberado: la réplica va en una sola
-dirección y Sheets sigue siendo la fuente de verdad.
+`dashboard_syso.html` no tiene datos que migrar: los trae embebidos en el
+archivo. `control-calidad-workflow` quedó fuera de alcance (ver más abajo).
+
+Las **apps de captura** (`control-en-proceso`, `control-calidad-envases`,
+`fabuloso`) y las de gestión siguen leyendo y escribiendo en Apps Script. Eso es
+deliberado: la réplica va en una sola dirección y Sheets sigue siendo la fuente
+de verdad, así que apuntarlas a una copia de 15 minutos las haría ver rotas.
 
 ### Página de inicio
 
@@ -387,6 +391,27 @@ Al 27/08/2026 son 4 sobre 2007 filas, todos en filas consecutivas de la hoja
 (418=417, 1104=1103, 1127=1126, 1145=1144). Esto significa que
 `informe-gerencial` muestra **2003 controles y no 2007**: es la única diferencia
 deliberada contra el origen en toda la migración.
+
+## Fuera de alcance
+
+**`control-calidad-workflow` no se migra.** Decisión del 01/09/2026.
+
+Su Apps Script (`AKfycbz9sq6…`) responde 403 con la pantalla de permisos de
+Google, así que la réplica no puede leerlo de forma anónima como los otros. El
+proyecto no está en el Drive de Vessena —se revisaron los cinco que aparecen
+ahí y ninguno lo contiene, ni como implementación archivada—, así que abrirlo
+dependía de ubicar a quien lo publicó.
+
+No bloquea nada: ningún dashboard consume ese dominio. La app sigue funcionando
+igual contra su propia hoja, y queda en el portal.
+
+Si algún día se quiere migrar, el camino más corto **no** es recuperar el Apps
+Script sino publicar su planilla como CSV y replicarla con el patrón de
+`fabuloso`, que ya lee una hoja de Google directo sin intermediario.
+
+**La captura de `fabuloso`** tampoco está replicada, pero por otro motivo: usa
+POST con token de sesión. Se destraba con un token de servicio en una variable
+de entorno, no con credenciales personales. Sigue pendiente, no descartada.
 
 ## Lo que falta resolver
 
