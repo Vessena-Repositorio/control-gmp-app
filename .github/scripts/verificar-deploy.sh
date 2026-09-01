@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
-# Espera a que el servicio vuelva a levantar despues del deploy y confirma que
-# quedo sano de verdad. Sin esto, un deploy que rompe la base o una migracion
-# que falla se ven igual de verdes en Actions que uno exitoso.
+# Espera a que el servicio vuelva despues del deploy y confirma que quedo sano
+# de verdad. Sin esto, el job termina en verde apenas el webhook devuelve 200,
+# lo cual solo prueba que Coolify recibio la orden: ni que el contenedor
+# levanto, ni que la base respondio, ni que las replicas corrieron.
 #
-# Necesita la variable URL (la base del servicio, sin barra final). Si no esta
+# Consulta /api/estado?estricto=1, que resume la base y las nueve replicas en
+# una sola respuesta y devuelve 503 mientras algo no este bien. Con `estricto`
+# ademas exige que ninguna replica siga en curso, que es lo que hace falta para
+# afirmar que el deploy quedo terminado.
+#
+# URL es la base del servicio en Coolify (vars.URL_APP), sin barra final. NO es
+# la de GitHub Pages: Pages no tiene backend que consultar. Si no esta
 # configurada, no falla: avisa y sigue, para no bloquear el pipeline por una
 # variable que todavia nadie cargo.
 set -uo pipefail
@@ -13,7 +20,8 @@ ESPERA=10
 
 if [ -z "${URL:-}" ]; then
     echo "No hay URL configurada para verificar (vars.URL_APP)."
-    echo "Cargala en Settings > Secrets and variables > Actions > Variables."
+    echo "Cargala en Settings > Secrets and variables > Actions > Variables,"
+    echo "con la base del servicio en Coolify, por ejemplo http://10.0.0.1:3000"
     echo "Se omite la verificacion."
     exit 0
 fi
@@ -21,34 +29,34 @@ fi
 echo "Verificando $URL (hasta $((INTENTOS * ESPERA))s)"
 
 for i in $(seq 1 "$INTENTOS"); do
-    RESP=$(curl -s --max-time 10 "$URL/api/envases/estado" 2>/dev/null || true)
+    # Una sola llamada: el codigo va al final del cuerpo y se separa despues.
+    # Con dos curl distintos el estado podria cambiar entre uno y otro.
+    RESPUESTA=$(curl -s -w $'\n%{http_code}' --max-time 10 \
+                "$URL/api/estado?estricto=1" 2>/dev/null || true)
+    CODIGO=$(printf '%s' "$RESPUESTA" | tail -n 1)
+    CUERPO=$(printf '%s' "$RESPUESTA" | sed '$d')
+    [ -z "$CODIGO" ] && CODIGO="000"
 
-    # El sync arranca junto con el servidor y tarda unos segundos, asi que se
-    # espera al estado 'ok' del ultimo sync, no solo a que el puerto responda.
-    case "$RESP" in
-        *'"estado":"ok"'*)
-            echo "OK tras $((i * ESPERA))s"
-            echo "$RESP"
-            exit 0
-            ;;
-        *'"estado":"error"'*)
-            echo "El ultimo sync fallo:"
-            echo "$RESP"
-            exit 1
-            ;;
-    esac
+    if [ "$CODIGO" = "200" ]; then
+        echo "OK tras $((i * ESPERA))s — base y las nueve replicas sanas"
+        echo "$CUERPO"
+        exit 0
+    fi
 
-    # El sitio puede estar sirviendo los .html aunque la API no responda: eso es
-    # el modo degradado a proposito, pero para un deploy sigue siendo un fallo.
+    # Cada minuto se muestra que esta faltando, para no mirar un log mudo
+    # durante siete minutos.
     if [ $((i % 6)) -eq 0 ]; then
-        SALUD=$(curl -s --max-time 5 "$URL/api/salud" 2>/dev/null || true)
-        echo "  [$((i * ESPERA))s] esperando... salud: ${SALUD:-sin respuesta}"
+        echo "  [$((i * ESPERA))s] HTTP $CODIGO — ${CUERPO:-sin respuesta}"
     fi
 
     sleep "$ESPERA"
 done
 
+echo
 echo "El servicio no quedo sano tras $((INTENTOS * ESPERA))s."
-echo "Ultima respuesta de /api/envases/estado: ${RESP:-sin respuesta}"
-echo "Revisa los logs del contenedor en Coolify."
+echo "Ultima respuesta de /api/estado?estricto=1 (HTTP $CODIGO):"
+echo "${CUERPO:-sin respuesta}"
+echo
+echo "El campo 'problemas' dice que dominio fallo y por que."
+echo "'pendientes' son replicas que seguian corriendo al agotarse el tiempo."
 exit 1

@@ -8,11 +8,8 @@ import { rutasProceso } from './routes/proceso.js';
 import { rutasSao001 } from './routes/sao001.js';
 import { rutasFabuloso } from './routes/fabuloso.js';
 import { rutasDocumentos } from './routes/documentos.js';
-import { sincronizarEnvases } from './sync/sync-envases.js';
-import { sincronizarProceso } from './sync/sync-proceso.js';
-import { sincronizarSao001 } from './sync/sync-sao001.js';
-import { sincronizarFabuloso } from './sync/sync-fabuloso.js';
-import { sincronizarDocumentos } from './sync/sync-documentos.js';
+import { rutasEstado } from './routes/estado.js';
+import { REPLICAS } from './lib/dominios.js';
 
 const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PUERTO = Number(process.env.PORT) || 3000;
@@ -48,6 +45,7 @@ app.use('/api/proceso', rutasProceso);
 app.use('/api/sao001', rutasSao001);
 app.use('/api/fabuloso', rutasFabuloso);
 app.use('/api/documentos', rutasDocumentos);
+app.use('/api/estado', rutasEstado);
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'endpoint inexistente' }));
 
@@ -118,17 +116,10 @@ function arrancar() {
                 console.log('[sync] replica periodica desactivada (SYNC_INTERVALO_MIN=0)');
                 return;
             }
-            // Cada dominio falla por separado: que un Apps Script este caido no
-            // puede impedir que se repliquen los demas.
-            const replicas = [
-                ['envases', sincronizarEnvases],
-                ['proceso', sincronizarProceso],
-                ['sao001', sincronizarSao001],
-                ['fabuloso', sincronizarFabuloso],
-                ['documentos', sincronizarDocumentos],
-            ];
+            // Cada replica falla por separado: que un Apps Script este caido no
+            // puede impedir que se repliquen las demas.
             const replicarTodo = () => {
-                for (const [nombre, fn] of replicas) {
+                for (const { nombre, fn } of REPLICAS) {
                     fn().catch((err) => console.error(`[sync:${nombre}]`, err.message));
                 }
             };
@@ -137,7 +128,10 @@ function arrancar() {
             // la base vacia hasta que venza el intervalo.
             replicarTodo();
             setInterval(replicarTodo, minutos * 60_000);
-            console.log(`[sync] replicas cada ${minutos} min: ${replicas.map((r) => r[0]).join(', ')}`);
+            console.log(
+                `[sync] replicas cada ${minutos} min: ` +
+                REPLICAS.map((r) => r.nombre).join(', ')
+            );
         })
         .catch((err) => {
             // Migracion fallida = la API queda inservible, pero el sitio sigue
