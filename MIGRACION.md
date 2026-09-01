@@ -392,6 +392,59 @@ Al 27/08/2026 son 4 sobre 2007 filas, todos en filas consecutivas de la hoja
 `informe-gerencial` muestra **2003 controles y no 2007**: es la única diferencia
 deliberada contra el origen en toda la migración.
 
+## Plan de corte a producción interna
+
+Decidido el 01/09/2026: **producción pasa a servirse solo en la red interna**,
+desde Coolify contra Postgres. Se deja de publicar en GitHub Pages y, al final,
+de depender de Apps Script.
+
+Tres decisiones que condicionan el resto:
+
+- **Todo el acceso es desde planta.** Nadie consulta desde fuera de la red, así
+  que no hace falta VPN ni publicar nada hacia afuera.
+- **Hay backups automáticos de Postgres.** Es lo que permite que Postgres pase a
+  ser fuente de verdad sin perder la retención que hoy da Google.
+- **Coolify queda como punto único de falla**, riesgo aceptado a conciencia. Hoy
+  Pages funciona como respaldo de lectura: si Coolify se cae, las apps se abren
+  igual desde `github.io` contra Apps Script. Al apagarlo, esa red se pierde y
+  una caída deja al sistema de calidad no disponible hasta que vuelva.
+
+### El orden importa
+
+Las dos mitades del corte tienen riesgos muy distintos y **no** se pueden hacer
+juntas.
+
+**1. Apagar GitHub Pages — se puede ya.** Coolify sirve los mismos archivos, y
+las apps que escriben siguen funcionando: el HTML lo sirve Coolify y el POST
+sigue yendo a Google. Verificado que no queda ningún enlace absoluto a
+`github.io`; los chequeos `SIN_BACKEND` simplemente dejan de coincidir.
+Conviene, eso sí, darle al servicio un nombre DNS en vez de la IP: el día que
+Coolify reasigne la red, `192.168.30.15` deja de resolver y con él todo.
+
+**2. Autenticación propia — antes que las escrituras.** Hoy el login del portal
+corre contra Apps Script: `index.html` hace POST a Google para autenticar. O
+sea que apagar Apps Script sin reemplazarlo no solo rompe las 10 apps que
+escriben, deja sin pantalla de acceso al sistema entero. Y en GMP la firma del
+analista es el registro: tiene que ser verificable antes de que Postgres reciba
+escrituras.
+
+**3. Escrituras a Postgres, dominio por dominio.** Cada dominio que corta apaga
+su réplica en el mismo movimiento, para no tener dos fuentes escribiendo sobre
+lo mismo. Conviene no empezar por `control-en-proceso`, que está en la línea
+todo el turno.
+
+**4. Retirar Apps Script y decidir qué pasa con las hojas.** Recién acá se puede
+sacar el fallback `SIN_BACKEND` de las apps, que hasta entonces es el camino de
+rollback.
+
+### Qué sigue siendo reversible, y hasta cuándo
+
+Mientras Apps Script siga publicado, el rollback de cualquier dashboard es una
+línea: se fuerza `APPS_SCRIPT_URL` y vuelve a leer de Google, incluso servido
+desde Coolify. Eso vale hasta el paso 4. Desde el paso 3, cada dominio que corta
+deja de ser reversible en el momento en que se registra la primera escritura que
+solo existe en Postgres.
+
 ## Fuera de alcance
 
 **`control-calidad-workflow` no se migra.** Decisión del 01/09/2026.
