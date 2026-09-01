@@ -3,6 +3,7 @@ import { sincronizarProceso } from '../sync/sync-proceso.js';
 import { sincronizarSao001 } from '../sync/sync-sao001.js';
 import { sincronizarFabuloso } from '../sync/sync-fabuloso.js';
 import { sincronizarDocumentos, DOMINIOS_DOCUMENTOS } from '../sync/sync-documentos.js';
+import { sincronizarUsuarios } from '../sync/sync-usuarios.js';
 
 /**
  * Registro unico de replicas. Es la fuente de verdad de que dominios existen:
@@ -21,6 +22,7 @@ export const REPLICAS = [
     { nombre: 'sao001', fn: sincronizarSao001, dominios: ['sao001'] },
     { nombre: 'fabuloso', fn: sincronizarFabuloso, dominios: ['fabuloso'] },
     { nombre: 'documentos', fn: sincronizarDocumentos, dominios: DOMINIOS_DOCUMENTOS },
+    { nombre: 'usuarios', fn: sincronizarUsuarios, dominios: ['usuarios'] },
 ];
 
 /** Todos los dominios que deberian tener una replica sana. */

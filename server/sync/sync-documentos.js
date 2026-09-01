@@ -35,9 +35,9 @@ const DOMINIOS = [
         env: 'ORIGEN_ESTABILIDAD',
         // Este origen manda cada coleccion como texto JSON dentro del JSON.
         anidadas: true,
-        // `usuarios` NO se replica a proposito: trae email, rol y pinHash. Nada
-        // en Postgres autentica contra esos datos, asi que copiarlos solo
-        // ampliaria donde pueden filtrarse.
+        // `usuarios` no va aca sino por sync-usuarios.js: son identidades y
+        // credenciales, y necesitan sus propias tablas para que el login pueda
+        // verificar contra ellas y reescribir el hash a un esquema fuerte.
         peticiones: [{ query: '', colecciones: ['productos', 'studies', 'auditLog'] }],
     },
     {

@@ -14,6 +14,7 @@
     "sync:sao001": "node server/sync/sync-sao001.js",
     "sync:fabuloso": "node server/sync/sync-fabuloso.js",
     "sync:documentos": "node server/sync/sync-documentos.js",
+    "sync:usuarios": "node server/sync/sync-usuarios.js",
     "verificar": "node server/verificar.js"
   },
   "dependencies": {
