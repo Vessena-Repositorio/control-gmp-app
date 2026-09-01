@@ -26,14 +26,13 @@ dashboards leen de Postgres.**
 
 | Dominio | Origen | Sirve a | Endpoint |
 |---|---|---|---|
-| Envases y tapas | Apps Script `AKfycby0…` | `dashboard.html` + 3 paneles | `/api/envases` |
+| Envases y tapas | Apps Script `AKfycby0…` | `supervision-envases`, `panel-supervision-tapas` | `/api/envases` |
 | Control en proceso | Apps Script `AKfycbxm…` | `informe-gerencial.html` | `/api/proceso` |
 | SAO-001 (agua) | Apps Script `AKfycbxx…`, CSV | `dashboard_sao001.html` | `/api/sao001` |
 | Fabuloso | Google Sheets gviz, CSV | `fabuloso_kpi_dashboard.html` | `/api/fabuloso` |
 
-Sin datos que migrar: `dashboard-calidad.html` y `dashboard_syso.html` traen los
-datos embebidos en el archivo, y `dashboard-calidad-moderno` / `-vessena` son
-portales, no consumidores de datos.
+`dashboard_syso.html` no tiene datos que migrar: los trae embebidos en el
+archivo.
 
 Siguen en Apps Script las **apps de captura** (`control-en-proceso`,
 `control-calidad-envases`, `control-calidad-workflow`, `fabuloso`) y los
@@ -43,13 +42,23 @@ dirección y Sheets sigue siendo la fuente de verdad.
 
 ### Página de inicio
 
-`index.html` es el selector de aplicaciones. La app de captura que estaba en la
-raíz se movió a `control-en-proceso.html`; **quien tenga la raíz marcada como
-favorito ahora cae en el portal** y llega a la captura con un clic más.
+`index.html` es el portal de calidad, el que antes vivía en
+`dashboard-calidad-vessena.html`. Esa ruta se conserva como redirección al
+inicio, para no romper los favoritos que apuntan ahí.
 
-Cada tarjeta indica de dónde salen sus datos, decidido en tiempo de ejecución:
-la misma app marcada como Postgres en Coolify aparece como Google Sheets
-servida desde Pages, porque ahí es lo que realmente hace.
+Dos consecuencias de que el portal esté en la raíz:
+
+- **La app de captura se movió a `control-en-proceso.html`.** Quien tenga la
+  raíz marcada como favorito ahora cae en el portal y llega a la captura con un
+  clic más.
+- **La raíz pide login.** El portal tiene su propio acceso contra un Apps
+  Script, así que entrar a la URL de siempre ya no muestra el formulario de
+  control sino una pantalla de acceso.
+
+Archivos retirados de `main` el 01/09/2026: `dashboard.html`,
+`dashboard-calidad.html`, `dashboard-calidad-moderno.html`,
+`panel-supervision-envases.html` y `guia-entrenamiento-gmp.html`. Siguen
+disponibles en la rama `respaldo-pre-main-2026-09-01`.
 
 ## Arquitectura
 
@@ -109,8 +118,8 @@ Nada de lo que anda hoy se apaga. Concretamente:
   `/index.html`, `/estabilidad.html`, etc. no cambian.
 - **Las apps de captura** siguen escribiendo en Apps Script y Sheets. No se les
   tocó una línea.
-- **GitHub Pages** sigue sirviendo todo desde `main` sin backend. `dashboard.html`
-  detecta que está en `github.io` y usa el Apps Script.
+- **GitHub Pages** sirve `main` sin backend. Cada app migrada detecta que está
+  en `github.io` y usa el Apps Script.
 - **Si Postgres se cae o no está configurado, el sitio no se cae.** El servidor
   escucha primero y toca la base después; un fallo de base deja la API en 503 y
   los `.html` se siguen sirviendo. Sin `DATABASE_URL` el proceso arranca igual.
@@ -212,10 +221,10 @@ Hay dos entornos, y no son "producción y staging" en el sentido habitual:
 | **GitHub Pages** | producción, lo que usa la gente hoy | `main` | Apps Script + Sheets |
 | **Coolify** | el entorno donde se prueba la migración | `migracion-postgres` | Postgres |
 
-Producción **no pasa por Coolify**: Pages sirve `main` por su cuenta. Por eso
-mientras el trabajo viva en la rama, nadie en planta ve el cambio, y por eso
-`dashboard.html` mira el hostname — en `github.io` usa Apps Script, en Coolify
-usa `/api/envases`. El mismo archivo funciona bien en los dos lados.
+Pages sirve `main` por su cuenta, sin pasar por Coolify. Por eso cada app
+migrada mira el hostname: en `github.io` usa Apps Script, en Coolify usa la API.
+El mismo archivo funciona en los dos lados, y desde el 01/09/2026 `main` tiene
+todo, así que Pages ya sirve el portal nuevo.
 
 Hay **un solo recurso de Coolify**. La rama que construye se elige en Coolify,
 no en el workflow: el webhook despliega la rama que ese recurso tenga
@@ -232,7 +241,7 @@ Cuando la migración esté validada:
    solo lectura contra Apps Script.
 
 Mientras Pages siga siendo producción, mergear a `main` es seguro: Pages sirve
-`dashboard.html`, que en `github.io` lee de Apps Script como siempre.
+las apps migradas, que en `github.io` leen de Apps Script como siempre.
 
 ## Automatización
 
@@ -320,9 +329,8 @@ no tiene que vaciar los dashboards.
 
 ## Rollback
 
-`dashboard.html` elige el origen según dónde esté servido: usa `/api/envases` en
-Coolify y el Apps Script en GitHub Pages. Para volver atrás, en
-`dashboard.html` forzá:
+Cada app migrada elige el origen según dónde esté servida: la API en Coolify, el
+Apps Script en GitHub Pages. Para volver atrás una sola, forzá en ese archivo:
 
 ```js
 const GOOGLE_SCRIPT_URL = APPS_SCRIPT_URL;
@@ -348,9 +356,9 @@ silencio: en GMP un saneamiento invisible es peor que el dato sucio.
 - **Una fecha corrupta** en SAO-001: `15/07//2026`, con doble barra.
   **Manejado**: el parser tolera separadores repetidos y la interpreta como
   `2026-07-15`, avisando en cada sync.
-- **`supervision-envases.html` y `panel-supervision-envases.html`** difieren en
-  54 líneas y tienen el mismo título. Parecen dos versiones vivas del mismo
-  panel. Ambas están en el portal hasta que se decida cuál queda.
+- **Resuelto el 01/09/2026**: de las dos versiones del panel de supervisión de
+  envases quedó `supervision-envases.html`. `panel-supervision-envases.html` se
+  retiró de `main` y sigue en la rama de respaldo.
 
 ### Controles duplicados
 
