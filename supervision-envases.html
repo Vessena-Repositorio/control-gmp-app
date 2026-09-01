@@ -508,7 +508,15 @@
 /* =====================================================================
    CONFIGURACIÓN
    ===================================================================== */
-const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby0Idz2-18NsukOhRqqrQrgHCpO7f4gX67kb-5gH0xA1DLxw7t39Yr37_PakYth5srj/exec';
+// Origen de datos. En Coolify sale de Postgres via /api/envases, que devuelve
+// la misma forma que devolvia Apps Script. GitHub Pages sirve estos mismos
+// .html sin backend, asi que ahi se sigue usando el Apps Script. Sin fallback
+// automatico entre uno y otro: si la API falla, tiene que verse el error.
+// Se arma absoluta con location.origin porque apiCall() hace new URL(), que
+// rechaza una ruta relativa.
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby0Idz2-18NsukOhRqqrQrgHCpO7f4gX67kb-5gH0xA1DLxw7t39Yr37_PakYth5srj/exec';
+const SIN_BACKEND = location.hostname.endsWith('github.io') || location.protocol === 'file:';
+const GOOGLE_SCRIPT_URL = SIN_BACKEND ? APPS_SCRIPT_URL : location.origin + '/api/envases';
 
 // Reglas de proceso
 const HORARIOS_ESPERADOS = ['06:00', '08:00', '10:00', '12:00', '14:00', '16:30'];

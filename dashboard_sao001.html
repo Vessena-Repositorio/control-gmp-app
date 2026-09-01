@@ -1814,6 +1814,14 @@ async function fetchCsv(url) {
   }
 
   // Estrategia 2: si falla directo, probar proxies CORS (para URLs de Google Sheets)
+  //
+  // Con backend propio los proxies no sirven y ademas hacen daño: la API es del
+  // mismo origen, asi que si falla no es por CORS, y mandarle nuestra URL a un
+  // proxy publico la expone a un tercero para nada. Solo se usan sin backend.
+  if (!SIN_BACKEND) {
+    throw new Error('No se pudo leer /api/sao001. Revisá el estado de la API.');
+  }
+
   const proxies = [
     { name: 'corsproxy.io', fmt: u => 'https://corsproxy.io/?' + encodeURIComponent(u) },
     { name: 'allorigins',   fmt: u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u) },
@@ -3616,7 +3624,12 @@ const dateAdapter = {
 Chart._adapters._date.override(dateAdapter);
 
 // URL preconfigurada — Google Apps Script (sin CORS, tiempo real, sin caché)
-const PRECONFIGURED_URL = 'https://script.google.com/macros/s/AKfycbxxrGTAQPYbrMtcxHQjV_JlcursrBkvuQmnD9xV3zTF7JZ8Emy0cx29ITBCK7nNzRe7tw/exec';
+// Origen de datos. En Coolify sale de Postgres via /api/sao001, que devuelve el
+// mismo CSV que devolvia Apps Script. GitHub Pages sirve este mismo .html sin
+// backend, asi que ahi se sigue usando el Apps Script.
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxxrGTAQPYbrMtcxHQjV_JlcursrBkvuQmnD9xV3zTF7JZ8Emy0cx29ITBCK7nNzRe7tw/exec';
+const SIN_BACKEND = location.hostname.endsWith('github.io') || location.protocol === 'file:';
+const PRECONFIGURED_URL = SIN_BACKEND ? APPS_SCRIPT_URL : '/api/sao001';
 
 // Auto-cargar: prioridad URL guardada > URL preconfigurada
 const savedUrl = loadUrl();

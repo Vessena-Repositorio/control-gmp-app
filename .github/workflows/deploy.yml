@@ -1,17 +1,67 @@
 name: Deploy to Coolify
 
+# Hay un solo recurso de Coolify. La rama que construye se elige en Coolify, no
+# aca: el webhook despliega la rama que ese recurso tenga configurada. Hoy es
+# migracion-postgres; cuando el corte termine sera main, y este workflow no
+# necesita cambiar.
+#
+# Ojo: produccion hoy es GitHub Pages, que sirve main por su cuenta y no pasa
+# por aca. Un push a main no toca Coolify mas que para reconstruirlo.
 on:
   push:
     branches:
+      - main
       - migracion-postgres
+  # Permite dispararlo a mano desde la pestana Actions, sin tener que commitear
+  # algo para forzar un redeploy.
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: [self-hosted, linux, x64, coolify]
-
     steps:
-      - name: Trigger Coolify deployment
+      # El deploy va PRIMERO y sin depender de nada del repo: es un curl y nada
+      # mas. Si un paso previo fallara (checkout, red, permisos), el deploy no
+      # llegaria a ocurrir, que es peor que no verificarlo.
+      - name: Disparar deploy en Coolify
+        env:
+          WEBHOOK: ${{ secrets.COOLIFY_WEBHOOK }}
+          TOKEN: ${{ secrets.COOLIFY_TOKEN }}
         run: |
-          curl --fail \
-            --request GET "${{ secrets.COOLIFY_WEBHOOK }}" \
-            --header "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}"
+          # Coolify tiene dos formas de disparar un deploy y usan metodos
+          # distintos: el endpoint de API (/api/v1/deploy?uuid=...) responde a
+          # GET, y el webhook manual (/webhooks/source/.../manual) a POST.
+          # Mandar el metodo equivocado devuelve 405. Se prueba POST y, si el
+          # servidor lo rechaza por metodo, se reintenta con GET, asi el
+          # workflow funciona con cualquiera de las dos URLs.
+          disparar() {
+            curl -sS -o /tmp/coolify.txt -w '%{http_code}' \
+              --request "$1" "$WEBHOOK" --header "Authorization: Bearer $TOKEN"
+          }
+
+          CODIGO=$(disparar POST)
+          if [ "$CODIGO" = "405" ]; then
+            echo "POST devolvio 405; el webhook espera GET. Reintentando."
+            CODIGO=$(disparar GET)
+          fi
+
+          echo "HTTP $CODIGO"
+          cat /tmp/coolify.txt || true
+          echo
+
+          case "$CODIGO" in
+            2*) echo "Deploy disparado." ;;
+            405) echo "Ni POST ni GET son aceptados: revisa la URL del webhook."; exit 1 ;;
+            401|403) echo "El webhook rechazo el token (COOLIFY_TOKEN)."; exit 1 ;;
+            404) echo "El webhook no existe: el recurso pudo haber cambiado de uuid."; exit 1 ;;
+            *) echo "El webhook respondio $CODIGO."; exit 1 ;;
+          esac
+
+      # Recien ahora se baja el repo, que solo hace falta para el script de
+      # verificacion.
+      - uses: actions/checkout@v4
+
+      - name: Verificar que quedo sano
+        env:
+          URL: ${{ vars.URL_APP }}
+        run: bash .github/scripts/verificar-deploy.sh

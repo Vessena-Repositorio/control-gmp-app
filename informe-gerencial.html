@@ -525,7 +525,13 @@ body{font-family:var(--f);background:var(--bg);color:var(--text);line-height:1.5
 <!-- END mainView -->
 
 <script>
-const SURL='https://script.google.com/macros/s/AKfycbxmayMAPlLCrozmZRM3gLSf5MgcWO9lC5y_ayR0DkRdi_hHYaoLRI43OgIJ9d7nTPDGug/exec';
+// Origen de datos. En Coolify sale de Postgres via /api/proceso, que devuelve
+// la misma forma que devolvia Apps Script. GitHub Pages sirve este mismo .html
+// sin backend, asi que ahi se sigue usando el Apps Script. Sin fallback
+// automatico entre uno y otro: si la API falla, tiene que verse el error.
+const APPS_SCRIPT_URL='https://script.google.com/macros/s/AKfycbxmayMAPlLCrozmZRM3gLSf5MgcWO9lC5y_ayR0DkRdi_hHYaoLRI43OgIJ9d7nTPDGug/exec';
+const SIN_BACKEND=location.hostname.endsWith('github.io')||location.protocol==='file:';
+const SURL=SIN_BACKEND?APPS_SCRIPT_URL:'/api/proceso';
 
 // SPECS embebidos para que el informe pueda calcular Qn aunque los registros viejos no lo tengan
 const SPECS={

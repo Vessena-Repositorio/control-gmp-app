@@ -351,6 +351,11 @@ var myCharts=[];
 var SHEET_ID="1j5TkRMZbnR8v7vhPGGKiwJ3HnPErKFtM44BOyG02gk4";
 var SHEET_GID="0";
 
+// Origen de datos. En Coolify sale de Postgres via /api/fabuloso, que devuelve
+// el mismo CSV que servia gviz. GitHub Pages sirve este mismo .html sin
+// backend, asi que ahi se sigue leyendo la hoja directo.
+var SIN_BACKEND=location.hostname.indexOf("github.io")>=0||location.protocol==="file:";
+
 // Strip accents for robust column matching (handles NFD/NFC Unicode differences from Google Sheets)
 function stripAccents(s){return s.normalize?s.normalize("NFD").replace(/[\u0300-\u036f]/g,""):s.replace(/[áàâä]/g,"a").replace(/[éèêë]/g,"e").replace(/[íìîï]/g,"i").replace(/[óòôö]/g,"o").replace(/[úùûü]/g,"u").replace(/[ñ]/g,"n");}
 
@@ -509,7 +514,9 @@ function fetchSheet(){
   st.textContent="🔄 Cargando datos de Google Sheets...";
   st.style.background="rgba(234,179,8,.25)";
   // Try CSV first (preserves decimal comma strings correctly); fallback to JSONP for file:// protocol
-  var csvUrl="https://docs.google.com/spreadsheets/d/"+SHEET_ID+"/gviz/tq?tqx=out:csv&gid="+SHEET_GID+"&headers=1&t="+Date.now();
+  var csvUrl=SIN_BACKEND
+    ? "https://docs.google.com/spreadsheets/d/"+SHEET_ID+"/gviz/tq?tqx=out:csv&gid="+SHEET_GID+"&headers=1&t="+Date.now()
+    : "/api/fabuloso?t="+Date.now();
   if(typeof fetch!=="undefined"&&location.protocol!=="file:"){
     fetch(csvUrl).then(function(r){
       if(!r.ok)throw new Error("HTTP "+r.status);
@@ -517,6 +524,14 @@ function fetchSheet(){
     }).then(function(csv){
       parseCsvSheet(csv);
     }).catch(function(err){
+      // Con backend propio no se cae a JSONP contra Google: eso taparia un
+      // fallo de la API leyendo de la fuente vieja, que es justo lo que la
+      // migracion tiene que dejar de hacer en silencio.
+      if(!SIN_BACKEND){
+        st.textContent="⚠️ No se pudo leer /api/fabuloso: "+err.message;
+        st.style.background="rgba(244,88,122,.25)";
+        return;
+      }
       console.warn("CSV fetch falló, usando JSONP:",err);
       loadJsonpFallback();
     });

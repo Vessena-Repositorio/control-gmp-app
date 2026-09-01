@@ -117,7 +117,7 @@ async function gWrite(key,value){if(!SCRIPT_URL)return;_dirty=true;syncStatus='l
 async function gWriteSilent(key,value){if(!SCRIPT_URL)return;try{await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'save',key,value:JSON.stringify(value)})});}catch(e){}}
 /* EMAILS FIJOS — reciben copia de TODAS las notificaciones */
 const CC_EMAILS=['claudia.barlocco@vessena.com.uy','antonella.nunez@vessena.com.uy'];
-const APP_URL='https://vessena-repositorio.github.io/control-gmp-app/estabilidad.html';
+const APP_URL='estabilidad.html';
 function studyLink(id,label){return `<a href="${APP_URL}#study=${id}" style="display:inline-block;margin:12px 0;padding:10px 20px;background:#0E6B67;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold">${label||'Abrir estudio →'}</a>`;}
 
 async function gSendEmail(to,subject,body){if(!SCRIPT_URL)return;
@@ -136,7 +136,7 @@ function rSync(){const b=document.getElementById('syncBar');if(!b)return;const m
 const APPS_SCRIPT_CODE=`// === PROGRAMA DE ESTABILIDAD — BACKEND ===
 // Pegar este código en Apps Script y desplegar como aplicación web.
 
-var APP_URL = 'https://vessena-repositorio.github.io/control-gmp-app/estabilidad.html';
+var APP_URL = 'estabilidad.html';
 
 function doGet(e) {
   var sheet = getSheet();

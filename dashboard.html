@@ -293,7 +293,15 @@
         // ============================================================
         // CONFIGURACIÓN
         // ============================================================
-        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby0Idz2-18NsukOhRqqrQrgHCpO7f4gX67kb-5gH0xA1DLxw7t39Yr37_PakYth5srj/exec';
+        // Origen de datos. En Coolify los datos salen de Postgres a traves de
+        // /api/envases, que devuelve la misma forma que devolvia Apps Script.
+        // GitHub Pages sirve estos mismos .html sin backend, asi que ahi se
+        // sigue usando el Apps Script. No hay fallback automatico entre uno y
+        // otro a proposito: si la API falla, tiene que verse el error y no
+        // quedar tapado leyendo de la fuente vieja.
+        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby0Idz2-18NsukOhRqqrQrgHCpO7f4gX67kb-5gH0xA1DLxw7t39Yr37_PakYth5srj/exec';
+        const SIN_BACKEND = location.hostname.endsWith('github.io') || location.protocol === 'file:';
+        const GOOGLE_SCRIPT_URL = SIN_BACKEND ? APPS_SCRIPT_URL : '/api/envases';
 
         // Especificaciones (copiadas del control principal)
         const ESPECIFICACIONES = {
