@@ -331,28 +331,53 @@ function emailSel(id,val){return`<select id="${id}"><option value="">— Selecci
 /* STATE */
 let studies=[],productos=[],activeTab='dashboard',filters={t:'',q:''},selSt=null,selRep=null,charts={},catMode='list',editProd=null,dashFilter='',_dirty=false,auditLog=[],usuarios=[],currentUser=null,sessionStart=null;
 
-// Sistema de sesión
-function loadSession(){
+/* SESIÓN
+   La identidad la da el portal, no esta app. Antes tenía login propio por PIN
+   guardado con djb2: una función de dispersión, no de contraseñas, con la que
+   un PIN de 4 dígitos se revierte probando las 10.000 combinaciones. Y la
+   vigencia la controlaba un reloj en localStorage, que se puede adelantar desde
+   el navegador. Ahora las dos cosas las decide el servidor. */
+let sesionPortal=null;
+
+/* Devuelve el usuario en curso con la forma que ya esperaba el resto del
+   código ({nombre, rol, email}), para no tener que tocar cada uso. */
+function usuarioActual(){return sesionPortal;}
+
+async function cargarSesionPortal(){
   try{
-    const raw=localStorage.getItem('vessena_session');
-    if(!raw)return null;
-    const s=JSON.parse(raw);
-    // Sesión expira en 12 horas
-    if(Date.now()-s.start>12*3600*1000){localStorage.removeItem('vessena_session');return null;}
-    return s;
-  }catch(e){return null;}
+    const r=await fetch('/api/auth/yo');
+    if(!r.ok){
+      // Sin sesión se vuelve al portal, que es donde está el acceso.
+      location.href='/?volver='+encodeURIComponent(location.pathname);
+      return null;
+    }
+    const d=await r.json();
+    const rolRecurso=d.recursos&&d.recursos.estabilidad?d.recursos.estabilidad.rol:null;
+    sesionPortal={
+      email:d.usuario,
+      nombre:d.nombre,
+      /* El panel de administración de esta app compara con 'admin'; el padrón
+         usa 'administrador'. Se traduce acá y no al revés porque el vocabulario
+         del padrón es el que vale para todo el sistema. */
+      rol:rolRecurso==='administrador'?'admin':(rolRecurso||'operador'),
+      rolRecurso,
+      activo:true
+    };
+    currentUser=d.usuario;
+    sessionStart=Date.now();
+    return sesionPortal;
+  }catch(e){
+    console.error('No se pudo verificar la sesión:',e);
+    return null;
+  }
 }
-function saveSession(email){
-  const s={email,start:Date.now()};
-  localStorage.setItem('vessena_session',JSON.stringify(s));
-  sessionStart=s.start;
-  currentUser=email;
-}
+
 window.doLogout=async function(){
   if(currentUser)await logAudit('logout',null,'','','','Cierre de sesión');
-  localStorage.removeItem('vessena_session');
-  currentUser=null;sessionStart=null;
-  render();
+  /* Se cierra en el servidor: borrar solo el estado local dejaría la sesión
+     viva y usable desde otra pestaña. */
+  try{await fetch('/api/auth/logout',{method:'POST'});}catch(e){}
+  location.href='/';
 };
 
 async function logAudit(action,studyId,studyLabel,before,after,extra){
@@ -370,12 +395,11 @@ async function logAudit(action,studyId,studyLabel,before,after,extra){
   await gWriteSilent('auditLog',auditLog);
 }
 
-// Hash simple de PIN (no es criptografía real, pero evita almacenar en texto plano)
-function hashPin(pin){
-  let h=5381;
-  for(let i=0;i<pin.length;i++)h=((h<<5)+h)+pin.charCodeAt(i);
-  return String(h);
-}
+/* hashPin() se quitó junto con el login propio. Era djb2, una función de
+   dispersión y no de contraseñas: no "evitaba almacenar en texto plano" en
+   ningún sentido útil, porque un PIN de 4 dígitos se revierte probando las
+   10.000 combinaciones. Las credenciales ahora las guarda el servidor con
+   scrypt. */
 
 /* UTILS */
 const uid=()=>'ST-'+Date.now().toString(36).toUpperCase()+Math.floor(Math.random()*90+10);
@@ -493,7 +517,7 @@ function renderNav(){
   const nav=document.getElementById('tabNav');
   if(!SCRIPT_URL){nav.innerHTML='';return;}
   const nRech=studies.filter(s=>s.rechazado).length;
-  const u=usuarios.find(x=>x.email===currentUser);
+  const u=usuarioActual();
   const isAdmin=u&&u.rol==='admin';
   const visibleTabs=TABS.filter(t=>!t.adminOnly||isAdmin);
   nav.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
@@ -1316,166 +1340,35 @@ window.exportAuditCSV=function(){
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='audit_log_'+td2()+'.csv';a.click();
 };
 
-function renderLogin(){
-  const isFirstUser=usuarios.length===0;
-  document.getElementById('mc').innerHTML=`
-    <div style="max-width:420px;margin:60px auto;padding:32px;background:white;border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,0.08);border-top:4px solid var(--teal)">
-      <div style="text-align:center;margin-bottom:24px">
-        <div style="font-size:32px;margin-bottom:8px">🔐</div>
-        <h2 style="margin:0;color:var(--teal)">Programa de Estabilidad · LCC</h2>
-        <p style="color:var(--ink2);font-size:13px;margin-top:4px">Vessena S.A. · Iniciar sesión</p>
-      </div>
-      ${isFirstUser?`
-        <div style="background:#fef3c7;border-left:3px solid #f59e0b;padding:10px;border-radius:6px;margin-bottom:16px;font-size:12px;color:#78350f">
-          <strong>Primer uso:</strong> Creá el usuario administrador (será el primer usuario del sistema).
-        </div>
-      `:''}
-      <div style="display:flex;flex-direction:column;gap:12px">
-        <div>
-          <label style="font-size:12px;font-weight:600;color:var(--ink2);display:block;margin-bottom:4px">Email</label>
-          <input type="email" id="loginEmail" placeholder="usuario@vessena.com.uy" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px" autocomplete="email">
-        </div>
-        <div>
-          <label style="font-size:12px;font-weight:600;color:var(--ink2);display:block;margin-bottom:4px">PIN (4-6 dígitos)</label>
-          <input type="password" id="loginPin" placeholder="****" maxlength="6" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px;letter-spacing:4px" inputmode="numeric" pattern="[0-9]*">
-        </div>
-        <div id="loginError" style="color:var(--red);font-size:12px;min-height:16px"></div>
-        <button class="btn" id="btnLogin" style="padding:12px;font-size:14px;font-weight:600">${isFirstUser?'Crear cuenta administrador':'Iniciar sesión'}</button>
-      </div>
-      <div style="margin-top:20px;padding-top:16px;border-top:1px solid #eee;text-align:center;font-size:11px;color:var(--ink2)">
-        La sesión dura 12 horas · Todas las acciones quedan registradas
-      </div>
-    </div>`;
-  
-  const doLogin=async()=>{
-    const email=q('#loginEmail').value.trim().toLowerCase();
-    const pin=q('#loginPin').value.trim();
-    const err=q('#loginError');
-    if(!email||!email.includes('@')){err.textContent='Email inválido';return;}
-    if(!pin||pin.length<4||!/^\d+$/.test(pin)){err.textContent='PIN debe tener 4 a 6 dígitos';return;}
-    
-    if(isFirstUser){
-      // Crear primer usuario como admin
-      usuarios.push({email,pinHash:hashPin(pin),nombre:email.split('@')[0],rol:'admin',activo:true,creado:new Date().toISOString()});
-      await gWriteSilent('usuarios',usuarios);
-      saveSession(email);
-      await logAudit('login',null,'','','','Primer acceso — creado como admin');
-      render();return;
-    }
-    
-    const u=usuarios.find(x=>x.email===email);
-    if(!u){err.textContent='Usuario no encontrado. Contactá al administrador.';return;}
-    if(!u.activo){err.textContent='Usuario deshabilitado. Contactá al administrador.';return;}
-    if(u.pinHash!==hashPin(pin)){err.textContent='PIN incorrecto';return;}
-    
-    saveSession(email);
-    await logAudit('login',null,'','','','Inicio de sesión');
-    render();
-  };
-  
-  q('#btnLogin').onclick=doLogin;
-  q('#loginPin').onkeydown=(e)=>{if(e.key==='Enter')doLogin();};
-  q('#loginEmail').focus();
-}
+/* renderLogin() se quitó: el acceso es del portal. Quedaba como código muerto
+   que además referenciaba funciones ya eliminadas. */
 
+/* La gestión de usuarios también se quitó. Editaba un padrón propio en la hoja
+   que ya no controla el acceso: dar de alta o resetear un PIN acá no habilitaba
+   a nadie, y hacía creer lo contrario. Los usuarios y los permisos se
+   administran en el portal. */
 function renderUsuarios(){
-  const u=usuarios.find(x=>x.email===currentUser);
-  if(!u||u.rol!=='admin'){document.getElementById('mc').innerHTML='<div class="panel pp"><div class="empty">Solo administradores.</div></div>';return;}
+  const u=usuarioActual();
+  if(!u||u.rol!=='admin'){
+    document.getElementById('mc').innerHTML='<div class="panel pp"><div class="empty">Solo administradores</div></div>';
+    return;
+  }
   document.getElementById('mc').innerHTML=`
     <div class="panel pp">
-      <h2 class="st">👥 Gestión de usuarios</h2>
-      <p class="sd">Alta, baja y modificación de usuarios habilitados para acceder al sistema. Los cambios quedan registrados en auditoría.</p>
-      
-      <div style="background:#f0f9ff;border:1px solid #7dd3fc;border-radius:8px;padding:14px;margin-bottom:16px">
-        <h3 style="margin:0 0 10px 0;font-size:14px">➕ Agregar usuario nuevo</h3>
-        <div style="display:grid;grid-template-columns:1.5fr 1.5fr 100px 100px 90px;gap:8px;align-items:end">
-          <div><label style="font-size:11px;font-weight:600;color:var(--ink2)">Email</label><input type="email" id="uEmail" placeholder="usuario@vessena.com.uy" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:12px"></div>
-          <div><label style="font-size:11px;font-weight:600;color:var(--ink2)">Nombre</label><input type="text" id="uNombre" placeholder="Nombre y apellido" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:12px"></div>
-          <div><label style="font-size:11px;font-weight:600;color:var(--ink2)">Rol</label><select id="uRol" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:12px"><option value="usuario">Usuario</option><option value="admin">Admin</option></select></div>
-          <div><label style="font-size:11px;font-weight:600;color:var(--ink2)">PIN inicial</label><input type="text" id="uPin" placeholder="4-6 dígitos" maxlength="6" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:4px;font-size:12px" inputmode="numeric" pattern="[0-9]*"></div>
-          <button class="btn sm" id="btnAddU">Agregar</button>
-        </div>
-      </div>
-      
-      <table style="width:100%;font-size:13px">
-        <thead>
-          <tr><th>Email</th><th>Nombre</th><th>Rol</th><th>Estado</th><th>Alta</th><th>Acciones</th></tr>
-        </thead>
-        <tbody>
-          ${usuarios.map((usr,i)=>`
-            <tr ${usr.activo?'':'style="opacity:0.5"'}>
-              <td class="mono" style="font-size:11px">${E(usr.email)}</td>
-              <td>${E(usr.nombre||'—')}</td>
-              <td>${usr.rol==='admin'?'<span style="background:#8b5cf6;color:white;padding:2px 8px;border-radius:3px;font-size:10px">ADMIN</span>':'<span style="color:var(--ink2)">Usuario</span>'}</td>
-              <td>${usr.activo?'<span style="color:#059669">● Activo</span>':'<span style="color:#dc2626">● Deshabilitado</span>'}</td>
-              <td style="font-size:11px;color:var(--ink2)">${usr.creado?new Date(usr.creado).toLocaleDateString('es-UY'):'—'}</td>
-              <td>
-                <button class="btn sm ghost usr-pin" data-i="${i}" style="padding:3px 8px;font-size:11px" title="Cambiar PIN">🔑</button>
-                <button class="btn sm ghost usr-toggle" data-i="${i}" style="padding:3px 8px;font-size:11px" title="${usr.activo?'Deshabilitar':'Habilitar'}">${usr.activo?'🚫':'✓'}</button>
-                ${usr.email!==currentUser?`<button class="btn sm ghost usr-del" data-i="${i}" style="padding:3px 8px;font-size:11px;color:var(--red)" title="Eliminar">🗑</button>`:''}
-              </td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>
+      <h2 class="st">👥 Usuarios</h2>
+      <p class="sd">El acceso a esta aplicación se administra desde el portal:
+      allí se dan de alta las personas, se asignan los roles y se cambian las
+      contraseñas. Tu rol acá es <strong>${E(u.rolRecurso||u.rol)}</strong>.</p>
+      <p class="sd"><a href="/" style="color:var(--acc)">Ir al portal</a></p>
     </div>`;
-  
-  q('#btnAddU').onclick=async()=>{
-    const email=q('#uEmail').value.trim().toLowerCase();
-    const nombre=q('#uNombre').value.trim();
-    const rol=q('#uRol').value;
-    const pin=q('#uPin').value.trim();
-    if(!email||!email.includes('@')){toast('Email inválido');return;}
-    if(!nombre){toast('Falta el nombre');return;}
-    if(!pin||pin.length<4||!/^\d+$/.test(pin)){toast('PIN debe ser 4-6 dígitos');return;}
-    if(usuarios.find(x=>x.email===email)){toast('Ese email ya existe');return;}
-    usuarios.push({email,nombre,rol,pinHash:hashPin(pin),activo:true,creado:new Date().toISOString()});
-    await gWriteSilent('usuarios',usuarios);
-    await logAudit('alta_usuario',null,email,'','Creado','Rol: '+rol);
-    render();toast('Usuario creado');
-  };
-  
-  bind('.usr-toggle','click',async(el)=>{
-    const i=parseInt(el.dataset.i);
-    const usr=usuarios[i];
-    if(usr.email===currentUser){toast('No podés deshabilitarte a vos mismo');return;}
-    usr.activo=!usr.activo;
-    await gWriteSilent('usuarios',usuarios);
-    await logAudit(usr.activo?'habilitar_usuario':'deshabilitar_usuario',null,usr.email,usr.activo?'Deshabilitado':'Activo',usr.activo?'Activo':'Deshabilitado','');
-    render();
-  });
-  
-  bind('.usr-pin','click',async(el)=>{
-    const i=parseInt(el.dataset.i);
-    const usr=usuarios[i];
-    const nuevo=prompt('Nuevo PIN para '+usr.email+' (4-6 dígitos):');
-    if(!nuevo)return;
-    if(nuevo.length<4||!/^\d+$/.test(nuevo)){toast('PIN inválido');return;}
-    usr.pinHash=hashPin(nuevo);
-    await gWriteSilent('usuarios',usuarios);
-    await logAudit('cambio_pin',null,usr.email,'','','PIN actualizado por admin');
-    toast('PIN actualizado');
-  });
-  
-  bind('.usr-del','click',async(el)=>{
-    const i=parseInt(el.dataset.i);
-    const usr=usuarios[i];
-    if(!confirm('¿Eliminar el usuario '+usr.email+'?\nEsta acción no se puede deshacer.'))return;
-    usuarios.splice(i,1);
-    await gWriteSilent('usuarios',usuarios);
-    await logAudit('eliminar_usuario',null,usr.email,'Activo','ELIMINADO','');
-    render();toast('Usuario eliminado');
-  });
 }
 
 function render(){
   if(!SCRIPT_URL){renderSetup();renderNav();rSync();return;}
-  // Verificar sesión activa
-  if(!currentUser){
-    const s=loadSession();
-    if(s){currentUser=s.email;sessionStart=s.start;}
-  }
-  if(!currentUser){document.getElementById('tabNav').innerHTML='';renderLogin();rSync();return;}
+  /* La sesión ya se resolvió contra el servidor antes del primer render. Si no
+     hay, cargarSesionPortal() ya redirigió al portal; acá solo se evita dibujar
+     una pantalla a medias mientras el navegador cambia de página. */
+  if(!currentUser){document.getElementById('tabNav').innerHTML='';rSync();return;}
   renderNav();rSync();
   if(activeTab==='dashboard')renderDashboard();else if(activeTab==='estudios')renderEstudios();else if(activeTab==='rechazados')renderRechazados();else if(activeTab==='catalogo')renderCatalogo();else if(activeTab==='nuevo')renderNuevo();else if(activeTab==='informe')renderInforme();else if(activeTab==='auditoria')renderAuditoria();else if(activeTab==='usuarios')renderUsuarios();else if(activeTab==='info')renderInfo();else if(activeTab==='config')renderSetup();}
 // Función global para el botón Volver
@@ -1486,7 +1379,11 @@ window.goBackToList=function(){
   render();
 };
 
-(async()=>{if(SCRIPT_URL)await loadAll();
+(async()=>{
+  /* La sesión primero: sin identidad no tiene sentido cargar ni mostrar nada,
+     y si no hay, esto redirige al portal. */
+  await cargarSesionPortal();
+  if(SCRIPT_URL)await loadAll();
   const hash=window.location.hash;
   if(hash&&hash.startsWith('#study=')){
     const sid=hash.replace('#study=','');
