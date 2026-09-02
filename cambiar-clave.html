@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0b1120">
+<title>Cambiar contraseña · Vessena</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔑</text></svg>">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0b1120;--s1:#131d33;--s2:#182340;--border:#253354;
+  --text:#e4eaf6;--text2:#8494b7;--text3:#5c6f94;
+  --mint:#2dd4a8;--mint-d:#1fad88;--red:#f4587a;--amber:#f5a623;
+  --r:14px;--rs:9px;--f:'Outfit',sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--f);background:var(--bg);color:var(--text);min-height:100dvh;
+     display:flex;align-items:center;justify-content:center;padding:20px;-webkit-font-smoothing:antialiased}
+.caja{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);
+      padding:26px 24px;width:100%;max-width:420px}
+.ico{width:44px;height:44px;background:linear-gradient(140deg,var(--mint),var(--mint-d));
+     border-radius:11px;display:flex;align-items:center;justify-content:center;
+     font-size:21px;margin-bottom:14px}
+h1{font-size:19px;font-weight:800;margin-bottom:4px}
+.sub{font-size:12.5px;color:var(--text2);margin-bottom:20px;line-height:1.5}
+.quien{font-size:12px;color:var(--mint);font-weight:600;margin-bottom:20px;
+       background:rgba(45,212,168,.1);border-radius:var(--rs);padding:9px 12px}
+label{display:block;font-size:11px;color:var(--text2);font-weight:600;margin-bottom:5px}
+input{width:100%;background:var(--s2);border:1px solid var(--border);border-radius:var(--rs);
+      padding:11px 12px;color:var(--text);font-family:var(--f);font-size:14px;outline:none;margin-bottom:14px}
+input:focus{border-color:var(--mint)}
+.pista{font-size:11px;color:var(--text3);margin:-9px 0 14px;line-height:1.45}
+button{width:100%;padding:12px;border-radius:50px;border:none;cursor:pointer;
+       background:linear-gradient(140deg,var(--mint),var(--mint-d));color:var(--bg);
+       font-family:var(--f);font-size:14px;font-weight:800}
+button:disabled{opacity:.5;cursor:default}
+.msg{margin-top:14px;font-size:12.5px;padding:11px;border-radius:var(--rs);display:none;line-height:1.5}
+.msg.on{display:block}
+.msg.err{background:rgba(244,88,122,.12);color:var(--red)}
+.msg.ok{background:rgba(45,212,168,.12);color:var(--mint)}
+.msg.avisar{background:rgba(245,166,35,.12);color:var(--amber)}
+.pie{margin-top:18px;text-align:center;font-size:12px}
+.pie a{color:var(--text2);text-decoration:none}
+.pie a:hover{color:var(--mint)}
+</style>
+</head>
+<body>
+
+<div class="caja">
+  <div class="ico">🔑</div>
+  <h1>Cambiar contraseña</h1>
+  <p class="sub">Al guardarla se cierran tus otras sesiones abiertas.</p>
+
+  <div class="quien" id="quien">Verificando sesión…</div>
+
+  <form id="form" style="display:none">
+    <label for="actual">Contraseña actual</label>
+    <input type="password" id="actual" autocomplete="current-password" required>
+
+    <label for="nueva">Contraseña nueva</label>
+    <input type="password" id="nueva" autocomplete="new-password" required>
+    <p class="pista">Mínimo 12 caracteres. Una frase con varias palabras es más
+      segura y más fácil de recordar que algo corto con símbolos.</p>
+
+    <label for="repetir">Repetir la nueva</label>
+    <input type="password" id="repetir" autocomplete="new-password" required>
+
+    <button type="submit" id="btn">Guardar</button>
+  </form>
+
+  <div class="msg" id="msg"></div>
+
+  <p class="pie"><a href="./">← Volver al inicio</a></p>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const msg = $('msg');
+
+function avisar(texto, clase) {
+  msg.textContent = texto;
+  msg.className = 'msg on ' + clase;
+}
+
+// Sin sesion no tiene sentido mostrar el formulario: el cambio exige estar
+// logueado, asi que se comprueba antes de pedir nada.
+(async () => {
+  try {
+    const r = await fetch('/api/auth/yo');
+    if (!r.ok) {
+      $('quien').textContent = 'No hay sesión iniciada.';
+      avisar('Entrá al sistema desde el inicio y volvé a esta página.', 'avisar');
+      return;
+    }
+    const d = await r.json();
+    $('quien').textContent = d.nombre + ' · ' + d.usuario;
+    $('form').style.display = 'block';
+    $('actual').focus();
+  } catch {
+    $('quien').textContent = 'No se pudo verificar la sesión.';
+    avisar('El servidor no responde. Probá de nuevo en un momento.', 'err');
+  }
+})();
+
+$('form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const actual = $('actual').value;
+  const nueva = $('nueva').value;
+
+  // Se valida acá lo mismo que valida el servidor, para no hacer ida y vuelta
+  // por un error que se ve de entrada. El servidor lo valida igual.
+  if (nueva !== $('repetir').value) {
+    return avisar('Las dos contraseñas nuevas no coinciden.', 'err');
+  }
+  if (nueva.length < 12) {
+    return avisar('La contraseña nueva tiene que tener al menos 12 caracteres.', 'err');
+  }
+  if (nueva === actual) {
+    return avisar('La contraseña nueva tiene que ser distinta de la actual.', 'err');
+  }
+
+  $('btn').disabled = true;
+  $('btn').textContent = 'Guardando…';
+
+  try {
+    const r = await fetch('/api/auth/clave', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ actual, nueva }),
+    });
+    const d = await r.json();
+
+    if (r.ok) {
+      $('form').style.display = 'none';
+      avisar('Listo, tu contraseña quedó cambiada. Las demás sesiones se cerraron.', 'ok');
+    } else {
+      avisar(d.error || 'No se pudo cambiar la contraseña.', 'err');
+    }
+  } catch {
+    avisar('El servidor no responde. Probá de nuevo en un momento.', 'err');
+  } finally {
+    $('btn').disabled = false;
+    $('btn').textContent = 'Guardar';
+  }
+});
+</script>
+
+</body>
+</html>

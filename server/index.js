@@ -10,6 +10,8 @@ import { rutasFabuloso } from './routes/fabuloso.js';
 import { rutasDocumentos } from './routes/documentos.js';
 import { rutasEstado } from './routes/estado.js';
 import { rutasUsuarios } from './routes/usuarios.js';
+import { rutasAuth } from './routes/auth.js';
+import { cargarSesion } from './lib/sesiones.js';
 import { REPLICAS } from './lib/dominios.js';
 
 const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -18,6 +20,10 @@ const PUERTO = Number(process.env.PORT) || 3000;
 const app = express();
 app.disable('x-powered-by');
 app.use(express.json({ limit: '2mb' }));
+
+// La sesion se resuelve antes de cualquier ruta de API: varias necesitan saber
+// quien pide, y hacerlo una sola vez evita repetir la consulta en cada una.
+app.use('/api', cargarSesion);
 
 // --- API ------------------------------------------------------------------
 app.get('/api/salud', async (_req, res) => {
@@ -48,6 +54,7 @@ app.use('/api/fabuloso', rutasFabuloso);
 app.use('/api/documentos', rutasDocumentos);
 app.use('/api/estado', rutasEstado);
 app.use('/api/usuarios', rutasUsuarios);
+app.use('/api/auth', rutasAuth);
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'endpoint inexistente' }));
 
