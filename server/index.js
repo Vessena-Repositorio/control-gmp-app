@@ -12,6 +12,7 @@ import { rutasEstado } from './routes/estado.js';
 import { rutasUsuarios } from './routes/usuarios.js';
 import { rutasAuth } from './routes/auth.js';
 import { cargarSesion } from './lib/sesiones.js';
+import { permitirArchivo } from './lib/acceso.js';
 import { REPLICAS } from './lib/dominios.js';
 
 const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -62,7 +63,10 @@ app.use('/api', (_req, res) => res.status(404).json({ error: 'endpoint inexisten
 // El repo tiene los .html en la raiz, junto a server/, package.json y .git.
 // Servir la raiz entera los expondria, asi que solo se habilitan los .html:
 // las apps son de un unico archivo y no tienen otros assets.
-app.get(/.*/, (req, res, next) => {
+// Primero se resuelve QUE archivo se pide y si la ruta es legitima; despues, en
+// permitirArchivo, si quien pide puede verlo. Separar las dos cosas evita que
+// un chequeo de permisos trabaje sobre una ruta sin validar.
+app.get(/.*/, cargarSesion, (req, res, next) => {
     const crudo = req.path === '/' ? '/index.html' : req.path;
 
     // Se decodifica ANTES de validar: req.path conserva el porcentaje-encoding,
@@ -85,7 +89,12 @@ app.get(/.*/, (req, res, next) => {
         return res.status(400).end();
     }
 
-    res.sendFile(destino, (err) => {
+    req.rutaArchivo = destino.slice(RAIZ.length + 1);
+    req.destinoArchivo = destino;
+    next();
+}, permitirArchivo, (req, res, next) => {
+    if (!req.destinoArchivo) return next();
+    res.sendFile(req.destinoArchivo, (err) => {
         if (err) next(err.status === 404 ? undefined : err);
     });
 });

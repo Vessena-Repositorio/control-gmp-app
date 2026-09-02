@@ -800,6 +800,10 @@
       <div class="meta-label">Usuario</div>
       <div class="meta-value" id="user-name">—</div>
       <div class="user-info" id="user-role"></div>
+      <a class="logout-btn" href="cambiar-clave.html" style="text-decoration:none;display:inline-flex;align-items:center;gap:5px;margin-right:6px">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3"/></svg>
+        Contraseña
+      </a>
       <button class="logout-btn" id="logout-btn">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
         Salir
@@ -854,29 +858,25 @@
 
 <script>
   // ============ SISTEMA DE LOGIN ============
-  // URL del Google Apps Script desplegado (ver INSTRUCCIONES-LOGIN.md)
-  const LOGIN_URL = 'https://script.google.com/macros/s/AKfycbxTGSOZtfNn3f_0XSDM2r1Vx74-ivbXFTdR1F1eHwH_64x0prHqAFvAA_woXuNeXrdSew/exec';
+  // Autentica contra /api/auth, en Postgres. Antes iba a un Apps Script; esa
+  // URL se quitó al migrar, y con ella el sha256 del navegador: no aportaba
+  // seguridad, porque el hash mismo era la credencial que viajaba.
 
   // Verificar si ya hay sesión activa
-  function checkSession() {
-    const session = sessionStorage.getItem('vessena_session');
-    if (session) {
-      try {
-        const s = JSON.parse(session);
-        if (s.token && s.usuario) {
-          showDashboard(s.usuario);
-          return true;
-        }
-      } catch(e) {}
+  // La sesion la resuelve el servidor: la cookie es HttpOnly y el navegador no
+  // puede leerla, asi que hay que preguntarle. Es asincrono, al reves que la
+  // version vieja que miraba sessionStorage, y por eso devuelve una promesa.
+  async function checkSession() {
+    try {
+      const r = await fetch('/api/auth/yo');
+      if (!r.ok) return false;
+      const d = await r.json();
+      window.SESION = d;          // rol por app, para decidir que mostrar
+      showDashboard(d.usuario);
+      return true;
+    } catch {
+      return false;
     }
-    return false;
-  }
-
-  // Hash SHA-256 usando Web Crypto API (nativo del navegador)
-  async function sha256(text) {
-    const enc = new TextEncoder();
-    const buf = await crypto.subtle.digest('SHA-256', enc.encode(text));
-    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
   }
 
   // Mostrar error de login
@@ -908,33 +908,36 @@
 
     if (!usuario || !password) return;
 
-    if (LOGIN_URL === 'PEGA_AQUI_LA_URL_DEL_APPS_SCRIPT') {
-      showLoginError('Sistema no configurado. Ver INSTRUCCIONES-LOGIN.md');
-      return;
-    }
-
     btn.disabled = true;
     btnText.innerHTML = '<span class="login-spinner"></span> Verificando...';
 
     try {
-      const passwordHash = await sha256(password);
-      const response = await fetch(LOGIN_URL, {
+      // Autentica contra Postgres, no contra Apps Script. La clave viaja tal
+      // cual y la hashea el servidor: el sha256 en el navegador que se usaba
+      // antes no protegia nada, porque ese hash ERA la credencial y quien lo
+      // interceptaba podia reusarlo igual.
+      const response = await fetch('/api/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ usuario: usuario, passwordHash: passwordHash })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usuario, clave: password })
       });
       const data = await response.json();
 
-      if (data.ok) {
-        sessionStorage.setItem('vessena_session', JSON.stringify({
-          token: data.token,
-          usuario: data.usuario
-        }));
+      if (response.ok) {
+        // La sesion vive en una cookie HttpOnly que pone el servidor. No se
+        // guarda nada en sessionStorage: lo que el JavaScript puede leer, lo
+        // puede robar un script inyectado.
+        const volver = new URLSearchParams(location.search).get('volver');
+        if (volver && volver.startsWith('/')) {
+          location.href = volver;   // retomar la pagina que se quiso abrir
+          return;
+        }
         showDashboard(data.usuario);
       } else {
         showLoginError(data.error || 'Error de autenticación');
       }
     } catch(err) {
-      showLoginError('Error de conexión. Verifique su internet.');
+      showLoginError('No se pudo contactar al servidor.');
     } finally {
       btn.disabled = false;
       btnText.textContent = 'Ingresar';
@@ -943,17 +946,19 @@
   });
 
   // Logout
-  document.getElementById('logout-btn').addEventListener('click', () => {
-    if (confirm('¿Cerrar sesión?')) {
-      sessionStorage.removeItem('vessena_session');
-      location.reload();
-    }
+  document.getElementById('logout-btn').addEventListener('click', async () => {
+    if (!confirm('¿Cerrar sesión?')) return;
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch { /* si no responde, igual se recarga y la cookie ya no sirve */ }
+    location.reload();
   });
 
-  // Verificar sesión al cargar
-  if (!checkSession()) {
-    document.getElementById('login-user').focus();
-  }
+  // Verificar sesión al cargar. Ahora es asincrono porque la sesion la resuelve
+  // el servidor, asi que hay que esperarla antes de decidir que mostrar.
+  checkSession().then((hay) => {
+    if (!hay) document.getElementById('login-user').focus();
+  });
 
   // ============ FIN LOGIN ============
 
