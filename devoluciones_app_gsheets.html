@@ -1414,10 +1414,16 @@ const STATE = {monitor:null, movimientos:null, computed:null, mes:null, anio:nul
 // ============================================================
 // GOOGLE SHEETS SYNC LAYER (reemplaza Supabase)
 // ============================================================
-// ★ CONFIGURAR: URL del Web App de Google Apps Script
-const GSHEET_API_URL = "https://script.google.com/macros/s/AKfycbwRDBhiXtbW_EdIUdoTWQiIj7Yb8pYi9eTQtLEuT_Gcafmerg-N0YGtBAJIAenwOVKt/exec";
+// Los datos viven en Postgres, no en Sheets. Este fue el primer dominio en
+// cortar: la app escribe acá y la réplica desde Apps Script quedó apagada, así
+// que la hoja ya NO es la fuente de verdad y lo que se cargue allá no se ve.
+//
+// La sesión va en la cookie del login, por eso todas las llamadas usan
+// credentials same-origin. El nombre de quien opera lo pone el servidor a
+// partir de la sesión: ya no se manda desde acá.
+const GSHEET_API_URL = "/api/devoluciones";
 
-const GS_READY = GSHEET_API_URL.indexOf("PEGAR") === -1;
+const GS_READY = true;
 
 // Wrapper para llamadas GET/POST al Apps Script
 async function gsGet(params) {
@@ -1428,13 +1434,18 @@ async function gsGet(params) {
 }
 async function gsPost(body) {
   if (!GS_READY) return null;
+  // Content-Type real, no text/plain: aquel era para esquivar el preflight CORS
+  // de Apps Script, y contra nuestra API es del mismo origen y no hace falta.
+  // Ahora la respuesta SÍ se puede leer, así que un fallo de guardado deja de
+  // ser invisible.
   const r = await fetch(GSHEET_API_URL, {
     method: "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify(body),
-    redirect: "follow"
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
   });
-  return r.json();
+  const d = await r.json().catch(() => ({ ok: false, error: "respuesta ilegible" }));
+  if (!r.ok) throw new Error(d.error || `error ${r.status} al guardar`);
+  return d;
 }
 
 const SYNC = {

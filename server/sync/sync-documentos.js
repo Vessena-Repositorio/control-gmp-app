@@ -45,16 +45,13 @@ const DOMINIOS = [
         env: 'ORIGEN_CAPACITACIONES',
         peticiones: [{ query: '', colecciones: ['R', 'PL', 'PE', 'AUDIT'] }],
     },
-    {
-        dominio: 'devoluciones',
-        env: 'ORIGEN_DEVOLUCIONES',
-        peticiones: [
-            { query: '?action=getAllSnapshots', colecciones: ['snapshots'] },
-            { query: '?action=listMeses', colecciones: ['meses'] },
-            { query: '?action=getPersonas', colecciones: ['personas'] },
-            { query: '?action=getMotivos', colecciones: ['motivos'] },
-        ],
-    },
+    // devoluciones SE APAGO el 02/09/2026: Postgres paso a ser su fuente de
+    // verdad y la app escribe en /api/devoluciones.
+    //
+    // Volver a habilitarla BORRARIA los datos cargados desde el corte: esta
+    // replica elimina de Postgres lo que no esta en la hoja, y la hoja quedo
+    // congelada en el estado previo. Si alguna vez hay que reactivarla, primero
+    // hay que decidir que pasa con lo cargado en el medio.
 ];
 
 /** Identidad del registro: un id del origen si lo tiene, si no su posicion. */

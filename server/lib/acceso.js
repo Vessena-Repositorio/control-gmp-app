@@ -1,5 +1,5 @@
 import { consultar } from '../db.js';
-import { ARCHIVO_POR_RECURSO } from './permisos.js';
+import { ARCHIVO_POR_RECURSO, puede } from './permisos.js';
 import { auditar } from './sesiones.js';
 
 // Indice inverso: del archivo pedido al recurso protegido.
@@ -27,16 +27,19 @@ export async function permitirArchivo(req, res, next) {
     if (PUBLICAS.has(archivo)) return next();
 
     const recurso = RECURSO_POR_ARCHIVO[archivo];
-    // Un .html que no esta en el mapa no es un recurso conocido. Se exige
-    // sesion igual: es mas seguro que un archivo nuevo nazca protegido a que
-    // nazca abierto porque nadie se acordo de agregarlo.
-    // Redirección simple al inicio, que es donde esta el login. Un 401 con
-    // cuerpo dejaria al navegador mostrando un error en vez de la pantalla de
-    // acceso; `volver` permite retomar a donde iba despues de entrar.
+
+    // Sin sesion no se entrega nada, este o no el archivo en el mapa de
+    // recursos: es mas seguro que un archivo nuevo nazca protegido a que nazca
+    // abierto porque nadie se acordo de agregarlo.
+    //
+    // Se redirige al inicio, que es donde esta el login. Un 401 con cuerpo
+    // dejaria al navegador mostrando un error en vez de la pantalla de acceso;
+    // `volver` permite retomar a donde iba despues de entrar.
     if (!req.usuario) {
         return res.redirect('/?volver=' + encodeURIComponent(req.path));
     }
 
+    // Con sesion pero sin recurso conocido, alcanza con estar logueado.
     if (!recurso) return next();
 
     try {
@@ -60,6 +63,40 @@ export async function permitirArchivo(req, res, next) {
     } catch (err) {
         next(err);
     }
+}
+
+/**
+ * Middleware de API: exige sesion y que el rol habilite `accion` sobre
+ * `recurso`. Deja el rol en req.rol.
+ */
+export function exigirPermiso(recurso, accion) {
+    return async (req, res, next) => {
+        if (!req.usuario) return res.status(401).json({ ok: false, error: 'sesion requerida' });
+
+        try {
+            const { rows } = await consultar(
+                'SELECT rol FROM usuario_recursos WHERE usuario_id = $1 AND recurso = $2',
+                [req.usuario.id, recurso]
+            );
+
+            const rol = rows[0]?.rol;
+            if (!rol || !puede(rol, accion)) {
+                await auditar(req, {
+                    usuarioId: req.usuario.id,
+                    usuarioTxt: req.usuario.usuario,
+                    accion: 'permiso_denegado',
+                    recurso,
+                    detalle: `necesitaba ${accion}, tiene ${rol || 'ningun rol'}`,
+                });
+                return res.status(403).json({ ok: false, error: `no tenés permiso para ${accion}` });
+            }
+
+            req.rol = rol;
+            next();
+        } catch (err) {
+            next(err);
+        }
+    };
 }
 
 function paginaSinPermiso(recurso) {
