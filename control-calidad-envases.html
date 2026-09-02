@@ -560,25 +560,17 @@
         // ====================================================================
         // AUTENTICACIÓN
         // ====================================================================
-        // Usuarios autorizados. La clave inicial de TODOS es "vessena2026".
-        // Para cambiar una clave: pegar en la consola del navegador:
-        //   sha256Hex("nueva_clave").then(h => console.log(h));
-        // y reemplazar el hash correspondiente aquí.
-        const HASH_VESSENA2026 = '838ded3e4d810b0357da9ed0d78e9ec7378e92e650b330ebc5a34d099240c88b';
-        const USUARIOS = {
-            'lorena':    { nombre: 'Lorena Romero',    passwordHash: HASH_VESSENA2026 },
-            'gloria':    { nombre: 'Gloria Nuñez',     passwordHash: HASH_VESSENA2026 },
-            'antonella': { nombre: 'Antonella Nuñez',  passwordHash: HASH_VESSENA2026 },
-            'monica':    { nombre: 'Monica Puñales',   passwordHash: HASH_VESSENA2026 },
-            'claudia':   { nombre: 'Claudia Barlocco', passwordHash: HASH_VESSENA2026 },
-        };
-
-        async function sha256Hex(texto) {
-            const enc = new TextEncoder().encode(texto);
-            const hash = await crypto.subtle.digest('SHA-256', enc);
-            return Array.from(new Uint8Array(hash))
-                .map(b => b.toString(16).padStart(2, '0')).join('');
-        }
+        // La identidad la da el portal, vía /api/auth/yo. Acá había un padrón
+        // con las cinco personas y un hash SHA-256 sin sal escrito en el mismo
+        // archivo, con la misma clave para todas. Se quitó por tres motivos:
+        //
+        //   1. Ese hash viajaba en un archivo que se servía público, y sin sal
+        //      es reversible con una tabla.
+        //   2. La clave compartida hacía que la app no pudiera distinguir quién
+        //      cargó cada control, que es justo lo que la trazabilidad necesita.
+        //   3. Usaba crypto.subtle, que el navegador solo expone en contextos
+        //      seguros: servido por HTTP fallaba con "Cannot read properties of
+        //      undefined (reading 'digest')".
 
         function App() {
             const [activeTab, setActiveTab] = useState('soplado');
@@ -632,87 +624,70 @@
             };
 
             // === AUTENTICACIÓN ===
-            // Sesión expira automáticamente a las 12 h de haber iniciado
-            const SESION_MAX_HORAS = 12;
-
-            // Verifica si una sesión guardada aún es válida (no venció)
-            const sesionEsValida = (sesion) => {
-                if (!sesion || !sesion.loginAt) return false;
-                const inicioMs = new Date(sesion.loginAt).getTime();
-                if (isNaN(inicioMs)) return false;
-                const horasTranscurridas = (Date.now() - inicioMs) / 3600000;
-                return horasTranscurridas < SESION_MAX_HORAS;
-            };
-
-            const [usuarioLogueado, setUsuarioLogueado] = useState(() => {
-                try {
-                    const stored = localStorage.getItem('vessena_usuario_logueado');
-                    if (!stored) return null;
-                    const sesion = JSON.parse(stored);
-                    if (!sesionEsValida(sesion)) {
-                        // Sesión vencida: limpiar y forzar re-login
-                        localStorage.removeItem('vessena_usuario_logueado');
-                        return null;
-                    }
-                    return sesion;
-                } catch { return null; }
-            });
+            // La vigencia de la sesión la decide el servidor (10 h). Acá se
+            // revalida contra él y no con un reloj local, que se podía adelantar
+            // desde el navegador.
+            const [usuarioLogueado, setUsuarioLogueado] = useState(null);
             const [loginUsername, setLoginUsername] = useState('');
             const [loginPassword, setLoginPassword] = useState('');
             const [loginError, setLoginError] = useState('');
             const [loginProcesando, setLoginProcesando] = useState(false);
 
-            // Chequeo periódico (cada 1 min) para expirar sesión si ya venció
+            // La sesión es la del portal: esta app ya no tiene login propio.
+            // Antes validaba contra un hash escrito en este mismo archivo, con
+            // la misma clave para las cinco personas, así que no podía saber
+            // quién cargó cada control. Ahora la identidad la da el servidor.
+            //
+            // Además ese login no funcionaba servido por HTTP: usaba
+            // crypto.subtle, que el navegador solo expone en contextos seguros
+            // (HTTPS o localhost).
             React.useEffect(() => {
-                if (!usuarioLogueado) return;
-                const intervalo = setInterval(() => {
-                    if (!sesionEsValida(usuarioLogueado)) {
-                        localStorage.removeItem('vessena_usuario_logueado');
-                        setUsuarioLogueado(null);
-                        alert('⏰ Tu sesión expiró (más de ' + SESION_MAX_HORAS + ' h). Ingresá nuevamente para continuar.');
+                let vivo = true;
+                const traerSesion = async () => {
+                    try {
+                        const r = await fetch('/api/auth/yo');
+                        if (!vivo) return;
+                        if (!r.ok) {
+                            // Sin sesión no se sigue: se vuelve al portal, que
+                            // es donde está el acceso.
+                            location.href = '/?volver=' + encodeURIComponent(location.pathname);
+                            return;
+                        }
+                        const d = await r.json();
+                        if (vivo) {
+                            setUsuarioLogueado({
+                                username: d.usuario,
+                                nombre: d.nombre,
+                                rol: d.recursos?.['control-calidad-envases']?.rol || null,
+                                loginAt: new Date().toISOString(),
+                            });
+                        }
+                    } catch {
+                        if (vivo) setLoginError('No se pudo verificar la sesión con el servidor.');
                     }
-                }, 60000); // cada 60 segundos
-                return () => clearInterval(intervalo);
-            }, [usuarioLogueado]);
+                };
 
-            const handleLogin = async (e) => {
+                traerSesion();
+                // Se revalida cada minuto: si la sesión venció del lado del
+                // servidor, la app no puede seguir aceptando controles.
+                const intervalo = setInterval(traerSesion, 60000);
+                return () => { vivo = false; clearInterval(intervalo); };
+            }, []);
+
+            // El acceso se hace en el portal. Si alguien llega acá sin sesión,
+            // el efecto de arriba ya lo redirige; este handler solo lo lleva
+            // por si quedó viendo la pantalla vieja.
+            const handleLogin = (e) => {
                 if (e && e.preventDefault) e.preventDefault();
-                setLoginError('');
-                setLoginProcesando(true);
-                try {
-                    const user = loginUsername.trim().toLowerCase();
-                    const cuenta = USUARIOS[user];
-                    if (!cuenta) {
-                        setLoginError('Usuario no reconocido.');
-                        setLoginProcesando(false);
-                        return;
-                    }
-                    const hashIngresado = await sha256Hex(loginPassword);
-                    if (hashIngresado !== cuenta.passwordHash) {
-                        setLoginError('Clave incorrecta.');
-                        setLoginProcesando(false);
-                        return;
-                    }
-                    const sesion = {
-                        username: user,
-                        nombre: cuenta.nombre,
-                        loginAt: new Date().toISOString()
-                    };
-                    localStorage.setItem('vessena_usuario_logueado', JSON.stringify(sesion));
-                    setUsuarioLogueado(sesion);
-                    setLoginUsername('');
-                    setLoginPassword('');
-                } catch (err) {
-                    setLoginError('Error al iniciar sesión: ' + (err.message || err));
-                } finally {
-                    setLoginProcesando(false);
-                }
+                location.href = '/?volver=' + encodeURIComponent(location.pathname);
             };
 
-            const handleLogout = () => {
+            const handleLogout = async () => {
                 if (!confirm('¿Cerrar sesión?')) return;
-                localStorage.removeItem('vessena_usuario_logueado');
-                setUsuarioLogueado(null);
+                // Se cierra en el servidor, no solo acá: borrar el estado local
+                // dejaría la sesión viva y utilizable desde otra pestaña.
+                try { await fetch('/api/auth/logout', { method: 'POST' }); } catch {}
+                location.href = '/';
             };
 
             const [ordenesSoplado, setOrdenesSoplado] = useState([]);
