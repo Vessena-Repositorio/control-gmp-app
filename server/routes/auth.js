@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { consultar } from '../db.js';
 import { hashear, verificar } from '../lib/claves.js';
-import { PERMISOS_POR_ROL } from '../lib/permisos.js';
+import { PERMISOS_POR_ROL, ARCHIVO_POR_RECURSO } from '../lib/permisos.js';
 import {
     crearSesion, cerrarSesion, cerrarSesionesDe, cookieDeSesion, cookieVacia,
     leerCookie, NOMBRE_COOKIE, auditar, exigirSesion, DURACION_HORAS,
@@ -136,7 +136,13 @@ rutasAuth.get('/yo', async (req, res, next) => {
 
         const recursos = {};
         for (const f of rows) {
-            recursos[f.recurso] = { rol: f.rol, permisos: PERMISOS_POR_ROL[f.rol] || [] };
+            recursos[f.recurso] = {
+                rol: f.rol,
+                permisos: PERMISOS_POR_ROL[f.rol] || [],
+                // El archivo permite que el portal esconda lo que esta persona
+                // no puede abrir, en vez de dejarla chocar contra un 403.
+                archivo: ARCHIVO_POR_RECURSO[f.recurso] ?? null,
+            };
         }
 
         res.json({
@@ -144,6 +150,11 @@ rutasAuth.get('/yo', async (req, res, next) => {
             nombre: req.usuario.nombre,
             email: req.usuario.email,
             recursos,
+            // Todos los archivos protegidos, no solo los de esta persona. Sin
+            // esto el portal no puede distinguir "protegido y no es mio" de "no
+            // es un recurso protegido", y terminaria escondiendo de mas o de
+            // menos. Saber que existen no da acceso: el gate esta en el servidor.
+            archivosProtegidos: Object.values(ARCHIVO_POR_RECURSO),
         });
     } catch (err) {
         next(err);

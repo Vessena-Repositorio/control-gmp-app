@@ -875,6 +875,24 @@
     vista: 'operario',
   };
 
+  /**
+   * true si la sesión habilita ese destino. Solo se filtran los archivos que el
+   * servidor declara como protegidos: los enlaces externos y los .html que no
+   * son recursos conocidos se dejan pasar, porque esconderlos por no
+   * reconocerlos vaciaría el portal ante cualquier desajuste.
+   */
+  function puedeAbrir(url) {
+    if (!window.SESION) return false;          // sin sesión no se muestra nada
+    if (/^https?:/i.test(url)) return true;    // apps externas, fuera de este control
+
+    const recursos = window.SESION.recursos || {};
+    const mios = new Set(Object.values(recursos).map(r => r.archivo).filter(Boolean));
+    if (mios.has(url)) return true;
+
+    // Si el archivo es de algún recurso protegido pero no de los míos, se oculta.
+    return !(window.SESION.archivosProtegidos || []).includes(url);
+  }
+
   async function checkSession() {
     try {
       const r = await fetch('/api/auth/yo');
@@ -1209,6 +1227,11 @@
       if (cat.roles && cat.roles.length > 0 && !cat.roles.includes(userRole)) return;
 
       const filteredItems = cat.items.filter(item => {
+        // Se esconde lo que esta persona no puede abrir. El servidor lo bloquea
+        // igual con un 403, pero ofrecer un acceso que rebota es peor que no
+        // ofrecerlo: parece que algo falla y no que no corresponde.
+        if (item.url && !puedeAbrir(item.url)) return false;
+
         if (currentSearch){
           const q = currentSearch.toLowerCase();
           return item.name.toLowerCase().includes(q) || item.desc.toLowerCase().includes(q) || cat.title.toLowerCase().includes(q) || (item.code && item.code.toLowerCase().includes(q));
