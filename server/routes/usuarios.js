@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { consultar } from '../db.js';
 import { sincronizarUsuarios } from '../sync/sync-usuarios.js';
 import { exigirTokenSync } from '../lib/auth.js';
+import { hashear, generarClave } from '../lib/claves.js';
+import { PERMISOS_POR_ROL } from '../lib/permisos.js';
 
 export const rutasUsuarios = Router();
 
@@ -48,6 +50,88 @@ rutasUsuarios.get('/estado', exigirTokenSync, async (_req, res, next) => {
         });
     } catch (err) {
         next(err);
+    }
+});
+
+/**
+ * GET /api/usuarios/roles
+ * Quien tiene que rol en que app, y que habilita cada rol. Sin credenciales.
+ * Es la vista que permite auditar los permisos sin entrar a la base.
+ */
+rutasUsuarios.get('/roles', exigirTokenSync, async (_req, res, next) => {
+    try {
+        const { rows } = await consultar(
+            `SELECT u.usuario, u.nombre, ur.recurso, ur.rol
+             FROM usuarios u
+             JOIN usuario_recursos ur ON ur.usuario_id = u.id
+             WHERE u.activo
+             ORDER BY u.nombre, ur.recurso`
+        );
+
+        const porUsuario = {};
+        for (const f of rows) {
+            porUsuario[f.nombre] ??= { usuario: f.usuario, recursos: {} };
+            porUsuario[f.nombre].recursos[f.recurso] = f.rol;
+        }
+
+        res.json({ permisosPorRol: PERMISOS_POR_ROL, usuarios: porUsuario });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/**
+ * POST /api/usuarios/clave  { usuario, clave }
+ *
+ * Fija la clave de un usuario. Es el camino de alta inicial y de reseteo
+ * administrativo: la clave llega en texto, el servidor la hashea con scrypt y
+ * guarda solo el hash. Nunca se escribe una clave en el repositorio ni en una
+ * migracion.
+ *
+ * Si no se manda `clave`, se genera una y se devuelve UNA sola vez. Es la unica
+ * respuesta de toda la API que contiene una credencial en texto.
+ */
+rutasUsuarios.post('/clave', exigirTokenSync, async (req, res) => {
+    const { usuario, clave } = req.body || {};
+    if (!usuario) {
+        return res.status(400).json({ error: 'falta `usuario`' });
+    }
+    if (clave !== undefined && (typeof clave !== 'string' || clave.length < 12)) {
+        return res.status(400).json({ error: 'la clave debe tener al menos 12 caracteres' });
+    }
+
+    try {
+        const { rows } = await consultar(
+            `SELECT id, nombre FROM usuarios WHERE origen = 'vessena' AND lower(usuario) = lower($1)`,
+            [usuario]
+        );
+        if (!rows.length) {
+            return res.status(404).json({ error: `no existe el usuario ${usuario}` });
+        }
+
+        const generada = clave ?? generarClave();
+        const hash = await hashear(generada);
+
+        await consultar(
+            `INSERT INTO credenciales (usuario_id, esquema, valor, migrado_en)
+             VALUES ($1, 'scrypt', $2, now())
+             ON CONFLICT (usuario_id) DO UPDATE SET
+                esquema = 'scrypt', valor = EXCLUDED.valor,
+                migrado_en = now(), actualizado_en = now()`,
+            [rows[0].id, hash]
+        );
+
+        res.json({
+            estado: 'ok',
+            usuario,
+            nombre: rows[0].nombre,
+            // Solo se devuelve si la genero el servidor: si la mando quien
+            // llama, repetirla no agrega nada y la deja en un log de mas.
+            clave: clave ? undefined : generada,
+        });
+    } catch (err) {
+        console.error('[usuarios] fallo al fijar clave:', err.message);
+        res.status(500).json({ error: 'no se pudo fijar la clave' });
     }
 });
 
