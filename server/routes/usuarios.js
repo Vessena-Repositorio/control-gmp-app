@@ -130,8 +130,11 @@ rutasUsuarios.post('/clave', exigirTokenSync, async (req, res) => {
             clave: clave ? undefined : generada,
         });
     } catch (err) {
+        // Endpoint autenticado y de administracion: se devuelve el motivo real.
+        // Con el mensaje generico, un fallo de parametros de scrypt se veia
+        // igual que uno de base y hubo que deducirlo desde afuera.
         console.error('[usuarios] fallo al fijar clave:', err.message);
-        res.status(500).json({ error: 'no se pudo fijar la clave' });
+        res.status(500).json({ error: err.message });
     }
 });
 

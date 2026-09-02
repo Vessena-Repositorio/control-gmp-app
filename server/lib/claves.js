@@ -11,6 +11,12 @@ const r = 8;
 const p = 1;
 const LARGO = 32;
 
+// scrypt necesita 128 * N * r bytes = exactamente 32 MB con estos parametros, y
+// el limite por defecto de Node es 32 MB: sin subirlo, falla con
+// ERR_CRYPTO_INVALID_SCRYPT_PARAMS antes de hashear nada. Se deja el doble para
+// tener margen si algun dia se sube N.
+const MAXMEM = 64 * 1024 * 1024;
+
 /**
  * Hashea una clave. El resultado se guarda autodescrito:
  *   scrypt$N$r$p$salt$hash
@@ -19,7 +25,7 @@ const LARGO = 32;
  */
 export async function hashear(clave) {
     const salt = randomBytes(16);
-    const derivada = await scryptAsync(clave.normalize('NFKC'), salt, LARGO, { N, r, p });
+    const derivada = await scryptAsync(clave.normalize('NFKC'), salt, LARGO, { N, r, p, maxmem: MAXMEM });
     return `scrypt$${N}$${r}$${p}$${salt.toString('base64')}$${derivada.toString('base64')}`;
 }
 
@@ -31,7 +37,7 @@ async function verificarScrypt(clave, guardado) {
     const [, sN, sr, sp, salt, hash] = partes;
     const esperado = Buffer.from(hash, 'base64');
     const derivada = await scryptAsync(clave.normalize('NFKC'), Buffer.from(salt, 'base64'),
-        esperado.length, { N: +sN, r: +sr, p: +sp });
+        esperado.length, { N: +sN, r: +sr, p: +sp, maxmem: MAXMEM });
 
     // Comparacion en tiempo constante: comparar con === filtra informacion por
     // cuanto tarda en fallar.
@@ -42,14 +48,22 @@ function sha256Hex(texto) {
     return createHash('sha256').update(texto).digest('hex');
 }
 
-/** El djb2 con el que estabilidad guardaba los PIN. Solo para verificar. */
+/**
+ * El djb2 con el que estabilidad guardaba los PIN. Solo para verificar.
+ *
+ * Se reproduce TAL CUAL el original, sin normalizar a entero de 32 bits. Es
+ * tentador cerrar con `| 0`, pero el origen no lo hace: `h << 5` si coacciona a
+ * int32, y la suma siguiente devuelve a doble, asi que para cadenas largas el
+ * acumulador se va del rango y el resultado no es un int32. Agregar `| 0` da
+ * otro numero y ninguna clave larga validaria. Verificado contra los datos
+ * reales: el PIN '1234' da 2088290703, que es el hash guardado.
+ */
 function djb2(texto) {
     let h = 5381;
     for (let i = 0; i < texto.length; i++) {
         h = ((h << 5) + h) + texto.charCodeAt(i);
     }
-    // El origen lo guarda como entero de 32 bits con signo, igual que JS.
-    return String(h | 0);
+    return String(h);
 }
 
 /**
