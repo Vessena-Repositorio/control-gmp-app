@@ -866,13 +866,27 @@
   // La sesion la resuelve el servidor: la cookie es HttpOnly y el navegador no
   // puede leerla, asi que hay que preguntarle. Es asincrono, al reves que la
   // version vieja que miraba sessionStorage, y por eso devuelve una promesa.
+  // El catalogo usa 'admin' y 'operario'; el padron usa los roles del
+  // relevamiento. Se traduce acá para no tener que reescribir el catalogo.
+  const ROL_CATALOGO = {
+    administrador: 'admin',
+    revisor: 'admin',      // ve lo mismo que un administrador en el portal
+    operador: 'operario',
+    vista: 'operario',
+  };
+
   async function checkSession() {
     try {
       const r = await fetch('/api/auth/yo');
       if (!r.ok) return false;
       const d = await r.json();
       window.SESION = d;          // rol por app, para decidir que mostrar
-      showDashboard(d.usuario);
+      // showDashboard espera un objeto, no el nombre de usuario suelto.
+      showDashboard({
+        id: d.usuario,
+        nombre: d.nombre,
+        rol: ROL_CATALOGO[d.recursos?.portal?.rol] || 'operario',
+      });
       return true;
     } catch {
       return false;
@@ -932,7 +946,10 @@
           location.href = volver;   // retomar la pagina que se quiso abrir
           return;
         }
-        showDashboard(data.usuario);
+        // Se vuelve a pedir la sesion en vez de armar el usuario con lo que
+        // devolvio el login: /api/auth/yo trae ademas el rol por app, que es
+        // lo que decide que secciones se muestran.
+        await checkSession();
       } else {
         showLoginError(data.error || 'Error de autenticación');
       }
@@ -1182,7 +1199,10 @@
     const cont = document.getElementById('categories');
     cont.innerHTML = '';
     let visibleCount = 0;
-    const userRole = (window.currentUserRole || 'admin').toLowerCase();
+    // Sin rol conocido se asume el mas restrictivo. Antes caia en 'admin', asi
+    // que cualquier fallo al resolver la sesion mostraba TODAS las secciones a
+    // cualquiera: un permiso no puede fallar hacia el lado abierto.
+    const userRole = (window.currentUserRole || 'operario').toLowerCase();
 
     data.forEach(cat => {
       // Filtro por rol: si la categoría tiene lista de roles y no incluye al del usuario, se salta

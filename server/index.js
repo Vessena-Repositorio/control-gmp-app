@@ -1,7 +1,7 @@
 import express from 'express';
 import { dirname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { pool, hayBase } from './db.js';
+import { pool, hayBase, consultar } from './db.js';
 import { migrar } from './migrate.js';
 import { rutasEnvases } from './routes/envases.js';
 import { rutasProceso } from './routes/proceso.js';
@@ -130,7 +130,21 @@ function arrancar() {
     }
 
     migrar()
-        .then(() => {
+        .then(async () => {
+            // Un sync que estaba corriendo cuando se reinicio el contenedor
+            // quedo con estado 'corriendo' y nadie lo va a cerrar. Como
+            // /api/estado mira la ultima corrida de cada dominio, ese dominio
+            // se veria trabado hasta la proxima replica, y el chequeo estricto
+            // del deploy fallaba esperandolo. Se cierran al arrancar.
+            const { rowCount } = await consultar(
+                `UPDATE sync_log SET estado = 'error', fin_en = now(),
+                        error = 'interrumpido por reinicio del servicio'
+                 WHERE estado = 'corriendo'`
+            );
+            if (rowCount) {
+                console.warn(`[arranque] ${rowCount} sync(s) interrumpido(s) por el reinicio anterior`);
+            }
+
             const minutos = Number(process.env.SYNC_INTERVALO_MIN ?? 15);
             if (minutos <= 0) {
                 console.log('[sync] replica periodica desactivada (SYNC_INTERVALO_MIN=0)');
