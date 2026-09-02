@@ -514,8 +514,12 @@ function fetchSheet(){
   st.textContent="🔄 Cargando datos de Google Sheets...";
   st.style.background="rgba(234,179,8,.25)";
   // Try CSV first (preserves decimal comma strings correctly); fallback to JSONP for file:// protocol
+  // Se usa /export y NO /gviz. gviz infiere el tipo de cada columna y devuelve
+  // vacias las celdas que no encajan con el tipo que dedujo: por eso ANIONICO y
+  // pH aparecian en blanco desde julio 2026 aunque estaban cargados en la hoja.
+  // /export devuelve el contenido tal cual.
   var csvUrl=SIN_BACKEND
-    ? "https://docs.google.com/spreadsheets/d/"+SHEET_ID+"/gviz/tq?tqx=out:csv&gid="+SHEET_GID+"&headers=1&t="+Date.now()
+    ? "https://docs.google.com/spreadsheets/d/"+SHEET_ID+"/export?format=csv&gid="+SHEET_GID+"&t="+Date.now()
     : "/api/fabuloso?t="+Date.now();
   if(typeof fetch!=="undefined"&&location.protocol!=="file:"){
     fetch(csvUrl).then(function(r){

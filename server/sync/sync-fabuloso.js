@@ -16,6 +16,29 @@ import { descargarTexto } from '../lib/origen.js';
 // Columnas que identifican la fila; el resto pasa a fabuloso_valores.
 const IDENTIFICADORAS = new Set(['v', 'código', 'codigo', 'descripcion', 'descripción', 'lote']);
 
+/**
+ * gviz descarta datos. Infiere el tipo de cada columna y devuelve vacias las
+ * celdas que no encajan con el tipo deducido: sobre esta hoja dejaba ANIONICO y
+ * pH en blanco desde julio 2026 aunque estaban cargados. /export devuelve el
+ * contenido tal cual.
+ *
+ * Se reescribe la URL en vez de exigir cambiar la variable de entorno, porque
+ * la alternativa es seguir perdiendo datos en silencio hasta que alguien lo
+ * note. Se avisa en el log para que el cambio no sea invisible.
+ */
+function urlDeExport(url) {
+    const m = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+    if (!m || !url.includes('/gviz/')) return url;
+
+    const gid = url.match(/[?&]gid=(\d+)/)?.[1] ?? '0';
+    const nueva = `https://docs.google.com/spreadsheets/d/${m[1]}/export?format=csv&gid=${gid}`;
+    console.warn(
+        '[sync:fabuloso] ORIGEN_FABULOSO apunta a gviz, que descarta celdas. ' +
+        'Se usa /export en su lugar. Conviene actualizar la variable de entorno.'
+    );
+    return nueva;
+}
+
 export async function sincronizarFabuloso() {
     // El log se abre antes de validar la configuracion: si falta la variable,
     // el fallo tiene que quedar registrado y visible en /estado, no solo en los
@@ -30,7 +53,7 @@ export async function sincronizarFabuloso() {
         const url = process.env.ORIGEN_FABULOSO;
         if (!url) throw new Error('Falta ORIGEN_FABULOSO en las variables de entorno.');
 
-        const csv = await descargarTexto(url);
+        const csv = await descargarTexto(urlDeExport(url));
         const filas = parsearCsv(csv);
         if (filas.length < 2) {
             throw new Error('el CSV no trae filas de datos; no se toca la base');
