@@ -1115,14 +1115,30 @@
                 const specEnvase = SPECS_ACTIVAS[ordenSeleccionada.envase];
                 const skipMediciones = maquinaParada && tipoControlSoplado === 'arranque';
                 if (!skipMediciones && specEnvase?.parametros?.peso) {
-                    const cavidades = specEnvase.cavidades || 1;
-                    const prefijo = tipoControlSoplado === 'arranque' ? 'arr_peso_cav' : 'proc_peso_cav';
-                    const pesosCargados = [];
-                    for (let i = 1; i <= cavidades; i++) {
-                        const v = mediciones[`${prefijo}${i}`];
-                        if (v !== undefined && v !== '' && v !== null) pesosCargados.push(i);
+                    const esTapaProceso = specEnvase.esquemaProceso && tipoControlSoplado === 'proceso';
+                    let hayPeso = false;
+
+                    if (esTapaProceso) {
+                        // Tapas en control 2h: formato libre — hasta 3 pares (cavidad + valor)
+                        for (let i = 1; i <= 3; i++) {
+                            const cav = mediciones[`proc_peso_muestra${i}_cav`];
+                            const valor = mediciones[`proc_peso_muestra${i}_valor`];
+                            if (cav && valor !== undefined && valor !== '' && !isNaN(parseFloat(valor))) {
+                                hayPeso = true;
+                                break;
+                            }
+                        }
+                    } else {
+                        // Envases o arranque: formato indexado por cavidad
+                        const cavidades = specEnvase.cavidades || 1;
+                        const prefijo = tipoControlSoplado === 'arranque' ? 'arr_peso_cav' : 'proc_peso_cav';
+                        for (let i = 1; i <= cavidades; i++) {
+                            const v = mediciones[`${prefijo}${i}`];
+                            if (v !== undefined && v !== '' && v !== null) { hayPeso = true; break; }
+                        }
                     }
-                    if (pesosCargados.length === 0) {
+
+                    if (!hayPeso) {
                         setMensaje({
                             tipo: 'warning',
                             texto: `⚖️ El peso es obligatorio para ${specEnvase.nombre}. Cargá al menos una cavidad.`
@@ -2335,6 +2351,59 @@
                                                             <div style={{marginTop: '10px', fontSize: '12px', color: '#718096', fontStyle: 'italic'}}>
                                                                 Tildá cada casilla si el aspecto es correcto. Si detectás una anomalía, dejala sin tildar y detallá en Observaciones.
                                                             </div>
+
+                                                            {/* PESO DE TAPA - obligatorio, cavidad libre */}
+                                                            {spec.parametros?.peso && (
+                                                                <div style={{marginTop: '20px', background: '#fffbeb', padding: '15px', borderRadius: '8px', border: '1px solid #f6ad55'}}>
+                                                                    <h4 style={{margin: '0 0 8px 0', color: '#7c2d12', fontSize: '15px'}}>⚖️ Peso de tapa (mínimo una) *</h4>
+                                                                    <div style={{fontSize: '12px', color: '#78350f', marginBottom: '12px'}}>
+                                                                        Pesá al menos una tapa de cualquier cavidad. Especificación: {spec.parametros.peso.min} – {spec.parametros.peso.max} g
+                                                                    </div>
+                                                                    <table style={{width: '100%', fontSize: '13px', borderCollapse: 'collapse'}}>
+                                                                        <thead>
+                                                                            <tr style={{background: '#fef3c7'}}>
+                                                                                <th style={{padding: '6px', textAlign: 'left', border: '1px solid #f6ad55', width: '160px'}}>N° Cavidad</th>
+                                                                                <th style={{padding: '6px', textAlign: 'left', border: '1px solid #f6ad55'}}>Peso (g)</th>
+                                                                            </tr>
+                                                                        </thead>
+                                                                        <tbody>
+                                                                            {[1, 2, 3].map(idx => {
+                                                                                const cavKey = `proc_peso_muestra${idx}_cav`;
+                                                                                const pesoKey = `proc_peso_muestra${idx}_valor`;
+                                                                                const pesoVal = mediciones[pesoKey] || '';
+                                                                                const numPeso = parseFloat(pesoVal);
+                                                                                const fueraSpec = pesoVal !== '' && !isNaN(numPeso) &&
+                                                                                    (numPeso < spec.parametros.peso.min || numPeso > spec.parametros.peso.max);
+                                                                                return (
+                                                                                    <tr key={idx}>
+                                                                                        <td style={{padding: '4px', border: '1px solid #fed7aa'}}>
+                                                                                            <input type="number" min="1" max={spec.cavidades}
+                                                                                                value={mediciones[cavKey] || ''}
+                                                                                                onChange={(e) => setMediciones({...mediciones, [cavKey]: e.target.value})}
+                                                                                                placeholder={`1 – ${spec.cavidades}`}
+                                                                                                style={{width: '100%', padding: '6px', fontSize: '13px', border: '1px solid #cbd5e0', borderRadius: '4px'}} />
+                                                                                        </td>
+                                                                                        <td style={{padding: '4px', border: '1px solid #fed7aa'}}>
+                                                                                            <input type="number" step="0.01"
+                                                                                                value={pesoVal}
+                                                                                                onChange={(e) => setMediciones({...mediciones, [pesoKey]: e.target.value})}
+                                                                                                placeholder="g"
+                                                                                                style={{
+                                                                                                    width: '100%', padding: '6px', fontSize: '13px', borderRadius: '4px',
+                                                                                                    border: '1px solid ' + (fueraSpec ? '#e53e3e' : '#cbd5e0'),
+                                                                                                    background: fueraSpec ? '#fff5f5' : 'white'
+                                                                                                }} />
+                                                                                        </td>
+                                                                                    </tr>
+                                                                                );
+                                                                            })}
+                                                                        </tbody>
+                                                                    </table>
+                                                                    <div style={{marginTop: '8px', fontSize: '11px', color: '#78350f', fontStyle: 'italic'}}>
+                                                                        Podés cargar hasta 3 pesajes. Los valores fuera de especificación se marcan en rojo.
+                                                                    </div>
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     );
                                                 })()}
@@ -2516,7 +2585,7 @@
                                                     <div className="tipo-control-title">Control Quincenal</div>
                                                     <div className="tipo-control-desc">REG-C</div>
                                                     <div className="tipo-control-desc" style={{marginTop: '5px', fontWeight: '600'}}>
-                                                        Cada 15 días - 10 muestras/cavidad
+                                                        Cada 15 días - 3 muestras/cavidad
                                                     </div>
                                                 </div>
 
@@ -2543,7 +2612,7 @@
                                     )}
 
                                     {tipoControlLCC && (() => {
-                                        const numMuestras = tipoControlLCC === 'semanal' ? 3 : 10;
+                                        const numMuestras = tipoControlLCC === 'validacion' ? 10 : 3;
                                         const spec = nuevoControlLCC.envase ? SPECS_ACTIVAS[nuevoControlLCC.envase] : null;
                                         
                                         return (
@@ -2680,14 +2749,14 @@
                                                     </div>
                                                 )}
 
-                                                {/* PERFIL DE ESPESOR — semanal (3 botellas) o quincenal (6 botellas) */}
-                                                {(tipoControlLCC === 'semanal' || tipoControlLCC === 'quincenal') && spec && ENVASES_PERFIL_ESPESOR.includes(nuevoControlLCC.envase) && (() => {
-                                                    const nBotellas = PERFIL_ESPESOR_BOTELLAS_POR_TIPO[tipoControlLCC] || 3;
+                                                {/* PERFIL DE ESPESOR — solo semanal (3 botellas) */}
+                                                {tipoControlLCC === 'semanal' && spec && ENVASES_PERFIL_ESPESOR.includes(nuevoControlLCC.envase) && (() => {
+                                                    const nBotellas = 3;
                                                     return (
                                                     <div style={{marginTop: '30px', background: '#f7fafc', padding: '20px', borderRadius: '8px', border: '1px solid #e2e8f0'}}>
                                                         <h3 style={{marginBottom: '5px', color: '#2d3748'}}>📏 Perfil de Espesor</h3>
                                                         <div style={{fontSize: '13px', color: '#4a5568', marginBottom: '15px'}}>
-                                                            {tipoControlLCC === 'semanal' ? 'REG-SOP-PR-138-H' : 'REG-SOP-PR-138-C'} · {PERFIL_ESPESOR_PUNTOS.length} puntos por cavidad · {nBotellas} botellas por punto · {spec.cavidades || 2} cavidades
+                                                            REG-SOP-PR-138-H · {PERFIL_ESPESOR_PUNTOS.length} puntos por cavidad · {nBotellas} botellas por punto · {spec.cavidades || 2} cavidades
                                                         </div>
 
                                                         {Array.from({length: spec.cavidades || 2}, (_, i) => i + 1).map(cav => (
