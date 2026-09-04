@@ -311,14 +311,31 @@ window.APP_CONFIG = {
     if (state.session && state.session.token && payload.token === undefined) {
       payload.token = state.session.token;
     }
-    const res = await fetch(CFG.API_URL, {
-      method: 'POST',
-      // Content-Type text/plain evita el preflight CORS con Apps Script
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload)
-    });
-    if (!res.ok) throw new Error('Error HTTP ' + res.status);
-    const data = await res.json();
+    // Un fallo de transporte no es lo mismo que un rechazo del script: "Google
+    // no contesto" se reintenta, "tu sesion no vale" obliga a loguearse otra
+    // vez. Mezclarlos hacia que un arranque en frio que vencia borrara la
+    // sesion guardada y pidiera la clave sin motivo.
+    let res;
+    try {
+      res = await fetch(CFG.API_URL, {
+        method: 'POST',
+        // Content-Type text/plain evita el preflight CORS con Apps Script
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+    } catch (e) {
+      throw Object.assign(new Error('no se pudo contactar al servidor'), { transporte: true });
+    }
+    if (!res.ok) {
+      throw Object.assign(new Error('el servidor respondió ' + res.status), { transporte: true });
+    }
+    let data;
+    try { data = await res.json(); }
+    catch (e) {
+      // Apps Script devuelve una pagina de error HTML cuando la ejecucion no
+      // llego a arrancar; parsearla como JSON explota sin decir nada util.
+      throw Object.assign(new Error('el servidor no devolvió datos'), { transporte: true });
+    }
     if (!data.ok) throw new Error(data.error || 'Error del servidor');
     return data;
   }
@@ -456,6 +473,71 @@ window.APP_CONFIG = {
       const r = await api('getCatalog');
       state.catalog = r.defectos;
     } catch(e) { toast('No se pudo cargar catálogo de defectos: ' + e.message, 'err'); }
+  }
+
+  /**
+   * Arranque cuando ya hay sesion guardada. Antes era un api('verify') suelto:
+   * hasta que Google contestaba la pagina quedaba en blanco -topbar oculto,
+   * #app vacio y sin spinner-, sin manera de saber si estaba cargando o rota.
+   * Con Apps Script frio esa espera llega al medio minuto.
+   *
+   * Los dos pedidos van en paralelo: en serie el arranque costaba dos viajes.
+   */
+  async function arrancarConSesion() {
+    renderVerificando();
+    try {
+      const [, cat] = await Promise.all([
+        api('verify'),
+        // Si el catalogo falla no se cae el arranque: las pantallas que lo
+        // necesitan ya lo vuelven a pedir por su cuenta.
+        api('getCatalog').catch(() => null),
+      ]);
+      if (cat) state.catalog = cat.defectos;
+      nav('home');
+    } catch (e) {
+      if (e && e.transporte) renderSinConexion(e.message);
+      else { clearSession(); renderLogin(); }
+    }
+  }
+
+  function renderVerificando() {
+    topbar.classList.add('hidden');
+    drawer.classList.add('hidden');
+    app.innerHTML = `
+      <div class="login-wrap">
+        <div class="logo">
+          <div class="dot">V</div>
+          <h1>Vessena LCC Fabuloso</h1>
+        </div>
+        <div class="card" style="text-align:center">
+          <div class="spin" style="margin:8px auto 14px"></div>
+          <div>Verificando tu sesión…</div>
+          <div class="muted small mt8">La primera carga del día puede demorar hasta medio minuto.</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderSinConexion(motivo) {
+    topbar.classList.add('hidden');
+    drawer.classList.add('hidden');
+    app.innerHTML = `
+      <div class="login-wrap">
+        <div class="logo">
+          <div class="dot">V</div>
+          <h1>Vessena LCC Fabuloso</h1>
+        </div>
+        <div class="card">
+          <div class="chip danger">No se pudo contactar al servidor</div>
+          <div class="muted small mt8">${esc(motivo || '')}</div>
+          <div class="mt12">
+            <button class="primary" id="bt_reintentar" style="width:100%">Reintentar</button>
+          </div>
+          <div class="muted small mt8">Tu sesión sigue guardada: no hace falta escribir la clave de nuevo.</div>
+        </div>
+      </div>
+    `;
+    document.getElementById('bt_reintentar').addEventListener('click', arrancarConSesion);
   }
 
   async function doLogout() {
@@ -2052,8 +2134,7 @@ window.APP_CONFIG = {
 
   loadSession();
   if (state.session) {
-    // Verificamos token; si falla, volvemos al login
-    api('verify').then(async r => { await loadCatalog(); nav('home'); }).catch(() => { clearSession(); renderLogin(); });
+    arrancarConSesion();
   } else {
     renderLogin();
   }
