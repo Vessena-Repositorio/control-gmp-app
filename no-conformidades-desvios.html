@@ -1,0 +1,1317 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vessena S.A. — NC / CAPA & Desvíos Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Inter',-apple-system,system-ui,sans-serif;background:#F5F6F8;color:#1B1E25;font-size:14px;min-height:100vh}input,select,textarea,button{font-family:inherit}::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-thumb{background:#ccc;border-radius:3px}
+.ctx-help{background:#EFF6FF;border:1px solid #1E40AF20;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12.5px;color:#1E40AF;display:flex;align-items:flex-start;gap:8px;line-height:1.5}.ctx-help .ctx-icon{font-size:16px;flex-shrink:0}.ctx-help.warn{background:#FFFBEB;border-color:#D9770620;color:#92400E}.ctx-help.success{background:#F0FDF4;border-color:#16A34A20;color:#166534}
+.login-bg{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1B1E25,#2D3748)}.login-card{background:#fff;border-radius:16px;width:100%;max-width:400px;padding:40px;box-shadow:0 24px 80px rgba(0,0,0,.3)}
+.cfg-section{background:#fff;border:1px solid #E1E4EA;border-radius:10px;padding:18px;margin-bottom:16px}.cfg-section h3{font-size:14px;font-weight:700;margin:0 0 4px;display:flex;align-items:center;gap:8px}
+.cfg-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid #EEF0F3;border-radius:7px;margin-bottom:6px;background:#fff}.cfg-item:hover{border-color:#1E40AF30}
+.ish-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.ish-cell{border:1px solid #E1E4EA;border-radius:8px;padding:12px;background:#FAFBFC}.ish-cell h4{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin:0 0 6px;display:flex;align-items:center;gap:6px}
+.risk-matrix{border-collapse:collapse;margin:10px auto;font-size:11px;font-weight:600}.risk-matrix td,.risk-matrix th{border:1px solid #ccc;padding:8px 14px;text-align:center}.risk-matrix .r-crit{background:#FEE2E2;color:#991B1B}.risk-matrix .r-may{background:#FFEDD5;color:#9A3412}.risk-matrix .r-men{background:#DBEAFE;color:#1E40AF}
+.step-bar{display:flex;gap:0;margin-bottom:18px;position:relative}.step-item{flex:1;text-align:center;padding:10px 4px 8px;font-size:11px;font-weight:600;cursor:pointer;position:relative;transition:all .15s;border-bottom:3px solid transparent;user-select:none}.step-item:hover{opacity:.85}.step-item .step-icon{font-size:16px;display:block;margin-bottom:2px}.step-item .step-label{display:block;line-height:1.2}.step-item.done{border-bottom-color:var(--sc)}.step-item.active{border-bottom-color:var(--sc);background:var(--sbg);border-radius:8px 8px 0 0}.step-item.future{opacity:.45}
+.step-connector{position:absolute;top:16px;left:50%;width:100%;height:2px;z-index:0}
+.nav-footer{display:flex;justify-content:space-between;align-items:center;padding:16px 0 0;border-top:1px solid #EEF0F3;margin-top:16px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const{useState,useEffect,useCallback,useRef}=React;
+
+/* ═══════════════════════════════════════════════
+   CONSTANTS & UTILITIES
+   ═══════════════════════════════════════════════ */
+const NC_PHASES=[
+  {id:"abierta",label:"Apertura",color:"#DC2626",bg:"#FEF2F2",icon:"🔴",desc:"NC detectada y registrada"},
+  {id:"analisis",label:"Análisis 5M",color:"#D97706",bg:"#FFFBEB",icon:"🔍",desc:"Investigación causa raíz en curso"},
+  {id:"clasificada",label:"Clasificación",color:"#6366F1",bg:"#EEF2FF",icon:"⚖️",desc:"Criticidad determinada"},
+  {id:"capa",label:"Conclusiones",color:"#0891B2",bg:"#ECFEFF",icon:"📋",desc:"Conclusiones y tipo de acción"},
+  {id:"implementacion",label:"CAPA",color:"#2563EB",bg:"#EFF6FF",icon:"🔧",desc:"Acciones correctivas/preventivas"},
+  {id:"verificacion",label:"Verificación",color:"#7C3AED",bg:"#F5F3FF",icon:"✔️",desc:"Evaluación de eficacia"},
+  {id:"cerrada",label:"Cierre",color:"#16A34A",bg:"#F0FDF4",icon:"✅",desc:"Eficacia confirmada — NC cerrada"},
+];
+const DEV_PHASES=[
+  {id:"abierto",label:"Datos",color:"#DC2626",bg:"#FEF2F2",icon:"📝",desc:"Desvío registrado"},
+  {id:"evaluacion",label:"Impacto",color:"#D97706",bg:"#FFFBEB",icon:"📊",desc:"Análisis de impacto"},
+  {id:"decision",label:"Riesgo / Decisión",color:"#6366F1",bg:"#EEF2FF",icon:"⚖️",desc:"Clasificación y decisión"},
+  {id:"implementacion",label:"Implementación",color:"#0891B2",bg:"#ECFEFF",icon:"🔧",desc:"Acciones del desvío en curso"},
+  {id:"cerrado",label:"Cierre",color:"#16A34A",bg:"#F0FDF4",icon:"✅",desc:"Desvío cerrado y verificado"},
+];
+const CLASSIFICATIONS=[
+  {id:"CRITICA",label:"Crítica",color:"#DC2626",desc:"Riesgo inmediato/latente para la salud. Acción correctiva e investigación inmediata.",deadline:0,deadlineLabel:"Inmediato"},
+  {id:"MAYOR",label:"Mayor",color:"#B45309",desc:"Puede comprometer actividad comercial. Impacto a clientes poco probable.",deadline:3,deadlineLabel:"3 meses"},
+  {id:"MENOR",label:"Menor",color:"#1E40AF",desc:"Sin impacto en atributos de calidad. No pone en riesgo actividad comercial.",deadline:6,deadlineLabel:"6 meses"},
+];
+const SEVERITIES=["Baja","Moderada","Alta"];
+const PROBABILITIES=["Baja","Moderada","Alta"];
+const RISK_MATRIX={
+  "Alta-Alta":"CRITICA","Alta-Moderada":"MAYOR","Alta-Baja":"MENOR",
+  "Moderada-Alta":"MAYOR","Moderada-Moderada":"MAYOR","Moderada-Baja":"MENOR",
+  "Baja-Alta":"CRITICA","Baja-Moderada":"MENOR","Baja-Baja":"MENOR",
+};
+const DETECTION_SOURCES=["Auditorías","Control Interno","Reclamo clientes","Validaciones y calificaciones","Desvíos de procesos","Revisión por la dirección","Evaluación de tendencias","Evaluación de proveedores","Otros"];
+const ISHIKAWA_CATS=[
+  {id:"metodo",label:"Método",icon:"📄",questions:["¿Existe procedimiento?","¿El procedimiento detalla claramente la tarea?","¿El procedimiento contempla todas las etapas?","¿Los procedimientos vinculados se mantuvieron?","¿Existen formularios de apoyo?"]},
+  {id:"mano_obra",label:"Mano de Obra",icon:"👤",questions:["¿El personal está capacitado?","¿Puede cumplir la tarea sin dificultad?","¿La cantidad de personas es adecuada?","¿Procedió como habitualmente?","¿Se mantuvo el personal durante la tarea?"]},
+  {id:"materiales",label:"Materiales",icon:"📦",questions:["¿Los materiales fueron los adecuados?","¿Estaban aprobados por CC?","¿Cumplían especificación?","¿El proveedor es el habitual?","¿El material es adecuado para la tarea?"]},
+  {id:"maquinas",label:"Máquinas",icon:"⚙️",questions:["¿Los equipos fueron los adecuados?","¿Se encuentran calibrados?","¿Se les realiza mantenimiento preventivo?","¿Fue manipulado por personal entrenado?"]},
+  {id:"medio_ambiente",label:"Medio Ambiente",icon:"🏭",questions:["¿La tarea se realizó en el lugar indicado?","¿El área se encuentra calificada?","¿La limpieza fue correcta?","¿Las condiciones ambientales fueron adecuadas?","¿El lugar es adecuado para la tarea?"]},
+];
+const IMPACT_AREAS=["Producto(s)","Suspensión equipo/sistema","Nivel de riesgo","Aspectos regulatorios","Dirección Técnica","Aseguramiento de Calidad","Control de Calidad","Producción","I+D","Ingeniería y Mantenimiento","TI","Compras","Depósito y distribución","Marketing y Ventas","Documentos","Personal","Estado calificación/validación","21CFR11","Otros aspectos GMP","Necesidades de capacitación"];
+const SECTORS=["Seguimiento Depósito y Distribución","Seguimiento LCC","Gestión Productiva (Fabricación)","Seguimiento Gestión Productiva (Envasado)","Gestión Productiva (Plásticos)","Gestión de Higiene y Sanitización","Seguimiento Depósito de Materias Primas","Depósito PT","Hipoclorito","Control de Calidad","Aseguramiento de Calidad","Dirección Técnica","Compras","Servicios/Agua/Tanques"];
+const CAPA_TYPES=["Acción Correctiva","Acción Preventiva","Corrección"];
+const STATUSES=["Abierto","En proceso","Cerrado","Vencido"];
+const NAV=[
+  {k:"nc",l:"No Conformidades",i:"⚠️"},
+  {k:"dev",l:"Desvíos",i:"↩️"},
+  {k:"capa",l:"CAPA / Acciones",i:"📋"},
+  {k:"trail",l:"Audit Trail",i:"📜"},
+  {k:"rep",l:"Reportes",i:"📈"},
+  {k:"guide",l:"Guía de Uso",i:"❓"},
+];
+
+const K={bg:"#F5F6F8",srf:"#FFF",brd:"#E1E4EA",brdL:"#EEF0F3",txt:"#1B1E25",txS:"#5A6170",txM:"#8B92A0",pri:"#1E40AF",priL:"#EFF6FF",red:"#DC2626",redL:"#FEF2F2",grn:"#16A34A",grnL:"#F0FDF4",wrn:"#D97706",wrnL:"#FFFBEB",vio:"#6D28D9",vioL:"#F5F3FF",ves:"#C41E2A"};
+const sB=(v="pri")=>{const b={padding:"7px 15px",borderRadius:6,border:"none",cursor:"pointer",fontSize:12.5,fontWeight:600,display:"inline-flex",alignItems:"center",gap:5,transition:"all .15s",fontFamily:"inherit"};if(v==="pri")return{...b,background:K.pri,color:"#fff"};if(v==="red")return{...b,background:K.red,color:"#fff"};if(v==="grn")return{...b,background:K.grn,color:"#fff"};if(v==="g")return{...b,background:"transparent",color:K.txS,border:`1px solid ${K.brd}`};if(v==="sm")return{...b,padding:"4px 10px",fontSize:11.5,background:"transparent",color:K.txS,border:`1px solid ${K.brd}`};return b;};
+const sI={width:"100%",padding:"8px 11px",border:`1px solid ${K.brd}`,borderRadius:6,fontSize:13,fontFamily:"inherit",color:K.txt,background:K.srf,boxSizing:"border-box",outline:"none"};
+const sS={...sI,cursor:"pointer"};const sL={fontSize:11,fontWeight:700,color:K.txS,marginBottom:3,display:"block",textTransform:"uppercase",letterSpacing:".04em"};
+const sC={background:K.srf,border:`1px solid ${K.brd}`,borderRadius:9,padding:18,marginBottom:14};
+const sTh={textAlign:"left",padding:"9px 10px",borderBottom:`2px solid ${K.brd}`,color:K.txS,fontWeight:700,fontSize:10.5,textTransform:"uppercase",letterSpacing:".05em"};
+const sTd={padding:"10px",borderBottom:`1px solid ${K.brdL}`,verticalAlign:"top",fontSize:13};
+
+const LS={get(k){try{return JSON.parse(localStorage.getItem(k));}catch{return null;}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{}}};
+function useLS(k,i){const[v,sV]=useState(()=>LS.get(k)??i);const s=useCallback(fn=>{sV(p=>{const n=typeof fn==="function"?fn(p):fn;LS.set(k,n);return n;});},[k]);return[v,s];}
+const gid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const fd=d=>d?new Date(d).toLocaleDateString("es-UY",{day:"2-digit",month:"short",year:"numeric"}):"—";
+const fdt=d=>d?new Date(d).toLocaleString("es-UY",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}):"—";
+const tdy=()=>new Date().toISOString().split("T")[0];
+const addMo=(d,m)=>{const dt=new Date(d);dt.setMonth(dt.getMonth()+m);return dt.toISOString().split("T")[0];};
+function alog(sL,action,entity,detail,user="Sistema"){sL(p=>[{id:gid(),ts:new Date().toISOString(),user,action,entity,detail},...p]);}
+const daysLeft=(d)=>{if(!d)return 999;return Math.ceil((new Date(d)-new Date())/86400000);};
+
+const ROLES={admin:{label:"Administrador",color:"#DC2626",bg:"#FEF2F2",icon:"🔑",canEdit:true,canAdmin:true},user:{label:"Usuario",color:"#1E40AF",bg:"#EFF6FF",icon:"👤",canEdit:true,canAdmin:false},viewer:{label:"Visualización",color:"#059669",bg:"#F0FDF4",icon:"👁",canEdit:false,canAdmin:false}};
+/* Usuario provisorio, solo para poder abrir la app mientras se edita.
+   El acceso real pasa a ser el del portal (/api/auth/yo), igual que en
+   estabilidad y control-calidad-envases, y este bloque desaparece entonces.
+   No se ponen credenciales reales acá: el archivo va a un repositorio. */
+const DEFAULT_USERS=[
+  {id:"adm",username:"admin",password:"provisorio",role:"admin",name:"Administrador",active:true},
+];
+
+/* ═══ SHARED COMPONENTS ═══ */
+function Bg({children,color,bg}){return <span style={{display:"inline-block",padding:"2px 9px",borderRadius:16,fontSize:11,fontWeight:600,color,background:bg,whiteSpace:"nowrap"}}>{children}</span>;}
+function ClsBg({cls}){const c=CLASSIFICATIONS.find(x=>x.id===cls);return c?<Bg color={c.color} bg={c.color+"15"}>{c.label}</Bg>:<Bg color={K.txM} bg="#F1F5F9">Sin clasificar</Bg>;}
+function SBg({s}){const m={Abierto:[K.red,K.redL],"En proceso":[K.wrn,K.wrnL],Cerrado:[K.grn,K.grnL],Vencido:["#991B1B","#FEE2E2"]};const[c,b]=m[s]||[K.txM,"#F1F5F9"];return <Bg color={c} bg={b}>{s}</Bg>;}
+function PhaseBg({phase,phases}){const p=(phases||NC_PHASES).find(x=>x.id===phase)||(phases||NC_PHASES)[0];return <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:6,fontSize:11,fontWeight:600,color:p.color,background:p.bg}}>{p.icon} {p.label}</span>;}
+function Fd({l,children}){return <div style={{marginBottom:12}}><label style={sL}>{l}</label>{children}</div>;}
+function Em({icon,t}){return <div style={{textAlign:"center",padding:"36px 20px",color:K.txM}}><div style={{fontSize:28,marginBottom:6}}>{icon}</div><div style={{fontSize:13}}>{t}</div></div>;}
+function Md({title,onClose,children,wide}){return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",zIndex:100,display:"flex",justifyContent:"center",alignItems:"flex-start",paddingTop:30,overflowY:"auto"}} onClick={onClose}><div style={{background:"#fff",borderRadius:12,width:"100%",maxWidth:wide?960:640,padding:24,boxShadow:"0 20px 60px rgba(0,0,0,.15)",margin:"0 16px 40px"}} onClick={e=>e.stopPropagation()}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><h2 style={{fontSize:16,fontWeight:800,margin:0}}>{title}</h2><button onClick={onClose} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:K.txM}}>✕</button></div>{children}</div></div>);}
+function G2({children}){return <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>{children}</div>;}
+function CtxHelp({children,type="info"}){return <div className={`ctx-help ${type==="warn"?"warn":type==="success"?"success":""}`}><span className="ctx-icon">{type==="warn"?"⚠️":type==="success"?"✅":"💡"}</span><div>{children}</div></div>;}
+function VBanner(){return <CtxHelp type="warn"><strong>Modo visualización.</strong> Solo lectura.</CtxHelp>;}
+
+/* ═══ EXPORT FUNCTIONS ═══ */
+function exportNC(nc,capas){
+  const cls=CLASSIFICATIONS.find(c=>c.id===nc.classification);
+  const phase=NC_PHASES.find(p=>p.id===nc.phase);
+  const ncCapas=capas.filter(c=>c.ncId===nc.id);
+  const ish=nc.ishikawa||{};
+  const ishHTML=ISHIKAWA_CATS.map(cat=>{
+    const qs=cat.questions.map((q,i)=>`<tr><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${q}</td><td style="padding:4px 8px;border:1px solid #ddd;text-align:center;font-size:11px;font-weight:600">${(ish[cat.id]||{})[i]||"—"}</td></tr>`).join("");
+    return `<div style="margin-bottom:10px"><div style="font-weight:700;font-size:11px;margin-bottom:3px">${cat.icon} ${cat.label}</div><table style="width:100%;border-collapse:collapse">${qs}</table></div>`;
+  }).join("");
+  const capaRows=ncCapas.map(c=>`<tr><td style="padding:6px 8px;border:1px solid #ddd;font-size:11px">${c.type==="Acción Correctiva"?"Correctiva":c.type==="Acción Preventiva"?"Preventiva":"Corrección"}</td><td style="padding:6px 8px;border:1px solid #ddd;font-size:11px">${c.description}</td><td style="padding:6px 8px;border:1px solid #ddd;font-size:11px;white-space:nowrap">${fd(c.dueDate)}</td><td style="padding:6px 8px;border:1px solid #ddd;font-size:11px">${c.responsible}</td><td style="padding:6px 8px;border:1px solid #ddd;font-size:11px;text-align:center">${c.status==="Cerrado"?"Sí":"No"}</td></tr>`).join("");
+  const w=window.open("","_blank","width=900,height=700");
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${nc.code} — REG-SOP-AC-036-A</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Inter',system-ui,sans-serif;color:#1B1E25;font-size:13px;padding:30px 40px}@media print{@page{size:A4;margin:15mm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}h1{font-size:16px;margin:0}h2{font-size:13px;font-weight:700;background:#1B1E25;color:#fff;padding:8px 12px;margin:18px 0 10px;border-radius:4px}table{width:100%;border-collapse:collapse}th{background:#f1f5f9;padding:6px 8px;border:1px solid #ddd;font-size:10px;text-transform:uppercase;text-align:left}.row{display:flex;gap:16px;margin-bottom:8px}.row>div{flex:1}.lbl{font-size:10px;font-weight:700;color:#5A6170;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px}.val{font-size:12.5px;padding:6px 10px;background:#f8fafc;border:1px solid #e1e4ea;border-radius:5px;min-height:28px}.hdr{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #1B1E25;padding-bottom:10px;margin-bottom:16px}.badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700}.sect{margin-bottom:6px}</style></head><body>
+  <div class="hdr"><div><h1>${nc.code} REG-SOP-AC-036-A</h1><div style="font-size:11px;color:#5A6170;margin-top:3px">Vessena S.A. — Registro de No Conformidad</div></div><div style="text-align:right"><span class="badge" style="color:${phase?.color||"#666"};background:${phase?.bg||"#f1f5f9"}">${phase?.label||nc.phase}</span> <span class="badge" style="color:${cls?.color||"#666"};background:${cls?.color||"#666"}15">${cls?.label||"Sin clasificar"}</span></div></div>
+  <h2>01 APERTURA DE LA NO CONFORMIDAD</h2>
+  <div class="row"><div><div class="lbl">Fecha incidente</div><div class="val">${fd(nc.incidentDate)}</div></div><div><div class="lbl">Fecha apertura</div><div class="val">${fd(nc.openDate)}</div></div><div><div class="lbl">Abierto por</div><div class="val">${nc.openedBy||"—"}</div></div><div><div class="lbl">Sector</div><div class="val">${nc.sector||"—"}</div></div></div>
+  <div class="row"><div><div class="lbl">Fuente de detección</div><div class="val">${nc.source||"—"}</div></div><div><div class="lbl">Producto / Documento</div><div class="val">${nc.associatedItem||"—"}</div></div><div><div class="lbl">Lote</div><div class="val">${nc.lot||"—"}</div></div></div>
+  <div class="sect"><div class="lbl">Detalle del incidente</div><div class="val" style="white-space:pre-wrap">${nc.description||"—"}</div></div>
+  <h2>02 ANÁLISIS DE CAUSA RAÍZ</h2>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${ishHTML}</div>
+  <div class="sect"><div class="lbl">Descripción de hallazgos</div><div class="val" style="white-space:pre-wrap">${nc.analysisNotes||"—"}</div></div>
+  <div class="row"><div><div class="lbl">Fecha análisis</div><div class="val">${fd(nc.analysisDate)}</div></div><div><div class="lbl">Analizado por</div><div class="val">${nc.analyzedBy||"—"}</div></div></div>
+  <div class="sect"><div class="lbl">Causa raíz determinada</div><div class="val" style="white-space:pre-wrap">${nc.rootCause||"—"}</div></div>
+  <h2>03 CRITICIDAD Y DECISIÓN</h2>
+  <div class="row"><div><div class="lbl">Severidad</div><div class="val">${nc.severity||"—"}</div></div><div><div class="lbl">Probabilidad</div><div class="val">${nc.probability||"—"}</div></div><div><div class="lbl">Clasificación</div><div class="val" style="font-weight:700;color:${cls?.color||"#666"}">${cls?.label||"—"}</div></div></div>
+  <div class="row"><div><div class="lbl">Impacta otros</div><div class="val">${nc.impactsOthers||"—"}</div></div><div><div class="lbl">Tipo acción</div><div class="val">${nc.capaType||"—"}</div></div></div>
+  ${nc.impactDetail?`<div class="sect"><div class="lbl">Detalle impacto</div><div class="val" style="white-space:pre-wrap">${nc.impactDetail}</div></div>`:""}
+  <h2>04 ACCIONES (CAPA)</h2>
+  ${ncCapas.length===0?"<p style='color:#8B92A0;font-size:12px'>Sin acciones registradas.</p>":`<table><thead><tr><th>Tipo</th><th>Descripción</th><th>Plazo</th><th>Responsable</th><th>Cumplida</th></tr></thead><tbody>${capaRows}</tbody></table>`}
+  <h2>05 VERIFICACIÓN DE EFECTIVIDAD Y CIERRE</h2>
+  <div class="row"><div><div class="lbl">¿Eliminaron causa raíz?</div><div class="val">${nc.rootCauseEliminated||"—"}</div></div><div><div class="lbl">¿Cubrieron todos los procesos?</div><div class="val">${nc.coverageComplete||"—"}</div></div></div>
+  <div class="row"><div><div class="lbl">¿Afectaron negativamente?</div><div class="val">${nc.negativeImpact||"—"}</div></div><div><div class="lbl">¿En tiempo y forma?</div><div class="val">${nc.onTime||"—"}</div></div></div>
+  <div class="sect"><div class="lbl">Verificación de eficacia</div><div class="val" style="white-space:pre-wrap">${nc.effectivenessNotes||"—"}</div></div>
+  <div class="row"><div><div class="lbl">Fecha cierre</div><div class="val">${fd(nc.closeDate)}</div></div><div><div class="lbl">Cerrado por</div><div class="val">${nc.closedBy||"—"}</div></div></div>
+  ${nc.closeNotes?`<div class="sect"><div class="lbl">Detalle cierre</div><div class="val" style="white-space:pre-wrap">${nc.closeNotes}</div></div>`:""}
+  <div style="margin-top:20px;padding-top:10px;border-top:1px solid #ddd;font-size:10px;color:#8B92A0">REG-SOP-AC-036-A | ${nc.code} | Vessena S.A. | Generado: ${fdt(new Date().toISOString())}</div>
+  </body></html>`);
+  w.document.close();setTimeout(()=>w.print(),400);
+}
+
+function exportDev(dev){
+  const phase=DEV_PHASES.find(p=>p.id===dev.phase);
+  const impacts=dev.impacts||{};
+  const impRows=IMPACT_AREAS.map(a=>{const d=impacts[a]||{};return `<tr><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${a}</td><td style="padding:4px 8px;border:1px solid #ddd;text-align:center;font-size:11px">${d.applies===true?"Sí":d.applies===false?"No":"—"}</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${d.detail||""}</td></tr>`;}).join("");
+  const w=window.open("","_blank","width=900,height=700");
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${dev.code} — REG-SOP-AC-036-B</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Inter',system-ui,sans-serif;color:#1B1E25;font-size:13px;padding:30px 40px}@media print{@page{size:A4;margin:15mm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}h1{font-size:16px;margin:0}h2{font-size:13px;font-weight:700;background:#1B1E25;color:#fff;padding:8px 12px;margin:18px 0 10px;border-radius:4px}table{width:100%;border-collapse:collapse}th{background:#f1f5f9;padding:6px 8px;border:1px solid #ddd;font-size:10px;text-transform:uppercase;text-align:left}.row{display:flex;gap:16px;margin-bottom:8px}.row>div{flex:1}.lbl{font-size:10px;font-weight:700;color:#5A6170;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px}.val{font-size:12.5px;padding:6px 10px;background:#f8fafc;border:1px solid #e1e4ea;border-radius:5px;min-height:28px}.hdr{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #1B1E25;padding-bottom:10px;margin-bottom:16px}.badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700}.sect{margin-bottom:6px}</style></head><body>
+  <div class="hdr"><div><h1>${dev.code} REG-SOP-AC-036-B</h1><div style="font-size:11px;color:#5A6170;margin-top:3px">Vessena S.A. — Nota de Desvío</div></div><div style="text-align:right"><span class="badge" style="color:${phase?.color||"#666"};background:${phase?.bg||"#f1f5f9"}">${phase?.label||dev.phase}</span> <span class="badge" style="color:${dev.critical?"#DC2626":"#1E40AF"};background:${dev.critical?"#FEF2F2":"#EFF6FF"}">${dev.critical?"Crítico":"No Crítico"}</span></div></div>
+  <h2>01 DATOS DEL DESVÍO</h2>
+  <div class="row"><div><div class="lbl">Abierto por</div><div class="val">${dev.openedBy||"—"}</div></div><div><div class="lbl">Sector</div><div class="val">${dev.sector||"—"}</div></div><div><div class="lbl">Fecha</div><div class="val">${fd(dev.date)}</div></div></div>
+  <div class="row"><div><div class="lbl">Producto / Documento</div><div class="val">${dev.associatedItem||"—"}</div></div><div><div class="lbl">Lote</div><div class="val">${dev.lot||"—"}</div></div></div>
+  <div class="sect"><div class="lbl">Descripción del desvío</div><div class="val" style="white-space:pre-wrap">${dev.description||"—"}</div></div>
+  <div class="sect"><div class="lbl">Justificación</div><div class="val" style="white-space:pre-wrap">${dev.justification||"—"}</div></div>
+  <h2>02 ANÁLISIS DE IMPACTO</h2>
+  <table><thead><tr><th>Área</th><th style="width:50px">Aplica</th><th>Detalle</th></tr></thead><tbody>${impRows}</tbody></table>
+  ${dev.impactNotes?`<div class="sect" style="margin-top:8px"><div class="lbl">Observaciones</div><div class="val" style="white-space:pre-wrap">${dev.impactNotes}</div></div>`:""}
+  <h2>03 RIESGO Y DECISIÓN</h2>
+  <div class="row"><div><div class="lbl">Riesgo controlado</div><div class="val">${dev.riskControlled||"—"}</div></div><div><div class="lbl">Criticidad</div><div class="val" style="font-weight:700;color:${dev.critical?"#DC2626":"#1E40AF"}">${dev.critical?"Crítico":"No Crítico"}</div></div><div><div class="lbl">Planificación</div><div class="val">${dev.planned||"—"}</div></div></div>
+  <div class="row"><div><div class="lbl">Prioridad</div><div class="val">${dev.priority||"—"}</div></div><div><div class="lbl">Decisión</div><div class="val" style="font-weight:700;color:${dev.decision==="Aprobar"?"#16A34A":"#DC2626"}">${dev.decision||"Pendiente"}</div></div></div>
+  ${dev.riskNotes?`<div class="sect"><div class="lbl">Notas de riesgo</div><div class="val" style="white-space:pre-wrap">${dev.riskNotes}</div></div>`:""}
+  ${dev.verifiers?`<div class="sect"><div class="lbl">Verificadores</div><div class="val" style="white-space:pre-wrap">${dev.verifiers}</div></div>`:""}
+  <h2>04 IMPLEMENTACIÓN</h2>
+  <div class="sect"><div class="lbl">Acciones realizadas</div><div class="val" style="white-space:pre-wrap">${dev.implementationActions||"—"}</div></div>
+  ${dev.notifications?`<div class="sect"><div class="lbl">Notificaciones regulatorias</div><div class="val" style="white-space:pre-wrap">${dev.notifications}</div></div>`:""}
+  <h2>05 CIERRE</h2>
+  <div class="row"><div><div class="lbl">Documentación completa</div><div class="val">${dev.docComplete||"—"}</div></div><div><div class="lbl">Aprobado por</div><div class="val">${dev.approvedBy||"—"}</div></div><div><div class="lbl">Fecha cierre</div><div class="val">${fd(dev.closeDate)}</div></div></div>
+  ${dev.closeNotes?`<div class="sect"><div class="lbl">Notas de cierre</div><div class="val" style="white-space:pre-wrap">${dev.closeNotes}</div></div>`:""}
+  <div style="margin-top:20px;padding-top:10px;border-top:1px solid #ddd;font-size:10px;color:#8B92A0">REG-SOP-AC-036-B | ${dev.code} | Vessena S.A. | Generado: ${fdt(new Date().toISOString())}</div>
+  </body></html>`);
+  w.document.close();setTimeout(()=>w.print(),400);
+}
+
+/* ═══ UNIFIED STEP BAR ═══ */
+function StepBar({phases,currentPhase,viewStep,onClickStep,canEdit}){
+  const phIdx=phases.findIndex(p=>p.id===currentPhase);
+  return(<div className="step-bar" style={{borderBottom:`1px solid ${K.brdL}`,marginBottom:18}}>
+    {phases.map((p,i)=>{
+      const isDone=i<phIdx;const isActive=i===viewStep;const isFuture=i>phIdx;
+      return <div key={p.id}
+        className={`step-item ${isDone?"done":""} ${isActive?"active":""} ${isFuture?"future":""}`}
+        style={{"--sc":p.color,"--sbg":p.bg,color:isActive?p.color:isDone?p.color:K.txM}}
+        onClick={()=>onClickStep(i)}
+        title={p.desc}>
+        <span className="step-icon">{isDone&&i!==viewStep?"✓":p.icon}</span>
+        <span className="step-label">{p.label}</span>
+      </div>;
+    })}
+  </div>);
+}
+
+/* ═══ LOGIN ═══ */
+function Login({users,onLogin}){const[u,sU]=useState("");const[p,sP]=useState("");const[e,sE]=useState("");const go=()=>{const f=users.find(x=>x.username.toLowerCase()===u.toLowerCase()&&x.password===p&&x.active);f?(sE(""),onLogin(f)):sE("Credenciales incorrectas");};
+  return(<div className="login-bg"><div className="login-card"><div style={{textAlign:"center",marginBottom:20}}><div style={{fontSize:10,fontWeight:800,color:K.ves,letterSpacing:".1em",textTransform:"uppercase"}}>Vessena S.A.</div><h1 style={{fontSize:22,fontWeight:800}}>NC / CAPA & Desvíos</h1><p style={{fontSize:12,color:K.txS,marginTop:4}}>SOP-AC-036 — Gestión de No Conformidades</p></div>
+    {e&&<div style={{background:K.redL,border:`1px solid ${K.red}30`,borderRadius:8,padding:"10px",marginBottom:14,fontSize:12.5,color:K.red,textAlign:"center"}}>{e}</div>}
+    <Fd l="Usuario"><input style={{...sI,padding:"11px 14px",fontSize:14,background:"#F8FAFC"}} value={u} onChange={e=>sU(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()}/></Fd>
+    <Fd l="Contraseña"><input type="password" style={{...sI,padding:"11px 14px",fontSize:14,background:"#F8FAFC"}} value={p} onChange={e=>sP(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()}/></Fd>
+    <button onClick={go} style={{width:"100%",padding:"12px",background:K.pri,color:"#fff",border:"none",borderRadius:8,fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginTop:8}}>Iniciar sesión</button>
+  </div></div>);
+}
+
+/* ══════════════════════════════════════════════════════
+   NO CONFORMIDADES — LIST
+   ══════════════════════════════════════════════════════ */
+function NCList({data,canEdit,openNC}){
+  const{ncs}=data;const[q,sQ]=useState("");const[fCls,sFCls]=useState("");const[fPh,sFPh]=useState("");
+  let ls=ncs;
+  if(q){const ql=q.toLowerCase();ls=ls.filter(n=>[n.code,n.description,n.sector,n.source,n.openedBy,n.lot,n.associatedItem,n.rootCause,n.analysisNotes].some(v=>v&&String(v).toLowerCase().includes(ql)));}
+  if(fCls)ls=ls.filter(n=>n.classification===fCls);
+  if(fPh)ls=ls.filter(n=>n.phase===fPh);
+  return(<div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+      <div><h1 style={{fontSize:20,fontWeight:800}}>No Conformidades · {data.yr}</h1><p style={{color:K.txS,margin:"4px 0 0",fontSize:12.5}}>REG-SOP-AC-036-A — {ncs.length} registros</p></div>
+      {canEdit&&<button style={sB("pri")} onClick={()=>openNC(null)}>+ Nueva NC</button>}
+    </div>
+    {!canEdit&&<VBanner/>}
+    <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+      <input style={{...sI,maxWidth:250}} placeholder="Buscar..." value={q} onChange={e=>sQ(e.target.value)}/>
+      <select style={{...sS,maxWidth:160}} value={fCls} onChange={e=>sFCls(e.target.value)}><option value="">Todas las clasif.</option>{CLASSIFICATIONS.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}</select>
+      <select style={{...sS,maxWidth:160}} value={fPh} onChange={e=>sFPh(e.target.value)}><option value="">Todas las fases</option>{NC_PHASES.map(p=><option key={p.id} value={p.id}>{p.label}</option>)}</select>
+    </div>
+    <div style={sC}>
+      {ls.length===0?<Em icon="⚠️" t="Sin no conformidades registradas"/>:
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5}}><thead><tr>
+        <th style={sTh}>Código</th><th style={sTh}>Fecha</th><th style={sTh}>Sector</th><th style={sTh}>Descripción</th><th style={sTh}>Clasif.</th><th style={sTh}>Fase</th><th style={sTh}>Fuente</th>
+      </tr></thead><tbody>{ls.map(n=><tr key={n.id} style={{cursor:"pointer"}} onClick={()=>openNC(n)}>
+        <td style={{...sTd,fontWeight:700,color:K.pri,fontFamily:"monospace"}}>{n.code}</td>
+        <td style={{...sTd,whiteSpace:"nowrap",fontSize:12}}>{fd(n.incidentDate)}</td>
+        <td style={{...sTd,fontSize:12}}>{n.sector}</td>
+        <td style={{...sTd,minWidth:220}}><div style={{fontSize:12.5,lineHeight:1.4}}>{n.description}</div></td>
+        <td style={sTd}><ClsBg cls={n.classification}/></td>
+        <td style={sTd}><PhaseBg phase={n.phase} phases={NC_PHASES}/></td>
+        <td style={{...sTd,fontSize:11.5}}>{n.source}</td>
+      </tr>)}</tbody></table>}
+    </div>
+  </div>);
+}
+
+/* ══════════════════════════════════════════════════════
+   NC DETAIL — UNIFIED WIZARD
+   ══════════════════════════════════════════════════════ */
+function NCDetail({nc,data,canEdit,onClose,onSave,onDelete}){
+  const{capas}=data;
+  const[fm,sFm]=useState({...nc});
+  const phIdx=NC_PHASES.findIndex(p=>p.id===fm.phase);
+  const[step,sStep]=useState(phIdx>=0?phIdx:0);
+  const u=(k,v)=>sFm(p=>({...p,[k]:v}));
+  const ncCapas=capas.filter(c=>c.ncId===nc.id);
+  const curPhase=NC_PHASES[step];
+
+  // Ishikawa
+  const[ish,sIsh]=useState(nc.ishikawa||{});
+  const uIsh=(cat,qi,val)=>{sIsh(p=>{const n={...p,[cat]:{...(p[cat]||{})}};n[cat][qi]=val;return n;});};
+  useEffect(()=>{u("ishikawa",ish);},[ish]);
+
+  // Risk matrix auto-calc — only on explicit user changes, not on mount
+  const mounted=useRef(false);
+  useEffect(()=>{if(!mounted.current){mounted.current=true;return;}
+    if(fm.severity&&fm.probability){const key=`${fm.severity}-${fm.probability}`;const cls=RISK_MATRIX[key];if(cls)u("classification",cls);}
+  },[fm.severity,fm.probability]);
+
+  const canAdvance=step<NC_PHASES.length-1;
+  const canGoBack=step>0;
+
+  const advancePhase=()=>{
+    if(!canEdit||!canAdvance)return;
+    const nextPhase=NC_PHASES[step+1].id;
+    sFm(p=>({...p,phase:nextPhase}));
+    sStep(step+1);
+  };
+  const goBack=()=>{if(canGoBack)sStep(step-1);};
+
+  return(<Md title={`${nc.code} — No Conformidad`} onClose={onClose} wide>
+    {/* ── Phase step description ── */}
+    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
+      <span style={{fontSize:22}}>{curPhase.icon}</span>
+      <div><div style={{fontSize:15,fontWeight:800,color:curPhase.color}}>{curPhase.label}</div><div style={{fontSize:11.5,color:K.txS}}>{curPhase.desc}</div></div>
+      <div style={{marginLeft:"auto"}}><ClsBg cls={fm.classification}/></div>
+    </div>
+
+    <StepBar phases={NC_PHASES} currentPhase={fm.phase} viewStep={step} onClickStep={sStep} canEdit={canEdit}/>
+
+    {/* ═══ STEP 0: APERTURA ═══ */}
+    {step===0&&<div>
+      <CtxHelp>SOP-AC-036 §5.2: Complete los datos de apertura. El supervisor del sector donde se detectó la NC completa este registro.</CtxHelp>
+      <div style={sC}>
+        <G2>
+          <Fd l="Fecha del incidente"><input type="date" style={sI} value={fm.incidentDate||""} onChange={e=>u("incidentDate",e.target.value)} disabled={!canEdit}/></Fd>
+          <Fd l="Fecha de apertura"><input type="date" style={sI} value={fm.openDate||""} onChange={e=>u("openDate",e.target.value)} disabled={!canEdit}/></Fd>
+          <Fd l="Abierto por"><input style={sI} value={fm.openedBy||""} onChange={e=>u("openedBy",e.target.value)} disabled={!canEdit}/></Fd>
+          <Fd l="Sector"><select style={sS} value={fm.sector||""} onChange={e=>u("sector",e.target.value)} disabled={!canEdit}><option value="">— Seleccionar —</option>{SECTORS.map(s=><option key={s}>{s}</option>)}</select></Fd>
+        </G2>
+        <Fd l="Detalle (cuándo se detecta y qué se detecta)"><textarea style={{...sI,minHeight:80,resize:"vertical"}} value={fm.description||""} onChange={e=>u("description",e.target.value)} disabled={!canEdit}/></Fd>
+        <Fd l="Fuente de detección"><select style={sS} value={fm.source||""} onChange={e=>u("source",e.target.value)} disabled={!canEdit}><option value="">— Seleccionar —</option>{DETECTION_SOURCES.map(s=><option key={s}>{s}</option>)}</select></Fd>
+        <G2>
+          <Fd l="Producto / Instrumento / Documento asociado"><input style={sI} value={fm.associatedItem||""} onChange={e=>u("associatedItem",e.target.value)} disabled={!canEdit}/></Fd>
+          <Fd l="Lote (si corresponde)"><input style={sI} value={fm.lot||""} onChange={e=>u("lot",e.target.value)} disabled={!canEdit}/></Fd>
+        </G2>
+      </div>
+    </div>}
+
+    {/* ═══ STEP 1: ANÁLISIS 5M ═══ */}
+    {step===1&&<div>
+      <CtxHelp>SOP-AC-036 §5.3: Análisis de causa raíz con diagrama de Ishikawa (5M). Responda SI/NO/N-A a cada pregunta.</CtxHelp>
+      <div className="ish-grid">
+        {ISHIKAWA_CATS.map(cat=><div key={cat.id} className="ish-cell">
+          <h4 style={{color:K.pri}}>{cat.icon} {cat.label}</h4>
+          {cat.questions.map((q,qi)=><div key={qi} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:`1px solid ${K.brdL}`,fontSize:11.5}}>
+            <span style={{flex:1,color:K.txS}}>{q}</span>
+            {["SI","NO","N/A"].map(opt=><button key={opt} style={{padding:"2px 6px",borderRadius:4,border:`1px solid ${(ish[cat.id]||{})[qi]===opt?K.pri:K.brd}`,background:(ish[cat.id]||{})[qi]===opt?K.priL:"#fff",color:(ish[cat.id]||{})[qi]===opt?K.pri:K.txM,fontSize:10,fontWeight:600,cursor:canEdit?"pointer":"default",fontFamily:"inherit"}} onClick={()=>canEdit&&uIsh(cat.id,qi,opt)} disabled={!canEdit}>{opt}</button>)}
+          </div>)}
+        </div>)}
+      </div>
+      <div style={{...sC,marginTop:14}}>
+        <Fd l="Descripción de hallazgos (respuestas NO)"><textarea style={{...sI,minHeight:70,resize:"vertical"}} value={fm.analysisNotes||""} onChange={e=>u("analysisNotes",e.target.value)} disabled={!canEdit}/></Fd>
+        <G2>
+          <Fd l="Fecha del análisis"><input type="date" style={sI} value={fm.analysisDate||""} onChange={e=>u("analysisDate",e.target.value)} disabled={!canEdit}/></Fd>
+          <Fd l="Analizado por"><input style={sI} value={fm.analyzedBy||""} onChange={e=>u("analyzedBy",e.target.value)} disabled={!canEdit}/></Fd>
+        </G2>
+        <Fd l="Causa raíz determinada"><textarea style={{...sI,minHeight:60,resize:"vertical"}} value={fm.rootCause||""} onChange={e=>u("rootCause",e.target.value)} disabled={!canEdit} placeholder="Ishikawa, 5 Porqués u otra herramienta..."/></Fd>
+      </div>
+    </div>}
+
+    {/* ═══ STEP 2: CLASIFICACIÓN ═══ */}
+    {step===2&&<div>
+      <CtxHelp>SOP-AC-036 §5.4: Determine la clasificación usando la matriz Severidad × Probabilidad.</CtxHelp>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:14}}>
+        <div style={sC}>
+          <h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px"}}>Severidad</h3>
+          {SEVERITIES.map(s=><label key={s} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"8px 10px",border:`1px solid ${fm.severity===s?K.pri+"40":K.brd}`,borderRadius:7,marginBottom:6,cursor:canEdit?"pointer":"default",background:fm.severity===s?K.priL:"#fff"}}>
+            <input type="radio" name="sev" checked={fm.severity===s} onChange={()=>canEdit&&u("severity",s)} disabled={!canEdit} style={{marginTop:2}}/>
+            <div><div style={{fontSize:12.5,fontWeight:600}}>{s}</div><div style={{fontSize:10.5,color:K.txS}}>{s==="Baja"?"No compromete salud ni actividad comercial":s==="Moderada"?"Sistema correcto pero no efectivo":"Pérdida de licencia, riesgo de salud"}</div></div>
+          </label>)}
+        </div>
+        <div style={sC}>
+          <h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px"}}>Probabilidad</h3>
+          {PROBABILITIES.map(p=><label key={p} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"8px 10px",border:`1px solid ${fm.probability===p?K.pri+"40":K.brd}`,borderRadius:7,marginBottom:6,cursor:canEdit?"pointer":"default",background:fm.probability===p?K.priL:"#fff"}}>
+            <input type="radio" name="prob" checked={fm.probability===p} onChange={()=>canEdit&&u("probability",p)} disabled={!canEdit} style={{marginTop:2}}/>
+            <div><div style={{fontSize:12.5,fontWeight:600}}>{p}</div><div style={{fontSize:10.5,color:K.txS}}>{p==="Baja"?"Improbable, evento aislado":p==="Moderada"?"Puede no detectarse sin acción":"Probable recurrencia"}</div></div>
+          </label>)}
+        </div>
+        <div style={sC}>
+          <h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px"}}>Matriz de riesgo</h3>
+          <table className="risk-matrix"><thead><tr><th></th><th>Baja</th><th>Mod.</th><th>Alta</th></tr></thead>
+          <tbody>
+            <tr><th>Alta</th><td className="r-may">Mayor</td><td className="r-may">Mayor</td><td className="r-crit">Crítica</td></tr>
+            <tr><th>Mod.</th><td className="r-men">Menor</td><td className="r-may">Mayor</td><td className="r-crit">Crítica</td></tr>
+            <tr><th>Baja</th><td className="r-men">Menor</td><td className="r-men">Menor</td><td className="r-crit">Crítica</td></tr>
+          </tbody></table>
+          <div style={{textAlign:"center",marginTop:10}}>
+            <div style={{fontSize:10,color:K.txS,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>Resultado</div>
+            <div style={{fontSize:18}}><ClsBg cls={fm.classification}/></div>
+            {fm.classification&&<div style={{fontSize:11,color:K.txS,marginTop:6}}>Plazo CAPA: <strong>{CLASSIFICATIONS.find(c=>c.id===fm.classification)?.deadlineLabel}</strong></div>}
+          </div>
+        </div>
+      </div>
+    </div>}
+
+    {/* ═══ STEP 3: CONCLUSIONES ═══ */}
+    {step===3&&<div style={sC}>
+      <Fd l="¿Impacta sobre otros productos/procesos?">
+        <div style={{display:"flex",gap:8}}>{["Sí","No"].map(opt=><button key={opt} style={{...sB(fm.impactsOthers===opt?"pri":"g"),fontSize:12}} onClick={()=>canEdit&&u("impactsOthers",opt)} disabled={!canEdit}>{opt}</button>)}</div>
+      </Fd>
+      {fm.impactsOthers==="Sí"&&<Fd l="Detalle del impacto"><textarea style={{...sI,minHeight:50,resize:"vertical"}} value={fm.impactDetail||""} onChange={e=>u("impactDetail",e.target.value)} disabled={!canEdit}/></Fd>}
+      <Fd l="Tipo de acción a iniciar"><select style={sS} value={fm.capaType||""} onChange={e=>u("capaType",e.target.value)} disabled={!canEdit}><option value="">— Seleccionar —</option>{CAPA_TYPES.map(t=><option key={t}>{t}</option>)}</select></Fd>
+      <Fd l="Conclusiones generales"><textarea style={{...sI,minHeight:60,resize:"vertical"}} value={fm.conclusions||""} onChange={e=>u("conclusions",e.target.value)} disabled={!canEdit}/></Fd>
+    </div>}
+
+    {/* ═══ STEP 4: CAPA ═══ */}
+    {step===4&&<div style={sC}>
+      <h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px",color:"#2563EB"}}>🔧 Acciones CAPA vinculadas ({ncCapas.length})</h3>
+      <CtxHelp>SOP-AC-036 §5.5: Las acciones se gestionan desde la sección CAPA/Acciones del menú lateral. Aquí se muestran las vinculadas a esta NC.</CtxHelp>
+      {ncCapas.length===0?<Em icon="📋" t="Sin acciones CAPA vinculadas. Creá acciones desde 'CAPA / Acciones' vinculándolas a esta NC."/>:
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5}}><thead><tr><th style={sTh}>Código</th><th style={sTh}>Tipo</th><th style={sTh}>Descripción</th><th style={sTh}>Responsable</th><th style={sTh}>Vence</th><th style={sTh}>Estado</th></tr></thead>
+      <tbody>{ncCapas.map(c=><tr key={c.id}><td style={{...sTd,fontFamily:"monospace",fontWeight:700,color:K.pri}}>{c.code}</td><td style={sTd}><Bg color={c.type==="Acción Correctiva"?K.red:c.type==="Acción Preventiva"?K.vio:"#0891B2"} bg={c.type==="Acción Correctiva"?K.redL:c.type==="Acción Preventiva"?K.vioL:"#ECFEFF"}>{c.type==="Acción Correctiva"?"AC":c.type==="Acción Preventiva"?"AP":"Corr."}</Bg></td><td style={sTd}>{c.description}</td><td style={sTd}>{c.responsible}</td><td style={{...sTd,whiteSpace:"nowrap"}}>{fd(c.dueDate)}</td><td style={sTd}><SBg s={c.status}/></td></tr>)}</tbody></table>}
+    </div>}
+
+    {/* ═══ STEP 5: VERIFICACIÓN ═══ */}
+    {step===5&&<div style={sC}>
+      <CtxHelp type="warn">SOP-AC-036 §5.6: Las NC no serán cerradas hasta que no estén cerradas las CAPA establecidas.</CtxHelp>
+      <Fd l="¿Las acciones eliminaron la(s) causa(s) raíz?"><select style={sS} value={fm.rootCauseEliminated||""} onChange={e=>u("rootCauseEliminated",e.target.value)} disabled={!canEdit}><option value="">—</option><option>Sí</option><option>No</option><option>Parcialmente</option></select></Fd>
+      <Fd l="¿Las acciones cubrieron todos los procesos y productos?"><select style={sS} value={fm.coverageComplete||""} onChange={e=>u("coverageComplete",e.target.value)} disabled={!canEdit}><option value="">—</option><option>Sí</option><option>No</option></select></Fd>
+      <Fd l="¿Las acciones afectaron de forma negativa al proceso?"><select style={sS} value={fm.negativeImpact||""} onChange={e=>u("negativeImpact",e.target.value)} disabled={!canEdit}><option value="">—</option><option>No</option><option>Sí (detallar)</option></select></Fd>
+      <Fd l="¿Las acciones se pudieron llevar adelante en tiempo y forma?"><select style={sS} value={fm.onTime||""} onChange={e=>u("onTime",e.target.value)} disabled={!canEdit}><option value="">—</option><option>Sí</option><option>No (detallar)</option></select></Fd>
+      <Fd l="Verificación de eficacia"><textarea style={{...sI,minHeight:60,resize:"vertical"}} value={fm.effectivenessNotes||""} onChange={e=>u("effectivenessNotes",e.target.value)} disabled={!canEdit}/></Fd>
+    </div>}
+
+    {/* ═══ STEP 6: CIERRE ═══ */}
+    {step===6&&<div style={sC}>
+      <CtxHelp type="success">Completar los datos de cierre y guardar para finalizar la NC.</CtxHelp>
+      <G2>
+        <Fd l="Fecha de cierre"><input type="date" style={sI} value={fm.closeDate||""} onChange={e=>u("closeDate",e.target.value)} disabled={!canEdit}/></Fd>
+        <Fd l="Cerrado por"><input style={sI} value={fm.closedBy||""} onChange={e=>u("closedBy",e.target.value)} disabled={!canEdit}/></Fd>
+      </G2>
+      <Fd l="Notas de cierre"><textarea style={{...sI,minHeight:60,resize:"vertical"}} value={fm.closeNotes||""} onChange={e=>u("closeNotes",e.target.value)} disabled={!canEdit}/></Fd>
+    </div>}
+
+    {/* ═══ NAVIGATION FOOTER ═══ */}
+    <div className="nav-footer">
+      <div style={{display:"flex",gap:8}}>
+        {canEdit&&<button style={sB("red")} onClick={()=>onDelete(nc.id)}>🗑 Eliminar</button>}
+        <button style={{...sB("g"),color:"#7C3AED"}} onClick={()=>exportNC(fm,capas)}>📄 Exportar PDF</button>
+      </div>
+      <div style={{display:"flex",gap:8,alignItems:"center"}}>
+        {canGoBack&&<button style={sB("g")} onClick={goBack}>◀ {NC_PHASES[step-1].label}</button>}
+        <button style={sB("g")} onClick={onClose}>Cancelar</button>
+        {canEdit&&<button style={sB("pri")} onClick={()=>onSave(fm)}>💾 Guardar</button>}
+        {canEdit&&canAdvance&&<button style={{...sB("grn"),background:NC_PHASES[step+1].color}} onClick={()=>{const advFm={...fm,phase:NC_PHASES[step+1].id};onSave(advFm);sStep(step+1);}}>Guardar y avanzar ▸ {NC_PHASES[step+1].label}</button>}
+      </div>
+    </div>
+  </Md>);
+}
+
+/* ══════════════════════════════════════════════════════
+   DESVÍOS — LIST
+   ══════════════════════════════════════════════════════ */
+function DevList({data,canEdit,openDev}){
+  const{devs}=data;const[q,sQ]=useState("");
+  let ls=q?devs.filter(d=>[d.code,d.description,d.sector,d.openedBy,d.lot,d.associatedItem,d.decision].some(v=>v&&String(v).toLowerCase().includes(q.toLowerCase()))):devs;
+  return(<div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+      <div><h1 style={{fontSize:20,fontWeight:800}}>Notas de Desvío · {data.yr}</h1><p style={{color:K.txS,margin:"4px 0 0",fontSize:12.5}}>REG-SOP-AC-036-B — {devs.length} registros</p></div>
+      {canEdit&&<button style={sB("pri")} onClick={()=>openDev(null)}>+ Nuevo Desvío</button>}
+    </div>
+    {!canEdit&&<VBanner/>}
+    <input style={{...sI,maxWidth:300,marginBottom:12}} placeholder="Buscar..." value={q} onChange={e=>sQ(e.target.value)}/>
+    <div style={sC}>
+      {ls.length===0?<Em icon="↩️" t="Sin desvíos registrados"/>:
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5}}><thead><tr>
+        <th style={sTh}>Nº</th><th style={sTh}>Fecha</th><th style={sTh}>Sector</th><th style={sTh}>Descripción</th><th style={sTh}>Clasif.</th><th style={sTh}>Decisión</th><th style={sTh}>Fase</th>
+      </tr></thead><tbody>{ls.map(d=><tr key={d.id} style={{cursor:"pointer"}} onClick={()=>openDev(d)}>
+        <td style={{...sTd,fontWeight:700,color:K.pri,fontFamily:"monospace"}}>{d.code}</td>
+        <td style={{...sTd,whiteSpace:"nowrap",fontSize:12}}>{fd(d.date)}</td>
+        <td style={{...sTd,fontSize:12}}>{d.sector}</td>
+        <td style={{...sTd,minWidth:220}}><div style={{fontSize:12.5,lineHeight:1.4}}>{d.description}</div></td>
+        <td style={sTd}>{d.critical?<Bg color={K.red} bg={K.redL}>Crítico</Bg>:<Bg color={K.pri} bg={K.priL}>No Crítico</Bg>}</td>
+        <td style={sTd}>{d.decision?<Bg color={d.decision==="Aprobar"?K.grn:K.red} bg={d.decision==="Aprobar"?K.grnL:K.redL}>{d.decision}</Bg>:<Bg color={K.txM} bg="#F1F5F9">Pendiente</Bg>}</td>
+        <td style={sTd}><PhaseBg phase={d.phase} phases={DEV_PHASES}/></td>
+      </tr>)}</tbody></table>}
+    </div>
+  </div>);
+}
+
+/* ══════════════════════════════════════════════════════
+   DEV DETAIL — UNIFIED WIZARD
+   ══════════════════════════════════════════════════════ */
+function DevDetail({dev,canEdit,onClose,onSave,onDelete}){
+  const[fm,sFm]=useState({...dev});
+  const phIdx=DEV_PHASES.findIndex(p=>p.id===fm.phase);
+  const[step,sStep]=useState(phIdx>=0?phIdx:0);
+  const u=(k,v)=>sFm(p=>({...p,[k]:v}));
+  const curPhase=DEV_PHASES[step];
+  const[impacts,sImpacts]=useState(dev.impacts||{});
+  const uImp=(area,field,val)=>{sImpacts(p=>({...p,[area]:{...(p[area]||{}),[field]:val}}));};
+  useEffect(()=>{u("impacts",impacts);},[impacts]);
+
+  const canAdvance=step<DEV_PHASES.length-1;
+  const canGoBack=step>0;
+  const advancePhase=()=>{if(!canEdit||!canAdvance)return;sFm(p=>({...p,phase:DEV_PHASES[step+1].id}));sStep(step+1);};
+  const goBack=()=>{if(canGoBack)sStep(step-1);};
+
+  return(<Md title={`${dev.code} — Nota de Desvío`} onClose={onClose} wide>
+    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
+      <span style={{fontSize:22}}>{curPhase.icon}</span>
+      <div><div style={{fontSize:15,fontWeight:800,color:curPhase.color}}>{curPhase.label}</div><div style={{fontSize:11.5,color:K.txS}}>{curPhase.desc}</div></div>
+      <div style={{marginLeft:"auto"}}>{fm.critical?<Bg color={K.red} bg={K.redL}>Crítico</Bg>:<Bg color={K.pri} bg={K.priL}>No Crítico</Bg>}</div>
+    </div>
+    <StepBar phases={DEV_PHASES} currentPhase={fm.phase} viewStep={step} onClickStep={sStep} canEdit={canEdit}/>
+
+    {/* ═══ STEP 0: DATOS ═══ */}
+    {step===0&&<div style={sC}>
+      <G2>
+        <Fd l="Abierto por"><input style={sI} value={fm.openedBy||""} onChange={e=>u("openedBy",e.target.value)} disabled={!canEdit}/></Fd>
+        <Fd l="Sector"><select style={sS} value={fm.sector||""} onChange={e=>u("sector",e.target.value)} disabled={!canEdit}><option value="">—</option>{SECTORS.map(s=><option key={s}>{s}</option>)}</select></Fd>
+        <Fd l="Fecha"><input type="date" style={sI} value={fm.date||""} onChange={e=>u("date",e.target.value)} disabled={!canEdit}/></Fd>
+        <Fd l="Producto/Instrumento/Doc asociado"><input style={sI} value={fm.associatedItem||""} onChange={e=>u("associatedItem",e.target.value)} disabled={!canEdit}/></Fd>
+      </G2>
+      <Fd l="Lote (si corresponde)"><input style={sI} value={fm.lot||""} onChange={e=>u("lot",e.target.value)} disabled={!canEdit}/></Fd>
+      <Fd l="Descripción del desvío"><textarea style={{...sI,minHeight:80,resize:"vertical"}} value={fm.description||""} onChange={e=>u("description",e.target.value)} disabled={!canEdit}/></Fd>
+      <Fd l="Justificación del desvío"><textarea style={{...sI,minHeight:60,resize:"vertical"}} value={fm.justification||""} onChange={e=>u("justification",e.target.value)} disabled={!canEdit}/></Fd>
+    </div>}
+
+    {/* ═══ STEP 1: IMPACTO ═══ */}
+    {step===1&&<div style={sC}>
+      <CtxHelp>REG-SOP-AC-036-B: Evalúe el impacto del desvío sobre cada área.</CtxHelp>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5}}><thead><tr><th style={sTh}>Área</th><th style={{...sTh,width:60}}>Sí</th><th style={{...sTh,width:60}}>No</th><th style={sTh}>Detalle</th></tr></thead>
+      <tbody>{IMPACT_AREAS.map(area=><tr key={area}>
+        <td style={{...sTd,fontWeight:600,fontSize:12}}>{area}</td>
+        <td style={{...sTd,textAlign:"center"}}><input type="radio" name={`imp_${area}`} checked={(impacts[area]||{}).applies===true} onChange={()=>canEdit&&uImp(area,"applies",true)} disabled={!canEdit}/></td>
+        <td style={{...sTd,textAlign:"center"}}><input type="radio" name={`imp_${area}`} checked={(impacts[area]||{}).applies===false} onChange={()=>canEdit&&uImp(area,"applies",false)} disabled={!canEdit}/></td>
+        <td style={sTd}><input style={{...sI,fontSize:11.5,padding:"4px 8px"}} value={(impacts[area]||{}).detail||""} onChange={e=>canEdit&&uImp(area,"detail",e.target.value)} disabled={!canEdit}/></td>
+      </tr>)}</tbody></table>
+      <Fd l="Observaciones generales"><textarea style={{...sI,minHeight:50,resize:"vertical",marginTop:10}} value={fm.impactNotes||""} onChange={e=>u("impactNotes",e.target.value)} disabled={!canEdit}/></Fd>
+    </div>}
+
+    {/* ═══ STEP 2: RIESGO / DECISIÓN ═══ */}
+    {step===2&&<div>
+      <div style={sC}>
+        <h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px"}}>Análisis de riesgo</h3>
+        <Fd l="Análisis de riesgo con resultado 'riesgo controlado'">
+          <div style={{display:"flex",gap:8}}>{["Sí","No","Pendiente"].map(opt=><button key={opt} style={{...sB(fm.riskControlled===opt?"pri":"g"),fontSize:12}} onClick={()=>canEdit&&u("riskControlled",opt)} disabled={!canEdit}>{opt}</button>)}</div>
+        </Fd>
+        <Fd l="Notas del análisis de riesgo"><textarea style={{...sI,minHeight:50,resize:"vertical"}} value={fm.riskNotes||""} onChange={e=>u("riskNotes",e.target.value)} disabled={!canEdit}/></Fd>
+      </div>
+      <div style={sC}>
+        <h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px"}}>Clasificación y decisión</h3>
+        <G2>
+          <Fd l="Criticidad"><div style={{display:"flex",gap:8}}>
+            {[{v:true,l:"Crítico",c:K.red},{v:false,l:"No Crítico",c:K.pri}].map(opt=><button key={opt.l} style={{...sB("g"),borderColor:fm.critical===opt.v?opt.c:K.brd,color:fm.critical===opt.v?"#fff":opt.c,background:fm.critical===opt.v?opt.c:"transparent"}} onClick={()=>canEdit&&u("critical",opt.v)} disabled={!canEdit}>{opt.l}</button>)}
+          </div></Fd>
+          <Fd l="Planificación"><div style={{display:"flex",gap:8}}>
+            {["Planificado","No Planificado"].map(opt=><button key={opt} style={{...sB(fm.planned===opt?"pri":"g"),fontSize:12}} onClick={()=>canEdit&&u("planned",opt)} disabled={!canEdit}>{opt}</button>)}
+          </div></Fd>
+        </G2>
+        <G2>
+          <Fd l="Prioridad"><select style={sS} value={fm.priority||""} onChange={e=>u("priority",e.target.value)} disabled={!canEdit}><option value="">—</option><option>Alta</option><option>Media</option><option>Baja</option></select></Fd>
+          <Fd l="Decisión"><div style={{display:"flex",gap:8}}>
+            {["Aprobar","Rechazar"].map(opt=><button key={opt} style={{...sB("g"),borderColor:fm.decision===opt?(opt==="Aprobar"?K.grn:K.red):K.brd,color:fm.decision===opt?"#fff":(opt==="Aprobar"?K.grn:K.red),background:fm.decision===opt?(opt==="Aprobar"?K.grn:K.red):"transparent"}} onClick={()=>canEdit&&u("decision",opt)} disabled={!canEdit}>{opt}</button>)}
+          </div></Fd>
+        </G2>
+        <Fd l="Verificadores (nombre, sección, cargo)"><textarea style={{...sI,minHeight:50,resize:"vertical"}} value={fm.verifiers||""} onChange={e=>u("verifiers",e.target.value)} disabled={!canEdit}/></Fd>
+      </div>
+    </div>}
+
+    {/* ═══ STEP 3: IMPLEMENTACIÓN ═══ */}
+    {step===3&&<div style={sC}>
+      <Fd l="Acciones realizadas durante el desvío"><textarea style={{...sI,minHeight:80,resize:"vertical"}} value={fm.implementationActions||""} onChange={e=>u("implementationActions",e.target.value)} disabled={!canEdit}/></Fd>
+      <Fd l="Notificaciones regulatorias"><textarea style={{...sI,minHeight:50,resize:"vertical"}} value={fm.notifications||""} onChange={e=>u("notifications",e.target.value)} disabled={!canEdit} placeholder="Autoridad sanitaria, clientes, distribuidores..."/></Fd>
+    </div>}
+
+    {/* ═══ STEP 4: CIERRE ═══ */}
+    {step===4&&<div style={sC}>
+      <CtxHelp type="success">Completar datos de cierre para finalizar el desvío.</CtxHelp>
+      <Fd l="Se aporta toda la documentación que avala la aprobación/rechazo">
+        <div style={{display:"flex",gap:8}}>{["Sí","No","N/A"].map(opt=><button key={opt} style={{...sB(fm.docComplete===opt?"pri":"g"),fontSize:12}} onClick={()=>canEdit&&u("docComplete",opt)} disabled={!canEdit}>{opt}</button>)}</div>
+      </Fd>
+      <G2>
+        <Fd l="Aprobado por"><input style={sI} value={fm.approvedBy||""} onChange={e=>u("approvedBy",e.target.value)} disabled={!canEdit} placeholder="DT / Responsable AC"/></Fd>
+        <Fd l="Fecha cierre"><input type="date" style={sI} value={fm.closeDate||""} onChange={e=>u("closeDate",e.target.value)} disabled={!canEdit}/></Fd>
+      </G2>
+      <Fd l="Notas de cierre"><textarea style={{...sI,minHeight:50,resize:"vertical"}} value={fm.closeNotes||""} onChange={e=>u("closeNotes",e.target.value)} disabled={!canEdit}/></Fd>
+    </div>}
+
+    {/* ═══ NAVIGATION FOOTER ═══ */}
+    <div className="nav-footer">
+      <div style={{display:"flex",gap:8}}>
+        {canEdit&&<button style={sB("red")} onClick={()=>onDelete(dev.id)}>🗑 Eliminar</button>}
+        <button style={{...sB("g"),color:"#7C3AED"}} onClick={()=>exportDev(fm)}>📄 Exportar PDF</button>
+      </div>
+      <div style={{display:"flex",gap:8,alignItems:"center"}}>
+        {canGoBack&&<button style={sB("g")} onClick={goBack}>◀ {DEV_PHASES[step-1].label}</button>}
+        <button style={sB("g")} onClick={onClose}>Cancelar</button>
+        {canEdit&&<button style={sB("pri")} onClick={()=>onSave(fm)}>💾 Guardar</button>}
+        {canEdit&&canAdvance&&<button style={{...sB("grn"),background:DEV_PHASES[step+1].color}} onClick={()=>{const advFm={...fm,phase:DEV_PHASES[step+1].id};onSave(advFm);sStep(step+1);}}>Guardar y avanzar ▸ {DEV_PHASES[step+1].label}</button>}
+      </div>
+    </div>
+  </Md>);
+}
+
+/* ══════════════════════════════════════════════════════
+   CAPA / ACCIONES
+   ══════════════════════════════════════════════════════ */
+function CAPAList({data,canEdit}){
+  const{capas,setCapas,ncs,devs,setLogs,currentUser}=data;
+  const[sh,sSh]=useState(false);const[ed,sEd]=useState(null);const[q,sQ]=useState("");
+  const bl={ncId:"",devId:"",type:"Acción Correctiva",description:"",responsible:"",responsibleEmail:"",dueDate:"",status:"Abierto",verification:"",effectiveness:"",followupResp:"",followupEmail:""};
+  const[fm,sFm]=useState(bl);
+  const save=()=>{
+    if(ed){const pv=capas.find(c=>c.id===ed.id);setCapas(p=>p.map(c=>c.id===ed.id?{...c,...fm}:c));if(pv.status!==fm.status)alog(setLogs,"CAMBIO ESTADO","CAPA",`${ed.code}: ${pv.status} → ${fm.status}`,currentUser.name);else alog(setLogs,"EDITAR","CAPA",ed.code,currentUser.name);}
+    else{const nums=capas.map(c=>{const m=c.code.match(/CAPA[-_]?0*(\d+)/);return m?parseInt(m[1]):0;});const next=Math.max(0,...nums)+1;const code=`CAPA-${String(next).padStart(4,"0")}`;setCapas(p=>[...p,{...fm,id:gid(),code,createdAt:new Date().toISOString()}]);alog(setLogs,"CREAR","CAPA",code,currentUser.name);}
+    sSh(false);sEd(null);
+  };
+  const autoD=ncId=>{const nc=ncs.find(x=>x.id===ncId);if(nc&&nc.classification){const c=CLASSIFICATIONS.find(x=>x.id===nc.classification);if(c&&c.deadline>0)sFm(p=>({...p,dueDate:addMo(nc.openDate||tdy(),c.deadline)}));}};
+  const open=c=>{sFm(c||bl);sEd(c);sSh(true);};
+  const del=id=>{if(confirm("¿Eliminar esta CAPA?")){const c=capas.find(x=>x.id===id);setCapas(p=>p.filter(x=>x.id!==id));alog(setLogs,"ELIMINAR","CAPA",c?.code,currentUser.name);}};
+  const lkNC=fm.ncId?ncs.find(x=>x.id===fm.ncId):null;
+  const cls=lkNC?CLASSIFICATIONS.find(x=>x.id===lkNC.classification):null;
+  let ls=capas;
+  if(q){const ql=q.toLowerCase();ls=ls.filter(c=>[c.code,c.description,c.responsible,c.responsibleEmail,c.type,c.status,c.verification,c.effectiveness].some(v=>v&&String(v).toLowerCase().includes(ql)));}
+  const urgLabel=(dl)=>{if(dl<0)return{txt:"⚠ VENCIDO",bg:K.redL,color:K.red};if(dl<=7)return{txt:"🔴 "+dl+"d",bg:"#FEF2F2",color:K.red};if(dl<=15)return{txt:"🟡 "+dl+"d",bg:K.wrnL,color:"#92400E"};return null;};
+  const sendReminder=(a)=>{const nc=ncs.find(n=>n.id===a.ncId);const to=a.responsibleEmail||"";const cc=a.followupEmail||"";const subj="Recordatorio: CAPA "+a.code+" — Vessena S.A.";const body="Estimado/a "+a.responsible+",\n\nLe recordamos que la acción "+a.code+" vinculada a la NC "+(nc?nc.code:"")+" tiene fecha límite el "+fd(a.dueDate)+".\n\nDescripción: "+a.description+"\n\nSaludos cordiales,\nAseguramiento de Calidad\nVessena S.A.";window.open("mailto:"+to+"?cc="+cc+"&subject="+encodeURIComponent(subj)+"&body="+encodeURIComponent(body));};
+  const upcoming=capas.filter(c=>c.status!=="Cerrado"&&daysLeft(c.dueDate)<=15).sort((a,b)=>daysLeft(a.dueDate)-daysLeft(b.dueDate));
+
+  return(<div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+      <div><h1 style={{fontSize:20,fontWeight:800}}>CAPA / Acciones</h1><p style={{color:K.txS,margin:"4px 0 0",fontSize:12.5}}>{capas.length} acciones registradas</p></div>
+      {canEdit&&<button style={sB("pri")} onClick={()=>open(null)}>+ Nueva CAPA</button>}
+    </div>
+    {!canEdit&&<VBanner/>}
+    {upcoming.length>0&&<div style={{...sC,background:"#FEF2F2",borderColor:K.red+"30"}}>
+      <h3 style={{fontSize:13,fontWeight:700,color:K.red,margin:"0 0 8px"}}>🔔 Alertas de vencimiento</h3>
+      {upcoming.map(a=>{const dl=daysLeft(a.dueDate);const urg=urgLabel(dl);const nc=ncs.find(n=>n.id===a.ncId);return <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:"#fff",borderRadius:8,marginBottom:6,border:`1px solid ${urg.color}20`}}>
+        <Bg color={urg.color} bg={urg.bg}>{urg.txt}</Bg>
+        <span style={{fontFamily:"monospace",fontWeight:700,color:K.pri,fontSize:12}}>{a.code}</span>
+        <span style={{flex:1,fontSize:12.5}}>{a.description}</span>
+        <span style={{fontSize:11.5,color:K.txS}}>{a.responsible}</span>
+        <span style={{fontSize:11.5,fontWeight:600}}>{fd(a.dueDate)}</span>
+        {a.responsibleEmail&&<button style={{...sB("sm"),color:"#0891B2",fontSize:10}} onClick={()=>sendReminder(a)} title="Recordar">✉</button>}
+      </div>;})}
+    </div>}
+    <input style={{...sI,maxWidth:300,marginBottom:12}} placeholder="Buscar..." value={q} onChange={e=>sQ(e.target.value)}/>
+    <div style={sC}>
+      {ls.length===0?<Em icon="📋" t="Sin acciones CAPA"/>:
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5}}><thead><tr>
+        <th style={sTh}>Código</th><th style={sTh}>NC/Desvío</th><th style={sTh}>Tipo</th><th style={sTh}>Descripción</th><th style={sTh}>Responsable</th><th style={sTh}>Vence</th><th style={sTh}>Estado</th>{canEdit&&<th style={sTh}></th>}
+      </tr></thead><tbody>{ls.map(c=>{const dl=daysLeft(c.dueDate);const ov=dl<0&&c.status!=="Cerrado";const warn=dl>=0&&dl<=15&&c.status!=="Cerrado";const urg=c.status!=="Cerrado"?urgLabel(dl):null;const ncRef=ncs.find(n=>n.id===c.ncId);const devRef=devs.find(d=>d.id===c.devId);
+      return <tr key={c.id} style={{background:ov?K.redL:warn?"#FFFBEB":"transparent"}}>
+        <td style={{...sTd,fontWeight:700,color:K.pri,fontFamily:"monospace"}}>{c.code}</td>
+        <td style={{...sTd,fontFamily:"monospace",fontSize:11.5}}>{ncRef?.code||devRef?.code||"—"}</td>
+        <td style={sTd}><Bg color={c.type==="Acción Correctiva"?K.red:c.type==="Acción Preventiva"?K.vio:"#0891B2"} bg={c.type==="Acción Correctiva"?K.redL:c.type==="Acción Preventiva"?K.vioL:"#ECFEFF"}>{c.type==="Acción Correctiva"?"AC":c.type==="Acción Preventiva"?"AP":"Corr."}</Bg></td>
+        <td style={{...sTd,minWidth:200}}><div style={{fontSize:12.5,lineHeight:1.4}}>{c.description}</div></td>
+        <td style={sTd}><div>{c.responsible}</div>{c.responsibleEmail&&<div style={{fontSize:10,color:K.txS}}>{c.responsibleEmail}</div>}</td>
+        <td style={{...sTd,whiteSpace:"nowrap"}}>{fd(c.dueDate)} {urg&&<Bg color={urg.color} bg={urg.bg}>{urg.txt}</Bg>}</td>
+        <td style={sTd}><SBg s={c.status}/></td>
+        {canEdit&&<td style={sTd}><div style={{display:"flex",gap:4}}><button style={sB("sm")} onClick={()=>open(c)}>Editar</button>{c.responsibleEmail&&c.status!=="Cerrado"&&<button style={{...sB("sm"),color:"#0891B2",padding:"2px 6px"}} onClick={()=>sendReminder(c)} title="Recordar">✉</button>}</div></td>}
+      </tr>;})}</tbody></table>}
+    </div>
+    {sh&&<Md title={ed?"Editar "+ed.code:"Nueva CAPA"} onClose={()=>sSh(false)}>
+      <G2>
+        <Fd l="Vinculada a NC"><select style={sS} value={fm.ncId||""} onChange={e=>{sFm(p=>({...p,ncId:e.target.value,devId:""}));autoD(e.target.value);}}><option value="">— Ninguna —</option>{ncs.map(n=><option key={n.id} value={n.id}>{n.code} — {n.description?.slice(0,35)}</option>)}</select></Fd>
+        <Fd l="Vinculada a Desvío"><select style={sS} value={fm.devId||""} onChange={e=>sFm(p=>({...p,devId:e.target.value,ncId:""}))}><option value="">— Ninguno —</option>{devs.map(d=><option key={d.id} value={d.id}>{d.code} — {d.description?.slice(0,35)}</option>)}</select></Fd>
+      </G2>
+      {cls&&cls.deadline>0&&<CtxHelp type="success">Plazo CAPA: <strong>{cls.deadlineLabel}</strong> ({cls.desc?.slice(0,60)})</CtxHelp>}
+      <G2>
+        <Fd l="Tipo de acción"><select style={sS} value={fm.type||""} onChange={e=>sFm(p=>({...p,type:e.target.value}))}>{CAPA_TYPES.map(t=><option key={t}>{t}</option>)}</select></Fd>
+        <Fd l="Estado"><select style={sS} value={fm.status} onChange={e=>sFm(p=>({...p,status:e.target.value}))}>{STATUSES.map(s=><option key={s}>{s}</option>)}</select></Fd>
+      </G2>
+      <Fd l="Fecha límite"><input type="date" style={sI} value={fm.dueDate} onChange={e=>sFm(p=>({...p,dueDate:e.target.value}))}/></Fd>
+      <Fd l="Descripción de la acción"><textarea style={{...sI,minHeight:60,resize:"vertical"}} value={fm.description} onChange={e=>sFm(p=>({...p,description:e.target.value}))}/></Fd>
+      <div style={{...sC,background:"#F0F9FF",borderColor:"#0891B220"}}>
+        <h3 style={{fontSize:12,fontWeight:700,color:"#0891B2",margin:"0 0 8px"}}>👤 Responsable de la acción</h3>
+        <G2><Fd l="Nombre"><input style={sI} value={fm.responsible} onChange={e=>sFm(p=>({...p,responsible:e.target.value}))}/></Fd><Fd l="Email"><input type="email" style={sI} value={fm.responsibleEmail||""} onChange={e=>sFm(p=>({...p,responsibleEmail:e.target.value}))}/></Fd></G2>
+      </div>
+      <div style={{...sC,background:"#F5F3FF",borderColor:"#7C3AED20"}}>
+        <h3 style={{fontSize:12,fontWeight:700,color:"#7C3AED",margin:"0 0 8px"}}>🔍 Responsable de seguimiento</h3>
+        <G2><Fd l="Nombre"><input style={sI} value={fm.followupResp||""} onChange={e=>sFm(p=>({...p,followupResp:e.target.value}))}/></Fd><Fd l="Email"><input type="email" style={sI} value={fm.followupEmail||""} onChange={e=>sFm(p=>({...p,followupEmail:e.target.value}))}/></Fd></G2>
+      </div>
+      <Fd l="Verificación de implementación"><textarea style={{...sI,minHeight:40,resize:"vertical"}} value={fm.verification} onChange={e=>sFm(p=>({...p,verification:e.target.value}))}/></Fd>
+      <Fd l="Verificación de eficacia"><textarea style={{...sI,minHeight:40,resize:"vertical"}} value={fm.effectiveness} onChange={e=>sFm(p=>({...p,effectiveness:e.target.value}))}/></Fd>
+      <div style={{display:"flex",gap:8,justifyContent:"space-between",marginTop:14}}>
+        <div>{ed&&canEdit&&<button style={sB("red")} onClick={()=>{del(ed.id);sSh(false);}}>🗑 Eliminar</button>}</div>
+        <div style={{display:"flex",gap:8}}><button style={sB("g")} onClick={()=>sSh(false)}>Cancelar</button><button style={sB("pri")} onClick={save} disabled={!fm.description}>Guardar</button></div>
+      </div>
+    </Md>}
+  </div>);
+}
+
+/* ═══ AUDIT TRAIL ═══ */
+function Trail({logs}){const[q,sQ]=useState("");const ls=q?logs.filter(l=>Object.values(l).some(v=>String(v).toLowerCase().includes(q.toLowerCase()))):logs;
+  return(<div><h1 style={{fontSize:20,fontWeight:800,margin:"0 0 12px"}}>Audit Trail</h1><input style={{...sI,maxWidth:320,marginBottom:12}} placeholder="Buscar..." value={q} onChange={e=>sQ(e.target.value)}/><div style={sC}>{ls.length===0?<Em icon="📜" t="Sin registros"/>:<table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5}}><thead><tr><th style={sTh}>Fecha</th><th style={sTh}>Usuario</th><th style={sTh}>Acción</th><th style={sTh}>Entidad</th><th style={sTh}>Detalle</th></tr></thead><tbody>{ls.slice(0,200).map(l=><tr key={l.id}><td style={{...sTd,whiteSpace:"nowrap",fontFamily:"monospace",fontSize:11.5}}>{fdt(l.ts)}</td><td style={{...sTd,fontWeight:600}}>{l.user}</td><td style={sTd}><Bg color={l.action.includes("CREAR")?K.grn:l.action.includes("CAMBIO")?K.wrn:l.action.includes("ELIMINAR")?K.red:K.pri} bg={l.action.includes("CREAR")?K.grnL:l.action.includes("CAMBIO")?K.wrnL:l.action.includes("ELIMINAR")?K.redL:K.priL}>{l.action}</Bg></td><td style={sTd}>{l.entity}</td><td style={{...sTd,fontSize:12,color:K.txS}}>{l.detail}</td></tr>)}</tbody></table>}</div></div>);
+}
+
+/* ═══ REPORTES ═══ */
+const MONTHS_ES=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+function Reports({data}){
+  const{ncs,devs,capas}=data;
+  const closedNC=ncs.filter(n=>n.phase==="cerrada").length;
+  const openNC=ncs.length-closedNC;
+  const critNC=ncs.filter(n=>n.classification==="CRITICA"&&n.phase!=="cerrada").length;
+  const openDev=devs.filter(d=>d.phase!=="cerrado").length;
+  const openCapa=capas.filter(c=>c.status!=="Cerrado").length;
+  const overdue=capas.filter(c=>c.status!=="Cerrado"&&daysLeft(c.dueDate)<0).length;
+  const crNC=ncs.length?Math.round((closedNC/ncs.length)*100):0;
+  const byClass=CLASSIFICATIONS.map(c=>({...c,count:ncs.filter(n=>n.classification===c.id).length}));
+  const byPhase=NC_PHASES.map(p=>({...p,count:ncs.filter(n=>n.phase===p.id).length}));
+  const urgentCapas=capas.filter(c=>c.status!=="Cerrado"&&daysLeft(c.dueDate)<-30).sort((a,b)=>daysLeft(a.dueDate)-daysLeft(b.dueDate));
+  const[shNC,sShNC]=useState(false);
+  const[shDev,sShDev]=useState(false);
+
+  const dl=()=>{
+    const L=["VESSENA S.A. — REPORTE NC / CAPA & DESVÍOS — "+data.yr,fdt(new Date().toISOString()),"",`NC: ${ncs.length} | Desvíos: ${devs.length} | CAPA: ${capas.length}`,`Tasa cierre NC: ${crNC}%`,`CAPA vencidas: ${overdue}`,"","=== NO CONFORMIDADES ===",...ncs.map(n=>`[${n.code}] ${CLASSIFICATIONS.find(c=>c.id===n.classification)?.label||"—"} — ${n.description?.slice(0,80)} — Fase: ${NC_PHASES.find(p=>p.id===n.phase)?.label}`),"","=== DESVÍOS ===",...devs.map(d=>`[${d.code}] ${d.critical?"Crítico":"No Crítico"} — ${d.description?.slice(0,80)} — ${d.decision||"Pendiente"}`),"","=== CAPA ===",...capas.map(c=>`[${c.code}] ${c.type} — ${c.description?.slice(0,60)} — ${c.responsible} — Vence: ${fd(c.dueDate)} — ${c.status}`)];
+    const b=new Blob([L.join("\n")],{type:"text/plain;charset=utf-8"});const u=URL.createObjectURL(b);const el=document.createElement("a");el.href=u;el.download=`Reporte_NC_CAPA_${data.yr}.txt`;el.click();
+  };
+
+  return(<div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+      <div><h1 style={{fontSize:20,fontWeight:800}}>Reportes · {data.yr}</h1><p style={{color:K.txS,margin:"4px 0 0",fontSize:12.5}}>SOP-AC-036 — Vista general del sistema de No Conformidades y Desvíos</p></div>
+      <div style={{display:"flex",gap:8}}>
+        <button style={{...sB("pri"),background:"#7C3AED"}} onClick={()=>sShNC(true)}>📊 Informe Comité — NC</button>
+        <button style={{...sB("pri"),background:"#0891B2"}} onClick={()=>sShDev(true)}>📊 Informe Comité — Desvíos</button>
+        <button style={sB("g")} onClick={dl}>⬇ Texto plano</button>
+      </div>
+    </div>
+
+    {/* ── KPI cards ── */}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:12,margin:"14px 0 16px"}}>
+      {[
+        {l:"NC Abiertas",v:openNC,c:openNC>0?K.red:K.grn,bg:openNC>0?K.redL:K.grnL},
+        {l:"NC Cerradas",v:closedNC,c:K.grn,bg:K.grnL},
+        {l:"NC Críticas",v:critNC,c:K.red,bg:K.redL},
+        {l:"Desvíos abiertos",v:openDev,c:openDev>0?K.wrn:K.grn,bg:openDev>0?K.wrnL:K.grnL},
+        {l:"CAPA abiertas",v:openCapa,c:K.pri,bg:K.priL},
+        {l:"CAPA vencidas",v:overdue,c:overdue>0?K.red:K.grn,bg:overdue>0?K.redL:K.grnL},
+      ].map(x=><div key={x.l} style={{...sC,background:x.bg,borderColor:x.c+"20"}}><div style={{fontSize:10,fontWeight:700,color:x.c,textTransform:"uppercase"}}>{x.l}</div><div style={{fontSize:28,fontWeight:800,color:x.c,marginTop:4}}>{x.v}</div></div>)}
+    </div>
+
+    {/* ── Charts row 1 ── */}
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:14,marginBottom:14}}>
+      <div style={sC}>
+        <h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px"}}>NC por clasificación</h3>
+        <div style={{display:"flex",gap:10}}>{byClass.map(c=><div key={c.id} style={{flex:1,padding:"12px",background:c.color+"10",border:`1px solid ${c.color}20`,borderRadius:8,textAlign:"center"}}>
+          <div style={{fontSize:10,fontWeight:700,color:c.color,textTransform:"uppercase"}}>{c.label}</div>
+          <div style={{fontSize:26,fontWeight:800,color:c.color,margin:"4px 0"}}>{c.count}</div>
+          <div style={{fontSize:10,color:K.txS}}>Plazo: {c.deadlineLabel}</div>
+        </div>)}</div>
+      </div>
+      <div style={sC}>
+        <h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px"}}>NC por fase del ciclo</h3>
+        <div style={{display:"flex",gap:6,height:100,alignItems:"flex-end"}}>{byPhase.map(p=>{const mx=Math.max(...byPhase.map(x=>x.count),1);return <div key={p.id} style={{flex:1,textAlign:"center"}}><div style={{fontSize:14,fontWeight:800,color:p.color}}>{p.count}</div><div style={{height:Math.max((p.count/mx)*60,3),background:p.color+"25",border:`2px solid ${p.color}`,borderRadius:5}}/><div style={{fontSize:9,color:K.txS,marginTop:4,fontWeight:600}}>{p.icon}</div></div>})}</div>
+      </div>
+      <div style={sC}>
+        <h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px"}}>Tasa de cierre NC</h3>
+        <div style={{display:"flex",alignItems:"center",gap:16}}>
+          <div style={{fontSize:42,fontWeight:800,color:crNC>=80?K.grn:crNC>=50?K.wrn:K.red}}>{crNC}%</div>
+          <div style={{flex:1}}><div style={{height:10,background:"#F1F5F9",borderRadius:5,overflow:"hidden"}}><div style={{height:"100%",width:`${crNC}%`,background:crNC>=80?K.grn:crNC>=50?K.wrn:K.red,borderRadius:5,transition:"width .3s"}}/></div><div style={{fontSize:11,color:K.txS,marginTop:6}}>{closedNC} de {ncs.length} NC cerradas</div></div>
+        </div>
+      </div>
+    </div>
+
+    {/* ── Charts row 2 ── */}
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
+      <div style={sC}><h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px"}}>CAPA por tipo</h3><div style={{display:"flex",gap:10,height:110,alignItems:"flex-end"}}>{CAPA_TYPES.map(t=>{const n=capas.filter(c=>c.type===t).length;const mx=Math.max(...CAPA_TYPES.map(x=>capas.filter(c=>c.type===x).length),1);const color=t==="Acción Correctiva"?K.red:t==="Acción Preventiva"?K.vio:"#0891B2";return <div key={t} style={{flex:1,textAlign:"center"}}><div style={{fontSize:16,fontWeight:800,color}}>{n}</div><div style={{height:Math.max((n/mx)*80,3),background:color+"25",border:`2px solid ${color}`,borderRadius:5}}/><div style={{fontSize:10,color:K.txS,marginTop:5,fontWeight:600}}>{t==="Acción Correctiva"?"Correctiva":t==="Acción Preventiva"?"Preventiva":"Corrección"}</div></div>;})}</div></div>
+      <div style={sC}>
+        <h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px",color:K.red}}>🚨 CAPA vencidas +30 días</h3>
+        {urgentCapas.length===0?<Em icon="✅" t="Sin CAPA vencidas con más de 30 días"/>:
+        urgentCapas.map(c=>{const dl=daysLeft(c.dueDate);return <div key={c.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:`1px solid ${K.brdL}`,fontSize:12}}>
+          <Bg color={K.red} bg={K.redL}>⚠ {Math.abs(dl)}d vencida</Bg>
+          <span style={{fontFamily:"monospace",fontWeight:700,color:K.pri}}>{c.code}</span>
+          <span style={{flex:1,color:K.txS,fontSize:12,lineHeight:1.4}}>{c.description}</span>
+          <span style={{fontSize:11,whiteSpace:"nowrap"}}>Venció: {fd(c.dueDate)}</span>
+        </div>})}
+      </div>
+    </div>
+
+    <div style={sC}><h3 style={{fontSize:13,fontWeight:700,margin:"0 0 6px"}}>Referencia de plazos (SOP-AC-036)</h3><div style={{fontSize:12.5,color:K.txS}}><strong style={{color:K.red}}>NC Crítica:</strong> cierre CAPA inmediato &nbsp;|&nbsp;<strong style={{color:"#B45309"}}>NC Mayor:</strong> cierre dentro de 3 meses &nbsp;|&nbsp;<strong style={{color:K.pri}}>NC Menor:</strong> cierre dentro de 6 meses</div></div>
+
+    {shNC&&<CommitteeReport mode="nc" ncs={ncs} devs={devs} capas={capas} yr={data.yr} onClose={()=>sShNC(false)}/>}
+    {shDev&&<CommitteeReport mode="dev" ncs={ncs} devs={devs} capas={capas} yr={data.yr} onClose={()=>sShDev(false)}/>}
+  </div>);
+}
+
+/* ═══ INFORME COMITÉ GERENCIAL ═══ */
+function CommitteeReport({mode,ncs,devs,capas,yr,onClose}){
+  const isNC=mode==="nc";
+  const items=isNC?ncs:devs;
+  const title=isNC?"NO CONFORMIDADES":"DESVÍOS DE PRODUCCIÓN";
+  const subtitle=isNC?"Seguimiento de no conformidades abiertas y cerradas":"Seguimiento de desvíos de producción abiertos y cerrados";
+  const now=new Date();const mo=MONTHS_ES[now.getMonth()];
+  const today=now;
+
+  // Items already filtered by year from parent
+  const yrItems=items;
+  const closedKey=isNC?"cerrada":"cerrado";
+  const closed=yrItems.filter(x=>x.phase===closedKey).length;
+  const open=yrItems.length-closed;
+  const pct=yrItems.length?Math.round((closed/yrItems.length)*100):0;
+
+  // By classification (NC) or criticality (DEV)
+  const byCls=isNC?CLASSIFICATIONS.map(c=>({label:c.label,color:c.color,count:yrItems.filter(n=>n.classification===c.id).length})):[{label:"Crítico",color:K.red,count:yrItems.filter(d=>d.critical).length},{label:"No Crítico",color:K.pri,count:yrItems.filter(d=>!d.critical).length}];
+
+  // By source (NC) or sector (DEV)
+  const bySource=isNC?(()=>{const m={};yrItems.forEach(n=>{const s=n.source||"Sin dato";m[s]=(m[s]||0)+1;});return Object.entries(m).map(([k,v])=>({label:k,count:v}));})():(()=>{const m={};yrItems.forEach(d=>{const s=d.sector||"Sin dato";m[s]=(m[s]||0)+1;});return Object.entries(m).map(([k,v])=>({label:k,count:v}));})();
+
+  // CAPA stats
+  const relCapas=isNC?capas.filter(c=>ncs.some(n=>n.id===c.ncId)):capas.filter(c=>devs.some(d=>d.id===c.devId));
+  const capaOpen=relCapas.filter(c=>c.status!=="Cerrado").length;
+  const capaOverdue=relCapas.filter(c=>c.status!=="Cerrado"&&daysLeft(c.dueDate)<0).length;
+
+  // Months without new cases
+  const moCounts=Array(12).fill(0);
+  yrItems.forEach(x=>{const d=new Date(isNC?x.openDate:x.date);if(d.getFullYear()===yr)moCounts[d.getMonth()]++;});
+  const noCase=[];for(let i=0;i<=now.getMonth();i++){if(moCounts[i]===0)noCase.push(MONTHS_ES[i]);}
+  const noCaseStr=noCase.length>0?` · sin nuevos casos en ${noCase.join(", ")}`:"";
+
+  // Colors for pie
+  const PIE_COLORS=["#DC2626","#2563EB","#D97706","#16A34A","#7C3AED","#0891B2","#DB2777","#65A30D"];
+
+  // Day count helper
+  const daysSince=(dateStr)=>{if(!dateStr)return"—";return Math.floor((today-new Date(dateStr))/86400000);};
+
+  // First and last month with data
+  const firstMo=yrItems.reduce((m,x)=>{const d=new Date(isNC?x.openDate:x.date);return d<m?d:m;},new Date());
+  const dateRange=`${MONTHS_ES[firstMo.getMonth()]} – ${mo} ${yr}`;
+
+  const doPrint=()=>{
+    const el=document.getElementById("comrpt");if(!el)return;
+    const w=window.open("","_blank","width=960,height=700");
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title} — Vessena S.A.</title><style>
+      *{margin:0;padding:0;box-sizing:border-box}body{font-family:'Inter',system-ui,sans-serif;background:#fff;color:#1B1E25;font-size:13px;padding:0}
+      @media print{@page{size:landscape;margin:12mm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+    </style></head><body>${el.innerHTML}</body></html>`);
+    w.document.close();setTimeout(()=>{w.print();},400);
+  };
+
+  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:200,display:"flex",justifyContent:"center",alignItems:"flex-start",paddingTop:20,overflowY:"auto"}} onClick={onClose}>
+    <div style={{background:"#fff",borderRadius:12,width:"100%",maxWidth:1000,margin:"0 16px 40px",boxShadow:"0 24px 80px rgba(0,0,0,.2)"}} onClick={e=>e.stopPropagation()}>
+      {/* Toolbar */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",borderBottom:`1px solid ${K.brd}`}}>
+        <div style={{fontSize:14,fontWeight:700}}>📊 Vista previa — Informe Comité Gerencial</div>
+        <div style={{display:"flex",gap:8}}>
+          <button style={sB("pri")} onClick={doPrint}>🖨 Imprimir / PDF</button>
+          <button style={sB("g")} onClick={onClose}>✕ Cerrar</button>
+        </div>
+      </div>
+
+      {/* Report content */}
+      <div id="comrpt" style={{padding:0}}>
+
+        {/* ── SLIDE 1: COVER ── */}
+        <div style={{background:"linear-gradient(135deg,#1B1E25,#2D3748)",color:"#fff",padding:"60px 50px",textAlign:"center",pageBreakAfter:"always"}}>
+          <div style={{fontSize:10,fontWeight:800,letterSpacing:".15em",color:"#C41E2A",marginBottom:8}}>VESSENA S.A.</div>
+          <div style={{fontSize:36,fontWeight:800,letterSpacing:".02em",marginBottom:12}}>{title}</div>
+          <div style={{fontSize:15,color:"rgba(255,255,255,.6)",marginBottom:30}}>{subtitle}</div>
+          <div style={{fontSize:12,color:"rgba(255,255,255,.45)"}}>Aseguramiento de Calidad &nbsp;|&nbsp; Planta Vessena S.A. &nbsp;|&nbsp; Reporte {dateRange}</div>
+        </div>
+
+        {/* ── SLIDE 2: ANÁLISIS ── */}
+        <div style={{padding:"36px 50px",pageBreakAfter:"always"}}>
+          <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>ANÁLISIS COMPARATIVO</div>
+          <div style={{fontSize:13,color:K.txS,marginBottom:20}}>{title} {yr} &nbsp;·&nbsp; Estado al cierre de {mo}</div>
+
+          {/* KPI cards */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:16,marginBottom:28}}>
+            <div style={{background:"#F8FAFC",border:`1px solid ${K.brd}`,borderRadius:10,padding:"18px",textAlign:"center"}}>
+              <div style={{fontSize:11,fontWeight:700,color:K.txS,textTransform:"uppercase",marginBottom:4}}>Total {yr}</div>
+              <div style={{fontSize:42,fontWeight:800,color:K.pri}}>{yrItems.length}</div>
+              <div style={{fontSize:12,color:K.txS,marginTop:4}}>{closed} cerradas &nbsp;|&nbsp; {open} abiertas</div>
+            </div>
+            <div style={{background:pct>=80?"#F0FDF4":pct>=50?"#FFFBEB":"#FEF2F2",border:`1px solid ${pct>=80?K.grn+"30":pct>=50?K.wrn+"30":K.red+"30"}`,borderRadius:10,padding:"18px",textAlign:"center"}}>
+              <div style={{fontSize:11,fontWeight:700,color:K.txS,textTransform:"uppercase",marginBottom:4}}>Tasa de cierre</div>
+              <div style={{fontSize:42,fontWeight:800,color:pct>=80?K.grn:pct>=50?K.wrn:K.red}}>{pct}%</div>
+              <div style={{height:8,background:"#E5E7EB",borderRadius:4,marginTop:6,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:pct>=80?K.grn:pct>=50?K.wrn:K.red,borderRadius:4}}/></div>
+            </div>
+            <div style={{background:"#F8FAFC",border:`1px solid ${K.brd}`,borderRadius:10,padding:"18px",textAlign:"center"}}>
+              <div style={{fontSize:11,fontWeight:700,color:K.txS,textTransform:"uppercase",marginBottom:4}}>CAPA vinculadas</div>
+              <div style={{fontSize:42,fontWeight:800,color:K.vio}}>{relCapas.length}</div>
+              <div style={{fontSize:12,color:K.txS,marginTop:4}}>{capaOpen} abiertas{capaOverdue>0?<span style={{color:K.red,fontWeight:700}}> · {capaOverdue} vencidas</span>:""}</div>
+            </div>
+            <div style={{background:"#F8FAFC",border:`1px solid ${K.brd}`,borderRadius:10,padding:"18px",textAlign:"center"}}>
+              <div style={{fontSize:11,fontWeight:700,color:K.txS,textTransform:"uppercase",marginBottom:4}}>Promedio días abierta</div>
+              <div style={{fontSize:42,fontWeight:800,color:K.wrn}}>{yrItems.length?Math.round(yrItems.reduce((s,x)=>s+daysSince(isNC?x.openDate:x.date),0)/yrItems.length):0}</div>
+              <div style={{fontSize:12,color:K.txS,marginTop:4}}>días desde apertura</div>
+            </div>
+          </div>
+
+          {/* Charts row */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:24}}>
+            {/* Bar chart - by classification */}
+            <div style={{border:`1px solid ${K.brd}`,borderRadius:10,padding:"18px"}}>
+              <div style={{fontSize:12,fontWeight:700,marginBottom:12,textTransform:"uppercase",color:K.txS}}>Por {isNC?"clasificación":"criticidad"}</div>
+              <div style={{display:"flex",gap:12,height:120,alignItems:"flex-end"}}>
+                {byCls.map(c=>{const mx=Math.max(...byCls.map(x=>x.count),1);return <div key={c.label} style={{flex:1,textAlign:"center"}}>
+                  <div style={{fontSize:18,fontWeight:800,color:c.color}}>{c.count}</div>
+                  <div style={{height:Math.max((c.count/mx)*80,4),background:c.color,borderRadius:5,opacity:.8,marginTop:4}}/>
+                  <div style={{fontSize:10,fontWeight:600,color:K.txS,marginTop:6}}>{c.label}</div>
+                </div>;})}
+              </div>
+            </div>
+            {/* Pie chart - by source/sector */}
+            <div style={{border:`1px solid ${K.brd}`,borderRadius:10,padding:"18px"}}>
+              <div style={{fontSize:12,fontWeight:700,marginBottom:12,textTransform:"uppercase",color:K.txS}}>Por {isNC?"fuente de detección":"sector"}</div>
+              <div style={{display:"flex",alignItems:"center",gap:20}}>
+                {/* CSS pie */}
+                <div style={{width:100,height:100,borderRadius:"50%",background:(()=>{
+                  if(bySource.length===0)return "#E5E7EB";
+                  const total=bySource.reduce((s,x)=>s+x.count,0);
+                  let acc=0;const stops=[];
+                  bySource.forEach((s,i)=>{const pct=(s.count/total)*100;stops.push(`${PIE_COLORS[i%PIE_COLORS.length]} ${acc}% ${acc+pct}%`);acc+=pct;});
+                  return `conic-gradient(${stops.join(",")})`;
+                })(),flexShrink:0}}/>
+                <div style={{flex:1}}>
+                  {bySource.map((s,i)=><div key={s.label} style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                    <div style={{width:10,height:10,borderRadius:3,background:PIE_COLORS[i%PIE_COLORS.length],flexShrink:0}}/>
+                    <span style={{fontSize:11.5,flex:1}}>{s.label}</span>
+                    <span style={{fontSize:12,fontWeight:700}}>{s.count}</span>
+                  </div>)}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── SLIDE 3: DETALLE ── */}
+        <div style={{padding:"36px 50px"}}>
+          <div style={{fontSize:22,fontWeight:800,marginBottom:4}}>DETALLE DE PENDIENTES</div>
+          <div style={{fontSize:13,color:K.txS,marginBottom:20}}>{yrItems.length} {isNC?"No Conformidades":"Desvíos"} {yr} — al cierre de {mo}{noCaseStr}</div>
+
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+            <thead><tr style={{background:"#1B1E25",color:"#fff"}}>
+              <th style={{padding:"10px 8px",textAlign:"left",fontWeight:700,fontSize:10.5,textTransform:"uppercase",letterSpacing:".04em"}}>N°</th>
+              <th style={{padding:"10px 8px",textAlign:"left",fontWeight:700,fontSize:10.5,textTransform:"uppercase"}}>Fecha</th>
+              <th style={{padding:"10px 8px",textAlign:"center",fontWeight:700,fontSize:10.5,textTransform:"uppercase"}}>Días</th>
+              <th style={{padding:"10px 8px",textAlign:"left",fontWeight:700,fontSize:10.5,textTransform:"uppercase",width:"40%"}}>Descripción</th>
+              <th style={{padding:"10px 8px",textAlign:"left",fontWeight:700,fontSize:10.5,textTransform:"uppercase"}}>{isNC?"Detección":"Sector"}</th>
+              <th style={{padding:"10px 8px",textAlign:"left",fontWeight:700,fontSize:10.5,textTransform:"uppercase"}}>{isNC?"Clasif.":"Tipo"}</th>
+              <th style={{padding:"10px 8px",textAlign:"center",fontWeight:700,fontSize:10.5,textTransform:"uppercase"}}>Estado</th>
+              <th style={{padding:"10px 8px",textAlign:"center",fontWeight:700,fontSize:10.5,textTransform:"uppercase"}}>CAPA</th>
+            </tr></thead>
+            <tbody>
+              {yrItems.sort((a,b)=>new Date(isNC?a.openDate:a.date)-new Date(isNC?b.openDate:b.date)).map((x,i)=>{
+                const isClosed=isNC?x.phase==="cerrada":x.phase==="cerrado";
+                const dt=isNC?x.openDate:x.date;
+                const days=daysSince(dt);
+                const num=x.code.match(/\d+/)?.[0]||String(i+1);
+                const det=isNC?x.source:(x.sector||"—");
+                const cls=isNC?(CLASSIFICATIONS.find(c=>c.id===x.classification)?.label||"—"):(x.critical?"Crítico":"No Crítico");
+                const clsColor=isNC?(CLASSIFICATIONS.find(c=>c.id===x.classification)?.color||K.txM):(x.critical?K.red:K.pri);
+                const linked=isNC?capas.filter(c=>c.ncId===x.id):capas.filter(c=>c.devId===x.id);
+                const lclosed=linked.filter(c=>c.status==="Cerrado").length;
+                const stripe=i%2===0?"#fff":"#F8FAFC";
+                return <tr key={x.id} style={{background:stripe}}>
+                  <td style={{padding:"10px 8px",fontWeight:700,color:K.pri,fontFamily:"monospace"}}>{num}</td>
+                  <td style={{padding:"10px 8px",whiteSpace:"nowrap"}}>{fd(dt)}</td>
+                  <td style={{padding:"10px 8px",textAlign:"center",fontWeight:700,color:days>90?K.red:days>30?K.wrn:K.txS}}>{days}</td>
+                  <td style={{padding:"10px 8px",fontSize:11.5,lineHeight:1.4}}>{x.description}</td>
+                  <td style={{padding:"10px 8px",fontSize:11.5}}>{det}</td>
+                  <td style={{padding:"10px 8px"}}><span style={{padding:"2px 8px",borderRadius:12,fontSize:10.5,fontWeight:600,color:clsColor,background:clsColor+"15"}}>{cls}</span></td>
+                  <td style={{padding:"10px 8px",textAlign:"center"}}><span style={{padding:"3px 10px",borderRadius:12,fontSize:10.5,fontWeight:700,color:isClosed?K.grn:K.red,background:isClosed?K.grnL:K.redL}}>{isClosed?"CERRADO":"ABIERTO"}</span></td>
+                  <td style={{padding:"10px 8px",textAlign:"center",fontSize:11}}>{linked.length>0?<span style={{fontWeight:600}}>{lclosed}/{linked.length}</span>:"—"}</td>
+                </tr>;
+              })}
+            </tbody>
+          </table>
+          <div style={{marginTop:16,fontSize:11,color:K.txS,borderTop:`1px solid ${K.brd}`,paddingTop:10}}>
+            {title} {yr} — detalle al cierre de {mo} &nbsp;|&nbsp; Aseguramiento de Calidad · Vessena S.A.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>);
+}
+
+/* ═══ GUÍA DE USO ═══ */
+function GuidePage({goTo}){
+  const sections=[
+    {icon:"⚠️",title:"No Conformidades (NC)",id:"nc",content:"Registro y gestión del ciclo de vida completo de No Conformidades según SOP-AC-036 y REG-SOP-AC-036-A. Cada NC avanza por 7 etapas secuenciales en un wizard unificado.",
+      steps:["Desde el menú lateral, ir a 'No Conformidades' y click en '+ Nueva NC'","Se abre el wizard en la etapa 1 (Apertura): completar fecha del incidente, sector, detalle, fuente de detección, producto/lote asociado","Click en 'Guardar y avanzar ▸ Análisis 5M' para pasar a la etapa 2","Etapa 2 — Análisis 5M (Ishikawa): responder SI/NO/N-A a las preguntas de las 5 categorías (Método, Mano de Obra, Materiales, Máquinas, Medio Ambiente). Documentar hallazgos y causa raíz","Etapa 3 — Clasificación: seleccionar Severidad y Probabilidad. La matriz calcula automáticamente la criticidad (Crítica/Mayor/Menor) y muestra el plazo CAPA","Etapa 4 — Conclusiones: indicar si impacta otros productos/procesos, tipo de acción a iniciar (Correctiva/Preventiva/Corrección)","Etapa 5 — CAPA: muestra las acciones vinculadas (se crean desde el módulo CAPA / Acciones)","Etapa 6 — Verificación: responder las 4 preguntas de eficacia del SOP §5.6","Etapa 7 — Cierre: fecha de cierre, responsable y notas finales","Podés hacer click en cualquier etapa de la barra superior para saltar directamente a ella","El botón '💾 Guardar' guarda sin avanzar fase; 'Guardar y avanzar' guarda y mueve a la siguiente etapa"]},
+    {icon:"↩️",title:"Notas de Desvío",id:"dev",content:"Gestión de desvíos temporales de procedimientos/procesos vigentes según REG-SOP-AC-036-B. Cada desvío avanza por 5 etapas.",
+      steps:["Ir a 'Desvíos' y click en '+ Nuevo Desvío'","Etapa 1 — Datos: sector, fecha, producto/lote, descripción detallada del desvío y justificación (comercial si aplica)","Etapa 2 — Impacto: evaluar Sí/No para cada una de las 20 áreas de impacto (Producto, Regulatorio, Producción, CC, I+D, etc.) con detalle","Etapa 3 — Riesgo / Decisión: indicar si el riesgo está controlado, clasificar como Crítico/No Crítico, Planificado/No Planificado, definir prioridad y tomar la decisión de Aprobar o Rechazar","Etapa 4 — Implementación: documentar las acciones realizadas y notificaciones regulatorias","Etapa 5 — Cierre: confirmar documentación completa, aprobación y fecha de cierre"]},
+    {icon:"📋",title:"CAPA / Acciones",id:"capa",content:"Gestión centralizada de Acciones Correctivas, Preventivas y Correcciones. Vinculadas a NC o Desvíos, con cálculo automático de plazos y alertas de vencimiento.",
+      steps:["Ir a 'CAPA / Acciones' y click en '+ Nueva CAPA'","Vincular a una NC o Desvío existente — al vincular a NC, la fecha límite se calcula automáticamente según la clasificación","Seleccionar tipo de acción (Correctiva, Preventiva, Corrección) y estado","Completar descripción, responsable de la acción (nombre + email) y responsable de seguimiento/verificación","Las CAPA vencidas o próximas a vencer aparecen en el panel de alertas 🔔 con indicador de días","El botón ✉ genera un email de recordatorio pre-redactado al responsable","Completar verificación de implementación y verificación de eficacia antes de cerrar"]},
+    {icon:"📈",title:"Reportes",id:"rep",content:"Página principal con KPIs del sistema, gráficas e informes para comité gerencial. NC abiertas/cerradas/críticas, desvíos abiertos, CAPA abiertas/vencidas, tasa de cierre y alertas de vencimiento.",
+      steps:["Los 6 indicadores superiores muestran el estado actual del sistema","'NC por clasificación' muestra distribución Crítica/Mayor/Menor con plazos","'NC por fase del ciclo' visualiza cuántas NC hay en cada etapa","La barra de tasa de cierre muestra el % de NC cerradas","El panel de alertas lista las CAPA próximas a vencer con días restantes"]},
+    {icon:"📜",title:"Audit Trail",id:"trail",content:"Registro automático e inmutable de todas las operaciones: creación, edición, eliminación, cambios de fase, cambios de estado, login/logout.",
+      steps:["Todo se registra automáticamente con usuario, fecha, hora y detalle","Usá el buscador para filtrar por cualquier campo","Los registros no se pueden editar ni eliminar — garantiza trazabilidad GMP","Cada cambio de fase queda registrado con la transición exacta (ej: 'Apertura → Análisis 5M')"]},
+    {icon:"📈",title:"Reportes",id:"rep",content:"Métricas consolidadas y descarga de reporte completo en formato texto.",
+      steps:["Revisá tasa de cierre, totales y CAPA vencidas","Consultá las gráficas de NC por clasificación y CAPA por tipo","Click en '⬇ Descargar reporte' para obtener un archivo de texto con todo el detalle"]},
+  ];
+
+  return(<div>
+    <h1 style={{fontSize:20,fontWeight:800,marginBottom:4}}>Guía de Uso</h1>
+    <p style={{color:K.txS,margin:"0 0 16px",fontSize:12.5}}>Manual completo del sistema NC / CAPA & Desvíos — SOP-AC-036</p>
+
+    <div className="cfg-section" style={{background:K.priL,borderColor:K.pri+"20"}}>
+      <h3 style={{color:K.pri,fontSize:14}}>🚀 Flujos de trabajo</h3>
+      <div style={{marginTop:8}}>
+        <div style={{fontSize:12,fontWeight:700,color:K.red,marginBottom:6}}>No Conformidad (ciclo completo):</div>
+        <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:12}}>
+          {NC_PHASES.map((p,i)=>
+            <div key={i} style={{display:"flex",alignItems:"center",gap:4}}>
+              <div style={{background:"#fff",border:`1px solid ${p.color}30`,borderRadius:6,padding:"4px 10px",fontSize:11,fontWeight:600,color:p.color}}>{p.icon} {p.label}</div>
+              {i<NC_PHASES.length-1&&<span style={{color:K.txM,fontSize:12}}>→</span>}
+            </div>
+          )}
+        </div>
+        <div style={{fontSize:12,fontWeight:700,color:"#0891B2",marginBottom:6}}>Desvío de producción:</div>
+        <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:12}}>
+          {DEV_PHASES.map((p,i)=>
+            <div key={i} style={{display:"flex",alignItems:"center",gap:4}}>
+              <div style={{background:"#fff",border:`1px solid ${p.color}30`,borderRadius:6,padding:"4px 10px",fontSize:11,fontWeight:600,color:p.color}}>{p.icon} {p.label}</div>
+              {i<DEV_PHASES.length-1&&<span style={{color:K.txM,fontSize:12}}>→</span>}
+            </div>
+          )}
+        </div>
+        <div style={{fontSize:12,fontWeight:700,color:K.vio,marginBottom:6}}>Plazos CAPA según clasificación NC:</div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          {CLASSIFICATIONS.map(c=>
+            <div key={c.id} style={{background:"#fff",border:`1px solid ${c.color}30`,borderRadius:6,padding:"6px 12px",fontSize:11.5}}>
+              <span style={{fontWeight:700,color:c.color}}>{c.label}:</span> <span style={{color:K.txS}}>{c.deadlineLabel}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+
+    <div className="cfg-section">
+      <h3>📐 Cómo funciona el wizard secuencial</h3>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:4}}>
+        <div style={{padding:"10px 14px",background:"#F8FAFC",borderRadius:8}}><div style={{fontWeight:700,fontSize:13}}>🔀 Barra de etapas</div><div style={{fontSize:12,color:K.txS,marginTop:4}}>La barra superior del formulario muestra todas las etapas. Las completadas tienen ✓, la activa se resalta con color. Click en cualquier etapa para saltar a ella.</div></div>
+        <div style={{padding:"10px 14px",background:"#F8FAFC",borderRadius:8}}><div style={{fontWeight:700,fontSize:13}}>▸ Guardar y avanzar</div><div style={{fontSize:12,color:K.txS,marginTop:4}}>El botón de color a la derecha guarda los datos y avanza la NC/Desvío a la siguiente fase. El nombre de la fase destino aparece en el botón.</div></div>
+        <div style={{padding:"10px 14px",background:"#F8FAFC",borderRadius:8}}><div style={{fontWeight:700,fontSize:13}}>💾 Guardar sin avanzar</div><div style={{fontSize:12,color:K.txS,marginTop:4}}>El botón azul 'Guardar' guarda los cambios en la etapa actual sin mover la fase. Útil para guardar progreso parcial.</div></div>
+        <div style={{padding:"10px 14px",background:"#F8FAFC",borderRadius:8}}><div style={{fontWeight:700,fontSize:13}}>◀ Navegar atrás</div><div style={{fontSize:12,color:K.txS,marginTop:4}}>El botón gris a la izquierda permite volver a la etapa anterior para revisar o corregir datos, sin cambiar la fase del registro.</div></div>
+      </div>
+    </div>
+
+    <div className="cfg-section">
+      <h3>👥 Niveles de acceso</h3>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginTop:4}}>
+        <div style={{padding:"10px 14px",background:"#FEF2F2",borderRadius:8}}><div style={{fontWeight:700,color:"#DC2626",fontSize:13}}>🔑 Administrador</div><div style={{fontSize:12,color:K.txS,marginTop:4}}>Acceso total + gestión de usuarios. Puede crear, editar, eliminar y avanzar etapas de NC, Desvíos y CAPA.</div></div>
+        <div style={{padding:"10px 14px",background:K.priL,borderRadius:8}}><div style={{fontWeight:700,color:K.pri,fontSize:13}}>👤 Usuario</div><div style={{fontSize:12,color:K.txS,marginTop:4}}>Puede crear, editar y gestionar NC, Desvíos y CAPA. No puede administrar usuarios.</div></div>
+        <div style={{padding:"10px 14px",background:K.grnL,borderRadius:8}}><div style={{fontWeight:700,color:K.grn,fontSize:13}}>👁 Visualización</div><div style={{fontSize:12,color:K.txS,marginTop:4}}>Solo lectura — consulta datos sin poder crear, editar ni avanzar etapas.</div></div>
+      </div>
+    </div>
+
+    {sections.map(s=>(
+      <div key={s.title} className="cfg-section">
+        <h3 style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:18}}>{s.icon}</span> {s.title}
+          <button style={{...sB("sm"),marginLeft:"auto"}} onClick={()=>goTo(s.id)}>Ir al módulo →</button>
+        </h3>
+        <p style={{fontSize:13,color:K.txS,lineHeight:1.6,margin:"0 0 10px"}}>{s.content}</p>
+        {s.steps.map((st,i)=><div key={i} style={{display:"flex",gap:10,alignItems:"flex-start",padding:"8px 12px",border:`1px solid ${K.brdL}`,borderRadius:8,marginBottom:6,background:"#fff"}}>
+          <div style={{width:24,height:24,borderRadius:"50%",background:K.priL,color:K.pri,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:12,flexShrink:0}}>{i+1}</div>
+          <div style={{fontSize:13,color:K.txt,lineHeight:1.5,paddingTop:2}}>{st}</div>
+        </div>)}
+      </div>
+    ))}
+
+    <div className="cfg-section" style={{background:"#FEF2F2",borderColor:"#DC262620"}}>
+      <h3 style={{color:"#DC2626"}}>⚠ Clasificación de NC — Matriz de riesgo (SOP-AC-036 §5.4)</h3>
+      <p style={{fontSize:12,color:K.txS,margin:"0 0 10px"}}>La clasificación se determina automáticamente cruzando Severidad × Probabilidad:</p>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        <div>
+          <table className="risk-matrix" style={{width:"100%"}}><thead><tr><th>Sev. \ Prob.</th><th>Baja</th><th>Moderada</th><th>Alta</th></tr></thead>
+          <tbody>
+            <tr><th>Alta</th><td className="r-may">Mayor</td><td className="r-may">Mayor</td><td className="r-crit">Crítica</td></tr>
+            <tr><th>Moderada</th><td className="r-men">Menor</td><td className="r-may">Mayor</td><td className="r-crit">Crítica</td></tr>
+            <tr><th>Baja</th><td className="r-men">Menor</td><td className="r-men">Menor</td><td className="r-crit">Crítica</td></tr>
+          </tbody></table>
+        </div>
+        <div>{CLASSIFICATIONS.map(c=>
+          <div key={c.id} style={{background:"#fff",border:`1px solid ${c.color}20`,borderRadius:7,padding:"8px 12px",marginBottom:6}}>
+            <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:10,height:10,borderRadius:"50%",background:c.color}}/><span style={{fontWeight:700,fontSize:12.5,color:c.color}}>{c.label}</span><span style={{fontSize:11,color:K.txS,marginLeft:"auto"}}>Plazo: {c.deadlineLabel}</span></div>
+            <div style={{fontSize:12,color:K.txS,marginTop:3}}>{c.desc}</div>
+          </div>
+        )}</div>
+      </div>
+    </div>
+
+    <div className="cfg-section">
+      <h3>📖 Análisis 5M — Ishikawa (SOP-AC-036 §5.3)</h3>
+      <p style={{fontSize:12,color:K.txS,margin:"0 0 10px"}}>El wizard incluye la grilla interactiva de Ishikawa con las 5 categorías del formulario REG-SOP-AC-036-A:</p>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8}}>
+        {ISHIKAWA_CATS.map(c=>
+          <div key={c.id} style={{background:"#F8FAFC",borderRadius:7,padding:"10px 12px",border:`1px solid ${K.brdL}`}}>
+            <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>{c.icon} {c.label}</div>
+            <div style={{fontSize:11,color:K.txS}}>{c.questions.length} preguntas de verificación</div>
+          </div>
+        )}
+      </div>
+    </div>
+
+    <div className="cfg-section">
+      <h3>⚡ Tips rápidos</h3>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+        {[
+          {l:"Códigos automáticos",d:"NC-0001, DES-0001, CAPA-0001 se asignan automáticamente al crear."},
+          {l:"Plazos automáticos",d:"Al vincular CAPA a una NC clasificada, la fecha límite se calcula por SOP."},
+          {l:"Recordatorios por email",d:"El botón ✉ en CAPA genera un email pre-redactado al responsable."},
+          {l:"Apertura en etapa actual",d:"Al abrir una NC/Desvío, el wizard se posiciona en la etapa activa."},
+          {l:"Audit Trail",d:"Todo queda registrado: creaciones, ediciones, cambios de fase, login/logout."},
+          {l:"Navegación libre",d:"Podés click en cualquier etapa del wizard para revisarla sin cambiar la fase."},
+          {l:"Filtros combinables",d:"En NC podés filtrar por clasificación y fase simultáneamente."},
+          {l:"Datos en localStorage",d:"Los datos persisten en el navegador. Un cambio de navegador o limpieza borra los datos."},
+          {l:"Descarga de reportes",d:"El botón ⬇ en Reportes genera un archivo .txt con todo el detalle."},
+        ].map(x=><div key={x.l} style={{background:"#F8FAFC",borderRadius:7,padding:"10px 12px"}}><div style={{fontSize:12,fontWeight:700,marginBottom:2}}>{x.l}</div><div style={{fontSize:11.5,color:K.txS}}>{x.d}</div></div>)}
+      </div>
+    </div>
+
+    <div className="cfg-section" style={{background:"#F8FAFC",borderColor:K.brd}}>
+      <h3>📄 Documentos de referencia (SOP-AC-036)</h3>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:4}}>
+        {[
+          {c:"SOP-AC-036",d:"No Conformidades / Acciones Correctivas Acciones Preventivas (CAPA) — V4.0"},
+          {c:"REG-SOP-AC-036-A",d:"Registro de No Conformidad — formulario de apertura, análisis 5M, clasificación, CAPA y cierre"},
+          {c:"REG-SOP-AC-036-B",d:"Nota de Desvío — registro de desvíos temporales de procedimientos/procesos"},
+          {c:"ISO 9001:2015",d:"Sistema de Gestión de la Calidad — referencia normativa"},
+        ].map(x=><div key={x.c} style={{background:"#fff",border:`1px solid ${K.brdL}`,borderRadius:7,padding:"10px 12px"}}>
+          <div style={{fontSize:12,fontWeight:700,color:K.pri,fontFamily:"monospace"}}>{x.c}</div>
+          <div style={{fontSize:11.5,color:K.txS,marginTop:2}}>{x.d}</div>
+        </div>)}
+      </div>
+    </div>
+  </div>);
+}
+
+/* ═══ USER MANAGEMENT ═══ */
+function UserMgmt({users,setUsers,currentUser,setLogs}){
+  const[sh,sSh]=useState(false);const[ed,sEd]=useState(null);const bl={username:"",password:"",name:"",role:"user",active:true};const[fm,sFm]=useState(bl);
+  const save=()=>{if(ed){setUsers(p=>p.map(u=>u.id===ed.id?{...u,...fm}:u));alog(setLogs,"EDITAR USUARIO","Usuarios",fm.name,currentUser.name);}else{setUsers(p=>[...p,{...fm,id:gid()}]);alog(setLogs,"CREAR USUARIO","Usuarios",fm.name,currentUser.name);}sSh(false);sEd(null);};
+  const open=u=>{sFm(u||bl);sEd(u);sSh(true);};
+  return(<div><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}><h1 style={{fontSize:20,fontWeight:800}}>Usuarios</h1><button style={sB("pri")} onClick={()=>open(null)}>+ Nuevo</button></div>
+    <div style={sC}>{users.map(u=>{const r=ROLES[u.role]||{};return <div key={u.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:`1px solid ${K.brdL}`}}>
+      <div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:32,height:32,borderRadius:"50%",background:r.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>{r.icon}</div><div><div style={{fontSize:13,fontWeight:600}}>{u.name}</div><div style={{fontSize:11,color:K.txS}}>@{u.username} · <span style={{color:r.color}}>{r.label}</span></div></div></div>
+      <div style={{display:"flex",gap:6,alignItems:"center"}}>{!u.active&&<Bg color={K.red} bg={K.redL}>Inactivo</Bg>}<button style={sB("sm")} onClick={()=>open(u)}>Editar</button></div>
+    </div>;})}</div>
+    {sh&&<Md title={ed?"Editar usuario":"Nuevo usuario"} onClose={()=>sSh(false)}>
+      <G2><Fd l="Nombre"><input style={sI} value={fm.name} onChange={e=>sFm(p=>({...p,name:e.target.value}))}/></Fd><Fd l="Usuario"><input style={sI} value={fm.username} onChange={e=>sFm(p=>({...p,username:e.target.value}))}/></Fd></G2>
+      <G2><Fd l="Contraseña"><input style={sI} value={fm.password} onChange={e=>sFm(p=>({...p,password:e.target.value}))}/></Fd><Fd l="Rol"><select style={sS} value={fm.role} onChange={e=>sFm(p=>({...p,role:e.target.value}))}>{Object.entries(ROLES).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}</select></Fd></G2>
+      <Fd l="Activo"><label style={{display:"flex",alignItems:"center",gap:6}}><input type="checkbox" checked={fm.active} onChange={e=>sFm(p=>({...p,active:e.target.checked}))}/> Habilitado</label></Fd>
+      <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:14}}><button style={sB("g")} onClick={()=>sSh(false)}>Cancelar</button><button style={sB("pri")} onClick={save} disabled={!fm.name||!fm.username}>Guardar</button></div>
+    </Md>}
+  </div>);
+}
+
+/* ══════════════════════════════════════════════════════
+   DEFAULT DATA — NC 2026 (from PDFs)
+   ══════════════════════════════════════════════════════ */
+const DEFAULT_NCS=[
+{id:"nc001",code:"NC-001-2026",phase:"cerrada",incidentDate:"2026-01-20",openDate:"2026-01-21",openedBy:"Gloria Nuñez",sector:"Seguimiento Gestión Productiva (Envasado)",description:"Durante el cierre del proceso de envasado del producto 61011882 – FABULOSO PASIÓN DE FRUTAS 1 L, Lote 6019UY20F1, se registró un rendimiento del 96%, valor inferior al esperado para un segundo lote de campaña. Posteriormente, en el cierre del envasado del producto 61011878 – FABULOSO NARANJA 1 L, Lote 6020UY20F1 (primer lote de la campaña), se obtuvo un rendimiento del 89%, con una merma de granel aproximada de 4.100 kg, lo que representa una desviación significativa. La especificación de rendimiento de envasado para ambos productos se encuentra en el rango de 97% a 103%.",source:"Control Interno",associatedItem:"61011876 Fabuloso Pasión de Frutas 1L / 61011878 Fabuloso Naranja 1L",lot:"6019UY20F1 / 6020UY20F1",
+ishikawa:{metodo:{0:"SI"}},
+analysisNotes:"Se identificó que una válvula utilizada para la limpieza de cañerías había quedado levemente abierta. El SOP-SAN-198 no contempla explícitamente un punto de control para la verificación del cierre de la válvula de purga del tramo posterior al PIG.",analysisDate:"2026-01-21",analyzedBy:"Gloria Nuñez",
+rootCause:"Previo al inicio del turno de la mañana siguiente, se realizó una verificación del estado de cierre de las válvulas de la línea, identificándose que una válvula utilizada para la limpieza de cañerías (en cambios de variedad o limpiezas profundas) había quedado levemente abierta. Como consecuencia, durante la jornada productiva el producto se descargó de forma continua hacia el desagüe, llegando a la planta de tratamiento. El SOP-SAN-198 Enjuague de línea EQU-081 no contempla de manera explícita un punto de control para la verificación del cierre de la válvula de purga del tramo posterior al PIG.",
+severity:"Baja",probability:"Moderada",classification:"MENOR",
+impactsOthers:"Sí",impactDetail:"",capaType:"Acción Correctiva",conclusions:"",
+rootCauseEliminated:"Sí",coverageComplete:"Sí",negativeImpact:"No",onTime:"Sí",
+effectivenessNotes:"No se reportaron resultados de rendimientos de envasado fuera de % de tendencia post lavado.",
+closeDate:"2026-05-14",closedBy:"Gloria Nuñez",closeNotes:"Se cierra no conformidad por demostrar efectividad en los rendimientos de envasado luego de las acciones cumplidas.",createdAt:"2026-01-21T10:00:00.000Z"},
+
+{id:"nc003",code:"NC-003-2026",phase:"cerrada",incidentDate:"2026-03-02",openDate:"2026-03-09",openedBy:"Gloria Nuñez",sector:"Servicios/Agua/Tanques",description:"Se recibió el informe 513956 de Beltran Zunino que indica un recuento de heterotróficos para muestra de agua de TM8 de 1.1 x 10^5 ufc/100ml, superando la especificación de <10000 ufc/100 ml.",source:"Control Interno",associatedItem:"AGUA DE PROCESO",lot:"TM8-26022026",
+ishikawa:{metodo:{0:"SI"}},
+analysisNotes:"Se constató que la actividad de mantenimiento preventivo correspondiente al mes de febrero 2026, establecida con frecuencia mensual, no fue ejecutada. El sistema actual se basa en seguimiento manual, sin mecanismos formales de control, verificación independiente o alertas.",analysisDate:"2026-03-09",analyzedBy:"Gloria Nuñez",
+rootCause:"A partir del resultado fuera de especificación informado el 02/03/2026 para el punto de muestreo TM8, se verificó que la última limpieza y desmontaje del punto TM8 fue realizada el 17/01/2026, y que los controles microbiológicos posteriores estaban dentro de especificación. Sin embargo, la actividad de mantenimiento preventivo correspondiente al mes de febrero 2026 (frecuencia mensual) no fue ejecutada. Del análisis se identificó que el sistema actual se basa en un seguimiento manual, sin mecanismos formales de control, verificación independiente o alertas que permitan detectar desvíos en el cumplimiento de las tareas programadas.",
+severity:"Alta",probability:"Moderada",classification:"CRITICA",
+impactsOthers:"Sí",impactDetail:"Agua de proceso utilizada en producción",capaType:"Acción Correctiva",conclusions:"",
+rootCauseEliminated:"Sí",coverageComplete:"Sí",negativeImpact:"No",onTime:"Sí",
+effectivenessNotes:"Se evidenció resultados dentro de especificación, por debajo del nivel de alerta, de los controles luego de la limpieza. En mayo ya se coordinó para fin de semana 16/05 la limpieza del sistema y de todos los puntos de uso y de muestreo.",
+closeDate:"2026-05-14",closedBy:"Gloria Nuñez",closeNotes:"Se cierra no conformidad por demostrar que las acciones planteadas fueron efectivas y los resultados microbiológicos están dentro de control.",createdAt:"2026-03-09T10:00:00.000Z"},
+
+{id:"nc020",code:"NC-020-2026",phase:"implementacion",incidentDate:"2026-02-09",openDate:"2026-02-09",openedBy:"Gloria Nuñez",sector:"Aseguramiento de Calidad",description:"Durante la revisión del sistema de gestión se detectó que el plan anual de auditorías internas correspondiente al año 2025 no fue completado en su totalidad, quedando auditorías programadas sin ejecutar dentro del período establecido.",source:"Control Interno",associatedItem:"N/A",lot:"N/A",
+ishikawa:{metodo:{0:"SI"}},
+analysisNotes:"",analysisDate:"2026-02-09",analyzedBy:"Gloria Nuñez",
+rootCause:"",
+severity:"Moderada",probability:"Alta",classification:"MAYOR",
+impactsOthers:"",impactDetail:"",capaType:"Acción Correctiva",conclusions:"",
+rootCauseEliminated:"",coverageComplete:"",negativeImpact:"",onTime:"",
+effectivenessNotes:"",closeDate:"",closedBy:"",closeNotes:"",createdAt:"2026-02-09T10:00:00.000Z"},
+
+{id:"nc021",code:"NC-021-2026",phase:"implementacion",incidentDate:"2026-05-12",openDate:"2026-05-14",openedBy:"Gloria Nuñez",sector:"Control de Calidad",description:"Con fecha 12/05/2026 se recibe reclamo formal vía correo electrónico de cliente, manifestando inconformidad respecto al envase tipo doypack del Jabón Líquido 3 L marca Tienda. El cliente indica que el envase \"es más fino y se tuerce, por lo que queda todo desalineado y feo en la góndola\", comparándolo desfavorablemente con envases de Nevex y Skip.",source:"Reclamo clientes",associatedItem:"5602 PACK CRISTAL - DET LV LIMON 1,25LTS -2 C/DTO (6640 TIENDA INGLESA - JAB LIQ DOYP 3 LT)",lot:"No aplica",
+ishikawa:{metodo:{0:"SI"}},
+analysisNotes:"",analysisDate:"2026-05-14",analyzedBy:"Gloria Nuñez",
+rootCause:"El film flexible del doypack utilizado para el formato 3 L de jabón líquido marca Tienda presenta un espesor/gramaje insuficiente, lo que provoca falta de rigidez estructural y deformación (\"torcedura\") del envase cuando se exhibe lleno en góndola, afectando la presentación del producto en el punto de venta.",
+severity:"Moderada",probability:"Alta",classification:"MAYOR",
+impactsOthers:"Sí",impactDetail:"Presentación en punto de venta, imagen de marca",capaType:"Acción Correctiva",conclusions:"",
+rootCauseEliminated:"",coverageComplete:"",negativeImpact:"",onTime:"",
+effectivenessNotes:"",closeDate:"",closedBy:"",closeNotes:"",createdAt:"2026-05-14T10:00:00.000Z"},
+
+{id:"nc022",code:"NC-022-2026",phase:"implementacion",incidentDate:"2026-05-14",openDate:"2026-05-14",openedBy:"Gloria Nuñez",sector:"Seguimiento Gestión Productiva (Envasado)",description:"El 14/05/2026, a primera hora del turno, durante la verificación de arranque de línea Alwid, se detecta que la codificadora estaba imprimiendo la fecha de vencimiento \"05/208\" en lugar del valor correcto \"05/2028\" (omisión de un dígito en el año).",source:"Control Interno",associatedItem:"5602 PACK CRISTAL - DET LV LIMON 1,25LTS -2 C/DTO",lot:"6134UY20A1",
+ishikawa:{metodo:{0:"SI"}},
+analysisNotes:"La fecha de vencimiento se carga de forma MANUAL en la codificadora, a pesar de que el equipo dispone de la función de seteo automático de fecha. Al no estar activada esta función, el proceso depende íntegramente de la digitación correcta por parte del operario. Los controles de proceso vigentes fallaron en detectar el error durante el arranque del 13/05, presumiblemente por exceso de confianza al observar el dígito final esperado.",analysisDate:"2026-05-14",analyzedBy:"Gloria Nuñez",
+rootCause:"Del análisis de causa raíz se concluye que la fecha de vencimiento se carga de forma MANUAL en la codificadora, a pesar de que el equipo dispone de la función de seteo automático de fecha. Al no estar activada esta función, el proceso depende íntegramente de la digitación correcta por parte del operario, exponiéndolo a error humano.\n\nCausa de detección fallida (Medición): los controles de proceso vigentes (verificación del operario, verificación de CC y carga de foto del codificado en la app) fallaron en detectar el error durante el arranque del 13/05, presumiblemente por exceso de confianza al observar el dígito final esperado (\"8\"), sin lectura atenta del año completo.\n\nAlcance: producción del 13/05/2026 — 13.872 unidades (SKU 5804, 5314 y 5154). Totalidad en planta/depósito, sin despacho al cliente.",
+severity:"Alta",probability:"Moderada",classification:"MAYOR",
+impactsOthers:"Sí",impactDetail:"13.872 unidades afectadas en depósito, sin despacho. SKU 5804, 5314, 5154.",capaType:"Acción Correctiva",conclusions:"",
+rootCauseEliminated:"",coverageComplete:"",negativeImpact:"",onTime:"",
+effectivenessNotes:"",closeDate:"",closedBy:"",closeNotes:"",createdAt:"2026-05-14T11:00:00.000Z"},
+
+{id:"nc023",code:"NC-023-2026",phase:"implementacion",incidentDate:"2026-08-19",openDate:"2026-08-19",openedBy:"Gloria Nuñez",sector:"Seguimiento Gestión Productiva (Envasado)",description:"El 19/08/2026 se recibe reclamo formal del cliente Colgate-Palmolive informando que las etiquetas de las cajas del producto 61011876 – FABULOSO PASIÓN DE FRUTAS 1L indicaban erróneamente el SKU 61011882 – FABULOSO PASIÓN DE FRUTAS 2L. El alcance del evento comprende 40 pallets (506 unidades por pallet, cajas x 12 unidades), totalizando 20.240 cajas del lote 6230UY20F1. De estos, 18 pallets fueron despachados al cliente Colgate-Palmolive y 12 pallets permanecían en planta Vessena al momento de la detección.",source:"Reclamo clientes",associatedItem:"61011876 FABULOSO PASIÓN DE FRUTAS 1L",lot:"6230UY20F1",
+ishikawa:{metodo:{0:"SI",1:"SI",2:"SI",3:"NO",4:"SI"},mano_obra:{0:"SI",1:"SI",2:"SI",3:"NO",4:"SI"},materiales:{0:"N/A",1:"N/A",2:"N/A",3:"N/A",4:"N/A"},maquinas:{0:"SI",1:"SI",2:"SI",3:"NO"},medio_ambiente:{0:"SI",1:"SI",2:"N/A",3:"NO",4:"SI"}},
+analysisNotes:"Método #4: El procedimiento vigente contempla la verificación obligatoria de datos de impresión post-reinicio, pero no fue ejecutado al retomar la producción luego del corte de energía. El procedimiento vinculado no se mantuvo en la práctica operativa.\nMano de Obra #4: Al reiniciar el proceso post-corte, el operario reenvió el archivo de etiqueta sin verificar que correspondiera al SKU correcto, seleccionando por error el SKU 61011882 (2L) en lugar del 61011876 (1L). No ejecutó la verificación post-reinicio prevista en el procedimiento.\nMáquinas #4: La impresora de etiquetas no cuenta con memoria no volátil ni sistema de respaldo de energía ininterrumpible (UPS). Al producirse el apagón, los datos de impresión cargados se perdieron en su totalidad sin posibilidad de recuperación automática, requiriendo reenvío manual del archivo y exponiéndose a error humano.\nMedio Ambiente #4: Se produjo un apagón energético generalizado en el barrio donde se encuentra la planta, provocando la interrupción no planificada del proceso productivo y el reinicio de la impresora de etiquetas.",analysisDate:"2026-08-19",analyzedBy:"Gloria Nuñez",
+rootCause:"A mitad de la jornada productiva se produjo un apagón energético generalizado en el barrio donde se ubica la planta, lo que provocó la interrupción abrupta de la línea de envasado y el reinicio de la impresora de etiquetas de cajas. La impresora no cuenta con memoria no volátil ni sistema de respaldo de energía ininterrumpible (UPS), por lo que al restablecerse el suministro eléctrico los datos del archivo de impresión cargado al inicio del turno se perdieron en su totalidad, sin posibilidad de recuperación automática. Al retomar la producción, el operario reenvió manualmente el archivo de etiqueta, seleccionando por error el correspondiente al SKU 61011882 (Fabuloso Pasión de Frutas 2L) en lugar del SKU 61011876 (1L).\n\nAnálisis de la falla de detección: el procedimiento vigente contempla la verificación obligatoria de datos de impresión (SKU, descripción, lote) como punto de control independiente tras cualquier reinicio de proceso. Dicho control fue correctamente ejecutado y documentado al inicio de la jornada, quedando evidencia del sticker en la hoja de control en proceso. Sin embargo, al reanudarse la producción luego del corte de energía, la verificación post-reinicio no fue ejecutada ni documentada, constituyendo un incumplimiento del procedimiento establecido.\n\nDel análisis se identifican tres factores contribuyentes concurrentes: (1) Vulnerabilidad técnica del equipo: la impresora de etiquetas carece de memoria no volátil y de respaldo de energía (UPS), lo que convierte cada corte eléctrico en un punto crítico de falla que requiere reconfiguración manual completa, exponiéndose al error humano en la selección del archivo. (2) Incumplimiento de procedimiento: el control post-reinicio establecido en el procedimiento no fue ejecutado. Se evidencia una brecha entre el procedimiento documentado y la práctica operativa, lo que indica necesidad de refuerzo de capacitación y supervisión en controles tras paradas no programadas. (3) Ausencia de barrera de verificación independiente: si bien el procedimiento asigna la verificación, no existe un segundo control cruzado (por ejemplo, validación por parte del Jefe de envasado o de Control de Calidad) que actúe como barrera redundante ante el incumplimiento del primer control, particularmente en situaciones de reinicio donde el riesgo de error es elevado.\n\nConclusión: la causa raíz es la combinación de una vulnerabilidad técnica del equipo (sin memoria ni respaldo) con la no ejecución del control post-reinicio previsto en el procedimiento. La falla no se origina en ausencia de procedimiento sino en incumplimiento del mismo, agravada por la falta de una barrera de verificación redundante y la limitación técnica del equipo.",
+severity:"Alta",probability:"Moderada",classification:"MAYOR",
+impactsOthers:"Sí",impactDetail:"Cualquier producto envasado en la línea está expuesto al mismo riesgo ante un corte de energía. El incumplimiento del control post-reinicio podría replicarse en cualquier parada no programada.",capaType:"Acción Correctiva",conclusions:"",
+rootCauseEliminated:"",coverageComplete:"",negativeImpact:"",onTime:"",
+effectivenessNotes:"",closeDate:"",closedBy:"",closeNotes:"",createdAt:"2026-08-19T10:00:00.000Z"},
+
+{id:"nc024",code:"NC-024-2026",phase:"implementacion",incidentDate:"2026-08-10",openDate:"2026-08-10",openedBy:"Gloria Nuñez",sector:"Seguimiento Gestión Productiva (Envasado)",description:"El 10/08/2026, durante una verificación en depósito de producto terminado, se detecta que el sticker de funda del SKU 5602 – PACK CRISTAL DETER LIMÓN 1,25 LTS presenta un código DUN-14 que no corresponde al producto: el DUN-14 impreso corresponde al SKU 2132 – PACK RELAX 900 ML. El alcance del evento comprende 45 pallets (234 unidades por pallet, fundas de 6 unidades cada una), totalizando 10.530 fundas del lote 6218UY20A1, todas en planta al momento de la detección. El producto envasado dentro de las fundas es correcto; la no conformidad se limita al código DUN-14 del sticker de funda, afectando la trazabilidad logística e identificación a nivel de unidad de despacho.",source:"Control Interno",associatedItem:"5602 – PACK CRISTAL DETER LIMÓN 1,25 LTS",lot:"6218UY20A1",
+ishikawa:{metodo:{0:"NO",1:"NO",2:"NO",3:"N/A",4:"NO"},mano_obra:{0:"NO",1:"NO",2:"SI",3:"SI",4:"SI"},materiales:{0:"NO",1:"NO",2:"NO",3:"N/A",4:"SI"},maquinas:{0:"SI",1:"N/A",2:"SI",3:"SI"},medio_ambiente:{0:"SI",1:"SI",2:"N/A",3:"SI",4:"SI"}},
+analysisNotes:"Método #1, #2, #3, #5: No existe procedimiento ni formulario que establezca la verificación del DUN-14 del sticker de funda como punto de control en proceso.\nMano de Obra #1, #2: Al no existir procedimiento ni punto de control definido, el personal no ha sido capacitado en esta verificación.\nMateriales #1, #2, #3: La etiqueta de funda fue impresa con un DUN-14 que no corresponde al SKU del producto. El sticker no fue verificado por CC ya que este dato no forma parte de los controles vigentes.",analysisDate:"2026-08-10",analyzedBy:"Gloria Nuñez",
+rootCause:"El sticker de funda del SKU 5602 fue impreso con el código DUN-14 correspondiente al SKU 2132 – PACK RELAX 900 ML. El SKU 5602 es un producto establecido con historial prolongado en la empresa y no se registraron cambios intencionales recientes en la ficha del producto ni en el archivo de impresión. No fue posible determinar en qué momento ni por qué causa el DUN-14 fue alterado dentro del archivo, dado que el proceso actual de gestión de archivos de etiquetas no cuenta con control de versiones, registro de modificaciones ni permisos restringidos de edición.\n\nDel análisis se identifican tres factores raíz sistémicos:\n(1) Archivos de impresión sin control de integridad: los archivos se gestionan de forma local, sin versionado, sin log de cambios y sin verificación periódica contra datos maestros. Un dato crítico puede alterarse sin detección.\n(2) Ausencia de control del DUN-14 en proceso: el DUN-14 no está incluido en los controles en proceso, formularios de arranque ni verificaciones periódicas. No existía barrera de detección para este atributo en toda la cadena productiva.\n(3) Impresión de etiquetas desvinculada del ERP: los stickers de funda se generan de forma manual e independiente del sistema iDempiere, sin validación automática contra los datos maestros del producto.",
+severity:"Moderada",probability:"Alta",classification:"MAYOR",
+impactsOthers:"Sí",impactDetail:"Cualquier SKU cuya etiqueta de funda se genere mediante el proceso manual actual está expuesto al mismo riesgo.",capaType:"",conclusions:"",
+rootCauseEliminated:"",coverageComplete:"",negativeImpact:"",onTime:"",
+effectivenessNotes:"",closeDate:"",closedBy:"",closeNotes:"",createdAt:"2026-08-10T10:00:00.000Z"},
+];
+
+const DEFAULT_CAPAS=[
+// === NC 001/2026 ===
+{id:"c001",code:"CAPA-0001",ncId:"nc001",devId:"",type:"Acción Preventiva",description:"Actualización del procedimiento SOP-SAN-198 Enjuague de línea EQU-081, incorporando una verificación de cerrado de válvulas una vez retornado el PIG de arrastre por los Jefes de envasado.",responsible:"Gloria Nuñez",responsibleEmail:"gloria.nunez@vessena.com.uy",dueDate:"2026-01-27",status:"Cerrado",verification:"Procedimiento actualizado, versión 3.0 (21/01/2026).",effectiveness:"No se reportaron rendimientos fuera de tendencia post lavado.",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-01-21T10:00:00.000Z"},
+{id:"c002",code:"CAPA-0002",ncId:"nc001",devId:"",type:"Acción Correctiva",description:"Capacitación del personal de la línea y de los jefes de envasado en la nueva versión del procedimiento SOP-SAN-198.",responsible:"Gloria Nuñez",responsibleEmail:"gloria.nunez@vessena.com.uy",dueDate:"2026-01-27",status:"Cerrado",verification:"Personal capacitado (22/01/2026).",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-01-21T10:00:00.000Z"},
+// === NC 003/2026 ===
+{id:"c003",code:"CAPA-0003",ncId:"nc003",devId:"",type:"Corrección",description:"Realizar limpieza y desinfección inmediata de TM8.",responsible:"Arnoldo Braggio",responsibleEmail:"arnoldo.braggio@vessena.com.uy",dueDate:"2026-03-15",status:"Cerrado",verification:"Limpieza y desinfección de TM8 realizada 28/03/2026.",effectiveness:"Resultados dentro de especificación post limpieza.",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-03-09T10:00:00.000Z"},
+{id:"c004",code:"CAPA-0004",ncId:"nc003",devId:"",type:"Acción Correctiva",description:"Realizar hisopado de la válvula.",responsible:"Antonella Nuñez",responsibleEmail:"antonella.nunez@vessena.com.uy",dueDate:"2026-03-15",status:"Cerrado",verification:"Hisopado de válvula realizado 28/03/2026.",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-03-09T10:00:00.000Z"},
+{id:"c005",code:"CAPA-0005",ncId:"nc003",devId:"",type:"Acción Correctiva",description:"Incluir en órdenes de trabajo en Trello el mantenimiento y limpieza de los puntos de uso y tomas de muestra del sistema de agua.",responsible:"Gloria Nuñez",responsibleEmail:"gloria.nunez@vessena.com.uy",dueDate:"2026-03-22",status:"Cerrado",verification:"Se incorporó a las órdenes de trabajo las limpiezas según cronograma del sistema de agua.",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-03-09T10:00:00.000Z"},
+{id:"c006",code:"CAPA-0006",ncId:"nc003",devId:"",type:"Acción Preventiva",description:"Incluir este plan dentro del cronograma de Plan de mantenimiento preventivo general.",responsible:"Gloria Nuñez",responsibleEmail:"gloria.nunez@vessena.com.uy",dueDate:"2026-03-22",status:"Cerrado",verification:"Incluido en plan de mantenimiento preventivo general.",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-03-09T10:00:00.000Z"},
+{id:"c007",code:"CAPA-0007",ncId:"nc003",devId:"",type:"Acción Correctiva",description:"Capacitación del personal de mantenimiento en las órdenes de trabajo del mantenimiento y limpieza de las válvulas.",responsible:"Gloria Nuñez",responsibleEmail:"gloria.nunez@vessena.com.uy",dueDate:"2026-03-22",status:"Cerrado",verification:"Se capacitó al personal de mantenimiento.",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-03-09T10:00:00.000Z"},
+// === NC 020/2026 ===
+{id:"c008",code:"CAPA-0008",ncId:"nc020",devId:"",type:"Acción Correctiva",description:"Reprogramar y completar las auditorías pendientes en el 2026, incluir estos sectores en el plan anual de auditorías 2026. Considerar coordinación con los sectores e identificar períodos críticos operativos.",responsible:"Gloria Nuñez",responsibleEmail:"gloria.nunez@vessena.com.uy",dueDate:"2026-01-18",status:"Cerrado",verification:"Auditorías reprogramadas en plan 2026.",effectiveness:"",followupResp:"Claudia Barlocco",followupEmail:"claudia.barlocco@vessena.com.uy",createdAt:"2026-02-09T10:00:00.000Z"},
+{id:"c009",code:"CAPA-0009",ncId:"nc020",devId:"",type:"Acción Correctiva",description:"Ampliar el equipo de auditores internos.",responsible:"Claudia Barlocco",responsibleEmail:"claudia.barlocco@vessena.com.uy",dueDate:"2026-06-29",status:"En proceso",verification:"",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-02-09T10:00:00.000Z"},
+// === NC 021/2026 ===
+{id:"c010",code:"CAPA-0010",ncId:"nc021",devId:"",type:"Corrección",description:"Relevar stock de doypacks con la especificación de gramaje actual, evaluar alcance del problema.",responsible:"Antonella Nuñez",responsibleEmail:"antonella.nunez@vessena.com.uy",dueDate:"2026-05-20",status:"Cerrado",verification:"Stock relevado.",effectiveness:"",followupResp:"Claudia Barlocco",followupEmail:"claudia.barlocco@vessena.com.uy",createdAt:"2026-05-14T10:00:00.000Z"},
+{id:"c011",code:"CAPA-0011",ncId:"nc021",devId:"",type:"Acción Correctiva",description:"Acelerar la gestión en curso con el proveedor (China) para aumentar el espesor/gramaje del film del doypack. Solicitar muestras del nuevo film y plan de envío.",responsible:"Claudia Barlocco",responsibleEmail:"claudia.barlocco@vessena.com.uy",dueDate:"2026-05-27",status:"Cerrado",verification:"Gestión acelerada con proveedor.",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-05-14T10:00:00.000Z"},
+{id:"c012",code:"CAPA-0012",ncId:"nc021",devId:"",type:"Acción Correctiva",description:"Realizar ensayos de rigidez y estabilidad vertical (\"prueba de góndola\") sobre el envase con el nuevo film, con producto cargado, simulando condiciones de exhibición y apilado.",responsible:"Antonella Nuñez",responsibleEmail:"antonella.nunez@vessena.com.uy",dueDate:"2026-06-09",status:"Abierto",verification:"",effectiveness:"",followupResp:"Claudia Barlocco",followupEmail:"claudia.barlocco@vessena.com.uy",createdAt:"2026-05-14T10:00:00.000Z"},
+{id:"c013",code:"CAPA-0013",ncId:"nc021",devId:"",type:"Acción Correctiva",description:"Actualizar la especificación técnica del envase (Ficha Técnica de Material) incluyendo: espesor/gramaje mínimo del film, criterio de rigidez en góndola y ensayo asociado.",responsible:"Antonella Nuñez",responsibleEmail:"antonella.nunez@vessena.com.uy",dueDate:"2026-06-16",status:"Abierto",verification:"",effectiveness:"",followupResp:"Claudia Barlocco",followupEmail:"claudia.barlocco@vessena.com.uy",createdAt:"2026-05-14T10:00:00.000Z"},
+{id:"c014",code:"CAPA-0014",ncId:"nc021",devId:"",type:"Acción Preventiva",description:"Incorporar al procedimiento de calificación de envases flexibles el ensayo de estabilidad vertical con producto cargado como criterio obligatorio para todo nuevo envase o cambio de especificación.",responsible:"Antonella Nuñez",responsibleEmail:"antonella.nunez@vessena.com.uy",dueDate:"2026-05-27",status:"Abierto",verification:"",effectiveness:"",followupResp:"Claudia Barlocco",followupEmail:"claudia.barlocco@vessena.com.uy",createdAt:"2026-05-14T10:00:00.000Z"},
+// === NC 022/2026 ===
+{id:"c015",code:"CAPA-0015",ncId:"nc022",devId:"",type:"Corrección",description:"Bloqueo en el sistema de las 13.872 unidades del 13/05/2026 y segregarlas en cuarentena en depósito de producto terminado.",responsible:"Viviana Alanis",responsibleEmail:"",dueDate:"2026-05-13",status:"Cerrado",verification:"Unidades bloqueadas y segregadas.",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-05-14T11:00:00.000Z"},
+{id:"c016",code:"CAPA-0016",ncId:"nc022",devId:"",type:"Corrección",description:"Detener línea Alwid hasta corrección de la codificadora láser con el vencimiento correcto.",responsible:"Diego Varela",responsibleEmail:"",dueDate:"2026-05-13",status:"Cerrado",verification:"Línea detenida y codificadora corregida.",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-05-14T11:00:00.000Z"},
+{id:"c017",code:"CAPA-0017",ncId:"nc022",devId:"",type:"Corrección",description:"Reproceso de las unidades obtenidas del SKU 5602 hasta detección del error.",responsible:"Diego Varela",responsibleEmail:"",dueDate:"2026-05-13",status:"Cerrado",verification:"Reproceso completado.",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-05-14T11:00:00.000Z"},
+{id:"c018",code:"CAPA-0018",ncId:"nc022",devId:"",type:"Acción Correctiva",description:"Realizar seteo de fecha automática en la codificadora.",responsible:"Arnoldo Braggio",responsibleEmail:"arnoldo.braggio@vessena.com.uy",dueDate:"2026-05-17",status:"En proceso",verification:"",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-05-14T11:00:00.000Z"},
+// === NC 023/2026 ===
+{id:"c019",code:"CAPA-0019",ncId:"nc023",devId:"",type:"Corrección",description:"Bloquear y segregar los 12 pallets en planta Vessena del lote 6230UY20F1 con etiquetado incorrecto. Proceder al re-etiquetado correcto antes de liberar.",responsible:"Depósito PT / Envasado",responsibleEmail:"",dueDate:"2026-08-20",status:"Abierto",verification:"",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-08-19T10:00:00.000Z"},
+{id:"c020",code:"CAPA-0020",ncId:"nc023",devId:"",type:"Corrección",description:"Coordinar con Colgate-Palmolive la gestión de los 18 pallets despachados con etiquetado incorrecto (re-etiquetado en destino, devolución o retiro según acuerdo comercial).",responsible:"Comercial + Calidad",responsibleEmail:"",dueDate:"2026-08-26",status:"Abierto",verification:"",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-08-19T10:00:00.000Z"},
+{id:"c021",code:"CAPA-0021",ncId:"nc023",devId:"",type:"Acción Correctiva",description:"Actualizar el procedimiento de etiquetado incorporando doble verificación post-reinicio: verificación por el operario + verificación cruzada por el Jefe de envasado o CC, con firma de ambos en la hoja de control.",responsible:"Calidad",responsibleEmail:"gloria.nunez@vessena.com.uy",dueDate:"2026-09-02",status:"Abierto",verification:"",effectiveness:"",followupResp:"Claudia Barlocco",followupEmail:"claudia.barlocco@vessena.com.uy",createdAt:"2026-08-19T10:00:00.000Z"},
+{id:"c022",code:"CAPA-0022",ncId:"nc023",devId:"",type:"Acción Correctiva",description:"Capacitar al personal de la línea de envasado y jefes de turno en el control post-reinicio reforzado, con énfasis en la obligatoriedad del control tras cualquier parada no programada.",responsible:"Calidad",responsibleEmail:"gloria.nunez@vessena.com.uy",dueDate:"2026-09-09",status:"Abierto",verification:"",effectiveness:"",followupResp:"Claudia Barlocco",followupEmail:"claudia.barlocco@vessena.com.uy",createdAt:"2026-08-19T10:00:00.000Z"},
+{id:"c023",code:"CAPA-0023",ncId:"nc023",devId:"",type:"Acción Correctiva",description:"Implementar control de calidad obligatorio (verificación de sticker + registro en hoja de control) cada vez que se reanude la producción tras una interrupción, no solo al inicio de jornada.",responsible:"Control de Calidad",responsibleEmail:"",dueDate:"2026-09-02",status:"Abierto",verification:"",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-08-19T10:00:00.000Z"},
+{id:"c024",code:"CAPA-0024",ncId:"nc023",devId:"",type:"Acción Preventiva",description:"Evaluar e instalar UPS (respaldo de energía ininterrumpible) en la impresora de etiquetas para evitar pérdida de datos ante cortes eléctricos.",responsible:"Ingeniería / Mantenimiento",responsibleEmail:"arnoldo.braggio@vessena.com.uy",dueDate:"2026-09-30",status:"Abierto",verification:"",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-08-19T10:00:00.000Z"},
+{id:"c025",code:"CAPA-0025",ncId:"nc023",devId:"",type:"Acción Preventiva",description:"Evaluar adquisición de impresora con memoria no volátil que retenga el último archivo cargado tras corte de energía.",responsible:"Ingeniería",responsibleEmail:"arnoldo.braggio@vessena.com.uy",dueDate:"2026-09-30",status:"Abierto",verification:"",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-08-19T10:00:00.000Z"},
+{id:"c026",code:"CAPA-0026",ncId:"nc023",devId:"",type:"Acción Preventiva",description:"Evaluar con IT la implementación en el sistema iDempiere de la impresión automática de etiquetas de cajas/fundas directamente desde la orden de producción, según la cantidad teórica de la orden, eliminando la carga manual de archivos en la impresora y el riesgo de selección errónea de SKU.",responsible:"IT / Calidad",responsibleEmail:"",dueDate:"2026-10-31",status:"Abierto",verification:"",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-08-19T10:00:00.000Z"},
+// === NC 024/2026 ===
+{id:"c027",code:"CAPA-0027",ncId:"nc024",devId:"",type:"Corrección",description:"Destinar los 45 pallets del lote 6218UY20A1 exclusivamente a canal distribuidoras, restringiendo el despacho a cadenas que verifican e ingresan el DUN-14 a su sistema de stock.",responsible:"Andrés Rodríguez",responsibleEmail:"andres.rodriguez@vessena.com.uy",dueDate:"2026-08-09",status:"Cerrado",verification:"Pallets destinados a distribuidoras.",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-08-10T10:00:00.000Z"},
+{id:"c028",code:"CAPA-0028",ncId:"nc024",devId:"",type:"Acción Preventiva",description:"Evaluar con IT la implementación en iDempiere de la impresión automática de etiquetas de funda directamente desde la orden de producción, con validación automática del DUN-14 contra los datos maestros del producto, de forma análoga a las etiquetas de pallet.",responsible:"Claudia Barlocco",responsibleEmail:"claudia.barlocco@vessena.com.uy",dueDate:"2026-10-29",status:"En proceso",verification:"",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-08-10T10:00:00.000Z"},
+];
+
+/* ══════════════════════════════════════════════════════
+   MAIN APP
+   ══════════════════════════════════════════════════════ */
+function App(){
+  const[cu,sCu]=useState(()=>LS.get("vnc_session"));
+  const[users,setUsers]=useLS("vnc_users",DEFAULT_USERS);
+  const[ncs,setNCs]=useLS("vnc_ncs6",DEFAULT_NCS);
+  const[devs,setDevs]=useLS("vnc_devs6",[]);
+  const[capas,setCapas]=useLS("vnc_capas6",DEFAULT_CAPAS);
+  const[logs,setLogs]=useLS("vnc_logs6",[]);
+  const[pg,sPg]=useState("rep");
+  const[col,sCol]=useState(false);
+  const[ncDet,sNcDet]=useState(null);
+  const[devDet,sDevDet]=useState(null);
+  const[yr,sYr]=useState(new Date().getFullYear());
+
+  const login=u=>{sCu(u);LS.set("vnc_session",u);alog(setLogs,"SESIÓN","Sistema",`Login: ${u.name}`,u.name);};
+  const logout=()=>{alog(setLogs,"SESIÓN","Sistema",`Logout: ${cu.name}`,cu.name);sCu(null);LS.set("vnc_session",null);};
+
+  if(!cu)return <Login users={users} onLogin={login}/>;
+  const role=ROLES[cu.role]||{};const canEdit=role.canEdit;const canAdmin=role.canAdmin;
+
+  // Year-filtered data
+  const yrStr=String(yr);
+  const fNcs=ncs.filter(n=>(n.openDate||n.createdAt||"").startsWith(yrStr));
+  const fDevs=devs.filter(d=>(d.date||d.createdAt||"").startsWith(yrStr));
+  const fNcIds=new Set(fNcs.map(n=>n.id));const fDevIds=new Set(fDevs.map(d=>d.id));
+  const fCapas=capas.filter(c=>fNcIds.has(c.ncId)||fDevIds.has(c.devId)||(!(c.ncId||c.devId)&&(c.createdAt||"").startsWith(yrStr)));
+
+  // Available years from data
+  const allYears=[...new Set([...ncs.map(n=>(n.openDate||n.createdAt||"").slice(0,4)),...devs.map(d=>(d.date||d.createdAt||"").slice(0,4))].filter(y=>y&&y.length===4).map(Number))].sort();
+  if(!allYears.includes(yr))allYears.push(yr);
+  allYears.sort();
+
+  const data={ncs:fNcs,setNCs,devs:fDevs,setDevs,capas:fCapas,setCapas,logs,setLogs,currentUser:cu,allNcs:ncs,allDevs:devs,allCapas:capas,yr};
+  const nv=[...NAV];if(canAdmin)nv.push({k:"users",l:"Usuarios",i:"👥"});
+
+  const openNC=(existing)=>{
+    if(existing){sNcDet(existing);}
+    else if(canEdit){
+      const yr=new Date().getFullYear();const nums=ncs.map(n=>{const m=n.code.match(/NC[-_]?0*(\d+)/);return m?parseInt(m[1]):0;});const next=Math.max(0,...nums)+1;const code=`NC-${String(next).padStart(3,"0")}-${yr}`;
+      const newNC={id:gid(),code,phase:"abierta",incidentDate:"",openDate:tdy(),openedBy:cu.name,sector:"",description:"",source:"",associatedItem:"",lot:"",ishikawa:{},analysisNotes:"",analysisDate:"",analyzedBy:"",rootCause:"",severity:"",probability:"",classification:"",impactsOthers:"",impactDetail:"",capaType:"",conclusions:"",rootCauseEliminated:"",coverageComplete:"",negativeImpact:"",onTime:"",effectivenessNotes:"",closeDate:"",closedBy:"",closeNotes:"",createdAt:new Date().toISOString()};
+      setNCs(p=>[newNC,...p]);alog(setLogs,"CREAR","No Conformidad",code,cu.name);sNcDet(newNC);
+    }
+  };
+  const saveNC=(fm)=>{const prev=ncs.find(n=>n.id===fm.id);setNCs(p=>p.map(n=>n.id===fm.id?{...n,...fm}:n));if(prev&&prev.phase!==fm.phase)alog(setLogs,"CAMBIO FASE","No Conformidad",`${fm.code}: ${NC_PHASES.find(p=>p.id===prev.phase)?.label} → ${NC_PHASES.find(p=>p.id===fm.phase)?.label}`,cu.name);else alog(setLogs,"EDITAR","No Conformidad",fm.code,cu.name);sNcDet(null);};
+  const deleteNC=(id)=>{if(confirm("¿Eliminar esta NC?")){const n=ncs.find(x=>x.id===id);setNCs(p=>p.filter(x=>x.id!==id));alog(setLogs,"ELIMINAR","No Conformidad",n?.code,cu.name);sNcDet(null);}};
+  const openDev=(existing)=>{
+    if(existing){sDevDet(existing);}
+    else if(canEdit){
+      const yr=new Date().getFullYear();const nums=devs.map(d=>{const m=d.code.match(/DES[-_]?0*(\d+)/);return m?parseInt(m[1]):0;});const next=Math.max(0,...nums)+1;const code=`DES-${String(next).padStart(3,"0")}-${yr}`;
+      const newDev={id:gid(),code,phase:"abierto",openedBy:cu.name,sector:"",date:tdy(),associatedItem:"",lot:"",description:"",justification:"",impacts:{},impactNotes:"",riskControlled:"",riskNotes:"",critical:false,planned:"No Planificado",priority:"",decision:"",verifiers:"",implementationActions:"",notifications:"",docComplete:"",approvedBy:"",closeDate:"",closeNotes:"",createdAt:new Date().toISOString()};
+      setDevs(p=>[newDev,...p]);alog(setLogs,"CREAR","Desvío",code,cu.name);sDevDet(newDev);
+    }
+  };
+  const saveDev=(fm)=>{const prev=devs.find(d=>d.id===fm.id);setDevs(p=>p.map(d=>d.id===fm.id?{...d,...fm}:d));if(prev&&prev.phase!==fm.phase)alog(setLogs,"CAMBIO FASE","Desvío",`${fm.code}: ${DEV_PHASES.find(p=>p.id===prev.phase)?.label} → ${DEV_PHASES.find(p=>p.id===fm.phase)?.label}`,cu.name);else alog(setLogs,"EDITAR","Desvío",fm.code,cu.name);sDevDet(null);};
+  const deleteDev=(id)=>{if(confirm("¿Eliminar este desvío?")){const d=devs.find(x=>x.id===id);setDevs(p=>p.filter(x=>x.id!==id));alog(setLogs,"ELIMINAR","Desvío",d?.code,cu.name);sDevDet(null);}};
+
+  return(<div style={{background:K.bg,minHeight:"100vh"}}>
+    <div style={{width:col?52:220,background:K.txt,color:"#fff",display:"flex",flexDirection:"column",position:"fixed",top:0,left:0,bottom:0,zIndex:10,transition:"width .2s"}}>
+      <div style={{padding:col?"16px 8px":"16px 14px",borderBottom:"1px solid rgba(255,255,255,.08)",textAlign:col?"center":"left"}}>{col?<span style={{fontSize:15,fontWeight:800}}>V</span>:<div><div style={{fontSize:10,fontWeight:800,color:K.ves,letterSpacing:".1em",textTransform:"uppercase"}}>Vessena S.A.</div><div style={{fontSize:13.5,fontWeight:700,marginTop:2}}>NC / CAPA & Desvíos</div></div>}</div>
+      {!col&&<div style={{padding:"10px 14px",borderBottom:"1px solid rgba(255,255,255,.06)",display:"flex",alignItems:"center",gap:8}}><div style={{width:28,height:28,borderRadius:"50%",background:role.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13}}>{role.icon}</div><div style={{flex:1,overflow:"hidden"}}><div style={{fontSize:12,fontWeight:600,color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cu.name}</div><div style={{fontSize:10,color:role.color}}>{role.label}</div></div></div>}
+      {!col&&<div style={{padding:"8px 14px",borderBottom:"1px solid rgba(255,255,255,.06)"}}><div style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,.4)",textTransform:"uppercase",letterSpacing:".05em",marginBottom:4}}>SOP-AC-036</div><div style={{fontSize:11,color:"rgba(255,255,255,.6)"}}>No Conformidades / CAPA</div></div>}
+      {/* Year selector */}
+      <div style={{padding:col?"6px 4px":"8px 14px",borderBottom:"1px solid rgba(255,255,255,.06)",display:"flex",alignItems:"center",justifyContent:"center",gap:col?2:8}}>
+        <button onClick={()=>sYr(y=>y-1)} style={{background:"none",border:"none",color:"rgba(255,255,255,.5)",fontSize:14,cursor:"pointer",padding:"2px 4px",fontFamily:"inherit"}}>◀</button>
+        <span style={{fontSize:col?13:16,fontWeight:800,color:"#fff",minWidth:col?30:50,textAlign:"center"}}>{yr}</span>
+        <button onClick={()=>sYr(y=>y+1)} style={{background:"none",border:"none",color:"rgba(255,255,255,.5)",fontSize:14,cursor:"pointer",padding:"2px 4px",fontFamily:"inherit"}}>▶</button>
+      </div>
+      <nav style={{flex:1,padding:"6px 0",overflowY:"auto"}}>{nv.map(n=><div key={n.k} onClick={()=>sPg(n.k)} title={n.l} style={{display:"flex",alignItems:"center",gap:9,padding:"9px 14px",cursor:"pointer",background:pg===n.k?"rgba(255,255,255,.1)":"transparent",borderRadius:5,margin:"1px 6px",fontSize:12.5,fontWeight:pg===n.k?600:400,color:pg===n.k?"#fff":"rgba(255,255,255,.6)",borderTop:n.k==="users"?"1px solid rgba(255,255,255,.06)":"none",marginTop:n.k==="users"?6:1}}><span style={{fontSize:14,flexShrink:0}}>{n.i}</span>{!col&&<span>{n.l}</span>}</div>)}</nav>
+      <div style={{padding:"6px",borderTop:"1px solid rgba(255,255,255,.08)"}}><div onClick={logout} style={{display:"flex",alignItems:"center",justifyContent:col?"center":"flex-start",gap:8,padding:"9px 14px",cursor:"pointer",borderRadius:5,margin:"1px 6px",fontSize:12.5,color:"rgba(255,255,255,.5)"}}><span>🚪</span>{!col&&<span>Salir</span>}</div><div onClick={()=>sCol(!col)} style={{display:"flex",alignItems:"center",justifyContent:"center",padding:"8px",cursor:"pointer",fontSize:12,color:"rgba(255,255,255,.4)"}}>{col?"▸":"◂"}</div></div>
+    </div>
+    <div style={{marginLeft:col?52:220,padding:"20px 28px",transition:"margin .2s"}}>
+      {pg==="nc"&&<NCList data={data} canEdit={canEdit} openNC={openNC}/>}
+      {pg==="dev"&&<DevList data={data} canEdit={canEdit} openDev={openDev}/>}
+      {pg==="capa"&&<CAPAList data={data} canEdit={canEdit}/>}
+      {pg==="trail"&&<Trail logs={logs}/>}
+      {pg==="rep"&&<Reports data={data}/>}
+      {pg==="guide"&&<GuidePage goTo={sPg}/>}
+      {pg==="users"&&canAdmin&&<UserMgmt users={users} setUsers={setUsers} currentUser={cu} setLogs={setLogs}/>}
+    </div>
+    {ncDet&&<NCDetail nc={ncDet} data={data} canEdit={canEdit} onClose={()=>sNcDet(null)} onSave={saveNC} onDelete={deleteNC}/>}
+    {devDet&&<DevDetail dev={devDet} canEdit={canEdit} onClose={()=>sDevDet(null)} onSave={saveDev} onDelete={deleteDev}/>}
+  </div>);
+}
+ReactDOM.render(<App/>,document.getElementById("root"));
+</script>
+</body>
+</html>
