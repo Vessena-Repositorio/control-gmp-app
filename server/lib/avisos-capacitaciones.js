@@ -2,19 +2,22 @@
  * Avisos programados de Capacitaciones.
  *
  * Reemplaza a `sendDailyReminders` y `checkPendingInductions` del Apps Script:
- * los avisos 09, 10 y 12 del inventario. El 11 lo dispara una persona desde la
- * app, asi que llega con el corte de escritura.
+ * los avisos 09, 10 y 12 del inventario, mas el 13, que es nuevo. El 11 lo
+ * dispara una persona desde la app, asi que llega con el corte de escritura.
  *
- * Textos y asuntos replicados tal cual.
+ * Textos y asuntos de los migrados, replicados tal cual.
  *
- * PENDIENTE DE DECISION: los recordatorios del plan disparan solo si faltan
- * EXACTAMENTE 7 o 1 dias, igual que hoy. Si un dia no corre -corte, deploy
- * largo- ese recordatorio no sale nunca, porque al dia siguiente la cuenta ya
- * no da 7 ni 1. Arreglarlo pide registrar que item ya fue avisado, y eso cambia
- * el comportamiento en el caso de falla, asi que no se hace por cuenta propia.
+ * Los recordatorios previos disparan solo si faltan EXACTAMENTE 7 o 1 dias,
+ * igual que hoy: si un dia no corre, ese recordatorio no sale, porque al dia
+ * siguiente la cuenta ya no da 7 ni 1. Arreglarlo pide registrar que item ya fue
+ * avisado y cambia el comportamiento ante una falla, asi que se dejo como esta.
+ *
+ * El aviso 13 lo amortigua sin cambiar nada de eso: la capacitacion que se
+ * paso de fecha ahora avisa igual, todos los dias, aunque se hayan perdido los
+ * dos recordatorios previos. Antes ese caso terminaba en silencio.
  */
 import { hayCorreo, enviar } from './correo.js';
-import { supervisoresDe } from './destinatarios.js';
+import { supervisoresDe, unir } from './destinatarios.js';
 import { correrUnaVezPorDia, documentosDe, relojLocal, comoDia } from './tareas.js';
 
 const RECURSO = 'capacitaciones';
@@ -98,6 +101,53 @@ function cuerpoRecordatorio(p, dias) {
         `</div></div></div>`;
 }
 
+/**
+ * Aviso 13 — capacitaciones atrasadas. NUEVO: no existia en el Apps Script.
+ *
+ * Es un resumen por persona y no un correo por capacitacion: alguien con cuatro
+ * atrasadas recibe uno, no cuatro. Y se repite todos los dias mientras siga
+ * atrasada, siguiendo el criterio de estabilidad, que es el unico de los tres
+ * scripts que no pierde avisos.
+ */
+function cuerpoAtrasadas(items) {
+    const celda = 'padding:8px 10px;border:1px solid #e5e7eb';
+    const filas = items.map(({ p, dias }) => {
+        const color = dias >= 30 ? '#dc2626' : dias >= 8 ? '#d97706' : '#92400e';
+        return `<tr>` +
+            `<td style="${celda}"><b>${esc(p.t || '—')}</b></td>` +
+            `<td style="${celda}">${esc(p.dc || '—')}</td>` +
+            `<td style="${celda}">${esc(comoDia(p.fp))}</td>` +
+            `<td style="${celda};color:${color};font-weight:800">${dias}</td>` +
+        `</tr>`;
+    }).join('');
+    const th = (t, al) => `<th style="padding:8px 10px;text-align:${al};border:1px solid ${NAV}">${t}</th>`;
+    const plural = items.length === 1 ? '' : 'es';
+
+    return `<div style="font-family:Arial,Helvetica,sans-serif;background:#f5f5f5;padding:20px">` +
+      `<div style="max-width:700px;margin:auto">` +
+        `<div style="background:${NAV};color:#fff;padding:22px 24px;border-radius:8px 8px 0 0">` +
+          `<div style="font-size:20px;font-weight:800">Vessena S.A. — Capacitaciones atrasadas</div>` +
+          `<div style="font-size:12px;opacity:.85;margin-top:2px">Recordatorio automático · REG-SOP-AC-039-D</div>` +
+        `</div>` +
+        `<div style="background:#fff;padding:24px;border-radius:0 0 8px 8px">` +
+          `<p style="margin:0 0 12px 0">Hola,</p>` +
+          `<p style="margin:0 0 12px 0">Sos responsable de <b style="color:#dc2626">` +
+          `${items.length} capacitación${plural}</b> cuya fecha programada ya pasó:</p>` +
+          `<table style="width:100%;border-collapse:collapse;font-size:12px;margin:12px 0">` +
+            `<thead style="background:${NAV};color:#fff"><tr>` +
+              th('Tema','left') + th('Código doc','left') + th('Fecha programada','left') +
+              th('Días de atraso','center') +
+            `</tr></thead><tbody>${filas}</tbody></table>` +
+          `<p style="margin:12px 0;font-size:13px">Si ya se dictó, cargá la asistencia en la app ` +
+          `de <b>Registro</b>. Si se reprograma o se suspende, actualizá el plan para que deje de ` +
+          `figurar como atrasada.</p>` +
+          `<p style="margin:12px 0 0 0;font-size:11px;color:#666;border-top:1px solid #e5e7eb;padding-top:12px">` +
+            `Este recordatorio se envía todos los días hasta que la capacitación se cargue, ` +
+            `se reprograme o se suspenda.` +
+          `</p>` +
+        `</div></div></div>`;
+}
+
 export async function revisarRecordatoriosPlan({ forzar = false, soloPrevisualizar = false } = {}) {
     if (!hayCorreo) return { estado: 'sin correo configurado' };
 
@@ -106,7 +156,14 @@ export async function revisarRecordatoriosPlan({ forzar = false, soloPrevisualiz
         const hoy = comoDia(reloj.hoy);
         const plan = await documentosDe('capacitaciones', 'PL');
 
+        // Escalamiento opcional del aviso de atrasadas: si alguien se carga en
+        // notificacion_supervisores para 'atrasadas', recibe copia. Vacio por
+        // defecto, asi que hoy solo le llega al responsable.
+        const escalan = await supervisoresDe(RECURSO, 'atrasadas');
+
         const planeados = [];
+        const atrasadasPorPersona = new Map();
+
         for (const p of plan) {
             if (!p) continue;
             if (['cumplida', 'suspendida', 'reprogramada'].includes(p.e)) continue;
@@ -114,15 +171,40 @@ export async function revisarRecordatoriosPlan({ forzar = false, soloPrevisualiz
             if (!p.fp) continue;
 
             const dias = diasEntre(hoy, comoDia(p.fp));
-            if (dias !== 7 && dias !== 1) continue;
+            if (dias === null) continue;
 
+            if (dias === 7 || dias === 1) {
+                planeados.push({
+                    para: [String(p.email).trim().toLowerCase()],
+                    asunto: dias === 1
+                        ? `⏰ MAÑANA: capacitación — ${p.t}`
+                        : `📅 Recordatorio: capacitación en 7 días — ${p.t}`,
+                    html: cuerpoRecordatorio(p, dias),
+                    dias,
+                });
+                continue;
+            }
+
+            // Aviso 13: la fecha ya paso y el item sigue abierto.
+            if (dias < 0) {
+                const correo = String(p.email).trim().toLowerCase();
+                if (!atrasadasPorPersona.has(correo)) atrasadasPorPersona.set(correo, []);
+                atrasadasPorPersona.get(correo).push({ p, dias: Math.abs(dias) });
+            }
+        }
+
+        for (const [correo, items] of atrasadasPorPersona) {
+            items.sort((a, b) => b.dias - a.dias);
+            // Con una sola se reusa la ficha del recordatorio, que ya contempla
+            // el caso atrasado; con varias, la tabla resumen.
+            const unica = items.length === 1;
             planeados.push({
-                para: [String(p.email).trim().toLowerCase()],
-                asunto: dias === 1
-                    ? `⏰ MAÑANA: capacitación — ${p.t}`
-                    : `📅 Recordatorio: capacitación en 7 días — ${p.t}`,
-                html: cuerpoRecordatorio(p, dias),
-                dias,
+                para: unir(correo, escalan),
+                asunto: unica
+                    ? `⚠ ATRASADA: capacitación — ${items[0].p.t}`
+                    : `⚠ ${items.length} capacitaciones atrasadas`,
+                html: unica ? cuerpoRecordatorio(items[0].p, -items[0].dias) : cuerpoAtrasadas(items),
+                dias: -items[0].dias,
             });
         }
 
