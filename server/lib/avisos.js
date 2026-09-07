@@ -16,9 +16,13 @@ import { hayCorreo, enviar } from './correo.js';
 
 const TAREA = 'avisos_capa';
 
+// Las variables llevan CAPA en el nombre a proposito. Cuando se sume la
+// segunda notificacion -estabilidad, capacitaciones- un `AVISOS_ACTIVOS` a
+// secas seria ambiguo: nadie sabria que apaga, y eso termina en que nadie lo
+// toca. La zona horaria y el SMTP si son transversales y quedan sin prefijo.
 const ZONA = process.env.ZONA_HORARIA || 'America/Montevideo';
-const HORA = Number(process.env.AVISOS_HORA ?? 8);
-const DIAS_PREVIOS = Number(process.env.AVISOS_DIAS_PREVIOS ?? 7);
+const HORA = Number(process.env.AVISOS_CAPA_HORA ?? 8);
+const DIAS_PREVIOS = Number(process.env.AVISOS_CAPA_DIAS_PREVIOS ?? 7);
 
 // Copia para Calidad. Si no se declara se usa la propia casilla que firma los
 // mensajes, que es de QA: es preferible que el resumen llegue a una casilla de
@@ -30,7 +34,20 @@ const CALIDAD = process.env.CORREO_CALIDAD || process.env.SMTP_REMITENTE;
 // que nadie haya podido ver antes que dice el mensaje ni a quienes les llega.
 // La corrida manual (POST /api/correo/avisos) no mira esta variable: sirve
 // justamente para probar el circuito antes de encenderlo.
-const ACTIVOS = ['1', 'true', 'si'].includes(String(process.env.AVISOS_ACTIVOS || '').toLowerCase());
+const ACTIVOS = ['1', 'true', 'si'].includes(String(process.env.AVISOS_CAPA_ACTIVOS || '').toLowerCase());
+
+// Red de contencion para el renombre: si quedo cargado el nombre viejo y no el
+// nuevo, los avisos no saldrian y no habria ningun error que lo delate. Un
+// aviso que no sale no se nota, asi que conviene gritarlo en el arranque.
+for (const [viejo, nuevo] of [
+    ['AVISOS_ACTIVOS', 'AVISOS_CAPA_ACTIVOS'],
+    ['AVISOS_HORA', 'AVISOS_CAPA_HORA'],
+    ['AVISOS_DIAS_PREVIOS', 'AVISOS_CAPA_DIAS_PREVIOS'],
+]) {
+    if (process.env[viejo] && !process.env[nuevo]) {
+        console.warn(`[avisos] ${viejo} ya no se usa: renombrala a ${nuevo} o el valor se ignora`);
+    }
+}
 
 /** Acciones sin cerrar que vencen dentro de la ventana, o que ya vencieron. */
 async function accionesPendientes() {
@@ -113,7 +130,7 @@ function comoHtml(acciones, titulo) {
  */
 export async function revisarAvisosCapa({ forzar = false, soloCalidad = false } = {}) {
     if (!hayCorreo) return { estado: 'sin correo configurado' };
-    if (!forzar && !ACTIVOS) return { estado: 'envio automatico apagado (AVISOS_ACTIVOS)' };
+    if (!forzar && !ACTIVOS) return { estado: 'envio automatico apagado (AVISOS_CAPA_ACTIVOS)' };
 
     // Si hubiera mas de una instancia, solo una manda. Sin esto cada una
     // mandaria su propia copia del mismo resumen.
