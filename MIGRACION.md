@@ -153,6 +153,11 @@ deja sin configurar (ver "Automatización").
    | `SYNC_TOKEN` | uno largo y aleatorio, para el sync manual |
    | `SYNC_INTERVALO_MIN` | `15` |
    | `DATABASE_SSL` | `true` solo si tu Postgres exige TLS |
+   | `SMTP_HOST` | `email8.pl.com.uy` |
+   | `SMTP_PUERTO` | `587` (STARTTLS) |
+   | `SMTP_REMITENTE` | `notificacionesQA@vessena.com.uy` |
+   | `SMTP_CLAVE` | la clave de esa casilla — **solo en Coolify, nunca en el repo** |
+   | `SMTP_USUARIO` | opcional; si falta se usa `SMTP_REMITENTE` |
 
    Los cuatro valores de `ORIGEN_*` están en `.env.example`. Si falta alguno,
    ese dominio no replica y su dashboard queda sin datos — pero los demás
