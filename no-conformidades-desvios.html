@@ -51,9 +51,19 @@ const CLASSIFICATIONS=[
 ];
 const SEVERITIES=["Baja","Moderada","Alta"];
 const PROBABILITIES=["Baja","Moderada","Alta"];
+/* Matriz de criticidad, indexada como "Severidad-Probabilidad".
+   ─────────────────────────────────────────────────────────────────────────────
+   ATENCIÓN: esta tabla es la ÚNICA fuente. Las matrices que se ven en la etapa
+   de Clasificación y en la Guía se dibujan a partir de ella (ver <RiskMatrix/>),
+   no están escritas aparte. Antes sí lo estaban y discrepaban en dos celdas:
+   el sistema clasificaba distinto de lo que le mostraba a quien clasificaba.
+
+   Dos celdas siguen pendientes de confirmar contra el SOP-AC-036 §5.4 —las
+   marcadas abajo—: se dejaron como estaban en el código hasta poder cotejarlas
+   con el procedimiento. */
 const RISK_MATRIX={
-  "Alta-Alta":"CRITICA","Alta-Moderada":"MAYOR","Alta-Baja":"MENOR",
-  "Moderada-Alta":"MAYOR","Moderada-Moderada":"MAYOR","Moderada-Baja":"MENOR",
+  "Alta-Alta":"CRITICA","Alta-Moderada":"MAYOR","Alta-Baja":"MENOR",      // Alta-Baja: ¿MENOR o MAYOR?
+  "Moderada-Alta":"MAYOR","Moderada-Moderada":"MAYOR","Moderada-Baja":"MENOR", // Moderada-Alta: ¿MAYOR o CRITICA?
   "Baja-Alta":"CRITICA","Baja-Moderada":"MENOR","Baja-Baja":"MENOR",
 };
 const DETECTION_SOURCES=["Auditorías","Control Interno","Reclamo clientes","Validaciones y calificaciones","Desvíos de procesos","Revisión por la dirección","Evaluación de tendencias","Evaluación de proveedores","Otros"];
@@ -85,29 +95,78 @@ const sC={background:K.srf,border:`1px solid ${K.brd}`,borderRadius:9,padding:18
 const sTh={textAlign:"left",padding:"9px 10px",borderBottom:`2px solid ${K.brd}`,color:K.txS,fontWeight:700,fontSize:10.5,textTransform:"uppercase",letterSpacing:".05em"};
 const sTd={padding:"10px",borderBottom:`1px solid ${K.brdL}`,verticalAlign:"top",fontSize:13};
 
-const LS={get(k){try{return JSON.parse(localStorage.getItem(k));}catch{return null;}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{}}};
-function useLS(k,i){const[v,sV]=useState(()=>LS.get(k)??i);const s=useCallback(fn=>{sV(p=>{const n=typeof fn==="function"?fn(p):fn;LS.set(k,n);return n;});},[k]);return[v,s];}
-const gid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
-const fd=d=>d?new Date(d).toLocaleDateString("es-UY",{day:"2-digit",month:"short",year:"numeric"}):"—";
+const fd=d=>d?new Date(d+(String(d).length===10?"T00:00:00":"")).toLocaleDateString("es-UY",{day:"2-digit",month:"short",year:"numeric"}):"—";
 const fdt=d=>d?new Date(d).toLocaleString("es-UY",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}):"—";
 const tdy=()=>new Date().toISOString().split("T")[0];
 const addMo=(d,m)=>{const dt=new Date(d);dt.setMonth(dt.getMonth()+m);return dt.toISOString().split("T")[0];};
-function alog(sL,action,entity,detail,user="Sistema"){sL(p=>[{id:gid(),ts:new Date().toISOString(),user,action,entity,detail},...p]);}
-const daysLeft=(d)=>{if(!d)return 999;return Math.ceil((new Date(d)-new Date())/86400000);};
+const daysLeft=(d)=>{if(!d)return 999;return Math.ceil((new Date(d+"T00:00:00")-new Date())/86400000);};
 
-const ROLES={admin:{label:"Administrador",color:"#DC2626",bg:"#FEF2F2",icon:"🔑",canEdit:true,canAdmin:true},user:{label:"Usuario",color:"#1E40AF",bg:"#EFF6FF",icon:"👤",canEdit:true,canAdmin:false},viewer:{label:"Visualización",color:"#059669",bg:"#F0FDF4",icon:"👁",canEdit:false,canAdmin:false}};
-/* Usuario provisorio, solo para poder abrir la app mientras se edita.
-   El acceso real pasa a ser el del portal (/api/auth/yo), igual que en
-   estabilidad y control-calidad-envases, y este bloque desaparece entonces.
-   No se ponen credenciales reales acá: el archivo va a un repositorio. */
-const DEFAULT_USERS=[
-  {id:"adm",username:"admin",password:"provisorio",role:"admin",name:"Administrador",active:true},
-];
+/* Una fecha 'YYYY-MM-DD' como hora local. `new Date("2026-01-20")` se interpreta
+   como medianoche UTC, que en Montevideo son las 21:00 del 19: al agrupar por mes
+   o por año, todo lo del día 1 caía en el mes anterior. */
+const fecha0=d=>d?new Date(String(d).slice(0,10)+"T00:00:00"):null;
+
+/* Concordancia de número. Los avisos de cierre nombran cuántas acciones faltan,
+   y "quedan 1 acciones" en un mensaje de bloqueo se lee como un error del
+   sistema, no como una regla. La N del plural se reemplaza por el número. */
+const plural=(n,uno,varios)=>n===1?uno:varios.replace("N",n);
+
+/* Escapa texto que se inserta en el HTML de los informes imprimibles. Sin esto,
+   una descripción con "<" o "&" —habitual al citar una especificación, por
+   ejemplo "<10000 ufc/100ml"— rompe el documento generado. */
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+/* ═══ API ═══════════════════════════════════════════════════════════════════
+   Los datos viven en Postgres, no en el navegador: entramos desde varias
+   máquinas y todos tenemos que ver lo mismo. El audit trail también, que
+   guardado junto a los datos que audita no probaba nada.
+
+   Toda respuesta que no sea ok levanta una excepción con el mensaje del
+   servidor, para que quien llama no tenga que revisar `ok` en cada lugar y un
+   fallo no pase por guardado. */
+const API="/api/nc-desvios";
+async function api(ruta,opciones={}){
+  const r=await fetch(API+ruta,{
+    credentials:"same-origin",
+    headers:opciones.body?{"Content-Type":"application/json"}:undefined,
+    ...opciones,
+  });
+  if(r.status===401){
+    // La sesión venció mientras la pestaña estaba abierta.
+    location.href="/?volver="+encodeURIComponent(location.pathname);
+    throw new Error("sesión vencida");
+  }
+  let d=null;
+  try{d=await r.json();}catch{}
+  if(!r.ok||!d||d.ok===false)throw new Error((d&&d.error)||`error ${r.status}`);
+  return d;
+}
+
+/* ═══ ROLES ═════════════════════════════════════════════════════════════════
+   El padrón del portal usa administrador / revisor / operador / vista. La app
+   solo necesita saber dos cosas: si puede editar y si puede administrar. Se
+   traduce acá y no al revés, porque el vocabulario del padrón es el que vale
+   para todo el sistema.
+
+   `canAdmin` gobierna borrar. El servidor exige el mismo permiso, así que
+   esconder el botón es comodidad, no la protección: borrar un registro GMP no
+   está al alcance de quien carga datos en el turno. */
+const ROLES={
+  administrador:{label:"Administrador",color:"#DC2626",bg:"#FEF2F2",icon:"🔑",canEdit:true,canAdmin:true},
+  revisor:{label:"Revisor",color:"#6D28D9",bg:"#F5F3FF",icon:"🔍",canEdit:true,canAdmin:false},
+  operador:{label:"Operador",color:"#1E40AF",bg:"#EFF6FF",icon:"👤",canEdit:true,canAdmin:false},
+  vista:{label:"Visualización",color:"#059669",bg:"#F0FDF4",icon:"👁",canEdit:false,canAdmin:false},
+};
 
 /* ═══ SHARED COMPONENTS ═══ */
 function Bg({children,color,bg}){return <span style={{display:"inline-block",padding:"2px 9px",borderRadius:16,fontSize:11,fontWeight:600,color,background:bg,whiteSpace:"nowrap"}}>{children}</span>;}
 function ClsBg({cls}){const c=CLASSIFICATIONS.find(x=>x.id===cls);return c?<Bg color={c.color} bg={c.color+"15"}>{c.label}</Bg>:<Bg color={K.txM} bg="#F1F5F9">Sin clasificar</Bg>;}
 function SBg({s}){const m={Abierto:[K.red,K.redL],"En proceso":[K.wrn,K.wrnL],Cerrado:[K.grn,K.grnL],Vencido:["#991B1B","#FEE2E2"]};const[c,b]=m[s]||[K.txM,"#F1F5F9"];return <Bg color={c} bg={b}>{s}</Bg>;}
+
+/* "Vencido" es un hecho de la fecha, no un estado que alguien tenga que tildar.
+   La lista lo mostraba solo si alguien se acordaba de cambiarlo a mano, así que
+   una acción pasada de fecha seguía figurando como "Abierto". Se deriva. */
+const estadoVisible=c=>(c.status!=="Cerrado"&&daysLeft(c.dueDate)<0?"Vencido":c.status);
 function PhaseBg({phase,phases}){const p=(phases||NC_PHASES).find(x=>x.id===phase)||(phases||NC_PHASES)[0];return <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:6,fontSize:11,fontWeight:600,color:p.color,background:p.bg}}>{p.icon} {p.label}</span>;}
 function Fd({l,children}){return <div style={{marginBottom:12}}><label style={sL}>{l}</label>{children}</div>;}
 function Em({icon,t}){return <div style={{textAlign:"center",padding:"36px 20px",color:K.txM}}><div style={{fontSize:28,marginBottom:6}}>{icon}</div><div style={{fontSize:13}}>{t}</div></div>;}
@@ -116,8 +175,40 @@ function G2({children}){return <div style={{display:"grid",gridTemplateColumns:"
 function CtxHelp({children,type="info"}){return <div className={`ctx-help ${type==="warn"?"warn":type==="success"?"success":""}`}><span className="ctx-icon">{type==="warn"?"⚠️":type==="success"?"✅":"💡"}</span><div>{children}</div></div>;}
 function VBanner(){return <CtxHelp type="warn"><strong>Modo visualización.</strong> Solo lectura.</CtxHelp>;}
 
+/* Dibuja la matriz de criticidad leyendo RISK_MATRIX. Al derivarla del mismo
+   objeto que hace el cálculo, lo que se muestra y lo que se aplica no pueden
+   separarse. `marcar` resalta la celda que corresponde a la selección actual. */
+function RiskMatrix({sev,prob}){
+  const clase={CRITICA:"r-crit",MAYOR:"r-may",MENOR:"r-men"};
+  const etiqueta=id=>CLASSIFICATIONS.find(c=>c.id===id)?.label||"—";
+  return(<table className="risk-matrix" style={{width:"100%"}}>
+    <thead><tr><th style={{fontSize:9.5,fontWeight:700}}>Sev. \ Prob.</th>{PROBABILITIES.map(p=><th key={p}>{p}</th>)}</tr></thead>
+    <tbody>
+      {[...SEVERITIES].reverse().map(s=><tr key={s}>
+        <th>{s}</th>
+        {PROBABILITIES.map(p=>{
+          const id=RISK_MATRIX[`${s}-${p}`];
+          const activa=sev===s&&prob===p;
+          return <td key={p} className={clase[id]||""}
+            style={activa?{outline:`2px solid ${K.txt}`,outlineOffset:-2,fontWeight:800}:undefined}>
+            {etiqueta(id)}
+          </td>;
+        })}
+      </tr>)}
+    </tbody>
+  </table>);
+}
+
 /* ═══ EXPORT FUNCTIONS ═══ */
-function exportNC(nc,capas){
+/* Escapa las cadenas de un registro dejando el resto intacto. Los informes se
+   arman con plantillas de texto, así que el escapado se hace acá, en la entrada,
+   y no en cada una de las cuarenta interpolaciones: una que se olvide es una
+   descripción que rompe el documento sin aviso. */
+const escReg=o=>Object.fromEntries(Object.entries(o||{}).map(([k,v])=>[k,typeof v==="string"?esc(v):v]));
+
+function exportNC(ncCrudo,capasCrudas){
+  const nc=escReg(ncCrudo);
+  const capas=(capasCrudas||[]).map(escReg);
   const cls=CLASSIFICATIONS.find(c=>c.id===nc.classification);
   const phase=NC_PHASES.find(p=>p.id===nc.phase);
   const ncCapas=capas.filter(c=>c.ncId===nc.id);
@@ -128,6 +219,9 @@ function exportNC(nc,capas){
   }).join("");
   const capaRows=ncCapas.map(c=>`<tr><td style="padding:6px 8px;border:1px solid #ddd;font-size:11px">${c.type==="Acción Correctiva"?"Correctiva":c.type==="Acción Preventiva"?"Preventiva":"Corrección"}</td><td style="padding:6px 8px;border:1px solid #ddd;font-size:11px">${c.description}</td><td style="padding:6px 8px;border:1px solid #ddd;font-size:11px;white-space:nowrap">${fd(c.dueDate)}</td><td style="padding:6px 8px;border:1px solid #ddd;font-size:11px">${c.responsible}</td><td style="padding:6px 8px;border:1px solid #ddd;font-size:11px;text-align:center">${c.status==="Cerrado"?"Sí":"No"}</td></tr>`).join("");
   const w=window.open("","_blank","width=900,height=700");
+  // El navegador puede bloquear la ventana emergente; sin esto el clic no hace
+  // nada y no queda claro por que.
+  if(!w){alert("El navegador bloqueó la ventana del informe. Habilitá las ventanas emergentes para este sitio y volvé a intentar.");return;}
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${nc.code} — REG-SOP-AC-036-A</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Inter',system-ui,sans-serif;color:#1B1E25;font-size:13px;padding:30px 40px}@media print{@page{size:A4;margin:15mm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}h1{font-size:16px;margin:0}h2{font-size:13px;font-weight:700;background:#1B1E25;color:#fff;padding:8px 12px;margin:18px 0 10px;border-radius:4px}table{width:100%;border-collapse:collapse}th{background:#f1f5f9;padding:6px 8px;border:1px solid #ddd;font-size:10px;text-transform:uppercase;text-align:left}.row{display:flex;gap:16px;margin-bottom:8px}.row>div{flex:1}.lbl{font-size:10px;font-weight:700;color:#5A6170;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px}.val{font-size:12.5px;padding:6px 10px;background:#f8fafc;border:1px solid #e1e4ea;border-radius:5px;min-height:28px}.hdr{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #1B1E25;padding-bottom:10px;margin-bottom:16px}.badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700}.sect{margin-bottom:6px}</style></head><body>
   <div class="hdr"><div><h1>${nc.code} REG-SOP-AC-036-A</h1><div style="font-size:11px;color:#5A6170;margin-top:3px">Vessena S.A. — Registro de No Conformidad</div></div><div style="text-align:right"><span class="badge" style="color:${phase?.color||"#666"};background:${phase?.bg||"#f1f5f9"}">${phase?.label||nc.phase}</span> <span class="badge" style="color:${cls?.color||"#666"};background:${cls?.color||"#666"}15">${cls?.label||"Sin clasificar"}</span></div></div>
   <h2>01 APERTURA DE LA NO CONFORMIDAD</h2>
@@ -156,11 +250,15 @@ function exportNC(nc,capas){
   w.document.close();setTimeout(()=>w.print(),400);
 }
 
-function exportDev(dev){
+function exportDev(devCrudo){
+  const dev=escReg(devCrudo);
   const phase=DEV_PHASES.find(p=>p.id===dev.phase);
   const impacts=dev.impacts||{};
-  const impRows=IMPACT_AREAS.map(a=>{const d=impacts[a]||{};return `<tr><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${a}</td><td style="padding:4px 8px;border:1px solid #ddd;text-align:center;font-size:11px">${d.applies===true?"Sí":d.applies===false?"No":"—"}</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${d.detail||""}</td></tr>`;}).join("");
+  const impRows=IMPACT_AREAS.map(a=>{const d=impacts[a]||{};return `<tr><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${esc(a)}</td><td style="padding:4px 8px;border:1px solid #ddd;text-align:center;font-size:11px">${d.applies===true?"Sí":d.applies===false?"No":"—"}</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px">${esc(d.detail||"")}</td></tr>`;}).join("");
   const w=window.open("","_blank","width=900,height=700");
+  // El navegador puede bloquear la ventana emergente; sin esto el clic no hace
+  // nada y no queda claro por que.
+  if(!w){alert("El navegador bloqueó la ventana del informe. Habilitá las ventanas emergentes para este sitio y volvé a intentar.");return;}
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${dev.code} — REG-SOP-AC-036-B</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Inter',system-ui,sans-serif;color:#1B1E25;font-size:13px;padding:30px 40px}@media print{@page{size:A4;margin:15mm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}h1{font-size:16px;margin:0}h2{font-size:13px;font-weight:700;background:#1B1E25;color:#fff;padding:8px 12px;margin:18px 0 10px;border-radius:4px}table{width:100%;border-collapse:collapse}th{background:#f1f5f9;padding:6px 8px;border:1px solid #ddd;font-size:10px;text-transform:uppercase;text-align:left}.row{display:flex;gap:16px;margin-bottom:8px}.row>div{flex:1}.lbl{font-size:10px;font-weight:700;color:#5A6170;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px}.val{font-size:12.5px;padding:6px 10px;background:#f8fafc;border:1px solid #e1e4ea;border-radius:5px;min-height:28px}.hdr{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #1B1E25;padding-bottom:10px;margin-bottom:16px}.badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700}.sect{margin-bottom:6px}</style></head><body>
   <div class="hdr"><div><h1>${dev.code} REG-SOP-AC-036-B</h1><div style="font-size:11px;color:#5A6170;margin-top:3px">Vessena S.A. — Nota de Desvío</div></div><div style="text-align:right"><span class="badge" style="color:${phase?.color||"#666"};background:${phase?.bg||"#f1f5f9"}">${phase?.label||dev.phase}</span> <span class="badge" style="color:${dev.critical?"#DC2626":"#1E40AF"};background:${dev.critical?"#FEF2F2":"#EFF6FF"}">${dev.critical?"Crítico":"No Crítico"}</span></div></div>
   <h2>01 DATOS DEL DESVÍO</h2>
@@ -205,13 +303,34 @@ function StepBar({phases,currentPhase,viewStep,onClickStep,canEdit}){
   </div>);
 }
 
-/* ═══ LOGIN ═══ */
-function Login({users,onLogin}){const[u,sU]=useState("");const[p,sP]=useState("");const[e,sE]=useState("");const go=()=>{const f=users.find(x=>x.username.toLowerCase()===u.toLowerCase()&&x.password===p&&x.active);f?(sE(""),onLogin(f)):sE("Credenciales incorrectas");};
-  return(<div className="login-bg"><div className="login-card"><div style={{textAlign:"center",marginBottom:20}}><div style={{fontSize:10,fontWeight:800,color:K.ves,letterSpacing:".1em",textTransform:"uppercase"}}>Vessena S.A.</div><h1 style={{fontSize:22,fontWeight:800}}>NC / CAPA & Desvíos</h1><p style={{fontSize:12,color:K.txS,marginTop:4}}>SOP-AC-036 — Gestión de No Conformidades</p></div>
-    {e&&<div style={{background:K.redL,border:`1px solid ${K.red}30`,borderRadius:8,padding:"10px",marginBottom:14,fontSize:12.5,color:K.red,textAlign:"center"}}>{e}</div>}
-    <Fd l="Usuario"><input style={{...sI,padding:"11px 14px",fontSize:14,background:"#F8FAFC"}} value={u} onChange={e=>sU(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()}/></Fd>
-    <Fd l="Contraseña"><input type="password" style={{...sI,padding:"11px 14px",fontSize:14,background:"#F8FAFC"}} value={p} onChange={e=>sP(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()}/></Fd>
-    <button onClick={go} style={{width:"100%",padding:"12px",background:K.pri,color:"#fff",border:"none",borderRadius:8,fontSize:14,fontWeight:700,cursor:"pointer",fontFamily:"inherit",marginTop:8}}>Iniciar sesión</button>
+/* ═══ PANTALLAS DE ARRANQUE ═══════════════════════════════════════════════
+   Esta app ya no tiene acceso propio: la identidad la da el portal. Antes tenía
+   un login con usuarios y contraseñas escritos en el propio archivo, que además
+   de ser un archivo versionado no comparte nada con el resto del sistema: dar
+   de baja a alguien en el padrón no le sacaba el acceso acá. */
+function Cargando({texto}){
+  return(<div className="login-bg"><div className="login-card" style={{textAlign:"center"}}>
+    <div style={{fontSize:10,fontWeight:800,color:K.ves,letterSpacing:".1em",textTransform:"uppercase"}}>Vessena S.A.</div>
+    <h1 style={{fontSize:20,fontWeight:800,margin:"6px 0 14px"}}>NC / CAPA &amp; Desvíos</h1>
+    <div style={{fontSize:13,color:K.txS}}>{texto}</div>
+  </div></div>);
+}
+
+/* Cuando la API no contesta no se puede seguir: sin servidor no hay datos, y
+   mostrar una app vacía haría creer que no hay registros cargados. */
+function SinConexion({detalle,onReintentar}){
+  return(<div className="login-bg"><div className="login-card">
+    <div style={{fontSize:10,fontWeight:800,color:K.ves,letterSpacing:".1em",textTransform:"uppercase"}}>Vessena S.A.</div>
+    <h1 style={{fontSize:19,fontWeight:800,margin:"6px 0 10px"}}>No se pudo conectar con el servidor</h1>
+    <p style={{fontSize:12.5,color:K.txS,lineHeight:1.6,marginBottom:12}}>
+      Esta aplicación guarda los datos en el servidor de calidad para que todos vean lo
+      mismo desde cualquier máquina. Sin conexión con él no hay nada que mostrar.
+    </p>
+    {detalle&&<div style={{background:K.redL,border:`1px solid ${K.red}30`,borderRadius:8,padding:"9px 12px",fontSize:11.5,color:K.red,marginBottom:14,wordBreak:"break-word"}}>{detalle}</div>}
+    <div style={{display:"flex",gap:8}}>
+      <button onClick={onReintentar} style={{...sB("pri"),flex:1,justifyContent:"center",padding:"10px"}}>Reintentar</button>
+      <a href="/" style={{...sB("g"),flex:1,justifyContent:"center",padding:"10px",textDecoration:"none"}}>Ir al portal</a>
+    </div>
   </div></div>);
 }
 
@@ -255,9 +374,10 @@ function NCList({data,canEdit,openNC}){
 /* ══════════════════════════════════════════════════════
    NC DETAIL — UNIFIED WIZARD
    ══════════════════════════════════════════════════════ */
-function NCDetail({nc,data,canEdit,onClose,onSave,onDelete}){
+function NCDetail({nc,data,canEdit,canAdmin,onClose,onSave,onDelete}){
   const{capas}=data;
   const[fm,sFm]=useState({...nc});
+  const[ocupado,sOcupado]=useState(false);
   const phIdx=NC_PHASES.findIndex(p=>p.id===fm.phase);
   const[step,sStep]=useState(phIdx>=0?phIdx:0);
   const u=(k,v)=>sFm(p=>({...p,[k]:v}));
@@ -278,13 +398,36 @@ function NCDetail({nc,data,canEdit,onClose,onSave,onDelete}){
   const canAdvance=step<NC_PHASES.length-1;
   const canGoBack=step>0;
 
-  const advancePhase=()=>{
-    if(!canEdit||!canAdvance)return;
-    const nextPhase=NC_PHASES[step+1].id;
-    sFm(p=>({...p,phase:nextPhase}));
-    sStep(step+1);
-  };
   const goBack=()=>{if(canGoBack)sStep(step-1);};
+
+  /* SOP-AC-036 §5.6: una NC no se cierra mientras tenga CAPA abiertas. El texto
+     de ayuda ya lo decía, pero nada lo impedía: se podía cerrar con acciones
+     pendientes y el expediente quedaba mintiendo. */
+  const capasAbiertas=ncCapas.filter(c=>c.status!=="Cerrado");
+  const puedeCerrar=capasAbiertas.length===0;
+
+  const guardar=async(fmAGuardar=fm)=>{
+    if(fmAGuardar.phase==="cerrada"&&!puedeCerrar){
+      data.avisar(`No se puede cerrar: ${plural(capasAbiertas.length,"queda 1 acción CAPA sin cerrar","quedan N acciones CAPA sin cerrar")} (${capasAbiertas.map(c=>c.code).join(", ")}).`,"error");
+      return;
+    }
+    sOcupado(true);
+    try{const g=await onSave(fmAGuardar);if(g)sFm(p=>({...p,...g}));}
+    catch(e){/* el aviso lo muestra quien guarda */}
+    finally{sOcupado(false);}
+  };
+
+  /* Avanzar mueve la fase solo hacia adelante. Antes fijaba la fase del paso
+     siguiente al que se estuviera mirando: entrar a una NC cerrada, ir a
+     revisar el análisis y guardar la devolvía a "Análisis 5M". */
+  const avanzar=async()=>{
+    if(!canEdit||!canAdvance)return;
+    const faseActual=NC_PHASES.findIndex(p=>p.id===fm.phase);
+    const destino=step+1;
+    const nueva=destino>faseActual?NC_PHASES[destino].id:fm.phase;
+    await guardar({...fm,phase:nueva});
+    sStep(destino);
+  };
 
   return(<Md title={`${nc.code} — No Conformidad`} onClose={onClose} wide>
     {/* ── Phase step description ── */}
@@ -357,12 +500,7 @@ function NCDetail({nc,data,canEdit,onClose,onSave,onDelete}){
         </div>
         <div style={sC}>
           <h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px"}}>Matriz de riesgo</h3>
-          <table className="risk-matrix"><thead><tr><th></th><th>Baja</th><th>Mod.</th><th>Alta</th></tr></thead>
-          <tbody>
-            <tr><th>Alta</th><td className="r-may">Mayor</td><td className="r-may">Mayor</td><td className="r-crit">Crítica</td></tr>
-            <tr><th>Mod.</th><td className="r-men">Menor</td><td className="r-may">Mayor</td><td className="r-crit">Crítica</td></tr>
-            <tr><th>Baja</th><td className="r-men">Menor</td><td className="r-men">Menor</td><td className="r-crit">Crítica</td></tr>
-          </tbody></table>
+          <RiskMatrix sev={fm.severity} prob={fm.probability}/>
           <div style={{textAlign:"center",marginTop:10}}>
             <div style={{fontSize:10,color:K.txS,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>Resultado</div>
             <div style={{fontSize:18}}><ClsBg cls={fm.classification}/></div>
@@ -388,7 +526,7 @@ function NCDetail({nc,data,canEdit,onClose,onSave,onDelete}){
       <CtxHelp>SOP-AC-036 §5.5: Las acciones se gestionan desde la sección CAPA/Acciones del menú lateral. Aquí se muestran las vinculadas a esta NC.</CtxHelp>
       {ncCapas.length===0?<Em icon="📋" t="Sin acciones CAPA vinculadas. Creá acciones desde 'CAPA / Acciones' vinculándolas a esta NC."/>:
       <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5}}><thead><tr><th style={sTh}>Código</th><th style={sTh}>Tipo</th><th style={sTh}>Descripción</th><th style={sTh}>Responsable</th><th style={sTh}>Vence</th><th style={sTh}>Estado</th></tr></thead>
-      <tbody>{ncCapas.map(c=><tr key={c.id}><td style={{...sTd,fontFamily:"monospace",fontWeight:700,color:K.pri}}>{c.code}</td><td style={sTd}><Bg color={c.type==="Acción Correctiva"?K.red:c.type==="Acción Preventiva"?K.vio:"#0891B2"} bg={c.type==="Acción Correctiva"?K.redL:c.type==="Acción Preventiva"?K.vioL:"#ECFEFF"}>{c.type==="Acción Correctiva"?"AC":c.type==="Acción Preventiva"?"AP":"Corr."}</Bg></td><td style={sTd}>{c.description}</td><td style={sTd}>{c.responsible}</td><td style={{...sTd,whiteSpace:"nowrap"}}>{fd(c.dueDate)}</td><td style={sTd}><SBg s={c.status}/></td></tr>)}</tbody></table>}
+      <tbody>{ncCapas.map(c=><tr key={c.id}><td style={{...sTd,fontFamily:"monospace",fontWeight:700,color:K.pri}}>{c.code}</td><td style={sTd}><Bg color={c.type==="Acción Correctiva"?K.red:c.type==="Acción Preventiva"?K.vio:"#0891B2"} bg={c.type==="Acción Correctiva"?K.redL:c.type==="Acción Preventiva"?K.vioL:"#ECFEFF"}>{c.type==="Acción Correctiva"?"AC":c.type==="Acción Preventiva"?"AP":"Corr."}</Bg></td><td style={sTd}>{c.description}</td><td style={sTd}>{c.responsible}</td><td style={{...sTd,whiteSpace:"nowrap"}}>{fd(c.dueDate)}</td><td style={sTd}><SBg s={estadoVisible(c)}/></td></tr>)}</tbody></table>}
     </div>}
 
     {/* ═══ STEP 5: VERIFICACIÓN ═══ */}
@@ -403,7 +541,9 @@ function NCDetail({nc,data,canEdit,onClose,onSave,onDelete}){
 
     {/* ═══ STEP 6: CIERRE ═══ */}
     {step===6&&<div style={sC}>
-      <CtxHelp type="success">Completar los datos de cierre y guardar para finalizar la NC.</CtxHelp>
+      {puedeCerrar
+        ?<CtxHelp type="success">Completar los datos de cierre y guardar para finalizar la NC.</CtxHelp>
+        :<CtxHelp type="warn"><strong>No se puede cerrar todavía.</strong> SOP-AC-036 §5.6: {plural(capasAbiertas.length,"queda 1 acción CAPA sin cerrar","quedan N acciones CAPA sin cerrar")} ({capasAbiertas.map(c=>c.code).join(", ")}). Cerralas desde el módulo CAPA / Acciones.</CtxHelp>}
       <G2>
         <Fd l="Fecha de cierre"><input type="date" style={sI} value={fm.closeDate||""} onChange={e=>u("closeDate",e.target.value)} disabled={!canEdit}/></Fd>
         <Fd l="Cerrado por"><input style={sI} value={fm.closedBy||""} onChange={e=>u("closedBy",e.target.value)} disabled={!canEdit}/></Fd>
@@ -414,14 +554,14 @@ function NCDetail({nc,data,canEdit,onClose,onSave,onDelete}){
     {/* ═══ NAVIGATION FOOTER ═══ */}
     <div className="nav-footer">
       <div style={{display:"flex",gap:8}}>
-        {canEdit&&<button style={sB("red")} onClick={()=>onDelete(nc.id)}>🗑 Eliminar</button>}
-        <button style={{...sB("g"),color:"#7C3AED"}} onClick={()=>exportNC(fm,capas)}>📄 Exportar PDF</button>
+        {canAdmin&&<button style={sB("red")} onClick={()=>onDelete(nc.id)}>🗑 Eliminar</button>}
+        <button style={{...sB("g"),color:"#7C3AED"}} onClick={()=>exportNC(fm,ncCapas)}>📄 Exportar PDF</button>
       </div>
       <div style={{display:"flex",gap:8,alignItems:"center"}}>
         {canGoBack&&<button style={sB("g")} onClick={goBack}>◀ {NC_PHASES[step-1].label}</button>}
-        <button style={sB("g")} onClick={onClose}>Cancelar</button>
-        {canEdit&&<button style={sB("pri")} onClick={()=>onSave(fm)}>💾 Guardar</button>}
-        {canEdit&&canAdvance&&<button style={{...sB("grn"),background:NC_PHASES[step+1].color}} onClick={()=>{const advFm={...fm,phase:NC_PHASES[step+1].id};onSave(advFm);sStep(step+1);}}>Guardar y avanzar ▸ {NC_PHASES[step+1].label}</button>}
+        <button style={sB("g")} onClick={onClose}>Cerrar</button>
+        {canEdit&&<button style={sB("pri")} onClick={guardar} disabled={ocupado}>{ocupado?"Guardando…":"💾 Guardar"}</button>}
+        {canEdit&&canAdvance&&<button style={{...sB("grn"),background:NC_PHASES[step+1].color}} onClick={avanzar} disabled={ocupado}>Guardar y avanzar ▸ {NC_PHASES[step+1].label}</button>}
       </div>
     </div>
   </Md>);
@@ -460,7 +600,86 @@ function DevList({data,canEdit,openDev}){
 /* ══════════════════════════════════════════════════════
    DEV DETAIL — UNIFIED WIZARD
    ══════════════════════════════════════════════════════ */
-function DevDetail({dev,canEdit,onClose,onSave,onDelete}){
+/* ═══ ACCIONES DE UN DESVÍO ═════════════════════════════════════════════════
+   Se escriben con el formato qué / quién / cuándo, y se guardan como acciones
+   CAPA vinculadas al desvío. No son una lista aparte: al ser filas de la misma
+   tabla entran en las alertas de vencimiento y en el seguimiento del módulo
+   CAPA. Una acción con fecha que nadie controla no es una acción, es una nota. */
+function AccionesDesvio({dev,data,canEdit}){
+  const{capas,guardarCapa,borrarCapa,avisar,canAdmin}=data;
+  const mias=capas.filter(c=>c.devId===dev.id);
+  const vacia={que:"",quien:"",email:"",cuando:"",tipo:"Corrección"};
+  const[nueva,sNueva]=useState(vacia);
+  const[ocupado,sOcupado]=useState(false);
+
+  const agregar=async()=>{
+    if(!nueva.que.trim()){avisar("Escribí qué hay que hacer","error");return;}
+    sOcupado(true);
+    try{
+      await guardarCapa({
+        devId:dev.id,ncId:"",type:nueva.tipo,description:nueva.que.trim(),
+        responsible:nueva.quien.trim(),responsibleEmail:nueva.email.trim(),
+        dueDate:nueva.cuando,status:"Abierto",
+      });
+      sNueva(vacia);
+      avisar("Acción agregada");
+    }catch(e){avisar("No se pudo agregar: "+e.message,"error");}
+    finally{sOcupado(false);}
+  };
+
+  const cambiar=async(c,campo,valor)=>{
+    try{await guardarCapa({...c,[campo]:valor});}
+    catch(e){avisar("No se pudo actualizar: "+e.message,"error");}
+  };
+
+  const quitar=async(c)=>{
+    if(!confirm(`¿Eliminar la acción ${c.code}?`))return;
+    try{await borrarCapa(c.id);avisar("Acción eliminada");}
+    catch(e){avisar("No se pudo eliminar: "+e.message,"error");}
+  };
+
+  return(<div style={sC}>
+    <h3 style={{fontSize:13,fontWeight:700,margin:"0 0 4px",color:"#0891B2"}}>🔧 Acciones del desvío ({mias.length})</h3>
+    <CtxHelp>Cada acción se escribe como <strong>qué</strong> se hace, <strong>quién</strong> lo hace y <strong>cuándo</strong> vence. Quedan vinculadas a este desvío y aparecen en las alertas de vencimiento junto con el resto de las CAPA.</CtxHelp>
+
+    {mias.length===0&&<Em icon="🔧" t="Todavía no hay acciones registradas para este desvío"/>}
+
+    {mias.length>0&&<table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5,marginBottom:12}}>
+      <thead><tr>
+        <th style={sTh}>Código</th><th style={sTh}>Qué</th><th style={{...sTh,width:150}}>Quién</th>
+        <th style={{...sTh,width:130}}>Cuándo</th><th style={{...sTh,width:120}}>Estado</th>{canAdmin&&<th style={sTh}></th>}
+      </tr></thead>
+      <tbody>{mias.map(c=><tr key={c.id}>
+        <td style={{...sTd,fontFamily:"monospace",fontWeight:700,color:K.pri,fontSize:11.5}}>{c.code}</td>
+        <td style={sTd}>{c.description}</td>
+        <td style={sTd}>{c.responsible||<span style={{color:K.txM}}>— sin asignar —</span>}</td>
+        <td style={{...sTd,whiteSpace:"nowrap"}}>{c.dueDate?fd(c.dueDate):<span style={{color:K.txM}}>— sin fecha —</span>}</td>
+        <td style={sTd}>
+          {canEdit
+            ?<select style={{...sS,fontSize:11.5,padding:"3px 6px"}} value={c.status} onChange={e=>cambiar(c,"status",e.target.value)}>
+               {STATUSES.filter(s=>s!=="Vencido").map(s=><option key={s}>{s}</option>)}
+             </select>
+            :<SBg s={estadoVisible(c)}/>}
+        </td>
+        {canAdmin&&<td style={sTd}><button style={{...sB("sm"),color:K.red,padding:"2px 7px"}} onClick={()=>quitar(c)}>✕</button></td>}
+      </tr>)}</tbody>
+    </table>}
+
+    {canEdit&&<div style={{border:`1px dashed ${K.brd}`,borderRadius:8,padding:12,background:"#FAFBFC"}}>
+      <div style={{fontSize:11,fontWeight:700,color:K.txS,textTransform:"uppercase",letterSpacing:".04em",marginBottom:8}}>Agregar acción</div>
+      <Fd l="Qué se hace"><textarea style={{...sI,minHeight:52,resize:"vertical"}} value={nueva.que} onChange={e=>sNueva(p=>({...p,que:e.target.value}))} placeholder="Descripción de la acción a realizar..."/></Fd>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 130px 150px",gap:10}}>
+        <Fd l="Quién"><input style={sI} value={nueva.quien} onChange={e=>sNueva(p=>({...p,quien:e.target.value}))} placeholder="Responsable"/></Fd>
+        <Fd l="Email (para recordatorios)"><input type="email" style={sI} value={nueva.email} onChange={e=>sNueva(p=>({...p,email:e.target.value}))}/></Fd>
+        <Fd l="Cuándo"><input type="date" style={sI} value={nueva.cuando} onChange={e=>sNueva(p=>({...p,cuando:e.target.value}))}/></Fd>
+        <Fd l="Tipo"><select style={sS} value={nueva.tipo} onChange={e=>sNueva(p=>({...p,tipo:e.target.value}))}>{CAPA_TYPES.map(t=><option key={t}>{t}</option>)}</select></Fd>
+      </div>
+      <button style={sB("pri")} onClick={agregar} disabled={ocupado||!nueva.que.trim()}>{ocupado?"Agregando…":"＋ Agregar acción"}</button>
+    </div>}
+  </div>);
+}
+
+function DevDetail({dev,data,canEdit,canAdmin,onClose,onSave,onDelete}){
   const[fm,sFm]=useState({...dev});
   const phIdx=DEV_PHASES.findIndex(p=>p.id===fm.phase);
   const[step,sStep]=useState(phIdx>=0?phIdx:0);
@@ -470,9 +689,34 @@ function DevDetail({dev,canEdit,onClose,onSave,onDelete}){
   const uImp=(area,field,val)=>{sImpacts(p=>({...p,[area]:{...(p[area]||{}),[field]:val}}));};
   useEffect(()=>{u("impacts",impacts);},[impacts]);
 
+  const[ocupado,sOcupado]=useState(false);
   const canAdvance=step<DEV_PHASES.length-1;
   const canGoBack=step>0;
-  const advancePhase=()=>{if(!canEdit||!canAdvance)return;sFm(p=>({...p,phase:DEV_PHASES[step+1].id}));sStep(step+1);};
+
+  /* Un desvío no se cierra con acciones pendientes, por la misma razón que una
+     NC: el expediente diría que está terminado y no lo está. */
+  const misCapas=data.capas.filter(c=>c.devId===dev.id);
+  const abiertas=misCapas.filter(c=>c.status!=="Cerrado");
+
+  const guardar=async(fmAGuardar=fm)=>{
+    if(fmAGuardar.phase==="cerrado"&&abiertas.length>0){
+      data.avisar(`No se puede cerrar: ${plural(abiertas.length,"queda 1 acción sin cerrar","quedan N acciones sin cerrar")} (${abiertas.map(c=>c.code).join(", ")}).`,"error");
+      return;
+    }
+    sOcupado(true);
+    try{const g=await onSave(fmAGuardar);if(g)sFm(p=>({...p,...g}));}
+    catch(e){/* el aviso lo muestra quien guarda */}
+    finally{sOcupado(false);}
+  };
+
+  // Solo hacia adelante: ver una etapa anterior no debe retroceder el desvío.
+  const avanzar=async()=>{
+    if(!canEdit||!canAdvance)return;
+    const faseActual=DEV_PHASES.findIndex(p=>p.id===fm.phase);
+    const destino=step+1;
+    await guardar({...fm,phase:destino>faseActual?DEV_PHASES[destino].id:fm.phase});
+    sStep(destino);
+  };
   const goBack=()=>{if(canGoBack)sStep(step-1);};
 
   return(<Md title={`${dev.code} — Nota de Desvío`} onClose={onClose} wide>
@@ -539,14 +783,19 @@ function DevDetail({dev,canEdit,onClose,onSave,onDelete}){
     </div>}
 
     {/* ═══ STEP 3: IMPLEMENTACIÓN ═══ */}
-    {step===3&&<div style={sC}>
-      <Fd l="Acciones realizadas durante el desvío"><textarea style={{...sI,minHeight:80,resize:"vertical"}} value={fm.implementationActions||""} onChange={e=>u("implementationActions",e.target.value)} disabled={!canEdit}/></Fd>
-      <Fd l="Notificaciones regulatorias"><textarea style={{...sI,minHeight:50,resize:"vertical"}} value={fm.notifications||""} onChange={e=>u("notifications",e.target.value)} disabled={!canEdit} placeholder="Autoridad sanitaria, clientes, distribuidores..."/></Fd>
+    {step===3&&<div>
+      <AccionesDesvio dev={fm} data={data} canEdit={canEdit}/>
+      <div style={sC}>
+        <Fd l="Notificaciones regulatorias"><textarea style={{...sI,minHeight:50,resize:"vertical"}} value={fm.notifications||""} onChange={e=>u("notifications",e.target.value)} disabled={!canEdit} placeholder="Autoridad sanitaria, clientes, distribuidores..."/></Fd>
+        <Fd l="Observaciones generales de la implementación"><textarea style={{...sI,minHeight:60,resize:"vertical"}} value={fm.implementationActions||""} onChange={e=>u("implementationActions",e.target.value)} disabled={!canEdit} placeholder="Contexto que no entra en una acción puntual..."/></Fd>
+      </div>
     </div>}
 
     {/* ═══ STEP 4: CIERRE ═══ */}
     {step===4&&<div style={sC}>
-      <CtxHelp type="success">Completar datos de cierre para finalizar el desvío.</CtxHelp>
+      {abiertas.length===0
+        ?<CtxHelp type="success">Completar datos de cierre para finalizar el desvío.</CtxHelp>
+        :<CtxHelp type="warn"><strong>No se puede cerrar todavía.</strong> {plural(abiertas.length,"Queda 1 acción sin cerrar","Quedan N acciones sin cerrar")} ({abiertas.map(c=>c.code).join(", ")}). Podés cerrarlas desde la etapa de Implementación.</CtxHelp>}
       <Fd l="Se aporta toda la documentación que avala la aprobación/rechazo">
         <div style={{display:"flex",gap:8}}>{["Sí","No","N/A"].map(opt=><button key={opt} style={{...sB(fm.docComplete===opt?"pri":"g"),fontSize:12}} onClick={()=>canEdit&&u("docComplete",opt)} disabled={!canEdit}>{opt}</button>)}</div>
       </Fd>
@@ -560,14 +809,14 @@ function DevDetail({dev,canEdit,onClose,onSave,onDelete}){
     {/* ═══ NAVIGATION FOOTER ═══ */}
     <div className="nav-footer">
       <div style={{display:"flex",gap:8}}>
-        {canEdit&&<button style={sB("red")} onClick={()=>onDelete(dev.id)}>🗑 Eliminar</button>}
+        {canAdmin&&<button style={sB("red")} onClick={()=>onDelete(dev.id)}>🗑 Eliminar</button>}
         <button style={{...sB("g"),color:"#7C3AED"}} onClick={()=>exportDev(fm)}>📄 Exportar PDF</button>
       </div>
       <div style={{display:"flex",gap:8,alignItems:"center"}}>
         {canGoBack&&<button style={sB("g")} onClick={goBack}>◀ {DEV_PHASES[step-1].label}</button>}
-        <button style={sB("g")} onClick={onClose}>Cancelar</button>
-        {canEdit&&<button style={sB("pri")} onClick={()=>onSave(fm)}>💾 Guardar</button>}
-        {canEdit&&canAdvance&&<button style={{...sB("grn"),background:DEV_PHASES[step+1].color}} onClick={()=>{const advFm={...fm,phase:DEV_PHASES[step+1].id};onSave(advFm);sStep(step+1);}}>Guardar y avanzar ▸ {DEV_PHASES[step+1].label}</button>}
+        <button style={sB("g")} onClick={onClose}>Cerrar</button>
+        {canEdit&&<button style={sB("pri")} onClick={()=>guardar()} disabled={ocupado}>{ocupado?"Guardando…":"💾 Guardar"}</button>}
+        {canEdit&&canAdvance&&<button style={{...sB("grn"),background:DEV_PHASES[step+1].color}} onClick={avanzar} disabled={ocupado}>Guardar y avanzar ▸ {DEV_PHASES[step+1].label}</button>}
       </div>
     </div>
   </Md>);
@@ -576,19 +825,175 @@ function DevDetail({dev,canEdit,onClose,onSave,onDelete}){
 /* ══════════════════════════════════════════════════════
    CAPA / ACCIONES
    ══════════════════════════════════════════════════════ */
+/* ═══ EVIDENCIA ADJUNTA ═════════════════════════════════════════════════════
+   Foto o PDF que respalda una acción. El archivo se guarda en el servidor, no
+   en el navegador: es evidencia, tiene que verla cualquiera que abra la acción.
+
+   Las imágenes se reducen acá antes de subirlas. Una foto de celular son 4 MB y
+   4000 px de ancho; para leer la etiqueta de una caja alcanzan 1600 px y quedan
+   en unos cientos de KB. Subir el original no agrega información y multiplica
+   por diez el tamaño de la base y del backup. */
+const MAX_LADO=1600;
+const CALIDAD_JPEG=0.82;
+const kb=n=>n<1024?n+" B":n<1048576?(n/1024).toFixed(0)+" KB":(n/1048576).toFixed(1)+" MB";
+
+function leerBase64(blob){
+  return new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=()=>res(String(r.result).split(",")[1]);
+    r.onerror=()=>rej(new Error("no se pudo leer el archivo"));
+    r.readAsDataURL(blob);
+  });
+}
+
+async function prepararAdjunto(file){
+  /* HEIC (el formato de las fotos de iPhone) no lo decodifica el canvas, así que
+     no se puede reducir: se sube tal cual y el servidor lo acepta igual. */
+  const reducible=file.type.startsWith("image/")&&file.type!=="image/heic";
+  if(!reducible)return{nombre:file.name,tipo:file.type||"application/octet-stream",contenido:await leerBase64(file)};
+
+  const url=URL.createObjectURL(file);
+  try{
+    const img=await new Promise((res,rej)=>{
+      const i=new Image();
+      i.onload=()=>res(i);
+      i.onerror=()=>rej(new Error("no se pudo abrir la imagen"));
+      i.src=url;
+    });
+    const escala=Math.min(1,MAX_LADO/Math.max(img.width,img.height));
+    // Ya es chica: se sube el original y no se recomprime, que solo perdería
+    // calidad sin ganar tamaño.
+    if(escala>=1)return{nombre:file.name,tipo:file.type,contenido:await leerBase64(file)};
+
+    const c=document.createElement("canvas");
+    c.width=Math.round(img.width*escala);c.height=Math.round(img.height*escala);
+    c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+    const blob=await new Promise(res=>c.toBlob(res,"image/jpeg",CALIDAD_JPEG));
+    if(!blob)throw new Error("no se pudo procesar la imagen");
+    return{
+      nombre:file.name.replace(/\.[^.]+$/,"")+".jpg",
+      tipo:"image/jpeg",
+      contenido:await leerBase64(blob),
+    };
+  }finally{
+    URL.revokeObjectURL(url);
+  }
+}
+
+function Evidencia({capa,canEdit,canAdmin,avisar,onCambio}){
+  const[lista,sLista]=useState(capa.adjuntos||[]);
+  const[subiendo,sSubiendo]=useState(false);
+  const input=useRef(null);
+
+  useEffect(()=>{sLista(capa.adjuntos||[]);},[capa.id]);
+
+  const subir=async(files)=>{
+    sSubiendo(true);
+    const nuevos=[];
+    for(const f of files){
+      try{
+        const payload=await prepararAdjunto(f);
+        const{adjunto}=await api(`/capa/${encodeURIComponent(capa.id)}/adjuntos`,
+          {method:"POST",body:JSON.stringify(payload)});
+        nuevos.push(adjunto);
+      }catch(e){
+        avisar(`No se pudo adjuntar ${f.name}: ${e.message}`,"error");
+      }
+    }
+    if(nuevos.length){
+      const l=[...nuevos,...lista];
+      sLista(l);onCambio&&onCambio(l);
+      avisar(nuevos.length===1?"Evidencia adjuntada":`${nuevos.length} archivos adjuntados`);
+    }
+    sSubiendo(false);
+    if(input.current)input.current.value="";
+  };
+
+  const borrar=async(a)=>{
+    if(!confirm(`¿Eliminar "${a.nombre}"? La evidencia no se recupera.`))return;
+    try{
+      await api("/adjuntos/"+a.id,{method:"DELETE"});
+      const l=lista.filter(x=>x.id!==a.id);
+      sLista(l);onCambio&&onCambio(l);
+      avisar("Adjunto eliminado");
+    }catch(e){avisar("No se pudo eliminar: "+e.message,"error");}
+  };
+
+  if(!capa.id)return(
+    <div style={{...sC,background:"#FAFBFC"}}>
+      <h3 style={{fontSize:12,fontWeight:700,color:K.txS,margin:"0 0 6px"}}>📎 Evidencia</h3>
+      <div style={{fontSize:12,color:K.txM}}>Guardá la acción para poder adjuntar archivos.</div>
+    </div>);
+
+  return(
+    <div style={{...sC,background:"#FFFBEB",borderColor:"#D9770620"}}>
+      <h3 style={{fontSize:12,fontWeight:700,color:"#92400E",margin:"0 0 8px"}}>
+        📎 Evidencia {lista.length>0&&<span style={{color:K.txS,fontWeight:600}}>({lista.length})</span>}
+      </h3>
+
+      {lista.length===0&&<div style={{fontSize:12,color:K.txM,marginBottom:8}}>Sin archivos adjuntos.</div>}
+
+      {lista.map(a=><div key={a.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",background:"#fff",border:`1px solid ${K.brdL}`,borderRadius:7,marginBottom:5}}>
+        <span style={{fontSize:15,flexShrink:0}}>{a.tipo==="application/pdf"?"📄":"🖼"}</span>
+        <a href={`${API}/adjuntos/${a.id}`} target="_blank" rel="noopener"
+           style={{flex:1,fontSize:12.5,color:K.pri,fontWeight:600,textDecoration:"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}
+           title={a.nombre}>{a.nombre}</a>
+        <span style={{fontSize:11,color:K.txM,whiteSpace:"nowrap"}}>{kb(a.tamano)}</span>
+        <span style={{fontSize:11,color:K.txM,whiteSpace:"nowrap"}} title={`Subido por ${a.subidoPor||"—"}`}>{fd(a.subidoEn)}</span>
+        {canAdmin&&<button style={{...sB("sm"),color:K.red,padding:"2px 7px"}} onClick={()=>borrar(a)} title="Eliminar adjunto">✕</button>}
+      </div>)}
+
+      {canEdit&&<div style={{marginTop:8}}>
+        <input ref={input} type="file" multiple accept="image/*,application/pdf" style={{display:"none"}}
+               onChange={e=>e.target.files.length&&subir([...e.target.files])}/>
+        <button style={{...sB("g"),color:"#92400E",borderColor:"#D9770640"}}
+                onClick={()=>input.current&&input.current.click()} disabled={subiendo}>
+          {subiendo?"Subiendo…":"＋ Adjuntar foto o PDF"}
+        </button>
+        <div style={{fontSize:10.5,color:K.txM,marginTop:5}}>
+          Las fotos se reducen automáticamente antes de subirse. Máximo 10 MB por archivo.
+        </div>
+      </div>}
+    </div>);
+}
+
 function CAPAList({data,canEdit}){
-  const{capas,setCapas,ncs,devs,setLogs,currentUser}=data;
+  const{capas,ncs,devs,guardarCapa,borrarCapa,avisar,canAdmin}=data;
   const[sh,sSh]=useState(false);const[ed,sEd]=useState(null);const[q,sQ]=useState("");
+  const[guardando,sGuardando]=useState(false);
   const bl={ncId:"",devId:"",type:"Acción Correctiva",description:"",responsible:"",responsibleEmail:"",dueDate:"",status:"Abierto",verification:"",effectiveness:"",followupResp:"",followupEmail:""};
   const[fm,sFm]=useState(bl);
-  const save=()=>{
-    if(ed){const pv=capas.find(c=>c.id===ed.id);setCapas(p=>p.map(c=>c.id===ed.id?{...c,...fm}:c));if(pv.status!==fm.status)alog(setLogs,"CAMBIO ESTADO","CAPA",`${ed.code}: ${pv.status} → ${fm.status}`,currentUser.name);else alog(setLogs,"EDITAR","CAPA",ed.code,currentUser.name);}
-    else{const nums=capas.map(c=>{const m=c.code.match(/CAPA[-_]?0*(\d+)/);return m?parseInt(m[1]):0;});const next=Math.max(0,...nums)+1;const code=`CAPA-${String(next).padStart(4,"0")}`;setCapas(p=>[...p,{...fm,id:gid(),code,createdAt:new Date().toISOString()}]);alog(setLogs,"CREAR","CAPA",code,currentUser.name);}
-    sSh(false);sEd(null);
+  const save=async()=>{
+    sGuardando(true);
+    try{
+      const c=await guardarCapa(ed?{...ed,...fm}:fm);
+      // Al crear, la ficha queda abierta sobre la acción recién creada: es donde
+      // se adjunta la evidencia, y cerrar acá obligaría a buscarla de nuevo.
+      sEd(c);sFm(c);
+      avisar(ed?"Acción guardada":`Acción ${c.code} creada`);
+    }catch(e){avisar("No se pudo guardar: "+e.message,"error");}
+    finally{sGuardando(false);}
   };
-  const autoD=ncId=>{const nc=ncs.find(x=>x.id===ncId);if(nc&&nc.classification){const c=CLASSIFICATIONS.find(x=>x.id===nc.classification);if(c&&c.deadline>0)sFm(p=>({...p,dueDate:addMo(nc.openDate||tdy(),c.deadline)}));}};
+  /* Plazo automático según la clasificación de la NC (SOP-AC-036).
+     Para las Críticas el plazo es "inmediato": antes eso se traducía en no poner
+     fecha, y una acción sin fecha nunca vencía ni entraba en las alertas. Justo
+     la que más urge era la única que el sistema no reclamaba. Ahora la fecha es
+     el día de apertura de la NC, que es lo que "inmediato" significa. */
+  const autoD=ncId=>{
+    const nc=ncs.find(x=>x.id===ncId);
+    if(!nc||!nc.classification)return;
+    const c=CLASSIFICATIONS.find(x=>x.id===nc.classification);
+    if(!c)return;
+    const base=nc.openDate||tdy();
+    sFm(p=>({...p,dueDate:c.deadline>0?addMo(base,c.deadline):base}));
+  };
   const open=c=>{sFm(c||bl);sEd(c);sSh(true);};
-  const del=id=>{if(confirm("¿Eliminar esta CAPA?")){const c=capas.find(x=>x.id===id);setCapas(p=>p.filter(x=>x.id!==id));alog(setLogs,"ELIMINAR","CAPA",c?.code,currentUser.name);}};
+  const del=async id=>{
+    const c=capas.find(x=>x.id===id);
+    if(!confirm(`¿Eliminar ${c?.code||"esta acción"}? También se borra su evidencia adjunta.`))return;
+    try{await borrarCapa(id);avisar("Acción eliminada");sSh(false);sEd(null);}
+    catch(e){avisar("No se pudo eliminar: "+e.message,"error");}
+  };
   const lkNC=fm.ncId?ncs.find(x=>x.id===fm.ncId):null;
   const cls=lkNC?CLASSIFICATIONS.find(x=>x.id===lkNC.classification):null;
   let ls=capas;
@@ -624,10 +1029,11 @@ function CAPAList({data,canEdit}){
         <td style={{...sTd,fontWeight:700,color:K.pri,fontFamily:"monospace"}}>{c.code}</td>
         <td style={{...sTd,fontFamily:"monospace",fontSize:11.5}}>{ncRef?.code||devRef?.code||"—"}</td>
         <td style={sTd}><Bg color={c.type==="Acción Correctiva"?K.red:c.type==="Acción Preventiva"?K.vio:"#0891B2"} bg={c.type==="Acción Correctiva"?K.redL:c.type==="Acción Preventiva"?K.vioL:"#ECFEFF"}>{c.type==="Acción Correctiva"?"AC":c.type==="Acción Preventiva"?"AP":"Corr."}</Bg></td>
-        <td style={{...sTd,minWidth:200}}><div style={{fontSize:12.5,lineHeight:1.4}}>{c.description}</div></td>
+        <td style={{...sTd,minWidth:200}}><div style={{fontSize:12.5,lineHeight:1.4}}>{c.description}</div>
+          {c.adjuntos&&c.adjuntos.length>0&&<div style={{fontSize:10.5,color:"#92400E",marginTop:3,fontWeight:600}}>📎 {c.adjuntos.length} {c.adjuntos.length===1?"adjunto":"adjuntos"}</div>}</td>
         <td style={sTd}><div>{c.responsible}</div>{c.responsibleEmail&&<div style={{fontSize:10,color:K.txS}}>{c.responsibleEmail}</div>}</td>
         <td style={{...sTd,whiteSpace:"nowrap"}}>{fd(c.dueDate)} {urg&&<Bg color={urg.color} bg={urg.bg}>{urg.txt}</Bg>}</td>
-        <td style={sTd}><SBg s={c.status}/></td>
+        <td style={sTd}><SBg s={estadoVisible(c)}/></td>
         {canEdit&&<td style={sTd}><div style={{display:"flex",gap:4}}><button style={sB("sm")} onClick={()=>open(c)}>Editar</button>{c.responsibleEmail&&c.status!=="Cerrado"&&<button style={{...sB("sm"),color:"#0891B2",padding:"2px 6px"}} onClick={()=>sendReminder(c)} title="Recordar">✉</button>}</div></td>}
       </tr>;})}</tbody></table>}
     </div>
@@ -636,10 +1042,13 @@ function CAPAList({data,canEdit}){
         <Fd l="Vinculada a NC"><select style={sS} value={fm.ncId||""} onChange={e=>{sFm(p=>({...p,ncId:e.target.value,devId:""}));autoD(e.target.value);}}><option value="">— Ninguna —</option>{ncs.map(n=><option key={n.id} value={n.id}>{n.code} — {n.description?.slice(0,35)}</option>)}</select></Fd>
         <Fd l="Vinculada a Desvío"><select style={sS} value={fm.devId||""} onChange={e=>sFm(p=>({...p,devId:e.target.value,ncId:""}))}><option value="">— Ninguno —</option>{devs.map(d=><option key={d.id} value={d.id}>{d.code} — {d.description?.slice(0,35)}</option>)}</select></Fd>
       </G2>
-      {cls&&cls.deadline>0&&<CtxHelp type="success">Plazo CAPA: <strong>{cls.deadlineLabel}</strong> ({cls.desc?.slice(0,60)})</CtxHelp>}
+      {cls&&<CtxHelp type={cls.deadline===0?"warn":"success"}>Plazo CAPA: <strong>{cls.deadlineLabel}</strong> ({cls.desc?.slice(0,60)})</CtxHelp>}
       <G2>
         <Fd l="Tipo de acción"><select style={sS} value={fm.type||""} onChange={e=>sFm(p=>({...p,type:e.target.value}))}>{CAPA_TYPES.map(t=><option key={t}>{t}</option>)}</select></Fd>
-        <Fd l="Estado"><select style={sS} value={fm.status} onChange={e=>sFm(p=>({...p,status:e.target.value}))}>{STATUSES.map(s=><option key={s}>{s}</option>)}</select></Fd>
+        {/* "Vencido" no se elige: lo determina la fecha. Ofrecerlo permitía
+            marcar como vencida una acción en fecha y, al revés, una pasada de
+            fecha seguía figurando abierta porque nadie la había tildado. */}
+        <Fd l="Estado"><select style={sS} value={fm.status} onChange={e=>sFm(p=>({...p,status:e.target.value}))}>{STATUSES.filter(s=>s!=="Vencido").map(s=><option key={s}>{s}</option>)}</select></Fd>
       </G2>
       <Fd l="Fecha límite"><input type="date" style={sI} value={fm.dueDate} onChange={e=>sFm(p=>({...p,dueDate:e.target.value}))}/></Fd>
       <Fd l="Descripción de la acción"><textarea style={{...sI,minHeight:60,resize:"vertical"}} value={fm.description} onChange={e=>sFm(p=>({...p,description:e.target.value}))}/></Fd>
@@ -651,24 +1060,89 @@ function CAPAList({data,canEdit}){
         <h3 style={{fontSize:12,fontWeight:700,color:"#7C3AED",margin:"0 0 8px"}}>🔍 Responsable de seguimiento</h3>
         <G2><Fd l="Nombre"><input style={sI} value={fm.followupResp||""} onChange={e=>sFm(p=>({...p,followupResp:e.target.value}))}/></Fd><Fd l="Email"><input type="email" style={sI} value={fm.followupEmail||""} onChange={e=>sFm(p=>({...p,followupEmail:e.target.value}))}/></Fd></G2>
       </div>
-      <Fd l="Verificación de implementación"><textarea style={{...sI,minHeight:40,resize:"vertical"}} value={fm.verification} onChange={e=>sFm(p=>({...p,verification:e.target.value}))}/></Fd>
-      <Fd l="Verificación de eficacia"><textarea style={{...sI,minHeight:40,resize:"vertical"}} value={fm.effectiveness} onChange={e=>sFm(p=>({...p,effectiveness:e.target.value}))}/></Fd>
+      <Fd l="Verificación de implementación"><textarea style={{...sI,minHeight:40,resize:"vertical"}} value={fm.verification||""} onChange={e=>sFm(p=>({...p,verification:e.target.value}))}/></Fd>
+      <Fd l="Verificación de eficacia"><textarea style={{...sI,minHeight:40,resize:"vertical"}} value={fm.effectiveness||""} onChange={e=>sFm(p=>({...p,effectiveness:e.target.value}))}/></Fd>
+
+      <Evidencia capa={ed||fm} canEdit={canEdit} canAdmin={canAdmin} avisar={avisar}
+                 onCambio={l=>{sEd(p=>p&&{...p,adjuntos:l});sFm(p=>({...p,adjuntos:l}));}}/>
+
       <div style={{display:"flex",gap:8,justifyContent:"space-between",marginTop:14}}>
-        <div>{ed&&canEdit&&<button style={sB("red")} onClick={()=>{del(ed.id);sSh(false);}}>🗑 Eliminar</button>}</div>
-        <div style={{display:"flex",gap:8}}><button style={sB("g")} onClick={()=>sSh(false)}>Cancelar</button><button style={sB("pri")} onClick={save} disabled={!fm.description}>Guardar</button></div>
+        <div>{ed&&canAdmin&&<button style={sB("red")} onClick={()=>del(ed.id)}>🗑 Eliminar</button>}</div>
+        <div style={{display:"flex",gap:8}}>
+          <button style={sB("g")} onClick={()=>{sSh(false);sEd(null);}}>Cerrar</button>
+          {canEdit&&<button style={sB("pri")} onClick={save} disabled={!fm.description||guardando}>{guardando?"Guardando…":"Guardar"}</button>}
+        </div>
       </div>
     </Md>}
   </div>);
 }
 
 /* ═══ AUDIT TRAIL ═══ */
-function Trail({logs}){const[q,sQ]=useState("");const ls=q?logs.filter(l=>Object.values(l).some(v=>String(v).toLowerCase().includes(q.toLowerCase()))):logs;
-  return(<div><h1 style={{fontSize:20,fontWeight:800,margin:"0 0 12px"}}>Audit Trail</h1><input style={{...sI,maxWidth:320,marginBottom:12}} placeholder="Buscar..." value={q} onChange={e=>sQ(e.target.value)}/><div style={sC}>{ls.length===0?<Em icon="📜" t="Sin registros"/>:<table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5}}><thead><tr><th style={sTh}>Fecha</th><th style={sTh}>Usuario</th><th style={sTh}>Acción</th><th style={sTh}>Entidad</th><th style={sTh}>Detalle</th></tr></thead><tbody>{ls.slice(0,200).map(l=><tr key={l.id}><td style={{...sTd,whiteSpace:"nowrap",fontFamily:"monospace",fontSize:11.5}}>{fdt(l.ts)}</td><td style={{...sTd,fontWeight:600}}>{l.user}</td><td style={sTd}><Bg color={l.action.includes("CREAR")?K.grn:l.action.includes("CAMBIO")?K.wrn:l.action.includes("ELIMINAR")?K.red:K.pri} bg={l.action.includes("CREAR")?K.grnL:l.action.includes("CAMBIO")?K.wrnL:l.action.includes("ELIMINAR")?K.redL:K.priL}>{l.action}</Bg></td><td style={sTd}>{l.entity}</td><td style={{...sTd,fontSize:12,color:K.txS}}>{l.detail}</td></tr>)}</tbody></table>}</div></div>);
+/* Los registros vienen del servidor (tabla ncd_actividad). Antes se guardaban
+   en el mismo localStorage que los datos que auditan, donde quien estaba siendo
+   auditado podía reescribirlos desde la consola del navegador.
+
+   El listado es del sistema entero y no del año seleccionado: una traza sirve
+   para reconstruir qué pasó, y recortarla por el filtro de la pantalla
+   escondería justo el movimiento que se está buscando. */
+function Trail({logs}){
+  const[q,sQ]=useState("");
+  const ls=q?logs.filter(l=>Object.values(l).some(v=>String(v).toLowerCase().includes(q.toLowerCase()))):logs;
+  const color=a=>a.includes("CREAR")||a.includes("CARGA")?[K.grn,K.grnL]
+    :a.includes("CAMBIO")?[K.wrn,K.wrnL]
+    :a.includes("ELIMINAR")?[K.red,K.redL]
+    :a.includes("ADJUNTAR")?["#0891B2","#ECFEFF"]:[K.pri,K.priL];
+  return(<div>
+    <h1 style={{fontSize:20,fontWeight:800,margin:"0 0 4px"}}>Audit Trail</h1>
+    <p style={{color:K.txS,margin:"0 0 12px",fontSize:12.5}}>Últimos {logs.length} movimientos registrados en el servidor.</p>
+    <input style={{...sI,maxWidth:320,marginBottom:12}} placeholder="Buscar..." value={q} onChange={e=>sQ(e.target.value)}/>
+    <div style={sC}>{ls.length===0?<Em icon="📜" t="Sin registros"/>:
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5}}>
+        <thead><tr><th style={sTh}>Fecha</th><th style={sTh}>Usuario</th><th style={sTh}>Acción</th><th style={sTh}>Entidad</th><th style={sTh}>Detalle</th></tr></thead>
+        <tbody>{ls.map(l=>{const[c,b]=color(l.accion||"");return <tr key={l.id}>
+          <td style={{...sTd,whiteSpace:"nowrap",fontFamily:"monospace",fontSize:11.5}}>{fdt(l.ts)}</td>
+          <td style={{...sTd,fontWeight:600}}>{l.usuario}</td>
+          <td style={sTd}><Bg color={c} bg={b}>{l.accion}</Bg></td>
+          <td style={sTd}>{l.entidad}</td>
+          <td style={{...sTd,fontSize:12,color:K.txS}}>{l.detalle}</td>
+        </tr>;})}</tbody>
+      </table>}
+    </div>
+  </div>);
 }
 
 /* ═══ REPORTES ═══ */
 const MONTHS_ES=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-function Reports({data}){
+/* Carga inicial. Los 7 expedientes de 2026 y sus 28 acciones venían escritos
+   dentro de este archivo, que era la única copia que existía. Este panel los
+   pasa a la base una sola vez; el servidor rechaza el pedido si ya hay algo
+   cargado, así que un click de más no puede duplicar un expediente.
+
+   Una vez hecho, DEFAULT_NCS y DEFAULT_CAPAS se pueden sacar del archivo. */
+function CargaInicial({onListo,avisar}){
+  const[ocupado,sOcupado]=useState(false);
+  const importar=async()=>{
+    if(!confirm(`Se van a cargar ${DEFAULT_NCS.length} no conformidades y ${DEFAULT_CAPAS.length} acciones. Solo se puede hacer una vez. ¿Continuar?`))return;
+    sOcupado(true);
+    try{
+      const r=await api("/importar",{method:"POST",body:JSON.stringify({ncs:DEFAULT_NCS,capas:DEFAULT_CAPAS})});
+      avisar(`Cargados ${r.ncs} expedientes y ${r.capas} acciones`);
+      onListo&&onListo();
+    }catch(e){avisar("No se pudo importar: "+e.message,"error");}
+    finally{sOcupado(false);}
+  };
+  return(<div style={{...sC,background:K.priL,borderColor:K.pri+"30"}}>
+    <h3 style={{fontSize:14,fontWeight:800,color:K.pri,margin:"0 0 6px"}}>📥 Carga inicial de datos</h3>
+    <p style={{fontSize:12.5,color:K.txS,lineHeight:1.6,margin:"0 0 12px"}}>
+      La base está vacía. Este archivo trae {DEFAULT_NCS.length} no conformidades de 2026 y {DEFAULT_CAPAS.length} acciones
+      cargadas de antemano; desde acá pasan al servidor, donde las va a ver todo el equipo.
+      Es una operación única: después de hacerla, este panel desaparece.
+    </p>
+    <button style={sB("pri")} onClick={importar} disabled={ocupado}>{ocupado?"Cargando…":"Cargar los datos iniciales"}</button>
+  </div>);
+}
+
+function Reports({data,canAdmin,onImportar}){
   const{ncs,devs,capas}=data;
   const closedNC=ncs.filter(n=>n.phase==="cerrada").length;
   const openNC=ncs.length-closedNC;
@@ -697,6 +1171,11 @@ function Reports({data}){
         <button style={sB("g")} onClick={dl}>⬇ Texto plano</button>
       </div>
     </div>
+
+    {/* La base recién creada está vacía: el administrador puede traer de una vez
+        los expedientes que este archivo trae cargados de antemano. */}
+    {canAdmin&&ncs.length===0&&devs.length===0&&capas.length===0&&
+      <div style={{marginTop:14}}><CargaInicial avisar={data.avisar} onListo={()=>onImportar&&onImportar(data.yr)}/></div>}
 
     {/* ── KPI cards ── */}
     <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:12,margin:"14px 0 16px"}}>
@@ -784,7 +1263,7 @@ function CommitteeReport({mode,ncs,devs,capas,yr,onClose}){
 
   // Months without new cases
   const moCounts=Array(12).fill(0);
-  yrItems.forEach(x=>{const d=new Date(isNC?x.openDate:x.date);if(d.getFullYear()===yr)moCounts[d.getMonth()]++;});
+  yrItems.forEach(x=>{const d=fecha0(isNC?x.openDate:x.date);if(d&&d.getFullYear()===yr)moCounts[d.getMonth()]++;});
   const noCase=[];for(let i=0;i<=now.getMonth();i++){if(moCounts[i]===0)noCase.push(MONTHS_ES[i]);}
   const noCaseStr=noCase.length>0?` · sin nuevos casos en ${noCase.join(", ")}`:"";
 
@@ -792,15 +1271,32 @@ function CommitteeReport({mode,ncs,devs,capas,yr,onClose}){
   const PIE_COLORS=["#DC2626","#2563EB","#D97706","#16A34A","#7C3AED","#0891B2","#DB2777","#65A30D"];
 
   // Day count helper
-  const daysSince=(dateStr)=>{if(!dateStr)return"—";return Math.floor((today-new Date(dateStr))/86400000);};
+  const daysSince=(dateStr)=>{if(!dateStr)return"—";return Math.floor((today-new Date(dateStr+"T00:00:00"))/86400000);};
+
+  /* Días que el expediente estuvo abierto: hasta el cierre si cerró, y hasta hoy
+     si sigue abierto. Antes contaba siempre hasta hoy, incluso para las cerradas,
+     así que una NC resuelta en una semana en enero sumaba trescientos días al
+     promedio que se le muestra a gerencia. Y cuando faltaba la fecha devolvía "—",
+     que al sumarse daba NaN y dejaba el indicador en blanco. */
+  const diasAbierto=(x)=>{
+    const ini=isNC?x.openDate:x.date;
+    if(!ini)return null;
+    const fin=x.closeDate||null;
+    const desde=new Date(ini+"T00:00:00");
+    const hasta=fin?new Date(fin+"T00:00:00"):today;
+    return Math.max(0,Math.floor((hasta-desde)/86400000));
+  };
+  const conDias=yrItems.map(diasAbierto).filter(d=>d!==null);
+  const promedioDias=conDias.length?Math.round(conDias.reduce((s,d)=>s+d,0)/conDias.length):0;
 
   // First and last month with data
-  const firstMo=yrItems.reduce((m,x)=>{const d=new Date(isNC?x.openDate:x.date);return d<m?d:m;},new Date());
+  const firstMo=yrItems.reduce((m,x)=>{const d=fecha0(isNC?x.openDate:x.date);return d&&d<m?d:m;},new Date());
   const dateRange=`${MONTHS_ES[firstMo.getMonth()]} – ${mo} ${yr}`;
 
   const doPrint=()=>{
     const el=document.getElementById("comrpt");if(!el)return;
     const w=window.open("","_blank","width=960,height=700");
+    if(!w){alert("El navegador bloqueó la ventana del informe. Habilitá las ventanas emergentes para este sitio y volvé a intentar.");return;}
     w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title} — Vessena S.A.</title><style>
       *{margin:0;padding:0;box-sizing:border-box}body{font-family:'Inter',system-ui,sans-serif;background:#fff;color:#1B1E25;font-size:13px;padding:0}
       @media print{@page{size:landscape;margin:12mm}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
@@ -854,8 +1350,8 @@ function CommitteeReport({mode,ncs,devs,capas,yr,onClose}){
             </div>
             <div style={{background:"#F8FAFC",border:`1px solid ${K.brd}`,borderRadius:10,padding:"18px",textAlign:"center"}}>
               <div style={{fontSize:11,fontWeight:700,color:K.txS,textTransform:"uppercase",marginBottom:4}}>Promedio días abierta</div>
-              <div style={{fontSize:42,fontWeight:800,color:K.wrn}}>{yrItems.length?Math.round(yrItems.reduce((s,x)=>s+daysSince(isNC?x.openDate:x.date),0)/yrItems.length):0}</div>
-              <div style={{fontSize:12,color:K.txS,marginTop:4}}>días desde apertura</div>
+              <div style={{fontSize:42,fontWeight:800,color:K.wrn}}>{promedioDias}</div>
+              <div style={{fontSize:12,color:K.txS,marginTop:4}}>hasta el cierre, o hasta hoy si sigue abierta</div>
             </div>
           </div>
 
@@ -913,7 +1409,10 @@ function CommitteeReport({mode,ncs,devs,capas,yr,onClose}){
               <th style={{padding:"10px 8px",textAlign:"center",fontWeight:700,fontSize:10.5,textTransform:"uppercase"}}>CAPA</th>
             </tr></thead>
             <tbody>
-              {yrItems.sort((a,b)=>new Date(isNC?a.openDate:a.date)-new Date(isNC?b.openDate:b.date)).map((x,i)=>{
+              {/* Sobre una copia: `sort` ordena en el lugar, y este arreglo es el
+                  estado de la aplicación. Ordenarlo acá reordenaría además las
+                  listas de NC y de desvíos, sin que nadie lo hubiera pedido. */}
+              {[...yrItems].sort((a,b)=>fecha0(isNC?a.openDate:a.date)-fecha0(isNC?b.openDate:b.date)).map((x,i)=>{
                 const isClosed=isNC?x.phase==="cerrada":x.phase==="cerrado";
                 const dt=isNC?x.openDate:x.date;
                 const days=daysSince(dt);
@@ -952,15 +1451,13 @@ function GuidePage({goTo}){
     {icon:"⚠️",title:"No Conformidades (NC)",id:"nc",content:"Registro y gestión del ciclo de vida completo de No Conformidades según SOP-AC-036 y REG-SOP-AC-036-A. Cada NC avanza por 7 etapas secuenciales en un wizard unificado.",
       steps:["Desde el menú lateral, ir a 'No Conformidades' y click en '+ Nueva NC'","Se abre el wizard en la etapa 1 (Apertura): completar fecha del incidente, sector, detalle, fuente de detección, producto/lote asociado","Click en 'Guardar y avanzar ▸ Análisis 5M' para pasar a la etapa 2","Etapa 2 — Análisis 5M (Ishikawa): responder SI/NO/N-A a las preguntas de las 5 categorías (Método, Mano de Obra, Materiales, Máquinas, Medio Ambiente). Documentar hallazgos y causa raíz","Etapa 3 — Clasificación: seleccionar Severidad y Probabilidad. La matriz calcula automáticamente la criticidad (Crítica/Mayor/Menor) y muestra el plazo CAPA","Etapa 4 — Conclusiones: indicar si impacta otros productos/procesos, tipo de acción a iniciar (Correctiva/Preventiva/Corrección)","Etapa 5 — CAPA: muestra las acciones vinculadas (se crean desde el módulo CAPA / Acciones)","Etapa 6 — Verificación: responder las 4 preguntas de eficacia del SOP §5.6","Etapa 7 — Cierre: fecha de cierre, responsable y notas finales","Podés hacer click en cualquier etapa de la barra superior para saltar directamente a ella","El botón '💾 Guardar' guarda sin avanzar fase; 'Guardar y avanzar' guarda y mueve a la siguiente etapa"]},
     {icon:"↩️",title:"Notas de Desvío",id:"dev",content:"Gestión de desvíos temporales de procedimientos/procesos vigentes según REG-SOP-AC-036-B. Cada desvío avanza por 5 etapas.",
-      steps:["Ir a 'Desvíos' y click en '+ Nuevo Desvío'","Etapa 1 — Datos: sector, fecha, producto/lote, descripción detallada del desvío y justificación (comercial si aplica)","Etapa 2 — Impacto: evaluar Sí/No para cada una de las 20 áreas de impacto (Producto, Regulatorio, Producción, CC, I+D, etc.) con detalle","Etapa 3 — Riesgo / Decisión: indicar si el riesgo está controlado, clasificar como Crítico/No Crítico, Planificado/No Planificado, definir prioridad y tomar la decisión de Aprobar o Rechazar","Etapa 4 — Implementación: documentar las acciones realizadas y notificaciones regulatorias","Etapa 5 — Cierre: confirmar documentación completa, aprobación y fecha de cierre"]},
+      steps:["Ir a 'Desvíos' y click en '+ Nuevo Desvío'","Etapa 1 — Datos: sector, fecha, producto/lote, descripción detallada del desvío y justificación (comercial si aplica)","Etapa 2 — Impacto: evaluar Sí/No para cada una de las 20 áreas de impacto (Producto, Regulatorio, Producción, CC, I+D, etc.) con detalle","Etapa 3 — Riesgo / Decisión: indicar si el riesgo está controlado, clasificar como Crítico/No Crítico, Planificado/No Planificado, definir prioridad y tomar la decisión de Aprobar o Rechazar","Etapa 4 — Implementación: cargar las acciones una por una con el formato qué se hace / quién lo hace / cuándo vence. Cada acción queda vinculada al desvío y entra en las alertas de vencimiento junto con las CAPA","Etapa 4 — También se documentan acá las notificaciones regulatorias (autoridad sanitaria, clientes, distribuidores) y las observaciones generales","Etapa 5 — Cierre: confirmar documentación completa, aprobación y fecha de cierre. No se puede cerrar mientras queden acciones abiertas"]},
     {icon:"📋",title:"CAPA / Acciones",id:"capa",content:"Gestión centralizada de Acciones Correctivas, Preventivas y Correcciones. Vinculadas a NC o Desvíos, con cálculo automático de plazos y alertas de vencimiento.",
-      steps:["Ir a 'CAPA / Acciones' y click en '+ Nueva CAPA'","Vincular a una NC o Desvío existente — al vincular a NC, la fecha límite se calcula automáticamente según la clasificación","Seleccionar tipo de acción (Correctiva, Preventiva, Corrección) y estado","Completar descripción, responsable de la acción (nombre + email) y responsable de seguimiento/verificación","Las CAPA vencidas o próximas a vencer aparecen en el panel de alertas 🔔 con indicador de días","El botón ✉ genera un email de recordatorio pre-redactado al responsable","Completar verificación de implementación y verificación de eficacia antes de cerrar"]},
+      steps:["Ir a 'CAPA / Acciones' y click en '+ Nueva CAPA'","Vincular a una NC o Desvío existente — al vincular a NC, la fecha límite se calcula automáticamente según la clasificación (Crítica: el mismo día; Mayor: 3 meses; Menor: 6 meses)","Seleccionar tipo de acción (Correctiva, Preventiva, Corrección) y estado","Completar descripción, responsable de la acción (nombre + email) y responsable de seguimiento/verificación","Adjuntar la evidencia en el bloque 📎: fotos o PDF que respalden lo hecho. Hay que guardar la acción una primera vez antes de poder adjuntar","Las fotos se reducen automáticamente antes de subirse, así que se pueden sacar con el celular sin preocuparse por el tamaño","Las CAPA vencidas o próximas a vencer aparecen en el panel de alertas 🔔 con indicador de días","El botón ✉ genera un email de recordatorio pre-redactado al responsable","Completar verificación de implementación y verificación de eficacia antes de cerrar"]},
     {icon:"📈",title:"Reportes",id:"rep",content:"Página principal con KPIs del sistema, gráficas e informes para comité gerencial. NC abiertas/cerradas/críticas, desvíos abiertos, CAPA abiertas/vencidas, tasa de cierre y alertas de vencimiento.",
-      steps:["Los 6 indicadores superiores muestran el estado actual del sistema","'NC por clasificación' muestra distribución Crítica/Mayor/Menor con plazos","'NC por fase del ciclo' visualiza cuántas NC hay en cada etapa","La barra de tasa de cierre muestra el % de NC cerradas","El panel de alertas lista las CAPA próximas a vencer con días restantes"]},
-    {icon:"📜",title:"Audit Trail",id:"trail",content:"Registro automático e inmutable de todas las operaciones: creación, edición, eliminación, cambios de fase, cambios de estado, login/logout.",
-      steps:["Todo se registra automáticamente con usuario, fecha, hora y detalle","Usá el buscador para filtrar por cualquier campo","Los registros no se pueden editar ni eliminar — garantiza trazabilidad GMP","Cada cambio de fase queda registrado con la transición exacta (ej: 'Apertura → Análisis 5M')"]},
-    {icon:"📈",title:"Reportes",id:"rep",content:"Métricas consolidadas y descarga de reporte completo en formato texto.",
-      steps:["Revisá tasa de cierre, totales y CAPA vencidas","Consultá las gráficas de NC por clasificación y CAPA por tipo","Click en '⬇ Descargar reporte' para obtener un archivo de texto con todo el detalle"]},
+      steps:["Los 6 indicadores superiores muestran el estado actual del sistema","'NC por clasificación' muestra distribución Crítica/Mayor/Menor con plazos","'NC por fase del ciclo' visualiza cuántas NC hay en cada etapa","La barra de tasa de cierre muestra el % de NC cerradas","'CAPA vencidas +30 días' lista lo que lleva más de un mes sin resolverse","Los dos botones de Informe Comité arman una presentación imprimible (portada, análisis y detalle) lista para gerencia","'⬇ Texto plano' descarga un .txt con todo el detalle del año"]},
+    {icon:"📜",title:"Audit Trail",id:"trail",content:"Registro automático de todas las operaciones: creación, edición, eliminación, cambios de fase, cambios de estado y adjuntos.",
+      steps:["Todo se registra automáticamente con usuario, fecha, hora y detalle","El usuario que queda registrado es el de la sesión del portal, no uno que se pueda elegir al guardar","Los registros se guardan en el servidor y la aplicación no tiene ninguna forma de editarlos ni borrarlos","La lista abarca el sistema entero, no solo el año seleccionado: una traza recortada escondería justo el movimiento que se busca","Usá el buscador para filtrar por cualquier campo","Cada cambio de fase queda registrado con la transición exacta (ej: 'abierta → analisis')"]},
   ];
 
   return(<div>
@@ -1011,15 +1508,23 @@ function GuidePage({goTo}){
 
     <div className="cfg-section">
       <h3>👥 Niveles de acceso</h3>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginTop:4}}>
-        <div style={{padding:"10px 14px",background:"#FEF2F2",borderRadius:8}}><div style={{fontWeight:700,color:"#DC2626",fontSize:13}}>🔑 Administrador</div><div style={{fontSize:12,color:K.txS,marginTop:4}}>Acceso total + gestión de usuarios. Puede crear, editar, eliminar y avanzar etapas de NC, Desvíos y CAPA.</div></div>
-        <div style={{padding:"10px 14px",background:K.priL,borderRadius:8}}><div style={{fontWeight:700,color:K.pri,fontSize:13}}>👤 Usuario</div><div style={{fontSize:12,color:K.txS,marginTop:4}}>Puede crear, editar y gestionar NC, Desvíos y CAPA. No puede administrar usuarios.</div></div>
-        <div style={{padding:"10px 14px",background:K.grnL,borderRadius:8}}><div style={{fontWeight:700,color:K.grn,fontSize:13}}>👁 Visualización</div><div style={{fontSize:12,color:K.txS,marginTop:4}}>Solo lectura — consulta datos sin poder crear, editar ni avanzar etapas.</div></div>
+      <p style={{fontSize:12,color:K.txS,margin:"4px 0 8px"}}>El rol lo asigna el portal de calidad, no esta aplicación. El servidor lo verifica en cada operación: esconder un botón no alcanzaría, porque la URL se puede escribir a mano.</p>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:4}}>
+        {Object.entries(ROLES).map(([k,v])=>
+          <div key={k} style={{padding:"10px 14px",background:v.bg,borderRadius:8}}>
+            <div style={{fontWeight:700,color:v.color,fontSize:13}}>{v.icon} {v.label}</div>
+            <div style={{fontSize:12,color:K.txS,marginTop:4}}>
+              {v.canAdmin?"Carga, edita y avanza etapas. Además puede eliminar registros y adjuntos, y hacer la carga inicial."
+                :v.canEdit?"Crea, edita y avanza etapas de NC, desvíos y acciones. Adjunta evidencia. No puede eliminar."
+                :"Solo lectura: consulta, exporta e imprime, sin modificar nada."}
+            </div>
+          </div>
+        )}
       </div>
     </div>
 
     {sections.map(s=>(
-      <div key={s.title} className="cfg-section">
+      <div key={s.id} className="cfg-section">
         <h3 style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:18}}>{s.icon}</span> {s.title}
           <button style={{...sB("sm"),marginLeft:"auto"}} onClick={()=>goTo(s.id)}>Ir al módulo →</button>
         </h3>
@@ -1036,12 +1541,7 @@ function GuidePage({goTo}){
       <p style={{fontSize:12,color:K.txS,margin:"0 0 10px"}}>La clasificación se determina automáticamente cruzando Severidad × Probabilidad:</p>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
         <div>
-          <table className="risk-matrix" style={{width:"100%"}}><thead><tr><th>Sev. \ Prob.</th><th>Baja</th><th>Moderada</th><th>Alta</th></tr></thead>
-          <tbody>
-            <tr><th>Alta</th><td className="r-may">Mayor</td><td className="r-may">Mayor</td><td className="r-crit">Crítica</td></tr>
-            <tr><th>Moderada</th><td className="r-men">Menor</td><td className="r-may">Mayor</td><td className="r-crit">Crítica</td></tr>
-            <tr><th>Baja</th><td className="r-men">Menor</td><td className="r-men">Menor</td><td className="r-crit">Crítica</td></tr>
-          </tbody></table>
+          <RiskMatrix/>
         </div>
         <div>{CLASSIFICATIONS.map(c=>
           <div key={c.id} style={{background:"#fff",border:`1px solid ${c.color}20`,borderRadius:7,padding:"8px 12px",marginBottom:6}}>
@@ -1069,15 +1569,15 @@ function GuidePage({goTo}){
       <h3>⚡ Tips rápidos</h3>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
         {[
-          {l:"Códigos automáticos",d:"NC-0001, DES-0001, CAPA-0001 se asignan automáticamente al crear."},
-          {l:"Plazos automáticos",d:"Al vincular CAPA a una NC clasificada, la fecha límite se calcula por SOP."},
+          {l:"Códigos automáticos",d:"NC-001-2026, DES-001-2026 y CAPA-0001 los asigna el servidor al crear, así dos personas cargando a la vez no repiten número."},
+          {l:"Plazos automáticos",d:"Al vincular una acción a una NC clasificada, la fecha límite sale del SOP. En las Críticas es el mismo día de apertura: inmediato."},
+          {l:"Evidencia adjunta",d:"En cada acción se pueden adjuntar fotos o PDF. Las fotos se reducen solas antes de subirse."},
+          {l:"Acciones del desvío",d:"Se escriben en la etapa Implementación con formato qué / quién / cuándo, y entran en las mismas alertas de vencimiento que las CAPA."},
           {l:"Recordatorios por email",d:"El botón ✉ en CAPA genera un email pre-redactado al responsable."},
-          {l:"Apertura en etapa actual",d:"Al abrir una NC/Desvío, el wizard se posiciona en la etapa activa."},
-          {l:"Audit Trail",d:"Todo queda registrado: creaciones, ediciones, cambios de fase, login/logout."},
-          {l:"Navegación libre",d:"Podés click en cualquier etapa del wizard para revisarla sin cambiar la fase."},
+          {l:"Cierre condicionado",d:"Una NC o un desvío no se cierran mientras les queden acciones abiertas (SOP-AC-036 §5.6)."},
+          {l:"Datos compartidos",d:"Todo se guarda en el servidor de calidad: lo que cargás lo ve el resto del equipo desde cualquier máquina."},
+          {l:"Navegación libre",d:"Podés click en cualquier etapa del wizard para revisarla. Volver atrás no retrocede la fase del registro."},
           {l:"Filtros combinables",d:"En NC podés filtrar por clasificación y fase simultáneamente."},
-          {l:"Datos en localStorage",d:"Los datos persisten en el navegador. Un cambio de navegador o limpieza borra los datos."},
-          {l:"Descarga de reportes",d:"El botón ⬇ en Reportes genera un archivo .txt con todo el detalle."},
         ].map(x=><div key={x.l} style={{background:"#F8FAFC",borderRadius:7,padding:"10px 12px"}}><div style={{fontSize:12,fontWeight:700,marginBottom:2}}>{x.l}</div><div style={{fontSize:11.5,color:K.txS}}>{x.d}</div></div>)}
       </div>
     </div>
@@ -1099,22 +1599,53 @@ function GuidePage({goTo}){
   </div>);
 }
 
-/* ═══ USER MANAGEMENT ═══ */
-function UserMgmt({users,setUsers,currentUser,setLogs}){
-  const[sh,sSh]=useState(false);const[ed,sEd]=useState(null);const bl={username:"",password:"",name:"",role:"user",active:true};const[fm,sFm]=useState(bl);
-  const save=()=>{if(ed){setUsers(p=>p.map(u=>u.id===ed.id?{...u,...fm}:u));alog(setLogs,"EDITAR USUARIO","Usuarios",fm.name,currentUser.name);}else{setUsers(p=>[...p,{...fm,id:gid()}]);alog(setLogs,"CREAR USUARIO","Usuarios",fm.name,currentUser.name);}sSh(false);sEd(null);};
-  const open=u=>{sFm(u||bl);sEd(u);sSh(true);};
-  return(<div><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}><h1 style={{fontSize:20,fontWeight:800}}>Usuarios</h1><button style={sB("pri")} onClick={()=>open(null)}>+ Nuevo</button></div>
-    <div style={sC}>{users.map(u=>{const r=ROLES[u.role]||{};return <div key={u.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:`1px solid ${K.brdL}`}}>
-      <div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:32,height:32,borderRadius:"50%",background:r.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>{r.icon}</div><div><div style={{fontSize:13,fontWeight:600}}>{u.name}</div><div style={{fontSize:11,color:K.txS}}>@{u.username} · <span style={{color:r.color}}>{r.label}</span></div></div></div>
-      <div style={{display:"flex",gap:6,alignItems:"center"}}>{!u.active&&<Bg color={K.red} bg={K.redL}>Inactivo</Bg>}<button style={sB("sm")} onClick={()=>open(u)}>Editar</button></div>
-    </div>;})}</div>
-    {sh&&<Md title={ed?"Editar usuario":"Nuevo usuario"} onClose={()=>sSh(false)}>
-      <G2><Fd l="Nombre"><input style={sI} value={fm.name} onChange={e=>sFm(p=>({...p,name:e.target.value}))}/></Fd><Fd l="Usuario"><input style={sI} value={fm.username} onChange={e=>sFm(p=>({...p,username:e.target.value}))}/></Fd></G2>
-      <G2><Fd l="Contraseña"><input style={sI} value={fm.password} onChange={e=>sFm(p=>({...p,password:e.target.value}))}/></Fd><Fd l="Rol"><select style={sS} value={fm.role} onChange={e=>sFm(p=>({...p,role:e.target.value}))}>{Object.entries(ROLES).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}</select></Fd></G2>
-      <Fd l="Activo"><label style={{display:"flex",alignItems:"center",gap:6}}><input type="checkbox" checked={fm.active} onChange={e=>sFm(p=>({...p,active:e.target.checked}))}/> Habilitado</label></Fd>
-      <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:14}}><button style={sB("g")} onClick={()=>sSh(false)}>Cancelar</button><button style={sB("pri")} onClick={save} disabled={!fm.name||!fm.username}>Guardar</button></div>
-    </Md>}
+/* ═══ ACCESOS ═══════════════════════════════════════════════════════════════
+   Antes acá había un alta de usuarios propia de esta app. Se quitó porque era
+   una trampa: editaba un padrón local que no controlaba el acceso, así que dar
+   de alta a alguien no lo habilitaba y darlo de baja no lo sacaba. Queda un
+   panel que dice dónde se administran de verdad. */
+function Accesos({cu,rolRecurso}){
+  const r=ROLES[rolRecurso]||{};
+  return(<div>
+    <h1 style={{fontSize:20,fontWeight:800,marginBottom:4}}>Accesos</h1>
+    <p style={{color:K.txS,margin:"0 0 16px",fontSize:12.5}}>Quién entra y con qué rol lo decide el portal de calidad, no esta aplicación.</p>
+
+    <div className="cfg-section">
+      <h3>👤 Tu sesión</h3>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginTop:8}}>
+        <div style={{width:40,height:40,borderRadius:"50%",background:r.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>{r.icon}</div>
+        <div>
+          <div style={{fontSize:14,fontWeight:700}}>{cu.nombre}</div>
+          <div style={{fontSize:11.5,color:K.txS}}>{cu.usuario} · <span style={{color:r.color,fontWeight:600}}>{r.label||rolRecurso}</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div className="cfg-section">
+      <h3>🔑 Qué habilita cada rol en esta app</h3>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:6}}>
+        {Object.entries(ROLES).map(([k,v])=>
+          <div key={k} style={{padding:"10px 14px",background:v.bg,borderRadius:8,border:`1px solid ${v.color}20`}}>
+            <div style={{fontWeight:700,color:v.color,fontSize:13}}>{v.icon} {v.label}</div>
+            <div style={{fontSize:12,color:K.txS,marginTop:4}}>
+              {v.canAdmin?"Carga, edita y además puede eliminar registros y hacer la carga inicial."
+                :v.canEdit?"Carga y edita no conformidades, desvíos y acciones. No puede eliminar."
+                :"Solo lectura. Consulta e imprime, sin modificar nada."}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+
+    <div className="cfg-section" style={{background:K.priL,borderColor:K.pri+"20"}}>
+      <h3 style={{color:K.pri}}>➕ Dar acceso a alguien más</h3>
+      <p style={{fontSize:12.5,color:K.txS,lineHeight:1.6,margin:"6px 0 0"}}>
+        Los permisos viven en el padrón del portal, junto con los del resto de las aplicaciones.
+        Para que una persona entre acá hace falta asignarle un rol en el recurso
+        <code style={{fontFamily:"monospace",fontWeight:700,color:K.pri}}> no-conformidades-desvios</code>.
+        Pedíselo a quien administre el portal.
+      </p>
+    </div>
   </div>);
 }
 
@@ -1230,85 +1761,239 @@ const DEFAULT_CAPAS=[
    MAIN APP
    ══════════════════════════════════════════════════════ */
 function App(){
-  const[cu,sCu]=useState(()=>LS.get("vnc_session"));
-  const[users,setUsers]=useLS("vnc_users",DEFAULT_USERS);
-  const[ncs,setNCs]=useLS("vnc_ncs6",DEFAULT_NCS);
-  const[devs,setDevs]=useLS("vnc_devs6",[]);
-  const[capas,setCapas]=useLS("vnc_capas6",DEFAULT_CAPAS);
-  const[logs,setLogs]=useLS("vnc_logs6",[]);
+  /* ─── Sesión ──────────────────────────────────────────────────────────────
+     La da el portal. `estado` distingue tres cosas que antes se confundían en
+     una sola pantalla en blanco: todavía cargando, no hay servidor, y listo. */
+  const[cu,sCu]=useState(null);
+  const[rolRecurso,sRol]=useState(null);
+  const[estado,sEstado]=useState("cargando");
+  const[errConexion,sErrConexion]=useState("");
+
+  const[ncs,setNCs]=useState([]);
+  const[devs,setDevs]=useState([]);
+  const[capas,setCapas]=useState([]);
+  const[logs,setLogs]=useState([]);
+  const[anios,sAnios]=useState([]);
+  const[cargandoDatos,sCargandoDatos]=useState(false);
+
   const[pg,sPg]=useState("rep");
   const[col,sCol]=useState(false);
   const[ncDet,sNcDet]=useState(null);
   const[devDet,sDevDet]=useState(null);
   const[yr,sYr]=useState(new Date().getFullYear());
+  const[aviso,sAviso]=useState(null);
 
-  const login=u=>{sCu(u);LS.set("vnc_session",u);alog(setLogs,"SESIÓN","Sistema",`Login: ${u.name}`,u.name);};
-  const logout=()=>{alog(setLogs,"SESIÓN","Sistema",`Logout: ${cu.name}`,cu.name);sCu(null);LS.set("vnc_session",null);};
+  /* Un mensaje breve arriba a la derecha. Antes guardar cerraba la ficha y ese
+     cierre era todo el acuse de recibo; ahora la ficha queda abierta, así que
+     hace falta decir explícitamente que se guardó. */
+  const avisar=useCallback((texto,tipo="ok")=>{
+    sAviso({texto,tipo,id:Date.now()});
+    setTimeout(()=>sAviso(a=>(a&&a.texto===texto?null:a)),tipo==="error"?6000:2500);
+  },[]);
 
-  if(!cu)return <Login users={users} onLogin={login}/>;
-  const role=ROLES[cu.role]||{};const canEdit=role.canEdit;const canAdmin=role.canAdmin;
+  const cargarSesion=useCallback(async()=>{
+    sEstado("cargando");
+    try{
+      const r=await fetch("/api/auth/yo",{credentials:"same-origin"});
+      if(!r.ok){
+        // Sin sesión se vuelve al portal, que es donde está el acceso.
+        location.href="/?volver="+encodeURIComponent(location.pathname);
+        return;
+      }
+      const d=await r.json();
+      const rec=d.recursos&&d.recursos["no-conformidades-desvios"];
+      sCu({usuario:d.usuario,nombre:d.nombre||d.usuario,email:d.email});
+      sRol(rec?rec.rol:"vista");
+      sEstado("listo");
+    }catch(e){
+      sErrConexion(e.message);
+      sEstado("sin-conexion");
+    }
+  },[]);
 
-  // Year-filtered data
-  const yrStr=String(yr);
-  const fNcs=ncs.filter(n=>(n.openDate||n.createdAt||"").startsWith(yrStr));
-  const fDevs=devs.filter(d=>(d.date||d.createdAt||"").startsWith(yrStr));
-  const fNcIds=new Set(fNcs.map(n=>n.id));const fDevIds=new Set(fDevs.map(d=>d.id));
-  const fCapas=capas.filter(c=>fNcIds.has(c.ncId)||fDevIds.has(c.devId)||(!(c.ncId||c.devId)&&(c.createdAt||"").startsWith(yrStr)));
+  useEffect(()=>{cargarSesion();},[cargarSesion]);
 
-  // Available years from data
-  const allYears=[...new Set([...ncs.map(n=>(n.openDate||n.createdAt||"").slice(0,4)),...devs.map(d=>(d.date||d.createdAt||"").slice(0,4))].filter(y=>y&&y.length===4).map(Number))].sort();
-  if(!allYears.includes(yr))allYears.push(yr);
-  allYears.sort();
+  /* ─── Datos del año ───────────────────────────────────────────────────────
+     Se recargan enteros al cambiar de año. Son unos cientos de registros: pedir
+     de nuevo es más simple y más seguro que mantener cachés por año que pueden
+     quedar viejas si otra persona cargó algo mientras tanto. */
+  const cargarDatos=useCallback(async(anio)=>{
+    sCargandoDatos(true);
+    try{
+      const d=await api(`/datos?anio=${anio}`);
+      setNCs(d.ncs);setDevs(d.devs);setCapas(d.capas);setLogs(d.actividad);
+      sAnios(d.anios||[]);
+    }catch(e){
+      avisar("No se pudieron cargar los datos: "+e.message,"error");
+    }finally{
+      sCargandoDatos(false);
+    }
+  },[avisar]);
 
-  const data={ncs:fNcs,setNCs,devs:fDevs,setDevs,capas:fCapas,setCapas,logs,setLogs,currentUser:cu,allNcs:ncs,allDevs:devs,allCapas:capas,yr};
-  const nv=[...NAV];if(canAdmin)nv.push({k:"users",l:"Usuarios",i:"👥"});
+  useEffect(()=>{if(estado==="listo")cargarDatos(yr);},[estado,yr,cargarDatos]);
 
-  const openNC=(existing)=>{
-    if(existing){sNcDet(existing);}
-    else if(canEdit){
-      const yr=new Date().getFullYear();const nums=ncs.map(n=>{const m=n.code.match(/NC[-_]?0*(\d+)/);return m?parseInt(m[1]):0;});const next=Math.max(0,...nums)+1;const code=`NC-${String(next).padStart(3,"0")}-${yr}`;
-      const newNC={id:gid(),code,phase:"abierta",incidentDate:"",openDate:tdy(),openedBy:cu.name,sector:"",description:"",source:"",associatedItem:"",lot:"",ishikawa:{},analysisNotes:"",analysisDate:"",analyzedBy:"",rootCause:"",severity:"",probability:"",classification:"",impactsOthers:"",impactDetail:"",capaType:"",conclusions:"",rootCauseEliminated:"",coverageComplete:"",negativeImpact:"",onTime:"",effectivenessNotes:"",closeDate:"",closedBy:"",closeNotes:"",createdAt:new Date().toISOString()};
-      setNCs(p=>[newNC,...p]);alog(setLogs,"CREAR","No Conformidad",code,cu.name);sNcDet(newNC);
+  const logout=async()=>{
+    // Se cierra en el servidor: borrar solo el estado local dejaría la sesión
+    // viva y usable desde otra pestaña.
+    try{await fetch("/api/auth/logout",{method:"POST",credentials:"same-origin"});}catch(e){}
+    location.href="/";
+  };
+
+  if(estado==="cargando")return <Cargando texto="Verificando la sesión…"/>;
+  if(estado==="sin-conexion")return <SinConexion detalle={errConexion} onReintentar={cargarSesion}/>;
+
+  const role=ROLES[rolRecurso]||ROLES.vista;
+  const canEdit=role.canEdit;const canAdmin=role.canAdmin;
+
+  /* ─── Escrituras ──────────────────────────────────────────────────────────
+     Todas siguen la misma forma: mandar al servidor, y recién con la respuesta
+     actualizar la pantalla. No se toca el estado antes de que el servidor
+     confirme: mostrar el cambio y que la escritura falle en silencio es
+     exactamente lo que hacía la versión que guardaba en el navegador. */
+
+  const guardarNC=async(fm,{cerrar=false}={})=>{
+    try{
+      const{nc}=await api("/nc",{method:"POST",body:JSON.stringify(fm)});
+      setNCs(p=>p.some(x=>x.id===nc.id)?p.map(x=>x.id===nc.id?nc:x):[nc,...p]);
+      // El audit trail lo escribe el servidor; se relee para verlo al día.
+      api("/datos?anio="+yr).then(d=>setLogs(d.actividad)).catch(()=>{});
+      avisar("Guardado");
+      if(cerrar)sNcDet(null);else sNcDet(nc);
+      return nc;
+    }catch(e){
+      avisar("No se pudo guardar: "+e.message,"error");
+      throw e;
     }
   };
-  const saveNC=(fm)=>{const prev=ncs.find(n=>n.id===fm.id);setNCs(p=>p.map(n=>n.id===fm.id?{...n,...fm}:n));if(prev&&prev.phase!==fm.phase)alog(setLogs,"CAMBIO FASE","No Conformidad",`${fm.code}: ${NC_PHASES.find(p=>p.id===prev.phase)?.label} → ${NC_PHASES.find(p=>p.id===fm.phase)?.label}`,cu.name);else alog(setLogs,"EDITAR","No Conformidad",fm.code,cu.name);sNcDet(null);};
-  const deleteNC=(id)=>{if(confirm("¿Eliminar esta NC?")){const n=ncs.find(x=>x.id===id);setNCs(p=>p.filter(x=>x.id!==id));alog(setLogs,"ELIMINAR","No Conformidad",n?.code,cu.name);sNcDet(null);}};
-  const openDev=(existing)=>{
-    if(existing){sDevDet(existing);}
-    else if(canEdit){
-      const yr=new Date().getFullYear();const nums=devs.map(d=>{const m=d.code.match(/DES[-_]?0*(\d+)/);return m?parseInt(m[1]):0;});const next=Math.max(0,...nums)+1;const code=`DES-${String(next).padStart(3,"0")}-${yr}`;
-      const newDev={id:gid(),code,phase:"abierto",openedBy:cu.name,sector:"",date:tdy(),associatedItem:"",lot:"",description:"",justification:"",impacts:{},impactNotes:"",riskControlled:"",riskNotes:"",critical:false,planned:"No Planificado",priority:"",decision:"",verifiers:"",implementationActions:"",notifications:"",docComplete:"",approvedBy:"",closeDate:"",closeNotes:"",createdAt:new Date().toISOString()};
-      setDevs(p=>[newDev,...p]);alog(setLogs,"CREAR","Desvío",code,cu.name);sDevDet(newDev);
+
+  const openNC=async(existente)=>{
+    if(existente){sNcDet(existente);return;}
+    if(!canEdit)return;
+    // El código lo asigna el servidor al insertar, no el navegador: si lo
+    // calculara acá, dos personas creando a la vez llegarían al mismo número.
+    try{
+      const{nc}=await api("/nc",{method:"POST",body:JSON.stringify({
+        phase:"abierta",incidentDate:"",openDate:tdy(),openedBy:cu.nombre,sector:"",
+        description:"",source:"",associatedItem:"",lot:"",ishikawa:{},analysisNotes:"",
+        analysisDate:"",analyzedBy:"",rootCause:"",severity:"",probability:"",
+        classification:"",impactsOthers:"",impactDetail:"",capaType:"",conclusions:"",
+        rootCauseEliminated:"",coverageComplete:"",negativeImpact:"",onTime:"",
+        effectivenessNotes:"",closeDate:"",closedBy:"",closeNotes:"",
+      })});
+      setNCs(p=>[nc,...p]);sNcDet(nc);
+    }catch(e){avisar("No se pudo crear la NC: "+e.message,"error");}
+  };
+
+  const deleteNC=async(id)=>{
+    const n=ncs.find(x=>x.id===id);
+    if(!confirm(`¿Eliminar ${n?.code||"esta NC"}? Sus acciones CAPA quedarán sin vincular.`))return;
+    try{
+      await api("/nc/"+encodeURIComponent(id),{method:"DELETE"});
+      setNCs(p=>p.filter(x=>x.id!==id));sNcDet(null);
+      cargarDatos(yr);
+      avisar("No conformidad eliminada");
+    }catch(e){avisar("No se pudo eliminar: "+e.message,"error");}
+  };
+
+  const guardarDev=async(fm,{cerrar=false}={})=>{
+    try{
+      const{dev}=await api("/desvios",{method:"POST",body:JSON.stringify(fm)});
+      setDevs(p=>p.some(x=>x.id===dev.id)?p.map(x=>x.id===dev.id?dev:x):[dev,...p]);
+      api("/datos?anio="+yr).then(d=>setLogs(d.actividad)).catch(()=>{});
+      avisar("Guardado");
+      if(cerrar)sDevDet(null);else sDevDet(dev);
+      return dev;
+    }catch(e){
+      avisar("No se pudo guardar: "+e.message,"error");
+      throw e;
     }
   };
-  const saveDev=(fm)=>{const prev=devs.find(d=>d.id===fm.id);setDevs(p=>p.map(d=>d.id===fm.id?{...d,...fm}:d));if(prev&&prev.phase!==fm.phase)alog(setLogs,"CAMBIO FASE","Desvío",`${fm.code}: ${DEV_PHASES.find(p=>p.id===prev.phase)?.label} → ${DEV_PHASES.find(p=>p.id===fm.phase)?.label}`,cu.name);else alog(setLogs,"EDITAR","Desvío",fm.code,cu.name);sDevDet(null);};
-  const deleteDev=(id)=>{if(confirm("¿Eliminar este desvío?")){const d=devs.find(x=>x.id===id);setDevs(p=>p.filter(x=>x.id!==id));alog(setLogs,"ELIMINAR","Desvío",d?.code,cu.name);sDevDet(null);}};
+
+  const openDev=async(existente)=>{
+    if(existente){sDevDet(existente);return;}
+    if(!canEdit)return;
+    try{
+      const{dev}=await api("/desvios",{method:"POST",body:JSON.stringify({
+        phase:"abierto",openedBy:cu.nombre,sector:"",date:tdy(),associatedItem:"",lot:"",
+        description:"",justification:"",impacts:{},impactNotes:"",riskControlled:"",
+        riskNotes:"",critical:false,planned:"No Planificado",priority:"",decision:"",
+        verifiers:"",notifications:"",docComplete:"",approvedBy:"",closeDate:"",closeNotes:"",
+      })});
+      setDevs(p=>[dev,...p]);sDevDet(dev);
+    }catch(e){avisar("No se pudo crear el desvío: "+e.message,"error");}
+  };
+
+  const deleteDev=async(id)=>{
+    const d=devs.find(x=>x.id===id);
+    if(!confirm(`¿Eliminar ${d?.code||"este desvío"}? Sus acciones quedarán sin vincular.`))return;
+    try{
+      await api("/desvios/"+encodeURIComponent(id),{method:"DELETE"});
+      setDevs(p=>p.filter(x=>x.id!==id));sDevDet(null);
+      cargarDatos(yr);
+      avisar("Desvío eliminado");
+    }catch(e){avisar("No se pudo eliminar: "+e.message,"error");}
+  };
+
+  /* Acciones CAPA. Las usan tanto el módulo de CAPA como la etapa de
+     Implementación de un desvío: una acción escrita ahí es una fila de la misma
+     tabla, con las mismas alertas de vencimiento. */
+  const guardarCapa=async(fm)=>{
+    const{capa}=await api("/capa",{method:"POST",body:JSON.stringify(fm)});
+    setCapas(p=>p.some(x=>x.id===capa.id)?p.map(x=>x.id===capa.id?capa:x):[...p,capa]);
+    api("/datos?anio="+yr).then(d=>setLogs(d.actividad)).catch(()=>{});
+    return capa;
+  };
+  const borrarCapa=async(id)=>{
+    await api("/capa/"+encodeURIComponent(id),{method:"DELETE"});
+    setCapas(p=>p.filter(x=>x.id!==id));
+    api("/datos?anio="+yr).then(d=>setLogs(d.actividad)).catch(()=>{});
+  };
+
+  const allYears=[...new Set([...anios,yr])].sort((a,b)=>a-b);
+
+  const data={
+    ncs,devs,capas,logs,yr,currentUser:cu,
+    guardarCapa,borrarCapa,avisar,canAdmin,
+    recargar:()=>cargarDatos(yr),
+  };
+  const nv=[...NAV];if(canAdmin)nv.push({k:"users",l:"Accesos",i:"👥"});
 
   return(<div style={{background:K.bg,minHeight:"100vh"}}>
     <div style={{width:col?52:220,background:K.txt,color:"#fff",display:"flex",flexDirection:"column",position:"fixed",top:0,left:0,bottom:0,zIndex:10,transition:"width .2s"}}>
       <div style={{padding:col?"16px 8px":"16px 14px",borderBottom:"1px solid rgba(255,255,255,.08)",textAlign:col?"center":"left"}}>{col?<span style={{fontSize:15,fontWeight:800}}>V</span>:<div><div style={{fontSize:10,fontWeight:800,color:K.ves,letterSpacing:".1em",textTransform:"uppercase"}}>Vessena S.A.</div><div style={{fontSize:13.5,fontWeight:700,marginTop:2}}>NC / CAPA & Desvíos</div></div>}</div>
-      {!col&&<div style={{padding:"10px 14px",borderBottom:"1px solid rgba(255,255,255,.06)",display:"flex",alignItems:"center",gap:8}}><div style={{width:28,height:28,borderRadius:"50%",background:role.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13}}>{role.icon}</div><div style={{flex:1,overflow:"hidden"}}><div style={{fontSize:12,fontWeight:600,color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cu.name}</div><div style={{fontSize:10,color:role.color}}>{role.label}</div></div></div>}
+      {!col&&<div style={{padding:"10px 14px",borderBottom:"1px solid rgba(255,255,255,.06)",display:"flex",alignItems:"center",gap:8}}><div style={{width:28,height:28,borderRadius:"50%",background:role.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13}}>{role.icon}</div><div style={{flex:1,overflow:"hidden"}}><div style={{fontSize:12,fontWeight:600,color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cu.nombre}</div><div style={{fontSize:10,color:role.color}}>{role.label}</div></div></div>}
       {!col&&<div style={{padding:"8px 14px",borderBottom:"1px solid rgba(255,255,255,.06)"}}><div style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,.4)",textTransform:"uppercase",letterSpacing:".05em",marginBottom:4}}>SOP-AC-036</div><div style={{fontSize:11,color:"rgba(255,255,255,.6)"}}>No Conformidades / CAPA</div></div>}
       {/* Year selector */}
       <div style={{padding:col?"6px 4px":"8px 14px",borderBottom:"1px solid rgba(255,255,255,.06)",display:"flex",alignItems:"center",justifyContent:"center",gap:col?2:8}}>
-        <button onClick={()=>sYr(y=>y-1)} style={{background:"none",border:"none",color:"rgba(255,255,255,.5)",fontSize:14,cursor:"pointer",padding:"2px 4px",fontFamily:"inherit"}}>◀</button>
-        <span style={{fontSize:col?13:16,fontWeight:800,color:"#fff",minWidth:col?30:50,textAlign:"center"}}>{yr}</span>
-        <button onClick={()=>sYr(y=>y+1)} style={{background:"none",border:"none",color:"rgba(255,255,255,.5)",fontSize:14,cursor:"pointer",padding:"2px 4px",fontFamily:"inherit"}}>▶</button>
+        {/* Los extremos se acotan a los años que tienen algo cargado (más el
+            actual y el siguiente): sin esto se podía navegar indefinidamente
+            hacia atrás por años vacíos creyendo que se habían perdido datos. */}
+        {(()=>{const min=Math.min(...allYears),max=Math.max(...allYears,new Date().getFullYear()+1);return<>
+          <button onClick={()=>sYr(y=>Math.max(min,y-1))} disabled={yr<=min} title={yr<=min?"No hay registros anteriores":""} style={{background:"none",border:"none",color:yr<=min?"rgba(255,255,255,.15)":"rgba(255,255,255,.5)",fontSize:14,cursor:yr<=min?"default":"pointer",padding:"2px 4px",fontFamily:"inherit"}}>◀</button>
+          <span style={{fontSize:col?13:16,fontWeight:800,color:"#fff",minWidth:col?30:50,textAlign:"center"}}>{yr}</span>
+          <button onClick={()=>sYr(y=>Math.min(max,y+1))} disabled={yr>=max} style={{background:"none",border:"none",color:yr>=max?"rgba(255,255,255,.15)":"rgba(255,255,255,.5)",fontSize:14,cursor:yr>=max?"default":"pointer",padding:"2px 4px",fontFamily:"inherit"}}>▶</button>
+        </>;})()}
       </div>
       <nav style={{flex:1,padding:"6px 0",overflowY:"auto"}}>{nv.map(n=><div key={n.k} onClick={()=>sPg(n.k)} title={n.l} style={{display:"flex",alignItems:"center",gap:9,padding:"9px 14px",cursor:"pointer",background:pg===n.k?"rgba(255,255,255,.1)":"transparent",borderRadius:5,margin:"1px 6px",fontSize:12.5,fontWeight:pg===n.k?600:400,color:pg===n.k?"#fff":"rgba(255,255,255,.6)",borderTop:n.k==="users"?"1px solid rgba(255,255,255,.06)":"none",marginTop:n.k==="users"?6:1}}><span style={{fontSize:14,flexShrink:0}}>{n.i}</span>{!col&&<span>{n.l}</span>}</div>)}</nav>
       <div style={{padding:"6px",borderTop:"1px solid rgba(255,255,255,.08)"}}><div onClick={logout} style={{display:"flex",alignItems:"center",justifyContent:col?"center":"flex-start",gap:8,padding:"9px 14px",cursor:"pointer",borderRadius:5,margin:"1px 6px",fontSize:12.5,color:"rgba(255,255,255,.5)"}}><span>🚪</span>{!col&&<span>Salir</span>}</div><div onClick={()=>sCol(!col)} style={{display:"flex",alignItems:"center",justifyContent:"center",padding:"8px",cursor:"pointer",fontSize:12,color:"rgba(255,255,255,.4)"}}>{col?"▸":"◂"}</div></div>
     </div>
     <div style={{marginLeft:col?52:220,padding:"20px 28px",transition:"margin .2s"}}>
+      {cargandoDatos&&<div style={{fontSize:12,color:K.txM,marginBottom:8}}>Cargando datos de {yr}…</div>}
       {pg==="nc"&&<NCList data={data} canEdit={canEdit} openNC={openNC}/>}
       {pg==="dev"&&<DevList data={data} canEdit={canEdit} openDev={openDev}/>}
       {pg==="capa"&&<CAPAList data={data} canEdit={canEdit}/>}
       {pg==="trail"&&<Trail logs={logs}/>}
-      {pg==="rep"&&<Reports data={data}/>}
+      {pg==="rep"&&<Reports data={data} canAdmin={canAdmin} onImportar={cargarDatos}/>}
       {pg==="guide"&&<GuidePage goTo={sPg}/>}
-      {pg==="users"&&canAdmin&&<UserMgmt users={users} setUsers={setUsers} currentUser={cu} setLogs={setLogs}/>}
+      {pg==="users"&&canAdmin&&<Accesos cu={cu} rolRecurso={rolRecurso}/>}
     </div>
-    {ncDet&&<NCDetail nc={ncDet} data={data} canEdit={canEdit} onClose={()=>sNcDet(null)} onSave={saveNC} onDelete={deleteNC}/>}
-    {devDet&&<DevDetail dev={devDet} canEdit={canEdit} onClose={()=>sDevDet(null)} onSave={saveDev} onDelete={deleteDev}/>}
+
+    {/* Acuse de recibo de las escrituras. Guardar ya no cierra la ficha, así que
+        sin esto no habría señal de que el servidor confirmó. */}
+    {aviso&&<div style={{position:"fixed",top:16,right:20,zIndex:300,background:aviso.tipo==="error"?K.red:K.grn,color:"#fff",padding:"10px 16px",borderRadius:8,fontSize:12.5,fontWeight:600,boxShadow:"0 8px 24px rgba(0,0,0,.18)",maxWidth:420}}>{aviso.texto}</div>}
+
+    {ncDet&&<NCDetail nc={ncDet} data={data} canEdit={canEdit} canAdmin={canAdmin} onClose={()=>sNcDet(null)} onSave={guardarNC} onDelete={deleteNC}/>}
+    {devDet&&<DevDetail dev={devDet} data={data} canEdit={canEdit} canAdmin={canAdmin} onClose={()=>sDevDet(null)} onSave={guardarDev} onDelete={deleteDev}/>}
   </div>);
 }
 ReactDOM.render(<App/>,document.getElementById("root"));
