@@ -158,6 +158,11 @@ deja sin configurar (ver "Automatización").
    | `SMTP_REMITENTE` | `notificacionesQA@vessena.com.uy` |
    | `SMTP_CLAVE` | la clave de esa casilla — **solo en Coolify, nunca en el repo** |
    | `SMTP_USUARIO` | opcional; si falta se usa `SMTP_REMITENTE` |
+   | `CORREO_CALIDAD` | casilla que recibe la copia del resumen de CAPA |
+   | `AVISOS_ACTIVOS` | `0` — poner en `1` para encender el envío diario |
+   | `AVISOS_HORA` | `8` — hora local del envío diario |
+   | `AVISOS_DIAS_PREVIOS` | `7` — cuántos días antes se avisa |
+   | `ZONA_HORARIA` | `America/Montevideo` |
 
    Los cuatro valores de `ORIGEN_*` están en `.env.example`. Si falta alguno,
    ese dominio no replica y su dashboard queda sin datos — pero los demás

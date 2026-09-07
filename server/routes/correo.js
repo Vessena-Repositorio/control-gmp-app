@@ -8,6 +8,8 @@
 import { Router } from 'express';
 import { exigirTokenSync } from '../lib/auth.js';
 import { hayCorreo, faltantes, verificar, enviar } from '../lib/correo.js';
+import { revisarAvisosCapa, configAvisos } from '../lib/avisos.js';
+import { consultar } from '../db.js';
 
 export const rutasCorreo = Router();
 
@@ -66,5 +68,32 @@ rutasCorreo.post('/prueba', exigirTokenSync, async (req, res) => {
     } catch (err) {
         console.error('[correo] prueba fallida:', err.message);
         res.status(502).json({ estado: 'error', error: err.message });
+    }
+});
+
+/**
+ * GET /api/correo/avisos — configuracion vigente y ultima corrida.
+ */
+rutasCorreo.get('/avisos', exigirTokenSync, async (_req, res, next) => {
+    try {
+        const { rows } = await consultar(
+            'SELECT * FROM tarea_diaria WHERE nombre = $1', ['avisos_capa']
+        );
+        res.json({ config: configAvisos(), ultimaCorrida: rows[0] || null });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/**
+ * POST /api/correo/avisos — corre la revision AHORA, sin esperar al horario.
+ * Manda correo de verdad: es para probar el circuito completo una vez.
+ */
+rutasCorreo.post('/avisos', exigirTokenSync, async (_req, res) => {
+    try {
+        res.json(await revisarAvisosCapa({ forzar: true }));
+    } catch (err) {
+        console.error('[avisos] corrida manual fallida:', err.message);
+        res.status(500).json({ estado: 'error', error: err.message });
     }
 });

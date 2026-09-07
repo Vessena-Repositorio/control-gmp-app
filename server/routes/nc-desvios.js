@@ -447,6 +447,19 @@ rutasNcDesvios.post('/capa', escribir, async (req, res, next) => {
         return res.status(400).json({ ok: false, error: 'la accion necesita una descripcion' });
     }
 
+    // El email del responsable es obligatorio. Sin el, la accion no dispara
+    // ningun aviso de vencimiento: el seguimiento queda librado a que alguien
+    // se acuerde de mirar el panel, que es justo lo que el aviso viene a
+    // reemplazar. Se valida en el servidor y no solo en el formulario porque
+    // la API tambien la usa la importacion.
+    const emailResp = String(capa.responsibleEmail || '').trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailResp)) {
+        return res.status(400).json({
+            ok: false,
+            error: 'la accion necesita el email del responsable, para poder avisarle del vencimiento',
+        });
+    }
+
     try {
         const guardado = await enTransaccion(async (c) => {
             const esNuevo = !capa.id;
@@ -480,7 +493,7 @@ rutasNcDesvios.post('/capa', escribir, async (req, res, next) => {
                 [
                     id, code, capa.ncId || null, capa.devId || null,
                     capa.type || null, capa.description, capa.responsible || null,
-                    capa.responsibleEmail || null, fecha(capa.dueDate),
+                    emailResp, fecha(capa.dueDate),
                     capa.status || 'Abierto',
                     JSON.stringify(soloDatos(capa, COLUMNAS_CAPA)), usuario,
                 ]

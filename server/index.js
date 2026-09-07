@@ -17,6 +17,7 @@ import { rutasAuth } from './routes/auth.js';
 import { cargarSesion } from './lib/sesiones.js';
 import { permitirArchivo } from './lib/acceso.js';
 import { REPLICAS } from './lib/dominios.js';
+import { revisarAvisosCapa } from './lib/avisos.js';
 
 const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PUERTO = Number(process.env.PORT) || 3000;
@@ -148,6 +149,20 @@ function arrancar() {
             if (rowCount) {
                 console.warn(`[arranque] ${rowCount} sync(s) interrumpido(s) por el reinicio anterior`);
             }
+
+            // Avisos por correo. Se revisa seguido pero manda una sola vez al
+            // dia: la condicion de "ya corrio hoy" vive en la base y no en este
+            // proceso, asi que un deploy a media mañana no dispara otra tanda.
+            //
+            // Va ANTES del corte por SYNC_INTERVALO_MIN a proposito: apagar las
+            // replicas no tiene por que apagar las notificaciones.
+            const revisarAvisos = () => {
+                revisarAvisosCapa()
+                    .then((r) => { if (r.estado === 'ok') console.log('[avisos]', JSON.stringify(r)); })
+                    .catch((err) => console.error('[avisos]', err.message));
+            };
+            revisarAvisos();
+            setInterval(revisarAvisos, 10 * 60_000);
 
             const minutos = Number(process.env.SYNC_INTERVALO_MIN ?? 15);
             if (minutos <= 0) {

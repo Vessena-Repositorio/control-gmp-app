@@ -964,6 +964,12 @@ function CAPAList({data,canEdit}){
   const bl={ncId:"",devId:"",type:"Acción Correctiva",description:"",responsible:"",responsibleEmail:"",dueDate:"",status:"Abierto",verification:"",effectiveness:"",followupResp:"",followupEmail:""};
   const[fm,sFm]=useState(bl);
   const save=async()=>{
+    // El email del responsable es obligatorio: es la dirección a la que va el
+    // aviso de vencimiento. Se chequea acá además del servidor para decirlo
+    // antes del viaje de ida y vuelta, no para reemplazarlo.
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(fm.responsibleEmail||"").trim())){
+      return avisar("Falta el email del responsable: es a donde se le avisa del vencimiento","error");
+    }
     sGuardando(true);
     try{
       const c=await guardarCapa(ed?{...ed,...fm}:fm);
