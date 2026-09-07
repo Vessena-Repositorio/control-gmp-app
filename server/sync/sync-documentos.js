@@ -30,16 +30,13 @@ const DOMINIOS = [
         env: 'ORIGEN_NC',
         peticiones: [{ query: '?action=getAll_CC', colecciones: ['ccs'] }],
     },
-    {
-        dominio: 'estabilidad',
-        env: 'ORIGEN_ESTABILIDAD',
-        // Este origen manda cada coleccion como texto JSON dentro del JSON.
-        anidadas: true,
-        // `usuarios` no va aca sino por sync-usuarios.js: son identidades y
-        // credenciales, y necesitan sus propias tablas para que el login pueda
-        // verificar contra ellas y reescribir el hash a un esquema fuerte.
-        peticiones: [{ query: '', colecciones: ['productos', 'studies', 'auditLog'] }],
-    },
+    // estabilidad SE APAGO el 07/09/2026: Postgres paso a ser su fuente de
+    // verdad y la app escribe en /api/estabilidad/datos.
+    //
+    // Volver a habilitarla PISARIA todo lo cargado desde el corte: esta replica
+    // reescribe lo que hay en Postgres con lo que traiga la hoja, y la hoja
+    // quedo congelada en el estado previo. Los datos se sembraron en
+    // estabilidad_datos con la migracion 017.
     {
         dominio: 'capacitaciones',
         env: 'ORIGEN_CAPACITACIONES',

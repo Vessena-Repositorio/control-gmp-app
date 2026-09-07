@@ -109,24 +109,63 @@ a.lb{font-size:12.5px;color:var(--td);cursor:pointer;text-decoration:underline;}
 /* ============================================================
    GOOGLE SHEETS BACKEND + EMAIL
 ============================================================ */
-let SCRIPT_URL=localStorage.getItem('gscript_url')||'https://script.google.com/macros/s/AKfycby3255SdR4jZ2ia6td9ShJGyJmuz7pKwKg6QN_zov5k8uR88ubnD9AkHsBwIIH9qZCZ/exec';
+let SCRIPT_URL='/api/estabilidad';
 let syncStatus='disconnected';
 
-async function gRead(){if(!SCRIPT_URL)return null;syncStatus='loading';rSync();try{const r=await fetch(SCRIPT_URL+'?t='+Date.now()+Math.random());const d=await r.json();syncStatus='ok';rSync();return d;}catch(e){console.error('gRead:',e);syncStatus='error';rSync();return null;}}
-async function gWrite(key,value){if(!SCRIPT_URL)return;_dirty=true;syncStatus='loading';rSync();try{await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'save',key,value:JSON.stringify(value)})});syncStatus='ok';rSync();toast('Guardado ✓');setTimeout(()=>{_dirty=false;},15000);}catch(e){syncStatus='error';rSync();toast('Error al guardar');_dirty=false;}}
-async function gWriteSilent(key,value){if(!SCRIPT_URL)return;try{await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'save',key,value:JSON.stringify(value)})});}catch(e){}}
-/* EMAILS FIJOS — reciben copia de TODAS las notificaciones */
-const CC_EMAILS=['claudia.barlocco@vessena.com.uy','antonella.nunez@vessena.com.uy'];
+/* ─── Puente hacia la API propia ──────────────────────────────────────────
+   La app ya no habla con Apps Script: lee y escribe en Postgres, mismo origen.
+   Se traduce el protocolo viejo -un GET que devuelve todas las claves y un POST
+   con {action,key,value}- en lugar de reescribir las ocho llamadas repartidas
+   por el archivo: menos superficie donde equivocarse en un corte que toca datos
+   de calidad.
+
+   Y se va `mode:'no-cors'`, que hacia falta contra Google y tenia un costo
+   feo: la respuesta era opaca, asi que un guardado que fallaba se veia igual
+   que uno que funcionaba. Ahora el error se lee y se muestra. */
+async function gsFetch(_url, opciones){
+  if(!opciones || opciones.method!=='POST'){
+    return fetch('/api/estabilidad/datos',{credentials:'same-origin'});
+  }
+  const p=JSON.parse(opciones.body);
+  const r=await fetch('/api/estabilidad/datos',{
+    method:'POST', credentials:'same-origin',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({key:p.key,value:p.value})
+  });
+  if(!r.ok){
+    let msg='error '+r.status;
+    try{ msg=(await r.json()).error||msg; }catch(e){}
+    throw new Error(msg);
+  }
+  return r;
+}
+
+/* El servidor decide a quien le escribe y que dice: la app solo informa QUE
+   PASO y sobre que estudio. Antes mandaba to/subject/body, y ese endpoint
+   quedaba abierto para que cualquiera con la URL mandara cualquier texto a
+   cualquier direccion firmado como Vessena. */
+async function avisarServidor(tipo,estudioId,extra){
+  try{
+    const r=await fetch('/api/estabilidad/aviso',{
+      method:'POST', credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(Object.assign({tipo,estudioId},extra||{}))
+    });
+    if(!r.ok)throw new Error('error '+r.status);
+  }catch(e){
+    // Que falle el aviso no puede tapar que el guardado si funciono: son dos
+    // cosas distintas y confundirlas hace que se recargue un dato ya guardado.
+    console.error('aviso:',e);
+    toast('Guardado, pero no se pudo enviar el aviso');
+  }
+}
+
+async function gRead(){if(!SCRIPT_URL)return null;syncStatus='loading';rSync();try{const r=await gsFetch(SCRIPT_URL+'?t='+Date.now()+Math.random());const d=await r.json();syncStatus='ok';rSync();return d;}catch(e){console.error('gRead:',e);syncStatus='error';rSync();return null;}}
+async function gWrite(key,value){if(!SCRIPT_URL)return;_dirty=true;syncStatus='loading';rSync();try{await gsFetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'save',key,value:JSON.stringify(value)})});syncStatus='ok';rSync();toast('Guardado ✓');setTimeout(()=>{_dirty=false;},15000);}catch(e){syncStatus='error';rSync();toast('Error al guardar');_dirty=false;}}
+async function gWriteSilent(key,value){if(!SCRIPT_URL)return;try{await gsFetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'save',key,value:JSON.stringify(value)})});}catch(e){}}
 const APP_URL='estabilidad.html';
 function studyLink(id,label){return `<a href="${APP_URL}#study=${id}" style="display:inline-block;margin:12px 0;padding:10px 20px;background:#0E6B67;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold">${label||'Abrir estudio →'}</a>`;}
 
-async function gSendEmail(to,subject,body){if(!SCRIPT_URL)return;
-  // Combinar destinatario + supervisión, sin duplicados
-  const all=new Set();
-  if(to)to.split(',').forEach(e=>all.add(e.trim()));
-  CC_EMAILS.forEach(e=>all.add(e));
-  const dest=[...all].filter(Boolean).join(',');
-  try{await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'email',to:dest,subject,body})});toast('Email enviado');}catch(e){toast('Error enviando email');}}
 
 function rSync(){const b=document.getElementById('syncBar');if(!b)return;const m={ok:['ok',`✓ ${productos.length} prod. · ${studies.length} est.`],error:['err','Error conexión'],loading:['loading','Sincronizando…'],disconnected:['err','No conectado']};const[c,t]=m[syncStatus]||m.disconnected;b.innerHTML=`<span class="sync-dot ${c}"></span> ${t} <a style="color:#BFE0DB;cursor:pointer;font-size:11px;margin-left:6px;text-decoration:underline" id="btnRL">↻ Recargar</a>`;const rl=document.getElementById('btnRL');if(rl)rl.onclick=async()=>{toast('Recargando desde Google Sheets…');await loadAll();render();toast('Cargados: '+productos.length+' productos, '+studies.length+' estudios');};}
 
@@ -482,13 +521,13 @@ async function saveOneStudy(s){
   _dirty=true;syncStatus='loading';rSync();
   try{
     // Leer datos actuales, actualizar solo este estudio, guardar todo
-    const r=await fetch(SCRIPT_URL+'?t='+Date.now());
+    const r=await gsFetch(SCRIPT_URL+'?t='+Date.now());
     const d=await r.json();
     let all=[];
     if(d.studies)try{all=JSON.parse(d.studies);}catch(e){}
     const idx=all.findIndex(x=>x.id===s.id);
     if(idx>=0)all[idx]=compress(s); else all.push(compress(s));
-    await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'save',key:'studies',value:JSON.stringify(all)})});
+    await gsFetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'save',key:'studies',value:JSON.stringify(all)})});
     syncStatus='ok';rSync();toast('Guardado ✓');
     setTimeout(()=>{_dirty=false;},15000);
   }catch(e){syncStatus='error';rSync();toast('Error al guardar');_dirty=false;}
@@ -496,7 +535,7 @@ async function saveOneStudy(s){
 async function saveStudies(){
   _dirty=true;syncStatus='loading';rSync();
   try{
-    await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'save',key:'studies',value:JSON.stringify(compress(studies))})});
+    await gsFetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'save',key:'studies',value:JSON.stringify(compress(studies))})});
     syncStatus='ok';rSync();toast('Guardado ✓ ('+studies.length+' estudios)');
     setTimeout(()=>{_dirty=false;},15000);
   }catch(e){syncStatus='error';rSync();toast('Error');_dirty=false;}
@@ -504,7 +543,7 @@ async function saveStudies(){
 async function saveProductos(){
   _dirty=true;syncStatus='loading';rSync();
   try{
-    await fetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'save',key:'productos',value:JSON.stringify(compress(productos))})});
+    await gsFetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'save',key:'productos',value:JSON.stringify(compress(productos))})});
     syncStatus='ok';rSync();toast('Guardado ✓');setTimeout(()=>{_dirty=false;},15000);
   }catch(e){syncStatus='error';rSync();toast('Error');_dirty=false;}
 }
@@ -871,8 +910,7 @@ function renderDetail(){
     await logAudit('aprobacion',s.id,s.producto+' (Lote '+s.lote+')',beforeState,'Aprobado');
     // Email al analista
     if(s.emailAnalista){
-      const body='<div style="font-family:Arial;max-width:600px"><h2 style="color:#357A55">✓ Estudio APROBADO</h2><p>Producto: <strong>'+s.producto+'</strong> — Lote: <strong>'+s.lote+'</strong></p><p>El estudio fue aprobado por Dirección Técnica el '+s.fechaAprobacion+'.</p>'+studyLink(s.id)+'<p style="color:#5B6B6E;font-size:12px">Programa de Estabilidad — LCC / Vessena S.A.</p></div>';
-      await gSendEmail(s.emailAnalista,'✓ APROBADO: '+s.producto+' (Lote '+s.lote+')',body);
+      await avisarServidor('aprobado',s.id);
     }
     render();toast('Estudio aprobado');
   };
@@ -889,9 +927,7 @@ function renderDetail(){
     await saveStudies();
     await logAudit('rechazo',s.id,s.producto+' (Lote '+s.lote+')',beforeState,'Rechazado',motivo);
     // Email al analista y creador
-    const body2='<div style="font-family:Arial;max-width:600px"><h2 style="color:#B03A2E">✗ Estudio RECHAZADO</h2><p>Producto: <strong>'+s.producto+'</strong> — Lote: <strong>'+s.lote+'</strong></p><p><strong>Motivo:</strong> '+motivo+'</p><p>Corregir y volver a enviar el informe.</p>'+studyLink(s.id,'Ver estudio rechazado →')+'<p style="color:#5B6B6E;font-size:12px">Programa de Estabilidad — LCC / Vessena S.A.</p></div>';
-    if(s.emailAnalista)await gSendEmail(s.emailAnalista,'✗ RECHAZADO: '+s.producto+' (Lote '+s.lote+')',body2);
-    if(s.emailCreador&&s.emailCreador!==s.emailAnalista)await gSendEmail(s.emailCreador,'✗ RECHAZADO: '+s.producto+' (Lote '+s.lote+')',body2);
+    await avisarServidor('rechazado',s.id,{motivo});
     render();toast('Estudio rechazado — notificación enviada');
   };
   q('#bSvMail').onclick=async()=>{
@@ -908,8 +944,7 @@ function renderDetail(){
     s.emailAnalista=q('#eAn').value.trim();s.emailCreador=q('#eCr').value.trim();
     if(!s.emailAnalista){toast('Completá el email del analista');return;}
     await saveStudies();
-    const body=buildAssignEmail(s);
-    await gSendEmail(s.emailAnalista,'Asignación: '+s.producto+' (Lote '+s.lote+')',body);
+    await avisarServidor('asignacion',s.id);
   };
   // Botón eliminar checkpoint (¡antes del bind general de data-cp para que no se pise!)
   bind('.cp-del','click',el=>{
@@ -1061,7 +1096,7 @@ function renderNuevo(){
       await logAudit('creacion_estudio',ns.id,ns.producto+' (Lote '+ns.lote+')','',ns.tipoLote+' / '+ns.tipoEstudio,'Analista: '+(emailAn||'sin asignar')+' · Fecha inicio: '+fi);
     }
     if(q('#nSendMail').checked&&emailAn){
-      for(const ns of created){await gSendEmail(emailAn,'Asignación: '+ns.producto+' ('+ns.tipoEstudio+', Lote '+ns.lote+')',buildAssignEmail(ns));}
+      for(const ns of created){await avisarServidor('asignacion',ns.id,{nuevo:true});}
     }
     activeTab='dashboard';dashFilter='';render();
     toast(tl==='desarrollo'?'Estudio creado ✓':'Estudio start-up creado ✓');
@@ -1395,7 +1430,7 @@ window.goBackToList=function(){
     if(_dirty){console.log('Auto-refresh: skip (dirty)');return;}
     if(selSt){console.log('Auto-refresh: skip (viewing detail)');return;}
     try{
-      const r=await fetch(SCRIPT_URL+'?t='+Date.now()+Math.random());
+      const r=await gsFetch(SCRIPT_URL+'?t='+Date.now()+Math.random());
       const d=await r.json();
       if(d.productos)try{productos=JSON.parse(d.productos);}catch(e){}
       if(d.studies)try{studies=JSON.parse(d.studies);}catch(e){}
