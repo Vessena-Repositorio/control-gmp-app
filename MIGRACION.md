@@ -163,6 +163,9 @@ deja sin configurar (ver "Automatización").
    | `AVISOS_CAPA_HORA` | `8` — hora local del envío diario |
    | `AVISOS_CAPA_DIAS_PREVIOS` | `7` — cuántos días antes se avisa |
    | `ZONA_HORARIA` | `America/Montevideo` |
+   | `URL_PUBLICA` | `http://192.168.30.15:3000` — a dónde apuntan los botones de los correos |
+   | `AVISOS_ESTABILIDAD_ACTIVOS` | `0` — enciende los avisos 06, 07 y 08 |
+   | `AVISOS_CAPACITACIONES_ACTIVOS` | `0` — enciende los avisos 09, 10 y 12 |
 
    Los cuatro valores de `ORIGEN_*` están en `.env.example`. Si falta alguno,
    ese dominio no replica y su dashboard queda sin datos — pero los demás
