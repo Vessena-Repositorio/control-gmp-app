@@ -172,7 +172,19 @@ export async function revisarAvisosCapa({ forzar = false, soloCalidad = false } 
         // cada diez minutos hasta la medianoche.
         if (!acciones.length) {
             if (!soloCalidad) await marcarCorrida(0, 'sin acciones por vencer');
-            return { estado: 'ok', acciones: 0, correos: 0 };
+
+            // Un cero puede ser "no hay nada por vencer" o "la tabla esta
+            // vacia", y no son lo mismo: del silencio del segundo caso no hay
+            // que fiarse. El proximo plazo dice cuando volveria a haber algo.
+            const { rows } = await consultar(
+                `SELECT count(*)::int                                              AS total,
+                        count(*) FILTER (WHERE estado <> 'Cerrado')::int            AS abiertas,
+                        count(*) FILTER (WHERE estado <> 'Cerrado'
+                                           AND due_date IS NOT NULL)::int           AS con_plazo,
+                        min(due_date) FILTER (WHERE estado <> 'Cerrado')            AS proximo_plazo
+                 FROM ncd_capa`
+            );
+            return { estado: 'ok', acciones: 0, correos: 0, conteo: rows[0] };
         }
 
         const porPersona = new Map();
