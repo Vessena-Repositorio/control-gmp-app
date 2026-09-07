@@ -141,13 +141,27 @@ export async function revisarAvisosEstabilidad({ forzar = false, soloPrevisualiz
         const planeados = [];
         const incompletosPorEstudio = [];
 
+        // Contadores de diagnostico. Sin esto la previsualizacion no distingue
+        // "hoy no corresponde avisar nada" de "lee mal el dato y calla", que es
+        // el modo de falla que importa: un aviso que no sale no se nota.
+        const conteo = {
+            activos: 0, conAnalista: 0, checkpoints: 0,
+            sinMuestrear: 0, proximos: 0, atrasados: 0, incompletos: 0,
+        };
+
         for (const s of estudios) {
             if (!s || s.rechazado || Number(s.stage) >= 5) continue;
+            conteo.activos++;
             const cps = Array.isArray(s.checkpoints) ? s.checkpoints : [];
+            conteo.checkpoints += cps.length;
+            conteo.sinMuestrear += cps.filter((cp) => !cp.fechaReal).length;
+            if (s.emailAnalista) conteo.conAnalista++;
 
             if (s.emailAnalista) {
                 const proximos = cps.filter((cp) => !cp.fechaReal && cp.fechaProgramada === manana);
                 const atrasados = cps.filter((cp) => !cp.fechaReal && cp.fechaProgramada && cp.fechaProgramada < hoy);
+                conteo.proximos += proximos.length;
+                conteo.atrasados += atrasados.length;
 
                 if (proximos.length) {
                     planeados.push({
@@ -170,6 +184,7 @@ export async function revisarAvisosEstabilidad({ forzar = false, soloPrevisualiz
             }
 
             const cpsIncompletos = cps.filter(incompleto);
+            conteo.incompletos += cpsIncompletos.length;
             if (cpsIncompletos.length) incompletosPorEstudio.push({ s, cps: cpsIncompletos });
         }
 
@@ -189,6 +204,8 @@ export async function revisarAvisosEstabilidad({ forzar = false, soloPrevisualiz
             return {
                 modo: 'previsualizacion',
                 estudiosRevisados: estudios.length,
+                hoy, manana,
+                conteo,
                 correos: 0,
                 saldrian: planeados.map((p) => ({ aviso: p.aviso, asunto: p.asunto, para: p.para })),
             };

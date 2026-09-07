@@ -209,9 +209,19 @@ export async function revisarRecordatoriosPlan({ forzar = false, soloPrevisualiz
         }
 
         if (soloPrevisualizar) {
+            // Mismo criterio que en estabilidad: que la previsualizacion pueda
+            // explicar por que NO sale nada, no solo que sale.
+            const cerrados = plan.filter((p) => ['cumplida', 'suspendida', 'reprogramada'].includes(p?.e)).length;
             return {
                 modo: 'previsualizacion',
                 itemsRevisados: plan.length,
+                hoy,
+                conteo: {
+                    cerrados,
+                    sinEmail: plan.filter((p) => p && !String(p.email || '').includes('@')).length,
+                    sinFecha: plan.filter((p) => p && !p.fp).length,
+                    atrasados: [...atrasadasPorPersona.values()].reduce((n, x) => n + x.length, 0),
+                },
                 correos: 0,
                 saldrian: planeados.map((x) => ({ asunto: x.asunto, para: x.para, dias: x.dias })),
             };
