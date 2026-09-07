@@ -111,7 +111,7 @@ function comoHtml(acciones, titulo) {
  * Corre la revision si corresponde. `forzar` saltea el horario y el "ya corrio
  * hoy": es lo que usa el endpoint de prueba para no esperar a mañana.
  */
-export async function revisarAvisosCapa({ forzar = false } = {}) {
+export async function revisarAvisosCapa({ forzar = false, soloCalidad = false } = {}) {
     if (!hayCorreo) return { estado: 'sin correo configurado' };
     if (!forzar && !ACTIVOS) return { estado: 'envio automatico apagado (AVISOS_ACTIVOS)' };
 
@@ -147,7 +147,7 @@ export async function revisarAvisosCapa({ forzar = false } = {}) {
         // Sin nada que avisar igual se marca el dia: no tiene sentido reintentar
         // cada diez minutos hasta la medianoche.
         if (!acciones.length) {
-            await marcarCorrida(0, 'sin acciones por vencer');
+            if (!soloCalidad) await marcarCorrida(0, 'sin acciones por vencer');
             return { estado: 'ok', acciones: 0, correos: 0 };
         }
 
@@ -161,7 +161,10 @@ export async function revisarAvisosCapa({ forzar = false } = {}) {
         }
 
         let correos = 0;
-        for (const [mail, suyas] of porPersona) {
+        // `soloCalidad` es el modo previsualizacion: arma todo igual pero no le
+        // escribe a nadie mas que a Calidad. Es la unica forma de ver como queda
+        // el mensaje sin mandarselo a los responsables de verdad.
+        for (const [mail, suyas] of (soloCalidad ? [] : porPersona)) {
             const titulo = `Tenes ${suyas.length} accion(es) CAPA por vencer`;
             try {
                 await enviar({
@@ -182,7 +185,8 @@ export async function revisarAvisosCapa({ forzar = false } = {}) {
         // sin destinatario: son datos cargados antes de que el email fuera
         // obligatorio, y conviene que se vean en vez de desaparecer.
         if (CALIDAD) {
-            const titulo = `Resumen CAPA: ${acciones.length} accion(es) por vencer`;
+            const titulo = (soloCalidad ? '[PRUEBA] ' : '') +
+                `Resumen CAPA: ${acciones.length} accion(es) por vencer`;
             const nota = sinDestinatario.length
                 ? `\nATENCION: ${sinDestinatario.length} accion(es) sin email de responsable. ` +
                   `Nadie recibio aviso por ellas: ${sinDestinatario.map((a) => a.code).join(', ')}\n`
@@ -201,12 +205,18 @@ export async function revisarAvisosCapa({ forzar = false } = {}) {
             }
         }
 
-        await marcarCorrida(acciones.length, `${correos} correo(s)`);
-        console.log(`[avisos] ${acciones.length} accion(es), ${correos} correo(s)`);
+        // Una previsualizacion no marca el dia como corrido: si lo hiciera,
+        // probar a la mañana cancelaria el aviso real de ese mismo dia.
+        if (!soloCalidad) await marcarCorrida(acciones.length, `${correos} correo(s)`);
+
+        console.log(`[avisos] ${acciones.length} accion(es), ${correos} correo(s)` +
+            (soloCalidad ? ' (previsualizacion)' : ''));
         return {
             estado: 'ok',
+            modo: soloCalidad ? 'previsualizacion (solo a Calidad)' : 'envio real',
             acciones: acciones.length,
             correos,
+            personasQueRecibirian: soloCalidad ? [...porPersona.keys()] : undefined,
             sinDestinatario: sinDestinatario.map((a) => a.code),
         };
     } finally {

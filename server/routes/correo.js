@@ -84,14 +84,18 @@ rutasCorreo.get('/avisos', exigirTokenSync, async (_req, res, next) => {
         next(err);
     }
 });
-
 /**
- * POST /api/correo/avisos — corre la revision AHORA, sin esperar al horario.
- * Manda correo de verdad: es para probar el circuito completo una vez.
+ * POST /api/correo/avisos  { todos?: true }
+ *
+ * Corre la revision AHORA, sin esperar al horario. Por defecto es una
+ * PREVISUALIZACION: arma los mismos mensajes pero solo se los manda a Calidad,
+ * para poder ver como quedan sin escribirle a los responsables de verdad.
+ * Con { "todos": true } manda en serio, a cada responsable.
  */
-rutasCorreo.post('/avisos', exigirTokenSync, async (_req, res) => {
+rutasCorreo.post('/avisos', exigirTokenSync, async (req, res) => {
+    const todos = req.body?.todos === true;
     try {
-        res.json(await revisarAvisosCapa({ forzar: true }));
+        res.json(await revisarAvisosCapa({ forzar: true, soloCalidad: !todos }));
     } catch (err) {
         console.error('[avisos] corrida manual fallida:', err.message);
         res.status(500).json({ estado: 'error', error: err.message });
