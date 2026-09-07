@@ -158,7 +158,7 @@ deja sin configurar (ver "Automatización").
    | `SMTP_REMITENTE` | `notificacionesQA@vessena.com.uy` |
    | `SMTP_CLAVE` | la clave de esa casilla — **solo en Coolify, nunca en el repo** |
    | `SMTP_USUARIO` | opcional; si falta se usa `SMTP_REMITENTE` |
-   | `CORREO_CALIDAD` | casilla que recibe la copia del resumen de CAPA |
+   | `CORREO_CALIDAD` | quiénes reciben el resumen de CAPA; varias direcciones separadas por coma |
    | `AVISOS_CAPA_ACTIVOS` | `0` — poner en `1` para encender el envío diario |
    | `AVISOS_CAPA_HORA` | `8` — hora local del envío diario |
    | `AVISOS_CAPA_DIAS_PREVIOS` | `7` — cuántos días antes se avisa |

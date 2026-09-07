@@ -24,10 +24,17 @@ const ZONA = process.env.ZONA_HORARIA || 'America/Montevideo';
 const HORA = Number(process.env.AVISOS_CAPA_HORA ?? 8);
 const DIAS_PREVIOS = Number(process.env.AVISOS_CAPA_DIAS_PREVIOS ?? 7);
 
-// Copia para Calidad. Si no se declara se usa la propia casilla que firma los
-// mensajes, que es de QA: es preferible que el resumen llegue a una casilla de
-// la organizacion antes que no le llegue a nadie.
-const CALIDAD = process.env.CORREO_CALIDAD || process.env.SMTP_REMITENTE;
+// Quienes reciben el resumen consolidado. Acepta varias direcciones separadas
+// por coma: que dependa de una sola persona es fragil, porque el resumen deja
+// de leerlo alguien justo cuando esa persona esta de licencia, que es cuando
+// mas falta hace.
+//
+// Si no se declara ninguna se usa la casilla que firma los mensajes, que es de
+// QA: mejor que llegue a una casilla de la organizacion antes que a nadie.
+const CALIDAD = String(process.env.CORREO_CALIDAD || process.env.SMTP_REMITENTE || '')
+    .split(/[,;]/)
+    .map((d) => d.trim())
+    .filter(Boolean);
 
 // El envio automatico arranca apagado y hay que encenderlo a mano. Sin esto, el
 // primer deploy mandaria correos a gente real apenas levanta el contenedor, sin
@@ -201,7 +208,7 @@ export async function revisarAvisosCapa({ forzar = false, soloCalidad = false } 
         // Copia a Calidad con el panorama completo, incluidas las que quedaron
         // sin destinatario: son datos cargados antes de que el email fuera
         // obligatorio, y conviene que se vean en vez de desaparecer.
-        if (CALIDAD) {
+        if (CALIDAD.length) {
             const titulo = (soloCalidad ? '[PRUEBA] ' : '') +
                 `Resumen CAPA: ${acciones.length} accion(es) por vencer`;
             const nota = sinDestinatario.length
@@ -255,5 +262,5 @@ async function marcarCorrida(cantidad, detalle) {
 
 /** Configuracion vigente, para el endpoint de diagnostico. */
 export function configAvisos() {
-    return { activos: ACTIVOS, zona: ZONA, hora: HORA, diasPrevios: DIAS_PREVIOS, copiaCalidad: CALIDAD || null };
+    return { activos: ACTIVOS, zona: ZONA, hora: HORA, diasPrevios: DIAS_PREVIOS, copiaCalidad: CALIDAD };
 }
