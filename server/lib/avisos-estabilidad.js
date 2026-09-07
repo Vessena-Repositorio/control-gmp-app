@@ -12,6 +12,7 @@
  * Una diferencia deliberada: los botones apuntan al servidor interno y no a
  * GitHub Pages, que se va a apagar y dejaria los enlaces muertos.
  */
+import { consultar } from '../db.js';
 import { hayCorreo, enviar } from './correo.js';
 import { supervisoresDe, unir } from './destinatarios.js';
 import { correrUnaVezPorDia, documentosDe, relojLocal, comoDia } from './tareas.js';
@@ -35,6 +36,29 @@ const CONDICIONES = [
 ];
 
 const cumpleCargado = (v) => v === 'si' || v === 'no';
+
+/**
+ * De donde salen los estudios.
+ *
+ * Despues del corte la fuente es `estabilidad_datos`, que es donde escribe la
+ * app; antes es la replica en `documentos`. Se prefiere la primera y se cae a
+ * la segunda, para que los avisos funcionen igual a los dos lados del corte y
+ * el dia del cambio no haya que tocar esto tambien.
+ */
+async function leerEstudios() {
+    const { rows } = await consultar(
+        `SELECT valor FROM estabilidad_datos WHERE clave = 'studies'`
+    );
+    if (rows.length) {
+        try {
+            const lista = JSON.parse(rows[0].valor);
+            if (Array.isArray(lista)) return lista;
+        } catch {
+            console.warn('[avisos:estabilidad] studies no es JSON valido, se usa la replica');
+        }
+    }
+    return documentosDe('estabilidad', 'studies');
+}
 
 /**
  * Un checkpoint muestreado al que le faltan resultados.
@@ -135,7 +159,7 @@ export async function revisarAvisosEstabilidad({ forzar = false, soloPrevisualiz
         const hoy = comoDia(reloj.hoy);
         const manana = comoDia(new Date(new Date(hoy + 'T12:00:00').getTime() + 86400000));
 
-        const estudios = await documentosDe('estabilidad', 'studies');
+        const estudios = await leerEstudios();
         const supervision = await supervisoresDe(RECURSO, 'incompletos');
 
         const planeados = [];
