@@ -21,6 +21,7 @@ import { REPLICAS } from './lib/dominios.js';
 import { revisarAvisosCapa } from './lib/avisos.js';
 import { revisarAvisosEstabilidad } from './lib/avisos-estabilidad.js';
 import { revisarRecordatoriosPlan, revisarInduccionesPendientes } from './lib/avisos-capacitaciones.js';
+import { revisarPendientesAprobacion } from './lib/avisos-envases.js';
 
 const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PUERTO = Number(process.env.PORT) || 3000;
@@ -169,6 +170,7 @@ function arrancar() {
                 ['estabilidad', revisarAvisosEstabilidad],
                 ['capacitaciones:plan', revisarRecordatoriosPlan],
                 ['capacitaciones:inducciones', revisarInduccionesPendientes],
+                ['envases:aprobacion', revisarPendientesAprobacion],
             ];
             const revisarAvisos = () => {
                 // Cada una falla por separado: que una se caiga no puede dejar
