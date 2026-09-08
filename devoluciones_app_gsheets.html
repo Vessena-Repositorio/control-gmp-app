@@ -1503,14 +1503,16 @@ const SYNC = {
   // Guarda el snapshot JSON para la comparativa
   async pushSnapshot(mes, anio, snapshot){
     if(!GS_READY || !SYNC.persona) return;
-    try{
-      await gsPost({
-        action: "saveSnapshot",
-        mes, anio,
-        snapshot,
-        persona: SYNC.persona
-      });
-    }catch(e){ console.warn("pushSnapshot:",e); }
+    // El error NO se atrapa. Atrapado aca, un snapshot que no entraba en el
+    // limite del servidor dejaba un console.warn que nadie mira: el analisis
+    // quedaba solo en el navegador de quien lo hizo, el resto veia un mes menos
+    // en el historico, y la app no daba ninguna señal. Que reviente y se avise.
+    await gsPost({
+      action: "saveSnapshot",
+      mes, anio,
+      snapshot,
+      persona: SYNC.persona
+    });
   },
   // Lista meses disponibles en Google Sheets
   async listMeses(){
@@ -3119,8 +3121,19 @@ $("btnSaveMotivos").addEventListener("click", () => {
   // ── Push to Google Sheets ──
   if(typeof GS_READY !== 'undefined' && GS_READY && SYNC.persona){
     const c = STATE.computed;
-    const snapshot = loadHistory()[`${STATE.anio}_${STATE.mes}`];
-    if(snapshot) SYNC.pushSnapshot(STATE.mes, STATE.anio, snapshot);
+    // historyKeyFor y no `${anio}_${mes}`: esa clave no existia en ningun lado,
+    // asi que snapshot venia undefined y NUNCA se subio un analisis al servidor.
+    const snapshot = loadHistory()[historyKeyFor(STATE.mes, STATE.anio)];
+    // Si el snapshot no llega al servidor hay que decirlo: el analisis quedo en
+    // ESTE navegador y nadie mas lo va a ver. Antes esto fallaba en silencio y
+    // se descubrio meses despues, con un mes faltante en la comparativa.
+    if(snapshot){
+      SYNC.pushSnapshot(STATE.mes, STATE.anio, snapshot).catch(e => {
+        SYNC.setBadge("error","El histórico no se guardó");
+        log(`⚠ ATENCIÓN: el análisis de ${cap(STATE.mes)} ${STATE.anio} se guardó en este navegador pero NO en el servidor (${e.message}). Los demás no lo van a ver. Avisá a sistemas.`);
+        try{ alert("El análisis quedó guardado solo en esta computadora.\n\nNo se pudo subir al servidor: " + e.message + "\n\nLos demás no van a verlo en el histórico."); }catch(_){}
+      });
+    }
     SYNC.pushMesData(STATE.mes, STATE.anio, {
       totalDev: c.totalDev, totalRot: c.totalRot, totalGeneral: c.totalGeneral,
       skuConDev: c.skuConDev, skuConRot: c.skuConRot,
@@ -5079,8 +5092,16 @@ $("btnPpt").addEventListener("click", () => {
       const snapshots = await SYNC.pullAllSnapshots();
       if(snapshots && Object.keys(snapshots).length){
         // Mergear con el histórico local (el remoto tiene prioridad)
+        // El servidor indexa por MES_ANIO y la app por historyKeyFor(): mezclar
+        // tal cual metia el mismo mes dos veces, con dos claves distintas, y
+        // salia duplicado en la comparativa. Se normaliza al formato de la app
+        // usando el mes y el año que vienen adentro del propio snapshot.
+        const remoto = {};
+        Object.entries(snapshots).forEach(([k, s]) => {
+          remoto[(s && s.mes && s.anio) ? historyKeyFor(s.mes, s.anio) : k] = s;
+        });
         const localH = loadHistory();
-        const merged = Object.assign({}, localH, snapshots);
+        const merged = Object.assign({}, localH, remoto);
         const _set = Storage.prototype.setItem;
         _set.call(localStorage, `history_${APP_VERSION}`, JSON.stringify(merged));
       }

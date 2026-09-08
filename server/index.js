@@ -27,7 +27,10 @@ const PUERTO = Number(process.env.PORT) || 3000;
 
 const app = express();
 app.disable('x-powered-by');
-app.use(express.json({ limit: '2mb' }));
+// 25mb y no 2: el snapshot mensual de devoluciones lleva el detalle por SKU, y
+// el mes mas cargado lo supero en silencio -el resumen entraba, el snapshot no-,
+// asi que en el historico faltaba un mes entero sin que nadie viera un error.
+app.use(express.json({ limit: '25mb' }));
 
 // La sesion se resuelve antes de cualquier ruta de API: varias necesitan saber
 // quien pide, y hacerlo una sola vez evita repetir la consulta en cada una.
