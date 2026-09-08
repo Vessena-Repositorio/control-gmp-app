@@ -878,10 +878,12 @@
             };
 
             // Cargar datos desde Google Sheets al iniciar
-            const cargarDatos = async () => {
-                if (!configurado) { setCargando(false); return; }
+            // opciones: { silent: true } → no toca setCargando, no interrumpe la UI
+            const cargarDatos = async (opciones = {}) => {
+                const silent = opciones.silent === true;
+                if (!configurado) { if (!silent) setCargando(false); return; }
                 try {
-                    setCargando(true);
+                    if (!silent) setCargando(true);
                     const result = await apiCall(endpoint('getAll'));
                     if (result.error) throw new Error(result.error);
 
@@ -931,20 +933,28 @@
                     if (storedOrdenes) setOrdenesSoplado(JSON.parse(storedOrdenes));
                     if (storedLCC) setControlesLCC(JSON.parse(storedLCC));
                 } finally {
-                    setCargando(false);
+                    if (!silent) setCargando(false);
                 }
             };
 
             useEffect(() => { cargarDatos(); }, [modoProducto]);
 
-            // Auto-sincronización cada 5 minutos
+            // Auto-sincronización cada 5 minutos — SILENCIOSA
+            // - No muestra spinner ni desmonta el formulario
+            // - Se SALTA si el analista tiene un formulario abierto (evita sobrescribir el borrador local)
             useEffect(() => {
                 if (!configurado) return;
                 const intervalo = setInterval(() => {
-                    cargarDatos();
+                    // Si hay formulario abierto de LCC, Soplado o Nueva Orden → posponer sync
+                    const editandoFormulario = mostrarNuevoLCC || mostrarNuevaOrden || tipoControlSoplado !== '';
+                    if (editandoFormulario) {
+                        console.log('[Auto-sync] Salteando: formulario en edición');
+                        return;
+                    }
+                    cargarDatos({ silent: true });
                 }, 5 * 60 * 1000);
                 return () => clearInterval(intervalo);
-            }, [configurado]);
+            }, [configurado, mostrarNuevoLCC, mostrarNuevaOrden, tipoControlSoplado]);
 
             // Guardar órdenes en Google Sheets (y localStorage como backup)
             const guardarOrdenes = (nuevasOrdenes) => {
@@ -1526,7 +1536,17 @@
                         <div style={{textAlign: 'right', color: '#718096', display: 'flex', alignItems: 'center', gap: '15px'}}>
                             <div style={{fontSize: '14px'}}>SOP-PR-138</div>
                             {configurado && (
-                                <button className="btn btn-secondary" onClick={cargarDatos}
+                                <button className="btn btn-secondary"
+                                    onClick={() => {
+                                        const editandoFormulario = mostrarNuevoLCC || mostrarNuevaOrden || tipoControlSoplado !== '';
+                                        if (editandoFormulario) {
+                                            // Sync silencioso — no interrumpe al analista
+                                            cargarDatos({ silent: true });
+                                            setMensaje({ tipo: 'success', texto: '🔄 Datos sincronizados en segundo plano (formulario preservado)' });
+                                        } else {
+                                            cargarDatos();
+                                        }
+                                    }}
                                     style={{fontSize: '13px', padding: '6px 14px'}}
                                     disabled={cargando}>
                                     {cargando ? '⏳ Cargando...' : '🔄 Sincronizar'}
