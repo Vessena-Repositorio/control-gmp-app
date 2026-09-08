@@ -13,6 +13,12 @@ export const PERMISOS_POR_ROL = {
     // Revisa lo que cargan los operadores, pero no aprueba ni ve el dato crudo.
     revisor: ['ver', 'cargar', 'revisar'],
 
+    // Carga y ademas aprueba, sin ser administradora de la app. Existe porque
+    // aprobar no venia con ningun rol salvo `administrador`, que ademas da
+    // administrar y ver_crudo: para habilitar a dos analistas a aprobar habia
+    // que darles todo lo demas. Aprobar es una responsabilidad del proceso.
+    aprobador: ['ver', 'cargar', 'aprobar'],
+
     // Carga datos en el turno.
     operador: ['ver', 'cargar'],
 
