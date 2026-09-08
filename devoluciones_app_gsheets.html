@@ -1539,7 +1539,6 @@ const SYNC = {
     const res = await gsGet({ action: "getAllSnapshots" });
     return (res && res.snapshots) || {};
   }
-  }
 };
 
 // Interceptar localStorage para sincronizar automáticamente a Google Sheets
