@@ -1531,10 +1531,14 @@ const SYNC = {
   // Trae todos los snapshots para reconstruir el histórico
   async pullAllSnapshots(){
     if(!GS_READY || !SYNC.persona) return {};
-    try{
-      const res = await gsGet({ action: "getAllSnapshots" });
-      return (res && res.snapshots) || {};
-    }catch(e){ console.warn("pullAllSnapshots:",e); return {}; }
+    // El error NO se atrapa, a proposito. Antes devolvia {} ante un fallo de red;
+    // hydrateFromCloud lo confundia con "no hay nada nuevo", se salteaba la
+    // mezcla y dejaba el cartel en "ok". Resultado: la app mostraba solo el
+    // historico local y afirmaba estar sincronizada. Fallar ruidosamente ES el
+    // arreglo: el catch de hydrateFromCloud ya sabe mostrarlo.
+    const res = await gsGet({ action: "getAllSnapshots" });
+    return (res && res.snapshots) || {};
+  }
   }
 };
 
@@ -5123,27 +5127,40 @@ $("btnPpt").addEventListener("click", () => {
     }, 120000); // 2 minutos
   }
 
-  // Skip button — enter without Google Sheets
+  // "Continuar sin sync" era la otra puerta al mismo problema: dejaba entrar con
+  // SYNC.persona en null, o sea trabajando solo contra localStorage sin que se
+  // notara. Ahora reintenta la sesion, que es lo unico util desde aca.
   document.getElementById("authSkip").addEventListener("click", () => {
-    overlay.classList.add("hidden");
-    console.log("[GSheets] Skipping Google Sheets sync — working offline.");
+    location.reload();
   });
 
-  // Init
-  if(GS_READY){
-    cargarPersonas().catch(e => {
-      showMsg("No se pudo conectar a Google Sheets. Podés continuar sin sync.", "err");
-      console.warn("cargarPersonas failed:", e);
-    });
-    // Auto-reingreso si la pestaña ya tenía sesión
-    const previa = sessionStorage.getItem("__persona");
-    if(previa){
-      onLogin(previa);
+  // Init — la identidad sale de la sesion del portal, no de escribir el nombre.
+  //
+  // Antes dependia de completar el login propio de esta app, que se guardaba en
+  // sessionStorage y se borraba al cerrar la pestaña. Si no se completaba -o si
+  // alguien apretaba "continuar sin sync"- SYNC.persona quedaba en null, y CADA
+  // funcion de sincronizacion corta en su primera linea con ese chequeo.
+  //
+  // El efecto era silencioso y en las dos direcciones: la app no traia lo que
+  // cargaban los demas Y no subia lo propio, mientras mostraba el cartel en
+  // verde. Se veia como "no me actualiza"; en realidad estaba desconectada.
+  //
+  // El portal ya autentico a esta persona para dejarla entrar al archivo, asi
+  // que preguntarle el nombre de nuevo no agregaba seguridad: solo agregaba un
+  // paso que se podia saltear.
+  (async () => {
+    try{
+      const r = await fetch('/api/auth/yo', { credentials: 'same-origin' });
+      if(!r.ok) throw new Error('sesion no valida');
+      const yo = await r.json();
+      onLogin(yo.nombre || yo.usuario);
       startPolling();
+    }catch(e){
+      console.error('sesion:', e);
+      SYNC.setBadge('error','Sin sesión — recargá la página');
+      showMsg('No se pudo confirmar tu sesión. Recargá la página.','err');
     }
-  } else {
-    showMsg("Configurá GSHEET_API_URL en el HTML con la URL de tu Google Apps Script desplegado.","err");
-  }
+  })();
 
   // Hooks de logging para eventos clave de la app
   document.addEventListener("change", e => {
