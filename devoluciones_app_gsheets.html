@@ -5114,10 +5114,20 @@ async function fixGuardar(){
       if(typeof renderMotivos === "function") try{ renderMotivos(); }catch(e){}
     }
 
+    const mesCorregido = `${cap(FIX.snap.mes)} ${FIX.snap.anio}`;
     renderHistory();
-    fixRenderSelector();
-    $("fixSub").textContent = "Correcciones guardadas y subidas al servidor.";
-    if(typeof log === "function") log(`Motivos de ${cap(FIX.snap.mes)} ${FIX.snap.anio} corregidos y sincronizados.`);
+    if(typeof log === "function") log(`Motivos de ${mesCorregido} corregidos y sincronizados.`);
+
+    // Se cierra el panel al guardar. Corregir es un desvio corto dentro de la
+    // revision: dejar la lista abierta tapa la comparativa, que es justo a lo
+    // que se vuelve despues de corregir.
+    FIX.key = null;
+    FIX.snap = null;
+    const sel = $("fixMes");
+    if(sel) sel.value = "";
+    $("fixList").innerHTML = "";
+    $("fixSave").disabled = true;
+    $("fixSub").textContent = `${mesCorregido}: correcciones guardadas y subidas. Elegí otro mes si necesitás corregir más.`;
   }catch(e){
     btn.disabled = false;
     $("fixSub").textContent = "No se pudieron subir las correcciones.";
