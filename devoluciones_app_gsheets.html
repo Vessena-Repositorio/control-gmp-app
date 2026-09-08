@@ -2255,6 +2255,10 @@ function renderHistory(){
   renderMonthPicker(h, keys);
   renderComparison(h);
   if(typeof updateHistBadge === "function") updateHistBadge();
+  // El selector de correccion se rellena aca y no solo al cargar la pagina: al
+  // arrancar todavia no hay historico -llega despues, con la sincronizacion- y
+  // el desplegable quedaba vacio para siempre.
+  if(typeof fixRenderSelector === "function") try{ fixRenderSelector(); }catch(e){}
 }
 
 function renderMonthPicker(h, keys){
