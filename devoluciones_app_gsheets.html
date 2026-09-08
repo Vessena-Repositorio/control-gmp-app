@@ -5092,16 +5092,20 @@ $("btnPpt").addEventListener("click", () => {
       const snapshots = await SYNC.pullAllSnapshots();
       if(snapshots && Object.keys(snapshots).length){
         // Mergear con el histórico local (el remoto tiene prioridad)
-        // El servidor indexa por MES_ANIO y la app por historyKeyFor(): mezclar
-        // tal cual metia el mismo mes dos veces, con dos claves distintas, y
-        // salia duplicado en la comparativa. Se normaliza al formato de la app
-        // usando el mes y el año que vienen adentro del propio snapshot.
-        const remoto = {};
-        Object.entries(snapshots).forEach(([k, s]) => {
-          remoto[(s && s.mes && s.anio) ? historyKeyFor(s.mes, s.anio) : k] = s;
-        });
-        const localH = loadHistory();
-        const merged = Object.assign({}, localH, remoto);
+        // Se normalizan LOS DOS lados, no solo el remoto. El servidor indexa por
+        // MES_ANIO y la app por historyKeyFor(), y en los navegadores que ya
+        // habian sincronizado antes quedaron guardadas las claves viejas: al
+        // mezclar, el mismo mes entraba dos veces y la comparativa contaba doble.
+        // Como cada snapshot lleva adentro su mes y su año, reindexar por ahi
+        // colapsa las dos formas en una sola y los duplicados desaparecen solos.
+        const normalizar = (obj) => {
+          const out = {};
+          Object.entries(obj || {}).forEach(([k, s]) => {
+            out[(s && s.mes && s.anio) ? historyKeyFor(s.mes, s.anio) : k] = s;
+          });
+          return out;
+        };
+        const merged = Object.assign({}, normalizar(loadHistory()), normalizar(snapshots));
         const _set = Storage.prototype.setItem;
         _set.call(localStorage, `history_${APP_VERSION}`, JSON.stringify(merged));
       }
