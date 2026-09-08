@@ -5126,7 +5126,14 @@ $("btnPpt").addEventListener("click", () => {
           const _set = Storage.prototype.setItem;
           _set.call(localStorage, key, JSON.stringify(buf));
           // Si ya está en pantalla, refrescar el buffer
-          if(STATE.motivosBuffer !== null){
+          // No pisar lo que se esta editando. Esto corre tambien desde el
+          // polling, cada 2 minutos: sin el freno, una correccion volvia sola al
+          // valor viejo a los pocos segundos de hacerla. Se veia como "no me
+          // deja corregir", y en realidad la estaba sobrescribiendo el sync.
+          //
+          // motivosDirty se prende en cuanto se toca un motivo y se apaga al
+          // guardar, asi que el refresco vuelve a entrar apenas se guarda.
+          if(STATE.motivosBuffer !== null && !STATE.motivosDirty){
             STATE.motivosBuffer = buf;
             if(typeof renderMotivos === "function") try{ renderMotivos(); }catch(e){}
           }
