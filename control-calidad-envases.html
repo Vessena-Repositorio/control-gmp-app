@@ -3643,35 +3643,52 @@
                                                                                 // Buscar spec del parámetro
                                                                                 const paramBase = key.replace(/^(validacion_|quincenal_|semanal_)/, '').replace(/_cav\d$/, '');
                                                                                 const specParam = spec?.parametros?.[paramBase];
-                                                                                
+
+                                                                                // El espesor no vive en `parametros`: tiene su propio perfil por
+                                                                                // punto (REG-SOP-PR-138-H) y su spec es un MÍNIMO, no un rango.
+                                                                                // Sin esto la columna quedaba vacía justo en las mediciones más
+                                                                                // numerosas del control, que son las de espesor.
+                                                                                const mEsp = paramBase.match(/^esp_cav\d+_(.+)_b\d+$/);
+                                                                                const specEspMin = mEsp ? getEspesorSpec(control.envase, mEsp[1]) : null;
+
                                                                                 let displayValue, esOOS = false;
                                                                                 if (Array.isArray(value)) {
                                                                                     const nums = value.filter(v => v && !isNaN(parseFloat(v))).map(v => parseFloat(v));
                                                                                     displayValue = value.filter(v => v !== '').join(', ');
                                                                                     if (specParam && nums.length > 0) {
                                                                                         esOOS = nums.some(v => v < specParam.min || v > specParam.max);
+                                                                                    } else if (specEspMin != null && nums.length > 0) {
+                                                                                        esOOS = nums.some(v => v < specEspMin);
                                                                                     }
                                                                                 } else {
                                                                                     displayValue = value;
                                                                                     const numVal = parseFloat(value);
                                                                                     if (specParam && !isNaN(numVal)) {
                                                                                         esOOS = numVal < specParam.min || numVal > specParam.max;
+                                                                                    } else if (specEspMin != null && !isNaN(numVal)) {
+                                                                                        esOOS = numVal < specEspMin;
                                                                                     }
                                                                                 }
-                                                                                
+
+                                                                                const tieneSpec = !!specParam || specEspMin != null;
+
                                                                                 return (
                                                                                     <tr key={key} style={{background: esOOS ? '#fff5f5' : 'transparent'}}>
                                                                                         <td style={{fontWeight: '600', fontSize: '13px'}}>{nombreParam}</td>
                                                                                         <td>{displayValue}</td>
                                                                                         {spec && (
                                                                                             <td style={{fontSize: '12px', color: '#718096'}}>
-                                                                                                {specParam ? `${specParam.min} - ${specParam.max} ${specParam.unidad}` : ''}
+                                                                                                {specParam
+                                                                                                    ? `${specParam.min} - ${specParam.max} ${specParam.unidad || ''}`
+                                                                                                    : specEspMin != null
+                                                                                                        ? `≥ ${specEspMin.toFixed(2)} mm`
+                                                                                                        : ''}
                                                                                             </td>
                                                                                         )}
                                                                                         <td>
-                                                                                            {esOOS 
-                                                                                                ? <span style={{color: '#e53e3e', fontWeight: '700'}}>⚠️ OOS</span>
-                                                                                                : specParam 
+                                                                                            {esOOS
+                                                                                                ? <span style={{color: '#e53e3e', fontWeight: '700'}}>✗ OOS</span>
+                                                                                                : tieneSpec
                                                                                                     ? <span style={{color: '#38a169'}}>✓</span>
                                                                                                     : ''
                                                                                             }
