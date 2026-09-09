@@ -323,15 +323,36 @@ export async function revisarInduccionesPendientes({ forzar = false, soloPrevisu
                 hechos.get(nom).add(r.tema);
             }
 
+            // El aviso es sobre INGRESOS: gente que entro hace poco y todavia no
+            // completo la induccion. La pantalla de la app ya excluye a quien
+            // tiene mas de un año -"para no llenar de gente vieja"- y este correo
+            // no lo hacia, asi que reportaba a alguien con siete años de casa
+            // como si fuera un ingreso pendiente. Las dos reglas ahora coinciden.
+            const DIAS_MAXIMO = 365;
+
             const pendientes = [];
+            let sinFechaAlta = 0;
+            let veteranosSinInduccion = 0;
+
             for (const p of personal) {
-                if (!p || p.a === false || !p.fechaAlta) continue;
+                if (!p || p.a === false) continue;
+
+                // Sin fecha de alta no se puede saber si es un ingreso reciente.
+                // Se cuentan aparte: son gente que este control NO esta mirando,
+                // y conviene que eso se vea en vez de desaparecer.
+                if (!p.fechaAlta) { sinFechaAlta++; continue; }
+
                 const dias = diasEntre(comoDia(p.fechaAlta), hoy);
                 if (dias === null || dias < 30) continue;
 
                 const tiene = hechos.get(String(p.n || '').toUpperCase().trim()) || new Set();
                 const falta = MODULOS_INDUCCION.filter((m) => !tiene.has(m));
                 if (!falta.length) continue;
+
+                // Le falta induccion pero no es un ingreso: es una brecha
+                // historica, y mezclarla con los ingresos recientes hace que el
+                // aviso pierda el sentido de urgencia que tiene.
+                if (dias > DIAS_MAXIMO) { veteranosSinInduccion++; continue; }
 
                 pendientes.push({
                     nombre: p.n, sector: p.s || '(sin sector)',
@@ -341,10 +362,16 @@ export async function revisarInduccionesPendientes({ forzar = false, soloPrevisu
             }
             pendientes.sort((a, b) => b.dias - a.dias);
 
+            // Lo que este control NO esta mirando, visible siempre. Sin esto, un
+            // "0 pendientes" puede significar que esta todo al dia o que casi
+            // nadie tiene fecha de alta cargada, y no habria forma de saberlo.
+            const noEvaluados = { sinFechaAlta, veteranosSinInduccion };
+
             // Sin pendientes no manda nada: no tiene sentido un correo semanal
             // que diga que todo esta bien.
             if (!pendientes.length) {
-                return { revisados: personal.length, pendientes: 0, correos: 0, detalle: 'sin pendientes' };
+                return { revisados: personal.length, pendientes: 0, correos: 0,
+                         noEvaluados, detalle: 'sin ingresos recientes con induccion pendiente' };
             }
 
             const para = await supervisoresDe(RECURSO, 'inducciones-pendientes');
@@ -354,13 +381,13 @@ export async function revisarInduccionesPendientes({ forzar = false, soloPrevisu
             if (soloPrevisualizar) {
                 return {
                     modo: 'previsualizacion', revisados: personal.length,
-                    pendientes: pendientes.length, correos: 0,
+                    pendientes: pendientes.length, correos: 0, noEvaluados,
                     saldrian: [{ asunto, para, personas: pendientes.map((x) => `${x.nombre} (${x.dias}d)`) }],
                 };
             }
             if (!para.length) {
                 return { revisados: personal.length, pendientes: pendientes.length, correos: 0,
-                         detalle: 'sin supervisores cargados' };
+                         noEvaluados, detalle: 'sin supervisores cargados' };
             }
 
             let enviados = 0;
@@ -372,7 +399,8 @@ export async function revisarInduccionesPendientes({ forzar = false, soloPrevisu
             }
             return {
                 revisados: personal.length, pendientes: pendientes.length, correos: enviados,
-                detalle: `${pendientes.length} pendiente(s), ${enviados} correo(s)`,
+                noEvaluados,
+                detalle: `${pendientes.length} pendiente(s), ${enviados} correo(s); no evaluados: ${sinFechaAlta} sin fecha de alta, ${veteranosSinInduccion} con mas de un año`,
             };
         }
     );
