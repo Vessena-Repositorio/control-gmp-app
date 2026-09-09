@@ -1,5 +1,7 @@
 import express from 'express';
 import { dirname, resolve, sep } from 'node:path';
+import { readdirSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { pool, hayBase, consultar } from './db.js';
 import { migrar } from './migrate.js';
@@ -26,6 +28,34 @@ import { revisarPendientesAprobacion } from './lib/avisos-envases.js';
 const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PUERTO = Number(process.env.PORT) || 3000;
 
+// Huella de las paginas que este contenedor esta sirviendo.
+//
+// Nace de una tarde perdida: se arreglo algo, se subio, y en pantalla seguia el
+// error. No habia forma de saber si el arreglo estaba mal o si el navegador
+// tenia la version vieja, porque desde afuera el servidor redirige al login
+// cualquier .html -exista o no- y un curl no distingue una version de otra.
+//
+// Se calcula una sola vez al arrancar, sobre el contenido de las paginas. Los
+// \r se sacan antes de hashear: el repo se clona con finales de linea distintos
+// segun el sistema, y sin eso el mismo commit daria huellas distintas.
+//
+// Para comparar contra el arbol local, desde la raiz del repo:
+//   ls *.html | LC_ALL=C sort | xargs cat | tr -d '\r' | sha256sum
+const HUELLA = (() => {
+    try {
+        const paginas = readdirSync(RAIZ)
+            .filter((f) => f.toLowerCase().endsWith('.html'))
+            .sort();
+        const h = createHash('sha256');
+        for (const f of paginas) {
+            h.update(readFileSync(resolve(RAIZ, f), 'utf8').replace(/\r/g, ''));
+        }
+        return { huella: h.digest('hex').slice(0, 12), paginas: paginas.length };
+    } catch (err) {
+        return { huella: 'desconocida', paginas: 0, error: err.message };
+    }
+})();
+
 const app = express();
 app.disable('x-powered-by');
 // 25mb y no 2: el snapshot mensual de devoluciones lleva el detalle por SKU, y
@@ -44,15 +74,17 @@ app.get('/api/salud', async (_req, res) => {
     if (!hayBase) {
         return res.status(503).json({
             estado: 'sitio ok, api sin base',
+            ...HUELLA,
             base: 'no configurada',
         });
     }
     try {
         await pool.query('SELECT 1');
-        res.json({ estado: 'ok', base: 'conectada' });
+        res.json({ estado: 'ok', base: 'conectada', ...HUELLA });
     } catch (err) {
         res.status(503).json({
             estado: 'sitio ok, api degradada',
+            ...HUELLA,
             base: 'sin conexion',
             error: err.message,
         });
