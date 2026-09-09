@@ -168,6 +168,53 @@ function cuerpo(pendientes, aprobados) {
         `</div></div></div>`;
 }
 
+
+/**
+ * Versión corta, para quien sigue el estado sin trabajar la lista. Sin tabla de
+ * pendientes a propósito: si quien solo mira recibe la lista operativa, la
+ * empieza a hojear, y el día que sí tiene que actuar ya la mira distinto.
+ */
+function cuerpoResumen(pendientes, aprobados) {
+    const masViejo = pendientes.length
+        ? pendientes.reduce((a, b) => (Number(a.dias) > Number(b.dias) ? a : b))
+        : null;
+
+    const dato = (etiqueta, valor, color) =>
+        `<tr>` +
+        `<td style="padding:9px 4px;color:#475467">${etiqueta}</td>` +
+        `<td style="padding:9px 4px;text-align:right;font-weight:800;font-size:17px;color:${color}">${valor}</td>` +
+        `</tr>`;
+
+    const quienes = aprobados.length
+        ? `<p style="margin:14px 0 0 0;font-size:13px;color:#475467">Aprobó: ` +
+          esc([...new Set(aprobados.map((a) => a.aprobado_por))].join(', ')) + `.</p>`
+        : '';
+
+    const alerta = masViejo && Number(masViejo.dias) >= 14
+        ? `<p style="margin:14px 0 0 0;padding:10px 12px;background:#fef2f2;border-left:3px solid #dc2626;` +
+          `font-size:13px;color:#7f1d1d">El más antiguo lleva ${masViejo.dias} días esperando.</p>`
+        : '';
+
+    return `<div style="font-family:Arial,Helvetica,sans-serif;background:#f5f5f5;padding:20px">` +
+      `<div style="max-width:520px;margin:auto">` +
+        `<div style="background:${NAV};color:#fff;padding:20px 22px;border-radius:8px 8px 0 0">` +
+          `<div style="font-size:18px;font-weight:800">Aprobaciones — estado semanal</div>` +
+          `<div style="font-size:12px;opacity:.85;margin-top:2px">Control de calidad de envases</div>` +
+        `</div>` +
+        `<div style="background:#fff;padding:22px;border-radius:0 0 8px 8px">` +
+          `<table style="width:100%;border-collapse:collapse;font-size:14px">` +
+            dato('Esperando aprobación', pendientes.length, pendientes.length ? '#b45309' : '#1d6f52') +
+            dato('Aprobados esta semana', aprobados.length, '#1d6f52') +
+            (masViejo ? dato('Días del más antiguo', masViejo.dias,
+                Number(masViejo.dias) >= 14 ? '#dc2626' : '#475467') : '') +
+          `</table>` +
+          quienes + alerta +
+          `<p style="margin:16px 0 0 0;font-size:11px;color:#666;border-top:1px solid #e5e7eb;padding-top:12px">` +
+            `Resumen de estado. La lista para aprobar le llega a quien aprueba.` +
+          `</p>` +
+        `</div></div></div>`;
+}
+
 /**
  * Corre el aviso si corresponde. Lunes, una vez por semana.
  * `soloPrevisualizar` arma todo y no manda: devuelve que saldria y a quien.
@@ -192,38 +239,54 @@ export async function revisarPendientesAprobacion({ forzar = false, soloPrevisua
                          detalle: 'nada pendiente ni aprobado esta semana' };
             }
 
-            const para = await supervisoresDe(RECURSO, NOTIFICACION);
-            // El asunto dice lo que hay que hacer, no lo que se hizo: lo que
-            // decide si alguien abre el correo es si le queda algo pendiente.
-            const asunto = filas.length
+            // Dos destinatarios con dos necesidades: quien aprueba recibe la
+            // lista para trabajar; quien sigue el estado, solo los numeros.
+            const paraLista = await supervisoresDe(RECURSO, NOTIFICACION);
+            const resumenTodos = await supervisoresDe(RECURSO, 'resumen-aprobaciones');
+            // Nadie recibe los dos: si alguien esta en las dos listas le llega
+            // el operativo, que es el que incluye lo que hay que hacer.
+            const paraResumen = resumenTodos.filter((d) => !paraLista.includes(d));
+
+            const asuntoLista = filas.length
                 ? `[Calidad] ${filas.length} análisis pendiente${filas.length === 1 ? '' : 's'} de aprobación`
                 : `[Calidad] ${aprobados.length} análisis aprobado${aprobados.length === 1 ? '' : 's'} esta semana`;
+            const asuntoResumen = `[Calidad] Aprobaciones: ${filas.length} pendiente${filas.length === 1 ? '' : 's'}` +
+                `, ${aprobados.length} aprobado${aprobados.length === 1 ? '' : 's'}`;
 
             if (soloPrevisualizar) {
                 return {
                     modo: 'previsualizacion', hoy: comoDia(reloj.hoy), conteo,
                     pendientes: filas.length, aprobados: aprobados.length, correos: 0,
-                    saldria: {
-                        asunto, para,
+                    listaOperativa: {
+                        asunto: asuntoLista, para: paraLista,
                         esperando: filas.map((f) =>
                             `${f.tipo} · ${f.envase || '—'} · ${comoDia(f.fecha)} · ${f.analista || '—'} · ${f.dias}d`),
                         aprobados: aprobados.map((f) =>
-                            `${f.tipo} · ${f.envase || '—'} · ${comoDia(f.fecha)} · aprobó ${f.aprobado_por} el ${comoDia(f.aprobado_en)}`),
+                            `${f.tipo} · ${f.envase || '—'} · aprobó ${f.aprobado_por} el ${comoDia(f.aprobado_en)}`),
                     },
+                    resumenDeEstado: { asunto: asuntoResumen, para: paraResumen },
                 };
-            }
-            if (!para.length) {
-                return { hoy: comoDia(reloj.hoy), conteo, pendientes: filas.length,
-                         aprobados: aprobados.length, correos: 0,
-                         detalle: 'sin destinatarios cargados' };
             }
 
             let enviados = 0;
-            try {
-                await enviar({ para, asunto, html: cuerpo(filas, aprobados), texto: asunto });
-                enviados = 1;
-            } catch (err) {
-                console.error('[avisos:envases] fallo:', err.message);
+            if (paraLista.length) {
+                try {
+                    await enviar({ para: paraLista, asunto: asuntoLista,
+                                   html: cuerpo(filas, aprobados), texto: asuntoLista });
+                    enviados++;
+                } catch (err) {
+                    console.error('[avisos:envases] lista operativa fallo:', err.message);
+                }
+            }
+            if (paraResumen.length) {
+                try {
+                    await enviar({ para: paraResumen, asunto: asuntoResumen,
+                                   html: cuerpoResumen(filas, aprobados), texto: asuntoResumen });
+                    enviados++;
+                } catch (err) {
+                    // Que falle el resumen no puede llevarse puesto el operativo.
+                    console.error('[avisos:envases] resumen fallo:', err.message);
+                }
             }
             return { conteo, pendientes: filas.length, aprobados: aprobados.length, correos: enviados,
                      detalle: `${filas.length} pendiente(s), ${aprobados.length} aprobado(s), ${enviados} correo(s)` };
