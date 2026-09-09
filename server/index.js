@@ -28,31 +28,52 @@ import { revisarPendientesAprobacion } from './lib/avisos-envases.js';
 const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PUERTO = Number(process.env.PORT) || 3000;
 
-// Huella de las paginas que este contenedor esta sirviendo.
+// Huella de lo que este contenedor esta sirviendo: las paginas, el servidor y
+// las migraciones. Todo lo que define su comportamiento.
 //
 // Nace de una tarde perdida: se arreglo algo, se subio, y en pantalla seguia el
-// error. No habia forma de saber si el arreglo estaba mal o si el navegador
-// tenia la version vieja, porque desde afuera el servidor redirige al login
+// error. No habia forma de saber si el arreglo estaba mal o si lo desplegado
+// era la version anterior, porque desde afuera el servidor redirige al login
 // cualquier .html -exista o no- y un curl no distingue una version de otra.
 //
-// Se calcula una sola vez al arrancar, sobre el contenido de las paginas. Los
-// \r se sacan antes de hashear: el repo se clona con finales de linea distintos
-// segun el sistema, y sin eso el mismo commit daria huellas distintas.
+// Cubre tambien server/ a proposito: si solo mirara los .html, un cambio de
+// backend daria la misma huella que la version vieja y la verificacion del
+// deploy pasaria contra el contenedor anterior, que es justo lo que se quiere
+// evitar.
 //
-// Para comparar contra el arbol local, desde la raiz del repo:
-//   ls *.html | LC_ALL=C sort | xargs cat | tr -d '\r' | sha256sum
+// Cada archivo aporta su ruta y su contenido. La ruta va incluida para que
+// renombrar algo tambien mueva la huella. Los \r se sacan antes de hashear: el
+// repo se clona con finales de linea distintos segun el sistema, y sin eso el
+// mismo commit daria huellas distintas.
+//
+// El equivalente exacto en shell, desde la raiz del repo, esta en
+// .github/scripts/huella.sh — si se cambia uno hay que cambiar el otro.
 const HUELLA = (() => {
     try {
-        const paginas = readdirSync(RAIZ)
-            .filter((f) => f.toLowerCase().endsWith('.html'))
-            .sort();
+        const bajo = (dir, prefijo) => {
+            const salida = [];
+            for (const e of readdirSync(resolve(RAIZ, dir), { withFileTypes: true })) {
+                const rel = prefijo + e.name;
+                if (e.isDirectory()) salida.push(...bajo(dir + '/' + e.name, rel + '/'));
+                else if (e.isFile()) salida.push(rel);
+            }
+            return salida;
+        };
+
+        const archivos = [
+            ...readdirSync(RAIZ).filter((f) => f.toLowerCase().endsWith('.html')),
+            'package.json',
+            ...bajo('server', 'server/'),
+        ].sort();
+
         const h = createHash('sha256');
-        for (const f of paginas) {
+        for (const f of archivos) {
+            h.update(f + '\n');
             h.update(readFileSync(resolve(RAIZ, f), 'utf8').replace(/\r/g, ''));
         }
-        return { huella: h.digest('hex').slice(0, 12), paginas: paginas.length };
+        return { huella: h.digest('hex').slice(0, 12), archivos: archivos.length };
     } catch (err) {
-        return { huella: 'desconocida', paginas: 0, error: err.message };
+        return { huella: 'desconocida', archivos: 0, error: err.message };
     }
 })();
 

@@ -1,13 +1,20 @@
 #!/usr/bin/env bash
-# Espera a que el servicio vuelva despues del deploy y confirma que quedo sano
-# de verdad. Sin esto, el job termina en verde apenas el webhook devuelve 200,
-# lo cual solo prueba que Coolify recibio la orden: ni que el contenedor
-# levanto, ni que la base respondio, ni que las replicas corrieron.
+# Espera a que el servicio vuelva despues del deploy y confirma que lo que
+# quedo corriendo es ESTE commit y que quedo sano.
 #
-# Consulta /api/estado?estricto=1, que resume la base y las nueve replicas en
-# una sola respuesta y devuelve 503 mientras algo no este bien. Con `estricto`
-# ademas exige que ninguna replica siga en curso, que es lo que hace falta para
-# afirmar que el deploy quedo terminado.
+# Antes solo miraba /api/estado. Eso alcanzaba para decir "el servicio
+# contesta", no para decir "el servicio contesta con lo que acabo de subir": si
+# el contenedor viejo seguia en pie -y sigue, mientras el nuevo se construye-,
+# respondia sano al instante y el job daba verde en trece segundos. Paso de
+# verdad, y costo dos vueltas mirando una pantalla vieja convencidas de que el
+# arreglo estaba mal.
+#
+# Ahora son dos condiciones, y hacen falta las dos:
+#   1. GET /api/salud devuelve la huella del arbol que se esta desplegando.
+#      Esa huella la calcula huella.sh sobre el checkout, y el servidor la
+#      calcula igual al arrancar. Si no coinciden, lo que corre es otra cosa.
+#   2. GET /api/estado?estricto=1 devuelve 200: base y replicas sanas, y
+#      ninguna replica todavia en curso.
 #
 # URL es la base del servicio en Coolify (vars.URL_APP), sin barra final. NO es
 # la de GitHub Pages: Pages no tiene backend que consultar. Si no esta
@@ -15,7 +22,7 @@
 # variable que todavia nadie cargo.
 set -uo pipefail
 
-INTENTOS=40
+INTENTOS=60
 ESPERA=10
 
 if [ -z "${URL:-}" ]; then
@@ -26,37 +33,66 @@ if [ -z "${URL:-}" ]; then
     exit 0
 fi
 
+RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ESPERADA=$(bash "$RAIZ/.github/scripts/huella.sh")
+
+if [ -z "$ESPERADA" ]; then
+    echo "No se pudo calcular la huella del checkout. Revisa huella.sh."
+    exit 1
+fi
+
 echo "Verificando $URL (hasta $((INTENTOS * ESPERA))s)"
+echo "Huella esperada: $ESPERADA"
+
+# Se recuerda la ultima huella distinta que se vio, para que el mensaje de
+# fracaso distinga dos casos que se arreglan distinto: el contenedor viejo
+# sigue arriba (huella vieja) o el server nuevo no sabe calcularla (ausente).
+VISTA=""
 
 for i in $(seq 1 "$INTENTOS"); do
-    # Una sola llamada: el codigo va al final del cuerpo y se separa despues.
-    # Con dos curl distintos el estado podria cambiar entre uno y otro.
-    RESPUESTA=$(curl -s -w $'\n%{http_code}' --max-time 10 \
-                "$URL/api/estado?estricto=1" 2>/dev/null || true)
-    CODIGO=$(printf '%s' "$RESPUESTA" | tail -n 1)
-    CUERPO=$(printf '%s' "$RESPUESTA" | sed '$d')
-    [ -z "$CODIGO" ] && CODIGO="000"
+    SALUD=$(curl -s --max-time 10 "$URL/api/salud" 2>/dev/null || true)
+    # Sin jq en el runner: se saca el campo con sed, que para un valor
+    # hexadecimal sin comillas adentro es suficiente.
+    ACTUAL=$(printf '%s' "$SALUD" | sed -n 's/.*"huella":"\([^"]*\)".*/\1/p')
+    [ -n "$ACTUAL" ] && VISTA="$ACTUAL"
 
-    if [ "$CODIGO" = "200" ]; then
-        echo "OK tras $((i * ESPERA))s — base y las nueve replicas sanas"
-        echo "$CUERPO"
-        exit 0
-    fi
+    if [ "$ACTUAL" = "$ESPERADA" ]; then
+        # Recien con la version correcta arriba tiene sentido preguntar si esta
+        # sana: preguntarselo al contenedor viejo no dice nada del nuevo.
+        RESPUESTA=$(curl -s -w $'\n%{http_code}' --max-time 10 \
+                    "$URL/api/estado?estricto=1" 2>/dev/null || true)
+        CODIGO=$(printf '%s' "$RESPUESTA" | tail -n 1)
+        CUERPO=$(printf '%s' "$RESPUESTA" | sed '$d')
 
-    # Cada minuto se muestra que esta faltando, para no mirar un log mudo
-    # durante siete minutos.
-    if [ $((i % 6)) -eq 0 ]; then
-        echo "  [$((i * ESPERA))s] HTTP $CODIGO — ${CUERPO:-sin respuesta}"
+        if [ "$CODIGO" = "200" ]; then
+            echo "OK tras $((i * ESPERA))s — corriendo $ESPERADA, base y replicas sanas"
+            echo "$CUERPO"
+            exit 0
+        fi
+
+        if [ $((i % 6)) -eq 0 ]; then
+            echo "  [$((i * ESPERA))s] version correcta, todavia no sana: HTTP $CODIGO — ${CUERPO:-sin respuesta}"
+        fi
+    elif [ $((i % 6)) -eq 0 ]; then
+        echo "  [$((i * ESPERA))s] todavia corre ${ACTUAL:-(sin huella: build anterior a este chequeo)}"
     fi
 
     sleep "$ESPERA"
 done
 
 echo
-echo "El servicio no quedo sano tras $((INTENTOS * ESPERA))s."
-echo "Ultima respuesta de /api/estado?estricto=1 (HTTP $CODIGO):"
-echo "${CUERPO:-sin respuesta}"
-echo
-echo "El campo 'problemas' dice que dominio fallo y por que."
-echo "'pendientes' son replicas que seguian corriendo al agotarse el tiempo."
+echo "El deploy no quedo confirmado tras $((INTENTOS * ESPERA))s."
+echo "Esperada: $ESPERADA"
+if [ -z "$VISTA" ]; then
+    echo "El servidor nunca reporto una huella. O el contenedor nuevo no levanto"
+    echo "-y sigue en pie el anterior, que es de antes de que existiera este"
+    echo "campo-, o /api/salud no esta respondiendo."
+    echo "Revisa los logs del contenedor en Coolify: si el proceso se cae al"
+    echo "arrancar, Coolify deja el viejo sirviendo y desde afuera no se nota."
+elif [ "$VISTA" != "$ESPERADA" ]; then
+    echo "Lo ultimo que se vio corriendo fue $VISTA: el contenedor no se cambio."
+else
+    echo "La version correcta llego a estar arriba pero /api/estado nunca dio 200."
+    echo "El campo 'problemas' dice que dominio fallo y por que."
+fi
 exit 1
