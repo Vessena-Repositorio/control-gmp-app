@@ -1,12 +1,21 @@
 name: Deploy to Coolify
 
 # Hay un solo recurso de Coolify. La rama que construye se elige en Coolify, no
-# aca: el webhook despliega la rama que ese recurso tenga configurada. Hoy es
-# migracion-postgres; cuando el corte termine sera main, y este workflow no
-# necesita cambiar.
+# aca: el webhook despliega la rama que ese recurso tenga configurada.
+#
+# Hoy Coolify esta configurado en main. Este comentario decia migracion-postgres
+# y estaba equivocado: se perdio una tarde buscando por que los arreglos "no se
+# veian", cuando lo que pasaba era que se subian a una rama que nadie desplegaba.
+# Si se cambia la rama en Coolify, hay que corregir esta linea en el mismo
+# momento; un comentario desactualizado sobre donde corre algo hace mas dano que
+# no tener comentario.
+#
+# La forma de confirmarlo sin depender de este texto: GET /api/salud devuelve la
+# huella de lo que el contenedor esta sirviendo, y .github/scripts/huella.sh
+# calcula la misma sobre un arbol local. Si coinciden, eso es lo desplegado.
 #
 # Ojo: produccion hoy es GitHub Pages, que sirve main por su cuenta y no pasa
-# por aca. Un push a main no toca Coolify mas que para reconstruirlo.
+# por aca. Un push a main actualiza las dos cosas.
 on:
   push:
     branches:
