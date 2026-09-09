@@ -178,7 +178,7 @@ summary.leg-y:hover{background:var(--g50)!important}
 
 <div class="hdr">
   <div class="hdr-top">
-    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-09b</span></div></div>
+    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-09c</span></div></div>
     <div class="code">REG-SOP-AC-039-D</div>
   </div>
   <div class="nav" id="nav">
@@ -187,6 +187,7 @@ summary.leg-y:hover{background:var(--g50)!important}
     <button data-v="reg">📋 Registro</button>
     <button data-v="plan">📅 Plan</button>
     <button data-v="pers">👥 Personal</button>
+    <button data-v="hab">🎯 Habilitados</button>
     <button data-v="audit">📜 Auditoría</button>
     <button data-v="users" id="nav-users">⚙️ Usuarios</button>
     <select id="global-year" style="margin-left:auto;font-size:13px;font-weight:700;padding:4px 10px;border-radius:8px;border:2px solid rgba(255,255,255,.3);background:rgba(255,255,255,.15);color:#fff;cursor:pointer"></select>
@@ -608,6 +609,29 @@ summary.leg-y:hover{background:var(--g50)!important}
   <div style="font-size:13px;font-weight:700;margin-bottom:8px" id="pers-cnt"></div>
   <div class="grid-3" id="prlist"></div>
 </div>
+</div>
+
+<!-- ═══ HABILITADOS ═══ -->
+<div class="section" id="sec-hab">
+  <div style="font-size:17px;font-weight:800">¿Quién puede hacer esta tarea?</div>
+  <div style="font-size:11px;color:var(--g500);margin:4px 0 12px 0;max-width:760px">
+    Busca las palabras en el <b>tema</b> y en la <b>descripción</b> de todas las capacitaciones registradas, sin importar el año.
+    Devuelve quién tiene registro y <b>también quién no lo tiene</b>, porque para asignar una tarea las dos listas importan.
+    Lo que se muestra es lo que está registrado: si alguien hizo la capacitación y no quedó cargada, acá no aparece.
+  </div>
+  <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:flex-end">
+    <div class="fg" style="flex:1;min-width:240px"><label>Tarea, tema o procedimiento</label><input id="hab-q" placeholder="🔍 ej: limpieza de líneas · autoelevador · SOP-SAN-052" autocomplete="off"></div>
+    <div class="fg" style="min-width:180px"><label>Sector</label><select id="hab-sec"><option value="">Todos los sectores</option></select></div>
+    <div class="fg" style="min-width:160px"><label>Vigencia</label><select id="hab-vig">
+      <option value="0">Sin límite</option>
+      <option value="12">Últimos 12 meses</option>
+      <option value="24">Últimos 24 meses</option>
+      <option value="36">Últimos 36 meses</option>
+    </select></div>
+    <div class="fg" style="min-width:130px"><label>Personal</label><select id="hab-act"><option value="1">Solo activos</option><option value="">Activos e inactivos</option></select></div>
+  </div>
+  <div id="hab-sug" style="margin-bottom:12px"></div>
+  <div id="hab-out"></div>
 </div>
 
 <!-- ═══ GERENCIAL ═══ -->
@@ -1216,6 +1240,10 @@ const NAME_ALIAS={
 let _cacheNombres = new Map();
 function limpiarCacheNombres(){ _cacheNombres = new Map(); }
 
+// Atajos de la pestaña Habilitados. Se declara acá arriba y no junto a su
+// funcion porque sv() lo pone en null, y sv() esta definida antes.
+let _habChips = null;
+
 function findPerson(recName){
   const _k = String(recName == null ? '' : recName);
   if (_cacheNombres.has(_k)) return _cacheNombres.get(_k);
@@ -1282,7 +1310,7 @@ try{const s=localStorage.getItem("vc3e");const pv=localStorage.getItem("vc3pver"
 if(pv!==PERS_VER){PE=[...DEF_PERS];localStorage.setItem("vc3pver",PERS_VER);localStorage.removeItem("vc3_aug2026_update")}
 else{PE=s?JSON.parse(s):[...DEF_PERS]}}catch(e){PE=[...DEF_PERS]}
 try{const s=localStorage.getItem("vc3audit");AUDIT=s?JSON.parse(s):[]}catch(e){AUDIT=[]}}
-function sv(){limpiarCacheNombres();try{localStorage.setItem("vc3r",JSON.stringify(R));localStorage.setItem("vc3p",JSON.stringify(PL));localStorage.setItem("vc3e",JSON.stringify(PE));localStorage.setItem("vc3audit",JSON.stringify(AUDIT))}catch(e){}}
+function sv(){limpiarCacheNombres();_habChips=null;try{localStorage.setItem("vc3r",JSON.stringify(R));localStorage.setItem("vc3p",JSON.stringify(PL));localStorage.setItem("vc3e",JSON.stringify(PE));localStorage.setItem("vc3audit",JSON.stringify(AUDIT))}catch(e){}}
 function logAudit(tipo,detalle,usuario){
   const usr=usuario||(currentUser?currentUser.nombre:'—');
   AUDIT.push({ts:new Date().toISOString(),tipo:tipo,detalle:detalle,usuario:usr});
@@ -3848,6 +3876,265 @@ $('btn-exp-pers').addEventListener('click',function(){
 });
 
 // ══════════ AUDITORIA ══════════
+
+// ══════════════════════════════════════════════════════════════════════════
+// HABILITADOS — quién puede hacer una tarea
+// ══════════════════════════════════════════════════════════════════════════
+//
+// La pregunta que resuelve es operativa: hay que limpiar un área, ¿a quién se
+// le puede pedir? No existe un catálogo de tareas contra el cual consultar. Lo
+// único que hay son los registros de capacitación, con el tema y la descripción
+// escritos a mano a lo largo de seis años y varias planillas distintas. Así que
+// se busca por palabras sobre ese texto, que es donde la información está.
+//
+// Devuelve las dos listas: con registro y sin registro. La segunda es la que
+// sirve para decidir a quién hay que capacitar, y es la que un buscador común
+// no daría.
+//
+// Lo que se muestra es lo REGISTRADO, no lo que la persona sabe. Si alguien
+// hizo la capacitación y no quedó cargada, acá no aparece. Se dice en pantalla
+// para que nadie lea esta vista como una habilitación formal.
+
+// Palabras que no aportan. Sin sacarlas, "limpieza de áreas" exigiría que el
+// registro diga "de", y cada uno lo escribió distinto.
+const HAB_VACIAS = new Set(['DE','DEL','LA','EL','LOS','LAS','Y','EN','POR','PARA','CON','UN','UNA','AL','SE','SU','SOBRE']);
+
+function habTokens(q){
+  return normTxt(q).split(/[^A-Z0-9-]+/)
+    .filter(t => t.length >= 3 && !HAB_VACIAS.has(t));
+}
+
+// Cuántas de las palabras buscadas aparecen en el tema o la descripción.
+// Devuelve el número y no un sí/no porque sirve para dos cosas: exigir todas
+// (la búsqueda normal) y, cuando eso no da nada, ordenar por cuántas coinciden.
+function habCoincidencias(r, tokens){
+  const texto = normTxt(String(r.tema || '') + ' ' + String(r.desc || ''));
+  let n = 0;
+  tokens.forEach(t => { if (texto.includes(t)) n++; });
+  return n;
+}
+
+// Antigüedad en palabras. Una fecha sola no dice nada al recorrer una lista de
+// treinta personas; "hace 4 años" sí.
+function habAntiguedad(fecha){
+  const f = new Date(String(fecha) + 'T00:00:00');
+  if (isNaN(f)) return { txt: 'sin fecha', meses: null };
+  const meses = Math.max(0, Math.round((Date.now() - f.getTime()) / (30.44 * 86400000)));
+  if (meses < 1)  return { txt: 'este mes', meses };
+  if (meses < 12) return { txt: 'hace ' + meses + ' mes' + (meses === 1 ? '' : 'es'), meses };
+  const a = Math.floor(meses / 12);
+  return { txt: 'hace ' + a + ' año' + (a === 1 ? '' : 's'), meses };
+}
+
+// Las palabras más usadas en las descripciones, como atajo. Se cuentan sesiones
+// únicas y no asistencias: si no, una charla con sesenta personas decidiría sola
+// cuáles son los temas de la planta.
+function habChips(){
+  if (_habChips) return _habChips;
+  const vistas = new Set(), cuenta = new Map();
+  R.forEach(r => {
+    const k = r.fecha + '||' + r.tema + '||' + r.desc;
+    if (vistas.has(k)) return;
+    vistas.add(k);
+    new Set(habTokens(String(r.tema || '') + ' ' + String(r.desc || '')))
+      .forEach(t => cuenta.set(t, (cuenta.get(t) || 0) + 1));
+  });
+  _habChips = [...cuenta.entries()]
+    .filter(([t, n]) => n >= 3 && t.length >= 5)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 14)
+    .map(([t]) => t);
+  return _habChips;
+}
+
+window.habBuscar = function(t){ $('hab-q').value = t; V.hab(); };
+
+V.hab = function(){
+  // Sectores: se rearma solo si cambió la dotación, para no perder la elección
+  // mientras se escribe en el buscador.
+  const secSel = $('hab-sec');
+  const secs = [...new Set(PE.map(p => p.s).filter(Boolean))].sort();
+  if (secSel.options.length !== secs.length + 1) {
+    const prev = secSel.value;
+    secSel.innerHTML = '<option value="">Todos los sectores</option>';
+    secs.forEach(s => secSel.add(new Option(s, s)));
+    secSel.value = prev || '';
+  }
+
+  const tokens  = habTokens($('hab-q').value);
+  const secFlt  = secSel.value;
+  const vig     = Number($('hab-vig').value) || 0;
+  const soloAct = $('hab-act').value === '1';
+
+  // Los atajos quedan siempre visibles: además de ahorrar tecleo, muestran con
+  // qué palabras quedó escrito lo que uno busca.
+  $('hab-sug').innerHTML =
+    '<div style="font-size:10px;color:var(--g500);font-weight:700;margin-bottom:5px">TEMAS MÁS REGISTRADOS — click para buscar</div>' +
+    '<div style="display:flex;gap:5px;flex-wrap:wrap">' +
+    habChips().map(t =>
+      '<button onclick="habBuscar(&quot;' + t + '&quot;)" style="font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;border:1px solid var(--g200);background:#fff;color:var(--navy);cursor:pointer;font-family:inherit">' + h(t) + '</button>'
+    ).join('') + '</div>';
+
+  if (!tokens.length) {
+    $('hab-out').innerHTML =
+      '<div style="background:var(--g50);border-radius:var(--r);padding:18px;font-size:12px;color:var(--g600);text-align:center">' +
+      'Escribí una o más palabras para buscar.<br>' +
+      '<span style="font-size:11px;color:var(--g500)">Se exigen <b>todas</b>: menos palabras traen más gente, más palabras afinan. ' +
+      'Si una búsqueda no devuelve nada, probá con una sola palabra — cada planilla escribió la tarea a su manera.</span></div>';
+    return;
+  }
+
+  // Corte por vigencia. Se compara sobre el texto yyyy-mm-dd, que ordena bien
+  // sin construir un objeto fecha por registro.
+  let corte = '';
+  if (vig) {
+    const d = new Date();
+    d.setMonth(d.getMonth() - vig);
+    corte = d.toISOString().slice(0, 10);
+  }
+
+  // Cada asistente deja su propio registro, así que la misma sesión aparece
+  // repetida. Se agrupa por persona y se colapsa por fecha+tema+descripción.
+  function juntar(minimo){
+    const propios = new Map(), ajenos = new Map();
+    R.forEach(r => {
+      const n = habCoincidencias(r, tokens);
+      if (n < minimo) return;
+      if (corte && String(r.fecha || '') < corte) return;
+      const fp = findPerson(r.nom);
+      const destino = fp ? propios : ajenos;
+      const clave   = fp ? fp.n : normTxt(r.nom).trim();
+      if (!clave) return;
+      if (!destino.has(clave)) destino.set(clave, new Map());
+      destino.get(clave).set(r.fecha + '||' + r.tema + '||' + r.desc,
+        { fecha: r.fecha, tema: r.tema, desc: r.desc, hrs: horasDeTexto(r.hrs), coinc: n });
+    });
+    return { propios: propios, ajenos: ajenos };
+  }
+
+  // Primero se exigen todas las palabras. Si eso no devuelve a nadie, se baja a
+  // "alguna" y se avisa en pantalla.
+  //
+  // No es un adorno: "limpieza de áreas" -la forma natural de nombrar la
+  // tarea- no aparece asi en ningun registro, porque cada planilla la escribio
+  // distinta ("limpieza de planta", "orden y limpieza del sector"). Sin esto,
+  // la primera busqueda que uno hace devuelve cero y parece que el sistema no
+  // tiene nada, cuando en realidad tiene 266 registros de limpieza.
+  let { propios: porPersona, ajenos: externos } = juntar(tokens.length);
+  let parcial = false;
+  if (!porPersona.size && !externos.size && tokens.length > 1) {
+    const r2 = juntar(1);
+    if (r2.propios.size || r2.ajenos.size) {
+      porPersona = r2.propios;
+      externos   = r2.ajenos;
+      parcial    = true;
+    }
+  }
+
+  const universo = PE.filter(p =>
+    (!secFlt || p.s === secFlt) && (!soloAct || p.a !== false));
+
+  const con = [], sin = [];
+  universo.forEach(p => {
+    const ses = porPersona.get(p.n);
+    if (ses && ses.size) {
+      const lista = [...ses.values()].sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
+      const mejor = lista.reduce((m, s) => Math.max(m, s.coinc), 0);
+      con.push({ p: p, ses: lista, ultima: lista[0].fecha, mejor: mejor });
+    } else {
+      sin.push(p);
+    }
+  });
+  // En modo parcial manda cuántas palabras coinciden: quien tiene dos de tres
+  // es mejor candidato que quien tiene una, aunque la suya sea más reciente.
+  con.sort((a, b) => (parcial ? b.mejor - a.mejor : 0) ||
+                     String(b.ultima).localeCompare(String(a.ultima)));
+  sin.sort((a, b) => a.n.localeCompare(b.n));
+  const alcance = (secFlt ? secFlt : 'toda la planta') + (soloAct ? '' : ', incluyendo inactivos');
+  const filtro  = vig ? ' · con registro en los últimos ' + vig + ' meses' : '';
+
+  let out = '';
+  out += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">' +
+    '<div style="flex:1;min-width:150px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 14px">' +
+      '<div style="font-size:24px;font-weight:800;color:var(--green)">' + con.length + '</div>' +
+      '<div style="font-size:10px;color:var(--g500)">CON REGISTRO</div></div>' +
+    '<div style="flex:1;min-width:150px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 14px">' +
+      '<div style="font-size:24px;font-weight:800;color:var(--red)">' + sin.length + '</div>' +
+      '<div style="font-size:10px;color:var(--g500)">SIN REGISTRO</div></div>' +
+    '<div style="flex:2;min-width:220px;background:var(--g50);border:1px solid var(--g200);border-radius:8px;padding:10px 14px">' +
+      '<div style="font-size:10px;color:var(--g500);font-weight:700">BUSCANDO</div>' +
+      '<div style="font-size:12px;font-weight:700;color:var(--navy)">' + tokens.map(t => h(t)).join(parcial ? ' ó ' : ' + ') + '</div>' +
+      '<div style="font-size:10px;color:var(--g500)">en ' + h(alcance) + h(filtro) + '</div></div>' +
+    '</div>';
+
+  // Cuando la búsqueda se abrió sola hay que decirlo, y decir por qué: si no,
+  // la lista parece contestar la pregunta que se hizo y contesta una más ancha.
+  if (parcial) {
+    out += '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--r);padding:10px 14px;font-size:11px;color:var(--navy);margin-bottom:12px">' +
+      '<b>Ningún registro tiene todas esas palabras juntas.</b> Se muestran los que tienen <b>alguna</b>, ' +
+      'ordenados por cuántas coinciden. La tarea puede estar escrita de otra forma: ' +
+      'lo que uno llama «limpieza de áreas» quedó registrado como «limpieza de planta» o «orden y limpieza del sector».' +
+      '<div style="font-size:10px;color:var(--g500);margin-top:4px">Mirá la descripción de cada registro antes de dar por buena la coincidencia.</div></div>';
+  }
+
+  if (con.length) {
+    out += '<div style="font-size:13px;font-weight:800;margin:14px 0 6px 0">✅ Tienen registro <span style="font-weight:400;color:var(--g500);font-size:11px">— ordenados por ' + (parcial ? 'cuántas palabras coinciden, y después por fecha' : 'la capacitación más reciente') + '</span></div>';
+    out += '<div style="background:#fff;border:1px solid var(--g200);border-radius:var(--r);overflow:hidden">';
+    con.forEach(c => {
+      const ant = habAntiguedad(c.ultima);
+      // Solo se pinta lo viejo. Marcar en verde lo reciente haría que la lista
+      // pareciera una semaforización formal de habilitaciones, que no lo es.
+      const color = ant.meses == null ? 'var(--g500)'
+                  : ant.meses > 36 ? '#b45309' : 'var(--g600)';
+      out += '<details style="border-bottom:1px solid var(--g100)">';
+      out += '<summary class="leg-y" style="cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;padding:8px 12px;font-size:12px">';
+      out += '<span style="flex:1 1 auto;min-width:0;font-weight:700">' + h(c.p.n) + (c.p.a === false ? ' <span style="font-size:9px;color:var(--red);font-weight:700">INACTIVO</span>' : '') + '</span>';
+      out += '<span style="flex:0 0 150px;color:var(--g500);font-size:11px">' + h(c.p.s || '—') + (c.p.tipo === 'MANPOWER' ? ' <span style="font-size:8px;background:#fef3c7;color:#92400e;padding:1px 4px;border-radius:3px;font-weight:700">MP</span>' : '') + '</span>';
+      out += '<span style="flex:0 0 150px;font-size:11px;color:' + color + '">' + h(c.ultima || '—') + ' · ' + ant.txt + '</span>';
+      out += '<span style="flex:0 0 70px;text-align:right;font-size:11px;color:var(--g500)">' + c.ses.length + ' reg.</span>';
+      out += '</summary>';
+      out += '<div style="padding:2px 12px 10px 26px;background:var(--g50)">';
+      c.ses.forEach(s => {
+        out += '<div style="display:flex;gap:8px;padding:4px 0;font-size:10px;border-bottom:1px solid var(--g200);align-items:flex-start">' +
+          '<span style="flex:0 0 85px;color:var(--g500);font-weight:600">' + h(s.fecha || '—') + '</span>' +
+          '<span style="flex:0 0 95px">' + bg(s.tema, 'blue') + '</span>' +
+          '<span style="flex:1 1 auto;min-width:0;color:var(--g700)">' + h(s.desc) + '</span>' +
+          '<span style="flex:0 0 48px;text-align:right;font-weight:800;color:var(--navy)">' + s.hrs.toFixed(1) + 'h</span>' +
+        '</div>';
+      });
+      out += '</div></details>';
+    });
+    out += '</div>';
+  } else {
+    out += '<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:var(--r);padding:14px;font-size:12px;color:#92400e;margin-top:12px">' +
+      '<b>Nadie tiene registro de esto</b> dentro del alcance elegido. Antes de concluir que hay que capacitar a todos, probá con menos palabras o sacá el filtro de vigencia: la misma tarea pudo quedar escrita de otra forma.</div>';
+  }
+
+  if (externos.size) {
+    // Nombres que figuran en los registros pero no están en la dotación: gente
+    // que se dio de baja, externos, o el mismo nombre escrito distinto. Van
+    // aparte porque no se les puede asignar una tarea desde acá, pero
+    // esconderlos haría que los números no cierren contra el Registro.
+    const nombres = [...externos.keys()].sort();
+    out += '<div style="margin-top:12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--r);padding:10px 14px;font-size:11px;color:var(--navy)">' +
+      '<b>' + nombres.length + ' nombre' + (nombres.length === 1 ? '' : 's') + ' con registro que no está en la dotación actual:</b> ' +
+      '<span style="color:var(--g600)">' + nombres.map(n => h(n)).join(' · ') + '</span>' +
+      '<div style="font-size:10px;color:var(--g500);margin-top:4px">Puede ser personal dado de baja, externos, o el mismo nombre escrito de otra manera.</div></div>';
+  }
+
+  if (sin.length) {
+    out += '<div style="font-size:13px;font-weight:800;margin:16px 0 6px 0">⚠️ Sin registro <span style="font-weight:400;color:var(--g500);font-size:11px">— habría que capacitarlas antes de asignarles la tarea</span></div>';
+    out += '<div class="grid-3">';
+    sin.forEach(p => {
+      out += '<div class="p-card" style="padding:7px 12px;font-size:11px">' +
+        '<span style="flex:1;min-width:0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + h(p.n) + '</span>' +
+        '<span style="color:var(--g500);font-size:10px">' + h(p.s || '—') + '</span></div>';
+    });
+    out += '</div>';
+  }
+
+  $('hab-out').innerHTML = out;
+};
 V.audit=function(){
   const q=$('audit-srch').value.toLowerCase();
   const tipo=$('audit-flt-tipo').value;
@@ -4055,6 +4342,10 @@ function init(){
   $('pers-tag-flt').addEventListener('change',V.pers);
   $('pers-faltante').addEventListener('change',V.pers);
   $('pers-sort').addEventListener('change',V.pers);
+  $('hab-q').addEventListener('input',V.hab);
+  $('hab-sec').addEventListener('change',V.hab);
+  $('hab-vig').addEventListener('change',V.hab);
+  $('hab-act').addEventListener('change',V.hab);
   document.querySelectorAll('.btn-flt-pers').forEach(b=>{
     b.addEventListener('click',function(){
       document.querySelectorAll('.btn-flt-pers').forEach(x=>{x.classList.remove('active');x.className=x.className.replace('btn-p','btn-o')});
@@ -4686,7 +4977,7 @@ async function pullFromGas() {
   const data = await gasGet('getAll');
   if (!data || !data.ok) { updateSyncBadge('offline'); return false; }
   // Solo pisar el estado si hay datos válidos
-  if (Array.isArray(data.R))     R = normalizarR(data.R);
+  if (Array.isArray(data.R))     { R = normalizarR(data.R); _habChips = null; }
   if (Array.isArray(data.PL))    PL = data.PL;
   if (Array.isArray(data.PE))    { PE = normalizarPE(data.PE); limpiarCacheNombres(); }
   if (Array.isArray(data.AUDIT)) AUDIT = data.AUDIT;
