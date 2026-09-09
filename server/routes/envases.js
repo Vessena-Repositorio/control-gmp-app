@@ -2,6 +2,9 @@ import { Router } from 'express';
 import { consultar } from '../db.js';
 import { sincronizarEnvases } from '../sync/sync-envases.js';
 import { exigirTokenSync } from '../lib/auth.js';
+import { exigirPermiso } from '../lib/acceso.js';
+
+const RECURSO = 'control-calidad-envases';
 
 export const rutasEnvases = Router();
 
@@ -123,6 +126,75 @@ rutasEnvases.get('/estado', async (_req, res, next) => {
  * POST /api/envases/sync
  * Dispara la replica a mano. Protegido por SYNC_TOKEN porque escribe en la base.
  */
+
+/**
+ * GET /api/envases/aprobaciones
+ *
+ * Devuelve un objeto indexado por id de control LCC, que es con lo que la app
+ * los tiene en pantalla:  { "1788016440296": { por, en } }
+ *
+ * Va aparte del getAll a proposito: esta app todavia lee los controles del
+ * Apps Script, asi que la aprobacion se cruza en pantalla en vez de venir
+ * mezclada. Cuando la lectura pase a Postgres, esto se puede fusionar.
+ */
+rutasEnvases.get('/aprobaciones', exigirPermiso(RECURSO, 'ver'), async (_req, res, next) => {
+    try {
+        const { rows } = await consultar(
+            `SELECT control_clave, aprobado_por, aprobado_en
+             FROM envases_aprobaciones ORDER BY aprobado_en DESC`
+        );
+        const porId = {};
+        for (const f of rows) {
+            const id = f.control_clave.startsWith('lcc:') ? f.control_clave.slice(4) : f.control_clave;
+            porId[id] = { por: f.aprobado_por, en: f.aprobado_en };
+        }
+        res.json({ aprobaciones: porId });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/**
+ * POST /api/envases/aprobaciones  { id }
+ *
+ * Registra la aprobacion de un control LCC. El permiso se exige aca y no solo
+ * en la pantalla: esconder el boton no impide nada a quien sepa abrir la
+ * consola.
+ */
+rutasEnvases.post('/aprobaciones', exigirPermiso(RECURSO, 'aprobar'), async (req, res, next) => {
+    const id = String(req.body?.id ?? '').trim();
+    if (!id) return res.status(400).json({ error: 'falta el id del control' });
+
+    // Quien aprueba sale de la sesion, nunca del cuerpo del pedido: es la firma
+    // del registro y tiene que ser quien realmente aprobo.
+    const quien = req.usuario.nombre || req.usuario.usuario;
+    const clave = `lcc:${id}`;
+
+    try {
+        const { rows } = await consultar(
+            `INSERT INTO envases_aprobaciones (control_clave, usuario_id, aprobado_por)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (control_clave) DO NOTHING
+             RETURNING aprobado_por, aprobado_en`,
+            [clave, req.usuario.id, quien]
+        );
+
+        // Ya estaba aprobado: se devuelve la aprobacion original, no la de
+        // ahora. Una segunda firma no reemplaza a la primera.
+        if (!rows.length) {
+            const previa = await consultar(
+                `SELECT aprobado_por, aprobado_en FROM envases_aprobaciones
+                 WHERE control_clave = $1`, [clave]
+            );
+            return res.json({ ok: true, yaEstaba: true, ...previa.rows[0] });
+        }
+
+        res.json({ ok: true, yaEstaba: false, ...rows[0] });
+    } catch (err) {
+        next(err);
+    }
+});
+
 rutasEnvases.post('/sync', exigirTokenSync, async (_req, res) => {
     try {
         const conteo = await sincronizarEnvases();

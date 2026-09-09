@@ -47,11 +47,31 @@ async function pendientes() {
                 ((now() AT TIME ZONE $1)::date - c.fecha) AS dias
          FROM controles c
          LEFT JOIN ordenes o ON o.id = c.orden_id
+         LEFT JOIN envases_aprobaciones a ON a.control_clave = c.clave_natural
          WHERE c.tipo IN ('semanal', 'quincenal')
            AND c.raw -> 'mediciones' ->> '_estado' = 'completo'
-           AND coalesce(c.raw -> 'mediciones' ->> '_aprobado', 'pendiente') <> 'aprobado'
+           -- La aprobacion vive en su tabla, no en el control: el Apps Script
+           -- descarta lo que se le escriba en mediciones.
+           AND a.control_clave IS NULL
          ORDER BY c.fecha, c.tipo`,
         [ZONA]
+    );
+    return rows;
+}
+
+
+/**
+ * Lo aprobado en los ultimos 7 dias. Es la otra mitad del estado: saber que
+ * quedo pendiente sirve poco si no se ve tambien lo que se resolvio.
+ */
+async function aprobadosRecientes() {
+    const { rows } = await consultar(
+        `SELECT c.tipo, c.fecha, c.analista, c.envase,
+                a.aprobado_por, a.aprobado_en
+         FROM envases_aprobaciones a
+         JOIN controles c ON c.clave_natural = a.control_clave
+         WHERE a.aprobado_en >= now() - interval '7 days'
+         ORDER BY a.aprobado_en DESC`
     );
     return rows;
 }
@@ -72,45 +92,78 @@ async function diagnostico() {
     return rows[0];
 }
 
-function cuerpo(filas) {
+/**
+ * Un solo correo con las dos mitades del estado: lo que falta aprobar y lo que
+ * se aprobó. Separarlas en dos mensajes haría que el de "todo bien" se lea
+ * primero y el otro se postergue.
+ */
+function cuerpo(pendientes, aprobados) {
     const celda = 'padding:8px 10px;border:1px solid #e5e7eb';
     const th = (t, al) => `<th style="padding:8px 10px;text-align:${al};border:1px solid ${NAV}">${t}</th>`;
+    const bloques = [];
 
-    const cuerpoFilas = filas.map((f) => {
-        const dias = Number(f.dias ?? 0);
-        const color = dias >= 14 ? '#dc2626' : dias >= 7 ? '#d97706' : '#475467';
-        return `<tr>` +
-            `<td style="${celda}"><b>${esc(f.tipo)}</b></td>` +
-            `<td style="${celda}">${esc(f.envase || '—')}</td>` +
-            `<td style="${celda}">${esc(f.orden || (f.origen === 'lcc' ? 'LCC' : '—'))}</td>` +
-            `<td style="${celda}">${esc(comoDia(f.fecha))}</td>` +
-            `<td style="${celda}">${esc(f.analista || '—')}</td>` +
-            `<td style="${celda};color:${color};font-weight:800">${dias}</td>` +
-        `</tr>`;
-    }).join('');
-
-    const plural = filas.length === 1 ? '' : 's';
-    return `<div style="font-family:Arial,Helvetica,sans-serif;background:#f5f5f5;padding:20px">` +
-      `<div style="max-width:820px;margin:auto">` +
-        `<div style="background:${NAV};color:#fff;padding:22px 24px;border-radius:8px 8px 0 0">` +
-          `<div style="font-size:20px;font-weight:800">Vessena S.A. — Análisis pendientes de aprobación</div>` +
-          `<div style="font-size:12px;opacity:.85;margin-top:2px">Control de calidad de envases · SOP-PR-138</div>` +
-        `</div>` +
-        `<div style="background:#fff;padding:24px;border-radius:0 0 8px 8px">` +
-          `<p style="margin:0 0 12px 0">Hola,</p>` +
-          `<p style="margin:0 0 12px 0">Hay <b style="color:#dc2626">${filas.length} análisis</b> ` +
-          `terminado${plural} por las analistas que sigue${plural === '' ? '' : 'n'} esperando aprobación:</p>` +
-          `<table style="width:100%;border-collapse:collapse;font-size:12px;margin:12px 0">` +
+    if (pendientes.length) {
+        const filas = pendientes.map((f) => {
+            const dias = Number(f.dias ?? 0);
+            // El color es la única forma de que una lista larga diga cuál urge.
+            const color = dias >= 14 ? '#dc2626' : dias >= 7 ? '#d97706' : '#475467';
+            return `<tr>` +
+                `<td style="${celda}"><b>${esc(f.tipo)}</b></td>` +
+                `<td style="${celda}">${esc(f.envase || '—')}</td>` +
+                `<td style="${celda}">${esc(f.orden || (f.origen === 'lcc' ? 'LCC' : '—'))}</td>` +
+                `<td style="${celda}">${esc(comoDia(f.fecha))}</td>` +
+                `<td style="${celda}">${esc(f.analista || '—')}</td>` +
+                `<td style="${celda};color:${color};font-weight:800">${dias}</td>` +
+            `</tr>`;
+        }).join('');
+        const p = pendientes.length === 1 ? '' : 's';
+        bloques.push(
+            `<h3 style="margin:18px 0 8px;color:#b45309;font-size:16px">⏳ Esperando aprobación` +
+            ` (${pendientes.length})</h3>` +
+            `<p style="margin:0 0 8px 0;font-size:13px">Terminado${p} por las analistas, sin aprobar todavía:</p>` +
+            `<table style="width:100%;border-collapse:collapse;font-size:12px">` +
             `<thead style="background:${NAV};color:#fff"><tr>` +
               th('Tipo', 'left') + th('Envase', 'left') + th('Orden', 'left') +
               th('Fecha', 'left') + th('Analista', 'left') + th('Días esperando', 'center') +
-            `</tr></thead><tbody>${cuerpoFilas}</tbody></table>` +
-          `<p style="font-size:12px;color:#666;margin-top:14px">Naranja: más de una semana esperando · Rojo: más de dos.</p>` +
-          `<p style="margin:14px 0"><a href="${BASE}/control-calidad-envases.html" ` +
+            `</tr></thead><tbody>${filas}</tbody></table>` +
+            `<p style="font-size:11px;color:#666;margin:6px 0 0">Naranja: más de una semana · Rojo: más de dos.</p>`
+        );
+    }
+
+    if (aprobados.length) {
+        const filas = aprobados.map((f) => `<tr>` +
+            `<td style="${celda}"><b>${esc(f.tipo)}</b></td>` +
+            `<td style="${celda}">${esc(f.envase || '—')}</td>` +
+            `<td style="${celda}">${esc(comoDia(f.fecha))}</td>` +
+            `<td style="${celda}">${esc(f.analista || '—')}</td>` +
+            `<td style="${celda};color:#1d6f52;font-weight:700">${esc(f.aprobado_por)}</td>` +
+            `<td style="${celda}">${esc(comoDia(f.aprobado_en))}</td>` +
+        `</tr>`).join('');
+        bloques.push(
+            `<h3 style="margin:22px 0 8px;color:#1d6f52;font-size:16px">✓ Aprobados esta semana` +
+            ` (${aprobados.length})</h3>` +
+            `<table style="width:100%;border-collapse:collapse;font-size:12px">` +
+            `<thead style="background:${NAV};color:#fff"><tr>` +
+              th('Tipo', 'left') + th('Envase', 'left') + th('Fecha', 'left') +
+              th('Analista', 'left') + th('Aprobó', 'left') + th('Cuándo', 'left') +
+            `</tr></thead><tbody>${filas}</tbody></table>`
+        );
+    }
+
+    return `<div style="font-family:Arial,Helvetica,sans-serif;background:#f5f5f5;padding:20px">` +
+      `<div style="max-width:840px;margin:auto">` +
+        `<div style="background:${NAV};color:#fff;padding:22px 24px;border-radius:8px 8px 0 0">` +
+          `<div style="font-size:20px;font-weight:800">Vessena S.A. — Estado de aprobaciones</div>` +
+          `<div style="font-size:12px;opacity:.85;margin-top:2px">Control de calidad de envases · SOP-PR-138</div>` +
+        `</div>` +
+        `<div style="background:#fff;padding:24px;border-radius:0 0 8px 8px">` +
+          `<p style="margin:0 0 4px 0">Hola,</p>` +
+          bloques.join('') +
+          `<p style="margin:18px 0"><a href="${BASE}/control-calidad-envases.html" ` +
           `style="display:inline-block;padding:10px 20px;background:#0E6B67;color:#fff;` +
-          `text-decoration:none;border-radius:6px;font-weight:bold">Abrir para aprobar →</a></p>` +
+          `text-decoration:none;border-radius:6px;font-weight:bold">Abrir la aplicación →</a></p>` +
           `<p style="margin:12px 0 0 0;font-size:11px;color:#666;border-top:1px solid #e5e7eb;padding-top:12px">` +
-            `Este aviso sale los lunes y solo cuando hay algo pendiente.` +
+            `Sale los lunes, y solo cuando hay algo que contar.` +
           `</p>` +
         `</div></div></div>`;
 }
@@ -128,44 +181,52 @@ export async function revisarPendientesAprobacion({ forzar = false, soloPrevisua
         async () => {
             const reloj = await relojLocal();
             const filas = await pendientes();
+            const aprobados = await aprobadosRecientes();
             const conteo = await diagnostico();
 
-            // Sin pendientes no se manda nada: un correo semanal que dice que
-            // esta todo bien se deja de leer, y despues no se lee el que importa.
-            if (!filas.length) {
-                return { hoy: comoDia(reloj.hoy), conteo, pendientes: 0, correos: 0,
-                         detalle: 'sin pendientes de aprobacion' };
+            // Se manda si hay cualquiera de las dos cosas. Un correo semanal que
+            // solo dice que esta todo bien se deja de leer, y despues no se lee
+            // el que importa.
+            if (!filas.length && !aprobados.length) {
+                return { hoy: comoDia(reloj.hoy), conteo, pendientes: 0, aprobados: 0, correos: 0,
+                         detalle: 'nada pendiente ni aprobado esta semana' };
             }
 
             const para = await supervisoresDe(RECURSO, NOTIFICACION);
-            const plural = filas.length === 1 ? '' : 's';
-            const asunto = `[Calidad] ${filas.length} análisis pendiente${plural} de aprobación`;
+            // El asunto dice lo que hay que hacer, no lo que se hizo: lo que
+            // decide si alguien abre el correo es si le queda algo pendiente.
+            const asunto = filas.length
+                ? `[Calidad] ${filas.length} análisis pendiente${filas.length === 1 ? '' : 's'} de aprobación`
+                : `[Calidad] ${aprobados.length} análisis aprobado${aprobados.length === 1 ? '' : 's'} esta semana`;
 
             if (soloPrevisualizar) {
                 return {
                     modo: 'previsualizacion', hoy: comoDia(reloj.hoy), conteo,
-                    pendientes: filas.length, correos: 0,
+                    pendientes: filas.length, aprobados: aprobados.length, correos: 0,
                     saldria: {
                         asunto, para,
-                        detalle: filas.map((f) =>
+                        esperando: filas.map((f) =>
                             `${f.tipo} · ${f.envase || '—'} · ${comoDia(f.fecha)} · ${f.analista || '—'} · ${f.dias}d`),
+                        aprobados: aprobados.map((f) =>
+                            `${f.tipo} · ${f.envase || '—'} · ${comoDia(f.fecha)} · aprobó ${f.aprobado_por} el ${comoDia(f.aprobado_en)}`),
                     },
                 };
             }
             if (!para.length) {
-                return { hoy: comoDia(reloj.hoy), conteo, pendientes: filas.length, correos: 0,
+                return { hoy: comoDia(reloj.hoy), conteo, pendientes: filas.length,
+                         aprobados: aprobados.length, correos: 0,
                          detalle: 'sin destinatarios cargados' };
             }
 
             let enviados = 0;
             try {
-                await enviar({ para, asunto, html: cuerpo(filas), texto: asunto });
+                await enviar({ para, asunto, html: cuerpo(filas, aprobados), texto: asunto });
                 enviados = 1;
             } catch (err) {
                 console.error('[avisos:envases] fallo:', err.message);
             }
-            return { conteo, pendientes: filas.length, correos: enviados,
-                     detalle: `${filas.length} pendiente(s), ${enviados} correo(s)` };
+            return { conteo, pendientes: filas.length, aprobados: aprobados.length, correos: enviados,
+                     detalle: `${filas.length} pendiente(s), ${aprobados.length} aprobado(s), ${enviados} correo(s)` };
         }
     );
 }
