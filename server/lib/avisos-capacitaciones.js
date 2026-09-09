@@ -38,6 +38,42 @@ const NOMBRE_MODULO = {
     'INDUCCION SEGURIDAD/SALUD': 'Inducción Seg./Salud',
 };
 
+/**
+ * Que modulos de induccion cubre un registro. Mira el TEMA y la DESCRIPCION.
+ *
+ * Los 3.130 registros historicos usan una taxonomia vieja: el reglamento esta
+ * descrito en `desc` con el tema puesto como PROCEDIMIENTO u OTRO. Clasificando
+ * solo por tema quedaban afuera 94 registros de reglamento.
+ *
+ * El tema SEGURIDAD/SALUD por si solo NO cuenta: agrupa charlas corrientes
+ * -simulacros, extintores, ergonomia- que no son la induccion de ingreso.
+ * Contarlas daba 7 personas como completas sin estarlo.
+ *
+ * Tiene que coincidir con `modulosDeRegistro` de capacitaciones_vessena.html:
+ * si divergen, la pantalla y el correo vuelven a decir cosas distintas sobre el
+ * mismo dato, que es el problema que ya tuvimos con el limite de un anio.
+ */
+function normTxt(s) {
+    return String(s == null ? '' : s).toUpperCase()
+        .replace(/[ÁÀÄÂ]/g, 'A').replace(/[ÉÈËÊ]/g, 'E').replace(/[ÍÌÏÎ]/g, 'I')
+        .replace(/[ÓÒÖÔ]/g, 'O').replace(/[ÚÙÜÛ]/g, 'U').replace(/Ñ/g, 'N');
+}
+
+function modulosDeRegistro(r) {
+    if (!r) return [];
+    const t = normTxt(r.tema).trim();
+    const d = normTxt(r.desc);
+    const m = [];
+    if (t === 'REGLAMENTO' || /REGLAMENTO/.test(d)) m.push('REGLAMENTO');
+    if (t === 'INDUCCION GMP' || t === 'MANUAL INDUCION'
+        || /INDUCCION GMP|MANUAL DE INDUCCION|MANUAK DE INDUCCION|CONCEPTOS GMP|GMP MANTENIMIENTO|INDUCCINON GMP/.test(d))
+        m.push('INDUCCION GMP');
+    if (t === 'INDUCCION SEGURIDAD/SALUD'
+        || /INDUCCION SEGURIDAD|INDUCCION DE SEGURIDAD|INDUCCION SYSO|SYSO/.test(d))
+        m.push('INDUCCION SEGURIDAD/SALUD');
+    return m;
+}
+
 function esc(s) {
     return String(s ?? '').replace(/[&<>"]/g, (c) =>
         ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -316,11 +352,12 @@ export async function revisarInduccionesPendientes({ forzar = false, soloPrevisu
             // mayusculas: es la unica llave que comparten las dos colecciones.
             const hechos = new Map();
             for (const r of registros) {
-                if (!MODULOS_INDUCCION.includes(r?.tema)) continue;
+                const mods = modulosDeRegistro(r);
+                if (!mods.length) continue;
                 const nom = String(r.nom || '').toUpperCase().trim();
                 if (!nom) continue;
                 if (!hechos.has(nom)) hechos.set(nom, new Set());
-                hechos.get(nom).add(r.tema);
+                for (const m of mods) hechos.get(nom).add(m);
             }
 
             // El aviso es sobre INGRESOS: gente que entro hace poco y todavia no
