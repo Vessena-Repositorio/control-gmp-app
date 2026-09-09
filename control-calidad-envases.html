@@ -3534,6 +3534,7 @@
                                                 const fechaAprob = aprob ? aprob.en : '';
                                                 const estadoCtrl = (control.mediciones && control.mediciones._estado) || 'completo';
                                                 const esAprobado = !!aprob;
+                                                const esBorrador = estadoCtrl === 'borrador';
 
                                                 // Estilos según estado
                                                 const chipStyle = esBorrador
