@@ -158,7 +158,7 @@ summary.leg-y:hover{background:var(--g50)!important}
 
 <div class="hdr">
   <div class="hdr-top">
-    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-10l</span></div></div>
+    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-10m</span></div></div>
     <div class="code">REG-SOP-AC-039-D</div>
   </div>
   <div class="nav" id="nav">
@@ -4166,6 +4166,35 @@ function fuzzyMatch(name,candidates){
 
 let pendingImport=null;
 
+
+/* ¿Esta persona "nueva" ya tiene historia en el sistema?
+
+   La importacion mensual da de alta a quien no reconoce, y le pone fecha de
+   alta HOY. Si un mes el nombre viene escrito distinto -una coma, un segundo
+   apellido, un acento- el emparejamiento falla, la persona se duplica y el
+   veterano pasa a ser un ingreso reciente al que la app le vuelve a pedir la
+   induccion. Eso paso con Federico Ramirez.
+
+   Los registros de capacitacion son la señal que faltaba mirar: si ese nombre
+   ya figura en el historial, no es un ingreso. Puede ser la misma persona
+   escrita distinto, o alguien que estuvo, se fue y volvio; en los dos casos la
+   fecha de alta de hoy es falsa.
+
+   La solucion de fondo es identificar por cedula, que Vessena va a empezar a
+   pedir. Esto no la reemplaza: acorta el daño mientras tanto. */
+function historiaPrevia(nombre){
+  const clave = normTxt(nombre).trim();
+  if (!clave) return null;
+  let cuantos = 0, primera = '';
+  R.forEach(r => {
+    if (normTxt(r.nom).trim() !== clave) return;
+    cuantos++;
+    const f = String(r.fecha || '').slice(0, 10);
+    if (f && (!primera || f < primera)) primera = f;
+  });
+  return cuantos ? { cuantos, primera } : null;
+}
+
 $('xlsx-admin').addEventListener('change',function(e){
   const file=e.target.files[0];if(!file)return;
   const reader=new FileReader();
@@ -4234,7 +4263,7 @@ $('xlsx-admin').addEventListener('change',function(e){
       // Build modal content
       let summ='<b>Archivo:</b> '+h(file.name)+' — '+excelPeople.length+' personas en '+wb.SheetNames.length+' hojas<br>';
       summ+='✅ <b>'+matched.size+'</b> existentes <span style="color:var(--g500);font-size:10px">(se mantiene sector y fecha de alta original)</span> &nbsp;·&nbsp; ';
-      summ+='➕ <b>'+newPeople.length+'</b> nuevos <span style="color:var(--g500);font-size:10px">(fecha alta = hoy)</span> &nbsp;·&nbsp; ';
+      summ+='➕ <b>'+newPeople.length+'</b> nuevos <span style="color:var(--g500);font-size:10px">(fecha de alta = hoy, o la de su primera capacitación si ya tenía)</span> &nbsp;·&nbsp; ';
       summ+='➖ <b>'+inactivePeople.length+'</b> a marcar inactivos <span style="color:var(--g500);font-size:10px">(fecha baja = hoy)</span>';
       $('import-summary').innerHTML=summ;
       
@@ -4259,7 +4288,18 @@ $('xlsx-admin').addEventListener('change',function(e){
         newHtml+='<table style="width:100%;font-size:11px"><thead><tr><th>Nombre</th><th>Excel dice</th><th>Sector en la app</th><th>Tipo</th></tr></thead><tbody>';
         newPeople.forEach((p,i)=>{
           newHtml+='<tr>';
-          newHtml+='<td style="font-weight:600">'+h(p.name)+'</td>';
+          // Si ese nombre ya tiene capacitaciones registradas, no es un
+          // ingreso: es alguien que ya estaba y el emparejamiento no reconocio,
+          // o alguien que se fue y volvio. Se avisa ANTES de aceptar, porque
+          // despues queda duplicado en el padron y con el legajo partido en dos.
+          const prev = historiaPrevia(p.name);
+          newHtml+='<td style="font-weight:600">'+h(p.name);
+          if (prev) {
+            newHtml+='<div style="font-size:9px;font-weight:700;color:#b45309;margin-top:2px">' +
+              '⚠ Ya tiene ' + prev.cuantos + ' capacitación' + (prev.cuantos===1?'':'es') +
+              ' desde ' + h(prev.primera) + ' — revisá si no es alguien que ya está, con el nombre escrito distinto</div>';
+          }
+          newHtml+='</td>';
           newHtml+='<td style="color:var(--g500);font-size:10px">'+h(p.sectorOrig)+'</td>';
           newHtml+='<td><select id="new-sec-'+i+'" style="font-size:11px;padding:3px 6px;width:100%">';
           SCS.forEach(s=>{
@@ -4334,7 +4374,12 @@ $('import-confirm').addEventListener('click',function(){
         }
       }
     }
-    PE.push({n:ep.name,s:sec,a:true,tipo:ep.tipo,tags:ep.tags||[],fechaAlta:new Date().toISOString().slice(0,10)});
+    // La fecha de alta sale del primer registro de capacitacion si esa persona
+    // ya tiene historia. Poner HOY para todos es lo que convertia veteranos en
+    // ingresos recientes y les volvia a pedir la induccion.
+    const _prev = historiaPrevia(ep.name);
+    const _alta = (_prev && _prev.primera) ? _prev.primera : new Date().toISOString().slice(0,10);
+    PE.push({n:ep.name,s:sec,a:true,tipo:ep.tipo,tags:ep.tags||[],fechaAlta:_alta});
     addedCount++;
   });
   
