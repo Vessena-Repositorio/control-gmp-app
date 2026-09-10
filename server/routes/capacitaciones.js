@@ -191,6 +191,102 @@ rutasCapacitaciones.post('/datos', escribir, async (req, res, next) => {
     }
 });
 
+
+/**
+ * POST /api/capacitaciones/resembrar  { forzar?: true }
+ *
+ * Vuelve a armar las colecciones desde lo que la replica trajo de la hoja.
+ *
+ * La siembra inicial corre una sola vez, en la migracion. Si despues se corrige
+ * algo en la hoja -por ejemplo dos registros que compartian id y por eso la
+ * replica guardaba uno solo- ese arreglo no llega solo a la tabla nueva. Sin
+ * esta ruta habria que esperar al corte y confiar en que la primera escritura
+ * de la app lo tape, que es exactamente la clase de "se arregla despues" que ya
+ * nos costo caro.
+ *
+ * Se niega si alguna coleccion fue escrita por la app: a partir de ahi Postgres
+ * es la fuente de verdad y la hoja quedo congelada, asi que resembrar seria
+ * volver atras y perder lo cargado desde el corte. `forzar: true` lo permite
+ * igual, pero deja respaldo de lo que pisa.
+ */
+rutasCapacitaciones.post('/resembrar', escribir, async (req, res, next) => {
+    const forzar = (req.body || {}).forzar === true;
+    const MARCAS_DE_SIEMBRA = ['siembra desde la replica', 'coleccion vacia al sembrar', 'resembrado desde la replica'];
+
+    try {
+        const resultado = await enTransaccion(async (c) => {
+            await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['capacitaciones']);
+
+            const { rows: actuales } = await c.query(
+                'SELECT clave, valor, version, actualizado_por FROM capacitaciones_datos'
+            );
+            const tocadas = actuales
+                .filter((f) => !MARCAS_DE_SIEMBRA.includes(String(f.actualizado_por || '')))
+                .map((f) => f.clave);
+
+            if (tocadas.length && !forzar) {
+                return { yaEscritas: tocadas };
+            }
+
+            // Lo que la replica tiene hoy, rearmado en el arreglo que espera la
+            // app. `pos` conserva el orden original de la hoja.
+            const { rows: desdeReplica } = await c.query(
+                `SELECT coleccion, json_agg(raw ORDER BY pos NULLS LAST, id)::text AS valor
+                 FROM documentos
+                 WHERE dominio = 'capacitaciones'
+                 GROUP BY coleccion`
+            );
+            if (!desdeReplica.length) {
+                return { sinReplica: true };
+            }
+
+            const previas = new Map(actuales.map((f) => [f.clave, f]));
+            const cambios = {};
+            for (const f of desdeReplica) {
+                if (!ES_CLAVE.has(f.coleccion)) continue;
+                const antes = previas.get(f.coleccion);
+                if (antes) {
+                    await c.query(
+                        `INSERT INTO capacitaciones_respaldos (clave, valor, version, guardado_por, motivo)
+                         VALUES ($1, $2, $3, $4, $5)`,
+                        [f.coleccion, antes.valor, antes.version, req.usuario.nombre, 'antes de resembrar']
+                    );
+                }
+                const { rows: r2 } = await c.query(
+                    `INSERT INTO capacitaciones_datos (clave, valor, version, actualizado_por)
+                     VALUES ($1, $2, 1, 'resembrado desde la replica')
+                     ON CONFLICT (clave) DO UPDATE
+                        SET valor = EXCLUDED.valor,
+                            version = capacitaciones_datos.version + 1,
+                            actualizado_en = now(),
+                            actualizado_por = EXCLUDED.actualizado_por
+                     RETURNING version`,
+                    [f.coleccion, f.valor]
+                );
+                let cuantos = null;
+                try { cuantos = JSON.parse(f.valor).length; } catch { /* se informa null */ }
+                let antesCuantos = null;
+                if (antes) { try { antesCuantos = JSON.parse(antes.valor).length; } catch { /* idem */ } }
+                cambios[f.coleccion] = { antes: antesCuantos, ahora: cuantos, version: Number(r2[0].version) };
+            }
+            return { ok: true, cambios };
+        });
+
+        if (resultado.yaEscritas) {
+            return res.status(409).json({
+                error: 'estas colecciones ya se escribieron desde la app',
+                colecciones: resultado.yaEscritas,
+                queHacer: 'despues del corte la hoja quedo congelada: resembrar volveria atras. Si aun asi hace falta, mandá forzar: true',
+            });
+        }
+        if (resultado.sinReplica) {
+            return res.status(409).json({ error: 'la replica no tiene datos de capacitaciones' });
+        }
+        res.json(resultado);
+    } catch (err) {
+        next(err);
+    }
+});
 /**
  * GET /api/capacitaciones/respaldos — que hay para volver atras.
  *

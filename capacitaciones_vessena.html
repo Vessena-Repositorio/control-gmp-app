@@ -178,7 +178,7 @@ summary.leg-y:hover{background:var(--g50)!important}
 
 <div class="hdr">
   <div class="hdr-top">
-    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-10a</span></div></div>
+    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-10b</span></div></div>
     <div class="code">REG-SOP-AC-039-D</div>
   </div>
   <div class="nav" id="nav">
@@ -827,6 +827,28 @@ const TC={"REGLAMENTO":"blue","INDUCCION GMP":"green","INDUCCION SEGURIDAD/SALUD
    "Inducción GMP, lineamientos de seguridad, Reglamento interno". */
 const IND_MODULOS = ['REGLAMENTO', 'INDUCCION GMP', 'INDUCCION SEGURIDAD/SALUD'];
 
+
+/* ── Identidad de un registro ────────────────────────────────────────────────
+   Los ids se generaban como `Date.now() + Math.random()`: un NUMERO con
+   decimales. Google Sheets lo guarda como numero y le recorta precision, asi
+   que dos registros creados en el mismo milisegundo terminaban con el mismo id.
+
+   No es hipotetico. El 07/08/2026 dos sesiones quedaron con sus asistentes
+   compartiendo id, y la replica -que guarda una fila por id- se quedo con uno
+   de cada par. Rodrigo Torres y Stefani Sosa habrian perdido su asistencia al
+   pasar a Postgres, sin que nada lo avisara.
+
+   El prefijo de letra es lo que arregla la causa: obliga a la hoja a tratarlo
+   como texto, y ahi no hay redondeo posible. El resto es tiempo en base 36 mas
+   azar, que alcanza de sobra para lo que se carga en un dia.
+
+   `crypto.randomUUID` seria mas corto de escribir, pero pide contexto seguro y
+   la app se sirve por http en la red interna. */
+function nuevoId(prefijo) {
+  const t = Date.now().toString(36);
+  const a = Math.random().toString(36).slice(2, 8);
+  return (prefijo || 'r') + t + a;
+}
 function normTxt(s){
   return String(s == null ? '' : s).toUpperCase()
     .replace(/[ÁÀÄÂ]/g,'A').replace(/[ÉÈËÊ]/g,'E').replace(/[ÍÌÏÎ]/g,'I')
@@ -2577,7 +2599,7 @@ function sub(){
     const base={fecha:f,mes:ms,tema:tm.tema,desc:tm.desc,cod:$('fk').value,hrs:parseFloat($('fh').value)||0,tipo:$('fy').value,ev:$('fe').value,plan:$('fp').value,resp:$('fr').value,puntajeMin:parseFloat($('f-puntaje').value)||0,planId:planId,dirigido:dirigido,persEst:persEst,year:regYear};
     const isInduction=INDUCTION_TOPICS.includes(tm.tema);
     tempParts.forEach(p=>{
-      R.push({...base,id:Date.now()+Math.random(),nom:p.nom,sec:p.sec,nota:p.nota||''});
+      R.push({...base,id:nuevoId(),nom:p.nom,sec:p.sec,nota:p.nota||''});
       if(isInduction){
         const found=findPerson(p.nom);
         if(!found){
@@ -3534,7 +3556,7 @@ window.repetirPlan=function(id){
   const estado=minMonth<=curMonth?'pendiente':'futura';
   
   // Create new plan item
-  const newId=Date.now()+Math.round(Math.random()*1000);
+  const newId=nuevoId("pl");
   const newItem={
     id:newId,
     t:orig.t,
@@ -4372,7 +4394,7 @@ function init(){
     const year=parseInt($('plan-year').value)||new Date().getFullYear();
     const tema=prompt('Nombre de la capacitación:');
     if(!tema||!tema.trim())return;
-    const newId=Date.now()+Math.round(Math.random()*1000);
+    const newId=nuevoId("pl");
     PL.push({
       id:newId,t:tema.trim(),o:'',d:'',dc:'',ev:'NO',h:1,
       m:[],e:'futura',resp:'',email:'',fr:'',year:year
@@ -4397,7 +4419,7 @@ function init(){
       const curItems=PL.filter(p=>p.year===parseInt($('plan-year').value));
       curItems.forEach(p=>{
         PL.push({
-          id:Date.now()+Math.round(Math.random()*10000),
+          id:nuevoId("pl"),
           t:p.t,o:p.o,d:p.d,dc:p.dc,ev:p.ev,h:p.h,
           m:[...p.m],e:'futura',resp:p.resp,email:p.email,fr:'',year:yr,
           persEst:p.persEst||0
@@ -4684,7 +4706,7 @@ $('ri-confirm').addEventListener('click',function(){
   
   d.participants.forEach(p=>{
     R.push({
-      id:Date.now()+Math.random(),
+      id:nuevoId(),
       fecha:d.fecha,mes:ms,tema:d.tema,desc:d.desc,cod:d.cod,
       hrs:d.hrs,tipo:d.tipo,ev:d.ev,plan:planId?'SI':'NO',
       resp:d.resp,puntajeMin:d.puntajeMin,
@@ -5722,7 +5744,7 @@ function bulkApply() {
       puntajeMin: s.puntajeMin, planId: planId, dirigido: s.dirigido || '', persEst: s.persEst || 0, year: regYear
     };
     asis.forEach(a => {
-      R.push({...base, id: Date.now() + Math.random(), nom: a.nom, sec: a.sec, nota: a.nota || ''});
+      R.push({...base, id: nuevoId(), nom: a.nom, sec: a.sec, nota: a.nota || ''});
       created++;
     });
     // Actualizar estado del plan item vinculado según cobertura (cumplida/parcial)
