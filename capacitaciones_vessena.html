@@ -151,7 +151,7 @@ summary.leg-y:hover{background:var(--g50)!important}
 
 <div class="hdr">
   <div class="hdr-top">
-    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-10g</span></div></div>
+    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-10h</span></div></div>
     <div class="code">REG-SOP-AC-039-D</div>
   </div>
   <div class="nav" id="nav">
@@ -3036,6 +3036,7 @@ V.plan=function(){
     html+='<td style="white-space:nowrap"><button class="btn-i" onclick="event.stopPropagation();editPlan('+p.id+')" title="Editar">⚙️</button>';
     if(p.e!=='suspendida'){html+='<button class="btn-i" onclick="event.stopPropagation();suspPlan('+p.id+')" title="Suspender">⏸️</button>'}
     else{html+='<button class="btn-i" onclick="event.stopPropagation();reactivarPlan('+p.id+')" title="Reactivar">▶️</button>'}
+    html+='<button class="btn-i" onclick="event.stopPropagation();reprogramarPlan('+p.id+')" title="Reprogramar: mover esta misma capacitación a otro mes">🗓️</button>';
     html+='<button class="btn-i" onclick="event.stopPropagation();vincularPlan('+p.id+')" title="Buscar registros que podrían ser esta capacitación y vincularlos">🔗</button>';
     html+='<button class="btn-i" onclick="event.stopPropagation();repetirPlan('+p.id+')" title="Repetir">🔄</button>';
     html+='<button class="btn-i" onclick="event.stopPropagation();eliminarPlan('+p.id+')" title="Eliminar" style="color:var(--red)">🗑️</button>';
@@ -3767,6 +3768,66 @@ window.eliminarPlan=function(id){
 };
 
 // ══════════ REPETIR PLAN ══════════
+
+/* Reprogramar: la MISMA partida se corre de mes.
+
+   No es lo mismo que repetir. Repetir crea una ronda nueva porque la
+   capacitacion se dicta otra vez -ingresos nuevos, refuerzo- y deja la original
+   donde estaba: dos filas, las dos ciertas. Reprogramar mueve la unica que hay.
+
+   Hasta ahora solo existia "repetir", asi que reprogramar se hacia con el, y el
+   resultado era una fila fantasma en el mes viejo, marcada como atrasada para
+   siempre, mas una ronda 2 que nadie pidio. La otra forma era abrir el
+   formulario y editar un campo de texto llamado "Meses planificados", que no se
+   parece en nada a "reprogramar".
+
+   Los meses originales quedan en `mOriginal` -es lo que hace que la partida
+   figure como Reprogramada y no como si siempre hubiera estado ahi- y el motivo
+   queda en la auditoria. Correr una capacitacion del plan anual es una decision
+   que despues hay que poder explicar. */
+window.reprogramarPlan = function(id){
+  if (!canDo('edit_plan')) { alert('No tenés permisos para modificar el plan.'); return; }
+  const p = PL.find(x => Number(x.id) === Number(id));
+  if (!p) return;
+
+  const actuales = (p.m || []).join(',');
+  const entrada = prompt(
+    'Reprogramar "' + p.t + '"\n\n' +
+    'Meses actuales: ' + (actuales || '(ninguno)') + '\n' +
+    'Escribí los meses nuevos en números, separados por coma.\n' +
+    'Ejemplo: 9   ·   o   9,10 si se dicta en dos meses.',
+    actuales);
+  if (entrada === null) return;
+
+  const nuevos = entrada.split(',').map(Number).filter(n => n >= 1 && n <= 12);
+  if (!nuevos.length) { alert('No entendí los meses. Van en números del 1 al 12, separados por coma.'); return; }
+  if (JSON.stringify(nuevos) === JSON.stringify(p.m)) { alert('Son los mismos meses que ya tenía.'); return; }
+
+  const motivo = prompt(
+    '¿Por qué se reprograma?\n\n' +
+    'Queda en la auditoría junto con el cambio de meses.', '');
+  if (motivo === null) return;
+
+  const nombresMes = nuevos.map(n => MS[n - 1]).join(', ');
+  pendingAuditInfo = null;
+  pendingSave = function(){
+    const usr = $('pw-user').value.trim() || '—';
+    // Solo la PRIMERA reprogramacion guarda los meses originales: si se
+    // reprograma dos veces, lo que interesa sigue siendo de donde salio.
+    if (!p.mOriginal) p.mOriginal = [...p.m];
+    const antes = (p.m || []).join(',');
+    p.m = nuevos;
+    logAudit('EDICIÓN PLAN',
+      'REPROGRAMADA: [' + p.t + '] meses ' + antes + ' → ' + nuevos.join(',') +
+      (motivo.trim() ? ' — Motivo: ' + motivo.trim() : ' — sin motivo indicado'), usr);
+    sv(); V.plan(); V.dash();
+  };
+  pedirConfirmacion(
+    '<b>Reprogramar</b><br>' + h(p.t) +
+    '<br>Meses: ' + (actuales || '—') + ' → <b>' + nuevos.join(',') + '</b> (' + h(nombresMes) + ')' +
+    (motivo.trim() ? '<br>Motivo: ' + h(motivo.trim()) : '') +
+    '<br><span style="color:var(--g500);font-size:11px">Se mueve esta misma capacitación. No se crea una ronda nueva.</span>');
+};
 window.repetirPlan=function(id){
   if(!canDo('edit_plan')){alert('No tenés permisos para modificar el plan.');return}
   const orig=PL.find(x=>x.id===id);if(!orig)return;
@@ -3812,13 +3873,13 @@ window.repetirPlan=function(id){
     motivoRepeticion:motivo.trim()
   };
   
-  // Mark original as Ronda 1 if not already
-  if(!orig.ronda)orig.ronda=1;
-  if(!orig.origenId)orig.origenId=orig.id;
-  
-  // Password protection
   pendingSave=function(){
     const usr=$('pw-user').value.trim()||'—';
+    // La original se marca como Ronda 1 RECIEN al confirmar. Antes se marcaba
+    // al abrir el dialogo, asi que cancelar dejaba igual la etiqueta puesta y
+    // el proximo guardado -cualquiera, desde cualquier pantalla- la persistia.
+    if(!orig.ronda)orig.ronda=1;
+    if(!orig.origenId)orig.origenId=orig.id;
     PL.push(newItem);
     logAudit('EDICIÓN PLAN','REPETICIÓN: ['+orig.t+'] → Ronda '+nextRound+' (meses: '+mArr.join(',')+') — Motivo: '+motivo.trim(),usr);
     sv();V.plan();V.dash();
