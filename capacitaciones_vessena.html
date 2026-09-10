@@ -178,7 +178,7 @@ summary.leg-y:hover{background:var(--g50)!important}
 
 <div class="hdr">
   <div class="hdr-top">
-    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-09c</span></div></div>
+    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-10a</span></div></div>
     <div class="code">REG-SOP-AC-039-D</div>
   </div>
   <div class="nav" id="nav">
@@ -850,6 +850,55 @@ function modulosDeRegistro(r){
 }
 
 function esInduccion(r){ return modulosDeRegistro(r).length > 0; }
+
+/* ── Alcance del control de inducción ────────────────────────────────────────
+   Los registros arrancan en 2020. La inducción de quien ya trabajaba antes de
+   esa fecha ocurrió y quedó en papel, pero no está en ninguna planilla y nunca
+   va a estarlo. Contarla como "pendiente" convertía el indicador en ruido: de
+   559 personas con registros, a 460 les falta el reglamento — una lista con la
+   que nadie puede hacer nada, y que esconde los huecos que sí son reales.
+
+   Se los deja FUERA DE ALCANCE, no como cumplidos. La app no sabe si hicieron
+   la inducción; lo que sabe es que no puede saberlo, y eso se muestra aparte.
+
+   Dos señales marcan a alguien como anterior al sistema:
+
+     1. La fecha de alta es anterior a 2020.
+     2. Tiene registros de capacitación ANTERIORES a su propia fecha de alta.
+        Eso significa que la fecha de alta no es su ingreso real. Es lo que pasa
+        cuando alguien cambia de sector: la ficha toma la fecha del cambio y un
+        veterano de siete años aparece como ingreso reciente. Federico Ramírez
+        es el caso: primer registro en julio de 2020, alta puesta en 2026.
+
+   La segunda señal se corrige sola a medida que se arreglan las fechas de alta,
+   y no depende de que alguien se acuerde de tocar un botón. */
+const INICIO_REGISTROS = '2020-01-01';
+
+// Módulos de inducción y primer registro de cada persona, en UNA pasada sobre
+// R. Antes esto se hacía recorriendo los 3.130 registros por cada persona:
+// medio millón de vueltas para responder una pregunta que se contesta con una.
+function indResumenPorPersona(){
+  const m = new Map();
+  R.forEach(r => {
+    const fp = findPerson(r.nom);
+    if (!fp) return;
+    let e = m.get(fp.n);
+    if (!e) { e = { modulos: new Set(), primero: '' }; m.set(fp.n, e); }
+    const f = String(r.fecha || '').slice(0, 10);
+    if (f && (!e.primero || f < e.primero)) e.primero = f;
+    modulosDeRegistro(r).forEach(x => e.modulos.add(x));
+  });
+  return m;
+}
+
+// ¿Esta persona ingresó antes de que existieran los registros?
+function indFueraDeAlcance(p, resumen){
+  const alta = String(p.fechaAlta || '').slice(0, 10);
+  if (!alta) return false;                       // sin alta se cuenta aparte, no acá
+  if (alta < INICIO_REGISTROS) return true;
+  const primero = resumen && resumen.primero;
+  return !!(primero && primero < alta);
+}
 
 const SCOLORS=["#2563eb","#059669","#d97706","#dc2626","#7c3aed","#0d9488","#ec4899","#6366f1","#ea580c","#06b6d4","#84cc16","#f43f5e","#8b5cf6","#14b8a6","#f59e0b","#64748b","#0ea5e9","#b91c1c","#a16207","#4f46e5","#0369a1","#9333ea"];
 
@@ -1956,8 +2005,25 @@ V.gerencia = function(){
   // ═══ NUEVOS INGRESOS CON INDUCCIÓN PENDIENTE (todas las categorías) ═══
   const nuevosPendientes = grComputeNuevosPendientes(year);
   window._grNuevosPendientes = nuevosPendientes;
+  // Quién queda fuera de este control. Un indicador que dice "todo bien" sin
+  // aclarar a cuánta gente no está mirando es peor que no tenerlo: se lee como
+  // cobertura completa cuando es cobertura parcial.
+  const _ap = nuevosPendientes.aparte || { antesDelSistema: [], sinFechaAlta: [] };
+  const notaAlcance = (_ap.antesDelSistema.length || _ap.sinFechaAlta.length)
+    ? '<div style="margin-top:8px;background:var(--g50);border:1px solid var(--g200);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--g600)">' +
+      '<b style="color:var(--navy)">Fuera de este control:</b> ' +
+      (_ap.antesDelSistema.length
+        ? '<b>' + _ap.antesDelSistema.length + '</b> ingresaron antes de que existieran los registros (2020) '
+        : '') +
+      (_ap.antesDelSistema.length && _ap.sinFechaAlta.length ? '· ' : '') +
+      (_ap.sinFechaAlta.length
+        ? '<b>' + _ap.sinFechaAlta.length + '</b> sin fecha de alta cargada'
+        : '') +
+      '<div style="font-size:10px;color:var(--g500);margin-top:3px">De ellos la app no sabe si hicieron la inducción: sabe que no puede saberlo. ' +
+      'Las fechas de alta se corrigen en Personal, con “✏️ Editar alta”.</div></div>'
+    : '';
   if (nuevosPendientes.length === 0) {
-    $('gr-nuevos').innerHTML = '<div style="padding:12px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;color:#166534;font-size:13px;font-weight:600;text-align:center">✓ Todos los ingresos del último año tienen inducción completa</div>';
+    $('gr-nuevos').innerHTML = '<div style="padding:12px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;color:#166534;font-size:13px;font-weight:600;text-align:center">✓ Todos los ingresos del último año tienen inducción completa</div>' + notaAlcance;
   } else {
     const infracciones = nuevosPendientes.filter(x => x.categoria === 'infraccion');
     const proximos = nuevosPendientes.filter(x => x.categoria === 'proximo');
@@ -1998,7 +2064,7 @@ V.gerencia = function(){
       : '';
     $('gr-nuevos').innerHTML = summaryHtml +
       '<div style="border:1px solid var(--g200);border-radius:8px;overflow:hidden">' + rowsHtml + extra + '</div>' +
-      mailNote;
+      mailNote + notaAlcance;
   }
 
   // ═══ FOCO DE ESTE MES ═══
@@ -2172,30 +2238,33 @@ window.grExportSinCapCSV = function() {
 
 // Computar nuevos ingresos con inducción pendiente (TODOS los que no completaron los 3 módulos,
 // con o sin sobrepasar los 30 días — se categorizan por urgencia)
+//
+// Quien ingresó antes de que existieran los registros no entra: ver
+// indFueraDeAlcance(). Se cuentan aparte y se muestran, para que "no lo estamos
+// mirando" no se confunda con "está todo bien".
 function grComputeNuevosPendientes(year) {
   const today = new Date();
   const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const result = [];
+  const resumen = indResumenPorPersona();
+  const aparte = { antesDelSistema: [], sinFechaAlta: [] };
 
   PE.forEach(p => {
     if (p.a === false) return;
-    if (!p.fechaAlta) return;
+    if (!p.fechaAlta) { aparte.sinFechaAlta.push(p); return; }
     let alta;
     try { alta = new Date(p.fechaAlta); if (isNaN(alta.getTime())) return; } catch(e) { return; }
+
+    const r = resumen.get(p.n);
+    if (indFueraDeAlcance(p, r)) { aparte.antesDelSistema.push(p); return; }
+
     const altaOnly = new Date(alta.getFullYear(), alta.getMonth(), alta.getDate());
     const dias = Math.floor((todayOnly - altaOnly) / 86400000);
     // Solo excluir bajas o muy antiguos (más de 1 año), para no llenar de gente vieja
     if (dias > 365) return;
     if (dias < 0) return;
 
-    // Buscar módulos de inducción registrados (histórico, cualquier año)
-    const modulos = new Set();
-    R.forEach(r => {
-      if (!esInduccion(r)) return;
-      const fp = findPerson(r.nom);
-      if (!fp) return;
-      if (fp.n === p.n) modulosDeRegistro(r).forEach(m => modulos.add(m));
-    });
+    const modulos = r ? r.modulos : new Set();
     const falta = IND_MODULOS.filter(t => !modulos.has(t));
     if (falta.length === 0) return;
 
@@ -2207,8 +2276,12 @@ function grComputeNuevosPendientes(year) {
 
     result.push({ persona: p, dias: dias, falta: falta, tiene: [...modulos], categoria: categoria, orden: orden });
   });
+
   // Orden: primero los de infracción (más días), después próximos, después en período
-  return result.sort((a,b) => a.orden - b.orden || b.dias - a.dias);
+  result.sort((a,b) => a.orden - b.orden || b.dias - a.dias);
+  // Va colgado del resultado para no cambiarle la forma a quien ya lo usa.
+  result.aparte = aparte;
+  return result;
 }
 
 // Modal: ver todos los nuevos ingresos con inducción pendiente

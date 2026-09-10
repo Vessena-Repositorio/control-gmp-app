@@ -350,16 +350,23 @@ export async function revisarInduccionesPendientes({ forzar = false, soloPrevisu
 
             // Indice de quien hizo que modulo de induccion, por nombre en
             // mayusculas: es la unica llave que comparten las dos colecciones.
+            // Se guarda tambien la fecha del primer registro de cada uno, que
+            // es lo que permite detectar una fecha de alta que no es el ingreso
+            // real (ver ANTES_DEL_SISTEMA mas abajo).
             const hechos = new Map();
+            const primerRegistro = new Map();
             for (const r of registros) {
-                const mods = modulosDeRegistro(r);
-                if (!mods.length) continue;
                 const nom = String(r.nom || '').toUpperCase().trim();
                 if (!nom) continue;
+                const f = String(r.fecha || '').slice(0, 10);
+                if (f && (!primerRegistro.has(nom) || f < primerRegistro.get(nom))) {
+                    primerRegistro.set(nom, f);
+                }
+                const mods = modulosDeRegistro(r);
+                if (!mods.length) continue;
                 if (!hechos.has(nom)) hechos.set(nom, new Set());
                 for (const m of mods) hechos.get(nom).add(m);
             }
-
             // El aviso es sobre INGRESOS: gente que entro hace poco y todavia no
             // completo la induccion. La pantalla de la app ya excluye a quien
             // tiene mas de un año -"para no llenar de gente vieja"- y este correo
@@ -367,9 +374,21 @@ export async function revisarInduccionesPendientes({ forzar = false, soloPrevisu
             // como si fuera un ingreso pendiente. Las dos reglas ahora coinciden.
             const DIAS_MAXIMO = 365;
 
+            // Los registros arrancan en 2020. La induccion de quien ya trabajaba
+            // antes ocurrio y quedo en papel, pero no esta en ninguna planilla y
+            // nunca va a estarlo. Se los deja fuera del control, no como
+            // cumplidos: la app no sabe si la hicieron, sabe que no puede saberlo.
+            //
+            // Tiene que coincidir con INICIO_REGISTROS / indFueraDeAlcance() de
+            // capacitaciones_vessena.html. Si el correo y la pantalla usaran
+            // reglas distintas, volveriamos al problema de siempre: dos numeros
+            // sobre lo mismo que no cierran.
+            const ANTES_DEL_SISTEMA = '2020-01-01';
+
             const pendientes = [];
             let sinFechaAlta = 0;
             let veteranosSinInduccion = 0;
+            let antesDelSistema = 0;
 
             for (const p of personal) {
                 if (!p || p.a === false) continue;
@@ -379,10 +398,24 @@ export async function revisarInduccionesPendientes({ forzar = false, soloPrevisu
                 // y conviene que eso se vea en vez de desaparecer.
                 if (!p.fechaAlta) { sinFechaAlta++; continue; }
 
+                const nom = String(p.n || '').toUpperCase().trim();
+                const alta = String(comoDia(p.fechaAlta) || '').slice(0, 10);
+                const primero = primerRegistro.get(nom) || '';
+
+                // Dos señales de que la persona es anterior al sistema: el alta
+                // es previa a 2020, o tiene registros ANTERIORES a su propia
+                // fecha de alta -o sea que esa fecha no es su ingreso real, que
+                // es lo que pasa cuando alguien cambia de sector y la ficha toma
+                // la fecha del cambio-.
+                if (alta && (alta < ANTES_DEL_SISTEMA || (primero && primero < alta))) {
+                    antesDelSistema++;
+                    continue;
+                }
+
                 const dias = diasEntre(comoDia(p.fechaAlta), hoy);
                 if (dias === null || dias < 30) continue;
 
-                const tiene = hechos.get(String(p.n || '').toUpperCase().trim()) || new Set();
+                const tiene = hechos.get(nom) || new Set();
                 const falta = MODULOS_INDUCCION.filter((m) => !tiene.has(m));
                 if (!falta.length) continue;
 
@@ -402,7 +435,7 @@ export async function revisarInduccionesPendientes({ forzar = false, soloPrevisu
             // Lo que este control NO esta mirando, visible siempre. Sin esto, un
             // "0 pendientes" puede significar que esta todo al dia o que casi
             // nadie tiene fecha de alta cargada, y no habria forma de saberlo.
-            const noEvaluados = { sinFechaAlta, veteranosSinInduccion };
+            const noEvaluados = { sinFechaAlta, veteranosSinInduccion, antesDelSistema };
 
             // Sin pendientes no manda nada: no tiene sentido un correo semanal
             // que diga que todo esta bien.
@@ -437,7 +470,7 @@ export async function revisarInduccionesPendientes({ forzar = false, soloPrevisu
             return {
                 revisados: personal.length, pendientes: pendientes.length, correos: enviados,
                 noEvaluados,
-                detalle: `${pendientes.length} pendiente(s), ${enviados} correo(s); no evaluados: ${sinFechaAlta} sin fecha de alta, ${veteranosSinInduccion} con mas de un año`,
+                detalle: `${pendientes.length} pendiente(s), ${enviados} correo(s); no evaluados: ${sinFechaAlta} sin fecha de alta, ${veteranosSinInduccion} con mas de un año, ${antesDelSistema} anteriores a los registros`,
             };
         }
     );
