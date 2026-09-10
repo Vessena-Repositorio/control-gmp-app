@@ -151,7 +151,7 @@ summary.leg-y:hover{background:var(--g50)!important}
 
 <div class="hdr">
   <div class="hdr-top">
-    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-10d</span></div></div>
+    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-10e</span></div></div>
     <div class="code">REG-SOP-AC-039-D</div>
   </div>
   <div class="nav" id="nav">
@@ -2704,6 +2704,24 @@ function frMonths(fr){
   return[...new Set(meses)];
 }
 
+/* Cuánta gente del sector destinatario asistió a una partida.
+   Se separa del ESTADO a proposito: son dos preguntas distintas y hasta ahora
+   estaban mezcladas en una sola etiqueta.
+
+     - "¿Se dicto?" es si o no. Si hubo una sesion, se dicto.
+     - "¿Llego a todos?" es un numero, y es lo que decide si hay que repetirla.
+
+   Antes una partida dictada a 21 de 87 personas figuraba como no cumplida, y
+   habia que abrirla para enterarse de por que. Ahora dice "Cumplida · 21/87", y
+   el numero en ambar cuando la cobertura es baja. */
+function coberturaPlan(p){
+  const ligados = R.filter(r => r.planId === p.id);
+  if (!ligados.length) return null;
+  const objetivo = p.persEst > 0 ? p.persEst : targetPeopleCount(p.d, p.year || 2026);
+  const asistieron = new Set(ligados.map(r => String(r.nom).toUpperCase().trim())).size;
+  const pct = objetivo > 0 ? Math.round(asistieron / objetivo * 100) : null;
+  return { asistieron, objetivo, pct };
+}
 V.plan=function(){
   const curMonth=cM+1;
   const curYear=new Date().getFullYear();
@@ -2727,14 +2745,9 @@ V.plan=function(){
     if(itemYear>curYearNow){p.e='futura';return}
     // Past year without records = pendiente
     if(itemYear<curYearNow){
-      const linkedRecs=R.filter(r=>r.planId===p.id);
-      if(linkedRecs.length>0){
-        const tgtTotal=p.persEst>0?p.persEst:targetPeopleCount(p.d,p.year||2026);
-        const attended=new Set(linkedRecs.map(r=>r.nom.toUpperCase().trim()));
-        const pct=tgtTotal>0?(attended.size/tgtTotal*100):100;
-        if(pct>=80)p.e='cumplida';
-        else p.e='parcial';
-      } else {p.e='pendiente'}
+      // Se dicto o no se dicto. La cobertura se muestra aparte, en la columna
+      // Estado, y no cambia este valor.
+      p.e = R.some(r=>r.planId===p.id) ? 'cumplida' : 'pendiente';
       return;
     }
     
@@ -2749,14 +2762,9 @@ V.plan=function(){
     const wasReprogrammed=p.mOriginal&&JSON.stringify(p.m)!==JSON.stringify(p.mOriginal);
     
     if(hasRecords){
-      // Has records - check coverage
-      const tSecs=targetSectors(p.d);
-      const sc=secCount();
-      const tgtTotal=tSecs.reduce((s,sec)=>s+(sc[sec]||0),0);
-      const attended=new Set(linkedRecs.map(r=>r.nom.toUpperCase().trim()));
-      const pct=tgtTotal>0?(attended.size/tgtTotal*100):100;
-      if(pct>=80)p.e='cumplida';
-      else p.e='parcial';
+      // Hubo al menos una sesion: la partida se dicto. Cuanta gente llego se
+      // muestra aparte -en la columna Estado- porque es otra pregunta.
+      p.e='cumplida';
     } else if(wasReprogrammed&&allFuture){
       p.e='reprogramada';
     } else if(inCurrentMonth){
@@ -2827,7 +2835,18 @@ V.plan=function(){
 
     const stCl={cumplida:'green',parcial:'amber',pendiente:'red',futura:'blue',suspendida:'purple',reprogramada:'teal'}[p.e];
     const stLb={cumplida:'Cumplida',parcial:'En curso',pendiente:'Pendiente',futura:'Futura',suspendida:'Suspendida',reprogramada:'Reprogramada'}[p.e];
-    html+='<td>'+bg(stLb,stCl)+(p.e==='suspendida'&&p.suspMotivo?'<div style="font-size:8px;color:var(--g500);margin-top:2px;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+h(p.suspMotivo)+'">'+h(p.suspMotivo)+'</div>':'')+'</td>';
+    // La cobertura va pegada al estado: "se dictó" y "llegó a todos" se leen
+    // juntas o no se leen. En ámbar cuando es baja, que es la señal de que hay
+    // que programar otra ronda.
+    const cob = coberturaPlan(p);
+    const cobHtml = cob
+      ? '<div style="font-size:9px;font-weight:700;margin-top:2px;color:' +
+        (cob.pct !== null && cob.pct < 80 ? '#b45309' : 'var(--g500)') +
+        '" title="Asistieron ' + cob.asistieron + ' de ' + cob.objetivo +
+        ' personas del sector destinatario">' + cob.asistieron + '/' + cob.objetivo +
+        (cob.pct !== null ? ' &middot; ' + cob.pct + '%' : '') + '</div>'
+      : '';
+    html+='<td>'+bg(stLb,stCl)+cobHtml+(p.e==='suspendida'&&p.suspMotivo?'<div style="font-size:8px;color:var(--g500);margin-top:2px;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+h(p.suspMotivo)+'">'+h(p.suspMotivo)+'</div>':'')+'</td>';
     html+='<td style="white-space:nowrap"><button class="btn-i" onclick="event.stopPropagation();editPlan('+p.id+')" title="Editar">⚙️</button>';
     if(p.e!=='suspendida'){html+='<button class="btn-i" onclick="event.stopPropagation();suspPlan('+p.id+')" title="Suspender">⏸️</button>'}
     else{html+='<button class="btn-i" onclick="event.stopPropagation();reactivarPlan('+p.id+')" title="Reactivar">▶️</button>'}
