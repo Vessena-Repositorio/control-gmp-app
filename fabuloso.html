@@ -973,7 +973,9 @@ window.APP_CONFIG = {
     const g = state.currentGroup || '';
     const list = state.catalog.filter(d =>
       (g === '' || (d.grupo === g)) &&
-      (!q || d.descripcion.toLowerCase().includes(q) || d.codigo.toLowerCase().includes(q)) &&
+      // Mismo motivo que la orden: un codigo de defecto numerico llega como
+      // numero y .toLowerCase() lo revienta, dejando el buscador inutil.
+      (!q || String(d.descripcion || "").toLowerCase().includes(q) || String(d.codigo || "").toLowerCase().includes(q)) &&
       (!f || d.clasificacion === f)
     );
     const map = {};
@@ -1197,10 +1199,17 @@ window.APP_CONFIG = {
         return s === hoyStr;
       });
 
-      // Agrupar por orden_envasado
+      // Agrupar por orden_envasado.
+      //
+      // La orden se pasa por String() antes de tocarla: una orden como "12345" la
+      // hoja la devuelve como NUMERO, y .trim() no existe en un numero. La
+      // pantalla entera se caia con "trim is not a function" en cuanto aparecia
+      // una orden puramente numerica. La misma agrupacion, unas lineas mas
+      // arriba, ya lo hacia bien: quedaron dos copias de la misma idea y solo
+      // una estaba protegida.
       const groups = {};
       rows.forEach(m => {
-        const key = (m.orden || '(sin orden)').trim() || '(sin orden)';
+        const key = String(m.orden == null ? "" : m.orden).trim() || "(sin orden)";
         if (!groups[key]) groups[key] = [];
         groups[key].push(m);
       });
