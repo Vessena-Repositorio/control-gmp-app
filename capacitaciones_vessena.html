@@ -151,7 +151,7 @@ summary.leg-y:hover{background:var(--g50)!important}
 
 <div class="hdr">
   <div class="hdr-top">
-    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-10e</span></div></div>
+    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-10f</span></div></div>
     <div class="code">REG-SOP-AC-039-D</div>
   </div>
   <div class="nav" id="nav">
@@ -765,6 +765,31 @@ summary.leg-y:hover{background:var(--g50)!important}
       <button class="btn btn-o" id="pw-no">Cancelar</button>
     </div>
     <div id="pw-err" style="color:var(--red);font-size:11px;margin-top:8px;display:none">Clave incorrecta</div>
+  </div>
+</div>
+
+<!-- MODAL vincular registros a una partida del plan -->
+<div class="modal-bg" id="vinc-modal">
+  <div class="modal" style="max-width:860px;max-height:92vh;display:flex;flex-direction:column">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px">
+      <div>
+        <div style="font-size:15px;font-weight:800;color:var(--navy)">🔗 Vincular registros a esta partida</div>
+        <div id="vinc-sub" style="font-size:11px;color:var(--g500);margin-top:2px"></div>
+      </div>
+      <button class="btn btn-o" onclick="document.getElementById('vinc-modal').classList.remove('show')">Cerrar</button>
+    </div>
+    <div style="font-size:11px;color:var(--g600);background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--r);padding:8px 12px;margin-bottom:10px">
+      Son <b>candidatos</b>, no coincidencias confirmadas: se buscan por las palabras del título en el tema y la descripción.
+      <b>Leé la descripción antes de tildar.</b> Lo que marques queda vinculado a esta partida y su estado se recalcula solo.
+    </div>
+    <div id="vinc-lista" style="flex:1;overflow-y:auto;border:1px solid var(--g200);border-radius:var(--r)"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:12px">
+      <div id="vinc-cuenta" style="font-size:11px;color:var(--g500)"></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-o" onclick="document.getElementById('vinc-modal').classList.remove('show')">Cancelar</button>
+        <button class="btn btn-s" id="vinc-ok">Vincular seleccionadas</button>
+      </div>
+    </div>
   </div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -2714,6 +2739,156 @@ function frMonths(fr){
    Antes una partida dictada a 21 de 87 personas figuraba como no cumplida, y
    habia que abrirla para enterarse de por que. Ahora dice "Cumplida · 21/87", y
    el numero en ambar cuando la cobertura es baja. */
+
+// ══════════════════════════════════════════════════════════════════════════
+// VINCULAR REGISTROS A UNA PARTIDA DEL PLAN
+// ══════════════════════════════════════════════════════════════════════════
+//
+// El plan sabe que una capacitacion se dicto solo si los registros la apuntan
+// con `planId`. Al cargar se elige la partida en un desplegable, y casi nunca
+// se eligio: de 24 partidas, 4 tienen registros vinculados. El resto figura
+// pendiente aunque se haya dictado, y no hay forma de darse cuenta salvo
+// leyendo el Registro a mano.
+//
+// Esto propone candidatos y los vincula, pero NO decide: la coincidencia por
+// texto es una pista. "Proc. limpieza planta" y "Limpieza de planta - Envasado"
+// comparten palabras y probablemente sean lo mismo; "Manejo seguro Cubas" y
+// "Manejo seguro de autoelevadores" tambien comparten palabras y no lo son.
+// Marcar una partida como cumplida sin que lo este es peor que dejarla
+// pendiente, asi que confirma una persona.
+
+let vincPlanId = null;
+let vincCandidatos = [];   // [{clave, fecha, tema, desc, nombres:[], planIdActual}]
+
+/* Sesiones que podrian ser esta partida. Se agrupan por fecha+tema+descripcion,
+   que es como se ve una capacitacion dictada: una fila por asistente en los
+   datos, una sola cosa en la realidad. */
+function candidatosPlan(p){
+  const tokens = habTokens(p.t);
+  if (!tokens.length) return [];
+  const anio = String(p.year || 2026);
+  const porSesion = new Map();
+
+  R.forEach(r => {
+    if (String(r.fecha || '').slice(0, 4) !== anio) return;
+    // Ya vinculada a ESTA partida: se muestra igual, tildada, para que se vea
+    // que cuenta. Vinculada a OTRA: se muestra bloqueada, porque moverla seria
+    // sacarsela a la otra sin decirlo.
+    const yaDeOtra = r.planId && Number(r.planId) !== Number(p.id);
+    if (habCoincidencias(r, tokens) < tokens.length) return;
+    const clave = r.fecha + '||' + r.tema + '||' + r.desc;
+    let s = porSesion.get(clave);
+    if (!s) {
+      s = { clave, fecha: r.fecha, tema: r.tema, desc: r.desc, nombres: [],
+            yaDeEsta: false, otraPartida: null };
+      porSesion.set(clave, s);
+    }
+    s.nombres.push(r.nom);
+    if (r.planId && Number(r.planId) === Number(p.id)) s.yaDeEsta = true;
+    if (yaDeOtra) s.otraPartida = Number(r.planId);
+  });
+
+  return [...porSesion.values()]
+    .sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
+}
+
+window.vincularPlan = function(id){
+  const p = PL.find(x => Number(x.id) === Number(id));
+  if (!p) return;
+  if (!canDo('register')) { alert('No tenés permisos para vincular registros.'); return; }
+  vincPlanId = Number(p.id);
+  vincCandidatos = candidatosPlan(p);
+
+  $('vinc-sub').innerHTML = h(p.t) + ' &nbsp;·&nbsp; dirigida a ' + h(p.d || '—') +
+    ' &nbsp;·&nbsp; buscando: <b>' + habTokens(p.t).map(t => h(t)).join(' + ') + '</b>';
+  vincRender();
+  $('vinc-modal').classList.add('show');
+};
+
+function vincRender(){
+  if (!vincCandidatos.length) {
+    $('vinc-lista').innerHTML =
+      '<div style="padding:24px;text-align:center;font-size:12px;color:var(--g500)">' +
+      'Ningún registro del año menciona todas las palabras del título.<br>' +
+      '<span style="font-size:11px">Puede que la capacitación no se haya dictado, o que se haya registrado con otro nombre. ' +
+      'En ese caso conviene buscarla en <b>Habilitados</b> con una sola palabra y vincularla desde el Registro.</span></div>';
+    $('vinc-cuenta').textContent = '';
+    return;
+  }
+  let html = '';
+  vincCandidatos.forEach((s, i) => {
+    const bloqueada = s.otraPartida != null;
+    const otra = bloqueada ? PL.find(x => Number(x.id) === s.otraPartida) : null;
+    html += '<div style="display:flex;gap:10px;padding:9px 12px;border-bottom:1px solid var(--g100);align-items:flex-start' +
+            (bloqueada ? ';opacity:.55' : '') + '">';
+    html += '<input type="checkbox" id="vinc-c' + i + '"' +
+            (s.yaDeEsta ? ' checked' : '') + (bloqueada ? ' disabled' : '') +
+            ' style="margin-top:3px;width:16px;height:16px;flex:0 0 16px">';
+    html += '<div style="flex:1;min-width:0">';
+    html += '<div style="font-size:11px;color:var(--g500);font-weight:700">' + h(s.fecha || '—') +
+            ' &nbsp;·&nbsp; ' + bg(s.tema, 'blue') +
+            ' &nbsp;·&nbsp; <b>' + s.nombres.length + '</b> asistente' + (s.nombres.length === 1 ? '' : 's') +
+            (s.yaDeEsta ? ' &nbsp;·&nbsp; <span style="color:var(--green);font-weight:800">YA VINCULADA</span>' : '') +
+            (bloqueada ? ' &nbsp;·&nbsp; <span style="color:#b45309;font-weight:800">vinculada a: ' +
+                h(otra ? otra.t : ('partida ' + s.otraPartida)) + '</span>' : '') +
+            '</div>';
+    html += '<div style="font-size:12px;color:var(--g700);margin-top:2px">' + h(s.desc) + '</div>';
+    html += '<div style="font-size:10px;color:var(--g500);margin-top:2px">' +
+            h(s.nombres.slice(0, 6).join(' · ')) +
+            (s.nombres.length > 6 ? ' … y ' + (s.nombres.length - 6) + ' más' : '') + '</div>';
+    html += '</div></div>';
+  });
+  $('vinc-lista').innerHTML = html;
+  const libres = vincCandidatos.filter(s => s.otraPartida == null).length;
+  $('vinc-cuenta').textContent = vincCandidatos.length + ' sesión(es) candidata(s), ' +
+    libres + ' disponible(s) para vincular';
+}
+
+function vincGuardar(){
+  const p = PL.find(x => Number(x.id) === vincPlanId);
+  if (!p) return;
+
+  let vinculados = 0, desvinculados = 0;
+  const detalle = [];
+
+  vincCandidatos.forEach((s, i) => {
+    if (s.otraPartida != null) return;              // no se le saca a otra partida
+    const casilla = document.getElementById('vinc-c' + i);
+    if (!casilla) return;
+    const quiere = casilla.checked;
+    if (quiere === s.yaDeEsta) return;              // sin cambio
+
+    R.forEach(r => {
+      if (r.fecha + '||' + r.tema + '||' + r.desc !== s.clave) return;
+      if (quiere) { r.planId = vincPlanId; r.plan = 'SI'; }
+      else if (Number(r.planId) === vincPlanId) { r.planId = 0; r.plan = 'NO'; }
+    });
+    if (quiere) vinculados++; else desvinculados++;
+    detalle.push((quiere ? '+ ' : '- ') + s.fecha + ' ' + s.desc + ' (' + s.nombres.length + ')');
+  });
+
+  if (!vinculados && !desvinculados) {
+    $('vinc-modal').classList.remove('show');
+    return;
+  }
+
+  // Queda en auditoria con el detalle: vincular cambia el estado de una partida
+  // del plan anual, y despues nadie se acuerda de por que una partida figura
+  // cumplida.
+  logAudit('PLAN',
+    'Vinculación de registros a "' + p.t + '": ' + vinculados + ' sesión(es) vinculada(s)' +
+    (desvinculados ? ', ' + desvinculados + ' desvinculada(s)' : '') +
+    ' — ' + detalle.join(' | '));
+
+  // La partida vuelve a recalcularse: si estaba marcada cumplida a mano, se
+  // respeta; si estaba pendiente y ahora tiene registros, pasa a cumplida.
+  sv();
+  $('vinc-modal').classList.remove('show');
+  V.plan();
+  alert(vinculados + ' sesión(es) vinculada(s) a "' + p.t + '"' +
+    (desvinculados ? ', ' + desvinculados + ' desvinculada(s)' : '') +
+    '. El estado de la partida se recalculó y ya quedó guardado.');
+}
 function coberturaPlan(p){
   const ligados = R.filter(r => r.planId === p.id);
   if (!ligados.length) return null;
@@ -2850,6 +3025,7 @@ V.plan=function(){
     html+='<td style="white-space:nowrap"><button class="btn-i" onclick="event.stopPropagation();editPlan('+p.id+')" title="Editar">⚙️</button>';
     if(p.e!=='suspendida'){html+='<button class="btn-i" onclick="event.stopPropagation();suspPlan('+p.id+')" title="Suspender">⏸️</button>'}
     else{html+='<button class="btn-i" onclick="event.stopPropagation();reactivarPlan('+p.id+')" title="Reactivar">▶️</button>'}
+    html+='<button class="btn-i" onclick="event.stopPropagation();vincularPlan('+p.id+')" title="Buscar registros que podrían ser esta capacitación y vincularlos">🔗</button>';
     html+='<button class="btn-i" onclick="event.stopPropagation();repetirPlan('+p.id+')" title="Repetir">🔄</button>';
     html+='<button class="btn-i" onclick="event.stopPropagation();eliminarPlan('+p.id+')" title="Eliminar" style="color:var(--red)">🗑️</button>';
     html+='</td>';
@@ -5933,6 +6109,7 @@ document.addEventListener('DOMContentLoaded',function(){
     if (hay) showApp();
     else sinSesion('No pudimos confirmar tu sesión, o tu usuario no tiene acceso a Capacitaciones.');
   });
+  $('vinc-ok').addEventListener('click', vincGuardar);
   _wireOcrModal();
   _wireBulkModal();
   const btnGrPrint = document.getElementById('btn-gr-print');
