@@ -54,6 +54,7 @@ input:focus,select:focus{outline:none;border-color:var(--navy-light);box-shadow:
    en que se diferencian. */
 .gantt .btn-i{font-size:15px;padding:3px 5px;border-radius:6px}
 .gantt .btn-i:hover{background:var(--g100);color:var(--navy)}
+#tip-flotante{position:fixed;z-index:9999;display:none;pointer-events:none;background:var(--navy);color:#fff;font-size:11px;font-weight:600;line-height:1.35;padding:6px 10px;border-radius:6px;max-width:280px;box-shadow:0 4px 14px rgba(0,0,0,.25)}
 .filters{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
 .filters input,.filters select{max-width:200px}
 .section{display:none}.section.active{display:block}
@@ -157,7 +158,7 @@ summary.leg-y:hover{background:var(--g50)!important}
 
 <div class="hdr">
   <div class="hdr-top">
-    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-10k</span></div></div>
+    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-10l</span></div></div>
     <div class="code">REG-SOP-AC-039-D</div>
   </div>
   <div class="nav" id="nav">
@@ -3123,13 +3124,17 @@ V.plan=function(){
        Un icono solo obliga a dejar el mouse quieto sobre cada uno para saber
        que hace. En una fila con seis acciones, dos de ellas parecidas y una
        destructiva, eso no alcanza. */
-    html+='<td style="white-space:nowrap"><button class="btn-i" onclick="event.stopPropagation();editPlan('+p.id+')" title="Abrir el formulario completo de esta capacitación">⚙️</button>';
-    if(p.e!=='suspendida'){html+='<button class="btn-i" onclick="event.stopPropagation();suspPlan('+p.id+')" title="Suspender: la capacitación no se va a dictar. Pide motivo.">⏸️</button>'}
-    else{html+='<button class="btn-i" onclick="event.stopPropagation();reactivarPlan('+p.id+')" title="Reactivar: vuelve al estado que tenía antes de suspenderse">▶️</button>'}
-    html+='<button class="btn-i" onclick="event.stopPropagation();reprogramarPlan('+p.id+')" title="Mover ESTA capacitación a otro mes. Sigue habiendo una sola fila.">🗓️</button>';
-    html+='<button class="btn-i" onclick="event.stopPropagation();vincularPlan('+p.id+')" title="Buscar registros que podrían ser esta capacitación y vincularlos">🔗</button>';
-    html+='<button class="btn-i" onclick="event.stopPropagation();repetirPlan('+p.id+')" title="Dictarla de nuevo: crea una fila NUEVA (otra ronda) y deja esta donde está. Para ingresos nuevos o refuerzo.">➕</button>';
-    html+='<button class="btn-i" onclick="event.stopPropagation();eliminarPlan('+p.id+')" title="Eliminar del plan" style="color:var(--red)">🗑️</button>';
+    /* El tooltip empieza por el NOMBRE de la accion: el icono solo no lo dice,
+       y quien pasa el cursor lo hace justamente porque no sabe cual es cual.
+       Los dos parecidos -reprogramar y nueva ronda- aclaran en que difieren,
+       que es lo unico que hace falta para no equivocarse. */
+    html+='<td style="white-space:nowrap"><button class="btn-i" onclick="event.stopPropagation();editPlan('+p.id+')" data-tip="Editar — abre el formulario completo de esta capacitación">⚙️</button>';
+    if(p.e!=='suspendida'){html+='<button class="btn-i" onclick="event.stopPropagation();suspPlan('+p.id+')" data-tip="Suspender — la capacitación no se va a dictar. Pide motivo.">⏸️</button>'}
+    else{html+='<button class="btn-i" onclick="event.stopPropagation();reactivarPlan('+p.id+')" data-tip="Reactivar — vuelve al estado que tenía antes de suspenderse">▶️</button>'}
+    html+='<button class="btn-i" onclick="event.stopPropagation();reprogramarPlan('+p.id+')" data-tip="Reprogramar — mueve ESTA capacitación a otro mes. Sigue habiendo una sola fila.">🗓️</button>';
+    html+='<button class="btn-i" onclick="event.stopPropagation();vincularPlan('+p.id+')" data-tip="Vincular registros — busca capacitaciones ya dictadas que podrían ser esta y las asocia">🔗</button>';
+    html+='<button class="btn-i" onclick="event.stopPropagation();repetirPlan('+p.id+')" data-tip="Nueva ronda — se dicta otra vez: crea una fila NUEVA y deja esta donde está. Para ingresos nuevos o refuerzo.">➕</button>';
+    html+='<button class="btn-i" onclick="event.stopPropagation();eliminarPlan('+p.id+')" data-tip="Eliminar del plan" style="color:var(--red)">🗑️</button>';
     html+='</td>';
     html+='</tr>';
   });
@@ -6319,6 +6324,58 @@ document.addEventListener('DOMContentLoaded',function(){
     }
   });
 });
+
+/* ── Tooltip propio ──────────────────────────────────────────────────────────
+   El `title` del navegador tarda casi un segundo en aparecer, se corta si el
+   mouse se mueve, y no se puede dar formato. Para una fila con seis iconos
+   -dos de ellos parecidos y uno destructivo- esa demora alcanza para que uno
+   apriete antes de leer.
+
+   Es UN solo elemento colgado del body, no uno por boton: la tabla del plan
+   tiene scroll horizontal, y cualquier cosa posicionada adentro queda
+   recortada por ese contenedor. Colgado del body se dibuja por encima de todo.
+
+   Se activa con `data-tip`. Los botones ya no llevan `title`, para que no
+   salgan los dos tooltips uno arriba del otro. */
+(function(){
+  let caja = null;
+
+  function mostrar(el){
+    const texto = el.getAttribute('data-tip');
+    if (!texto) return;
+    if (!caja) {
+      caja = document.createElement('div');
+      caja.id = 'tip-flotante';
+      document.body.appendChild(caja);
+    }
+    caja.textContent = texto;
+    caja.style.display = 'block';
+    // Primero visible, despues medido: el ancho depende del texto.
+    const r = el.getBoundingClientRect();
+    const c = caja.getBoundingClientRect();
+    let x = r.left + r.width / 2 - c.width / 2;
+    // Que no se salga por los costados de la ventana.
+    x = Math.max(8, Math.min(x, window.innerWidth - c.width - 8));
+    let y = r.top - c.height - 8;
+    if (y < 8) y = r.bottom + 8;      // si no entra arriba, va abajo
+    caja.style.left = x + 'px';
+    caja.style.top = y + 'px';
+  }
+
+  function ocultar(){ if (caja) caja.style.display = 'none'; }
+
+  document.addEventListener('mouseover', e => {
+    const el = e.target.closest && e.target.closest('[data-tip]');
+    if (el) mostrar(el);
+  });
+  document.addEventListener('mouseout', e => {
+    if (e.target.closest && e.target.closest('[data-tip]')) ocultar();
+  });
+  // Al hacer click el boton hace lo suyo y la fila se redibuja: si el tooltip
+  // queda visible, se ve flotando sobre una tabla que ya cambio.
+  document.addEventListener('click', ocultar, true);
+  window.addEventListener('scroll', ocultar, true);
+})();
 </script>
 </body>
 </html>
