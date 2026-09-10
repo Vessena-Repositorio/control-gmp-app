@@ -37,11 +37,17 @@ const DOMINIOS = [
     // reescribe lo que hay en Postgres con lo que traiga la hoja, y la hoja
     // quedo congelada en el estado previo. Los datos se sembraron en
     // estabilidad_datos con la migracion 017.
-    {
-        dominio: 'capacitaciones',
-        env: 'ORIGEN_CAPACITACIONES',
-        peticiones: [{ query: '', colecciones: ['R', 'PL', 'PE', 'AUDIT'] }],
-    },
+    // capacitaciones SE APAGO el 10/09/2026: Postgres paso a ser su fuente de
+    // verdad y la app escribe en /api/capacitaciones/datos.
+    //
+    // Volver a habilitarla no pisaria los datos de la app -escribe en
+    // `documentos`, y la app lee `capacitaciones_datos`- pero si dejaria una
+    // copia vieja de la hoja conviviendo con la buena, y POST /resembrar podria
+    // traerla de vuelta. La hoja quedo congelada en el estado del corte.
+    //
+    // Los avisos ya no la usan: leen por coleccionCapacitaciones(), que va a la
+    // tabla nueva. Si esto se reactiva sin revisar eso, los correos empiezan a
+    // mirar una foto vieja sin que nada lo delate.
     // devoluciones SE APAGO el 02/09/2026: Postgres paso a ser su fuente de
     // verdad y la app escribe en /api/devoluciones.
     //

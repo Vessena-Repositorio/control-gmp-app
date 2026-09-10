@@ -129,16 +129,6 @@ summary.leg-y:hover{background:var(--g50)!important}
   body{background:#fff}
 }
 /* Login */
-#login-screen{position:fixed;top:0;left:0;right:0;bottom:0;background:linear-gradient(135deg,#1a3352 0%,#0d9488 100%);z-index:999;display:flex;align-items:center;justify-content:center;flex-direction:column}
-#login-screen.hidden{display:none}
-.login-box{background:#fff;border-radius:16px;padding:32px;max-width:400px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.3)}
-.login-box h2{color:var(--navy);font-size:20px;margin-bottom:4px}
-.login-box .sub{color:var(--g500);font-size:12px;margin-bottom:20px}
-.login-box input,.login-box select{width:100%;padding:10px 12px;border:1px solid var(--g200);border-radius:8px;font-size:13px;font-family:inherit;margin-bottom:12px}
-.login-box input:focus,.login-box select:focus{outline:none;border-color:var(--navy-light);box-shadow:0 0 0 3px rgba(26,51,82,.1)}
-.login-box button{width:100%;padding:12px;background:var(--navy);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
-.login-box button:hover{background:var(--navy-light)}
-.login-err{color:var(--red);font-size:11px;margin-top:8px;display:none}
 .role-badge{display:inline-block;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700}
 .role-admin{background:#dbeafe;color:#1e40af}
 .role-editor{background:#d1fae5;color:#065f46}
@@ -150,23 +140,6 @@ summary.leg-y:hover{background:var(--g50)!important}
 </style>
 </head>
 <body>
-<div id="login-screen">
-  <div style="text-align:center;margin-bottom:24px">
-    <div style="font-size:36px;font-weight:800;color:#fff">VESSENA S.A.</div>
-    <div style="font-size:14px;color:rgba(255,255,255,.7)">Seguimiento de Capacitaciones 2026</div>
-  </div>
-  <div class="login-box">
-    <h2>Iniciar sesión</h2>
-    <div class="sub">Ingresá tus credenciales para acceder al sistema</div>
-    <input id="log-user" placeholder="Usuario" autocomplete="off">
-    <input id="log-pass" type="password" placeholder="Contraseña">
-    <button id="log-btn">Ingresar</button>
-    <div class="login-err" id="log-err">Usuario o contraseña incorrectos</div>
-  </div>
-  <div style="margin-top:20px;color:rgba(255,255,255,.5);font-size:10px;text-align:center">
-    REG-SOP-AC-039-D · v6.0
-  </div>
-</div>
 
 <div id="user-bar" style="display:none">
   <div><span class="uname" id="ub-name"></span> · <span id="ub-role-badge"></span></div>
@@ -178,7 +151,7 @@ summary.leg-y:hover{background:var(--g50)!important}
 
 <div class="hdr">
   <div class="hdr-top">
-    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-10b</span></div></div>
+    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-10c</span></div></div>
     <div class="code">REG-SOP-AC-039-D</div>
   </div>
   <div class="nav" id="nav">
@@ -191,7 +164,7 @@ summary.leg-y:hover{background:var(--g50)!important}
     <button data-v="audit">📜 Auditoría</button>
     <button data-v="users" id="nav-users">⚙️ Usuarios</button>
     <select id="global-year" style="margin-left:auto;font-size:13px;font-weight:700;padding:4px 10px;border-radius:8px;border:2px solid rgba(255,255,255,.3);background:rgba(255,255,255,.15);color:#fff;cursor:pointer"></select>
-    <button onclick="configureSheetsUrl()" data-role="admin" style="font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.15);color:#fff;cursor:pointer;font-family:inherit" title="Configurar conexión a Google Sheets">⚙️ Sheets</button>
+    <button onclick="configureSheetsUrl()" data-role="admin" style="font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.15);color:#fff;cursor:pointer;font-family:inherit" title="Conexión a Google Apps Script. Ya no se usa para los datos -esos viven en Postgres- sino para el OCR de planillas, la carga masiva y los recordatorios.">⚙️ OCR / Recordatorios</button>
   </div>
 </div>
 <div class="main">
@@ -701,11 +674,7 @@ summary.leg-y:hover{background:var(--g50)!important}
 <!-- USUARIOS -->
 <div class="section" id="sec-users">
   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
-    <div style="font-size:17px;font-weight:800">⚙️ Gestión de usuarios</div>
-    <button class="btn btn-s" id="btn-add-user">＋ Nuevo usuario</button>
-  </div>
-  <div style="font-size:10px;color:var(--g500);margin-bottom:12px;background:#eff6ff;padding:8px 12px;border-radius:var(--r);border:1px solid #bfdbfe">
-    🔐 Solo los administradores pueden gestionar usuarios. En la versión de producción (Firebase), cada usuario tendrá credenciales reales.
+    <div style="font-size:17px;font-weight:800">⚙️ Usuarios y accesos</div>
   </div>
   <div id="users-list"></div>
 </div>
@@ -4461,73 +4430,32 @@ function init(){
   V.dash();
 }
 // ══════════ USUARIOS ══════════
+/* Esta pantalla administraba una lista de usuarios guardada en el localStorage
+   de cada navegador, con las contraseñas en texto plano dentro de este archivo.
+   No controlaba nada: la pagina ya estaba protegida del lado del servidor, asi
+   que esa lista solo decidia que rol MOSTRAR, y cada máquina tenia la suya.
+   Agregar a alguien acá no le daba acceso, y borrarlo no se lo quitaba.
+
+   Se saca. Una pantalla que parece administrar accesos y no lo hace es peor que
+   no tenerla: alguien confia en que saco a una persona y no la saco.
+
+   Los accesos reales se administran en el portal, contra la base. */
 V.users=function(){
-  if(!canDo('edit_plan')){$('users-list').innerHTML='<div style="padding:20px;text-align:center;color:var(--g400)">Sin permisos</div>';return}
-  // Load users from localStorage or default
-  let users=[];
-  try{const s=localStorage.getItem('vc3_users');users=s?JSON.parse(s):[...DEMO_USERS]}catch(e){users=[...DEMO_USERS]}
-  let html='<table style="width:100%;font-size:11px"><thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Acciones</th></tr></thead><tbody>';
-  users.forEach((u,i)=>{
-    const rc=ROLE_CLASSES[u.rol]||'role-viewer';
-    const rl=ROLE_LABELS[u.rol]||u.rol;
-    html+='<tr><td style="font-weight:600">'+h(u.user)+'</td>';
-    html+='<td>'+h(u.nombre)+'</td>';
-    html+='<td><span class="role-badge '+rc+'">'+rl+'</span></td>';
-    html+='<td style="white-space:nowrap">';
-    html+='<button class="btn-i" onclick="editUser('+i+')" title="Editar">✏️</button>';
-    if(u.user!=='admin')html+='<button class="btn-i" onclick="delUser('+i+')" title="Eliminar">🗑️</button>';
-    html+='</td></tr>';
-  });
-  html+='</tbody></table>';
-  $('users-list').innerHTML=html;
+  const u = currentUser || {};
+  $('users-list').innerHTML =
+    '<div style="background:var(--g50);border:1px solid var(--g200);border-radius:var(--r);padding:18px;font-size:12px;color:var(--g600);line-height:1.6">' +
+    '<div style="font-size:13px;font-weight:800;color:var(--navy);margin-bottom:6px">Los accesos se administran en el portal</div>' +
+    'Quien puede entrar a esta app, y con qué rol, se define en la administración de usuarios del portal, ' +
+    'contra la base de datos. No se configura desde acá.' +
+    '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--g200)">' +
+    '<b>Tu sesión:</b> ' + h(u.nombre || '—') +
+    ' &nbsp;·&nbsp; <span class="role-badge ' + (ROLE_CLASSES[u.rol] || 'role-viewer') + '">' +
+    h(ROLE_LABELS[u.rol] || u.rol || '—') + '</span>' +
+    (u.email ? '<div style="font-size:11px;color:var(--g500);margin-top:4px">' + h(u.email) + '</div>' : '') +
+    '</div>' +
+    '<div style="margin-top:12px"><a href="/" style="color:var(--navy);font-weight:700">Ir al portal →</a></div>' +
+    '</div>';
 };
-
-function getUsers(){
-  try{const s=localStorage.getItem('vc3_users');return s?JSON.parse(s):[...DEMO_USERS]}catch(e){return[...DEMO_USERS]}
-}
-function saveUsers(users){localStorage.setItem('vc3_users',JSON.stringify(users));
-  // Update DEMO_USERS reference for login
-  DEMO_USERS.length=0;users.forEach(u=>DEMO_USERS.push(u));
-}
-
-window.editUser=function(idx){
-  const users=getUsers();
-  const u=users[idx];if(!u)return;
-  const nombre=prompt('Nombre completo:',u.nombre);if(!nombre)return;
-  const rol=prompt('Rol (admin/editor/viewer):',u.rol);
-  if(!['admin','editor','viewer'].includes(rol)){alert('Rol inválido');return}
-  const newPass=prompt('Nueva contraseña (dejá vacío para mantener):','');
-  u.nombre=nombre.trim();u.rol=rol;
-  if(newPass)u.pass=newPass;
-  saveUsers(users);
-  logAudit('PERSONAL','Usuario editado: '+u.user+' → '+ROLE_LABELS[rol]);
-  V.users();
-};
-
-window.delUser=function(idx){
-  const users=getUsers();
-  const u=users[idx];if(!u)return;
-  if(u.user==='admin'){alert('No se puede eliminar el admin.');return}
-  if(!confirm('¿Eliminar usuario "'+u.user+'"?'))return;
-  users.splice(idx,1);
-  saveUsers(users);
-  logAudit('PERSONAL','Usuario eliminado: '+u.user);
-  V.users();
-};
-
-$('btn-add-user').addEventListener('click',function(){
-  const user=prompt('Nombre de usuario (sin espacios):');if(!user||!user.trim())return;
-  const users=getUsers();
-  if(users.some(u=>u.user===user.trim().toLowerCase())){alert('Ese usuario ya existe.');return}
-  const nombre=prompt('Nombre completo:');if(!nombre)return;
-  const rol=prompt('Rol (admin/editor/viewer):','editor');
-  if(!['admin','editor','viewer'].includes(rol)){alert('Rol inválido');return}
-  const pass=prompt('Contraseña:');if(!pass)return;
-  users.push({user:user.trim().toLowerCase(),pass:pass,nombre:nombre.trim(),rol:rol});
-  saveUsers(users);
-  logAudit('PERSONAL','Nuevo usuario: '+user.trim()+' ('+ROLE_LABELS[rol]+')');
-  V.users();
-});
 
 // ══════════ IMPORT REGISTRO ══════════
 let pendingRegImport=null;
@@ -4896,67 +4824,93 @@ $('btn-exp-ppt').addEventListener('click',function(){
 });
 
 // ══════════ AUTH & ROLES ══════════
-const DEMO_USERS=[
-  {user:'admin',pass:'admin',nombre:'Administrador',rol:'admin'},
-  {user:'gloria',pass:'1234',nombre:'Gloria Nuñez',rol:'admin'},
-  {user:'claudia',pass:'1234',nombre:'Claudia Barlocco',rol:'admin'},
-  {user:'antonella',pass:'1234',nombre:'Antonella Nuñez',rol:'editor'},
-  {user:'gabriela',pass:'1234',nombre:'Gabriela Perez',rol:'viewer'},
-  {user:'rodrigo',pass:'1234',nombre:'Rodrigo Cabrera',rol:'viewer'},
-];
+/* ── Quien esta usando la app ────────────────────────────────────────────────
+   La identidad viene de la sesion de Vessena, la misma del portal. Antes habia
+   un login propio acá, con seis usuarios y sus claves escritas en este archivo:
+   como el repositorio es publico, esas claves eran publicas.
+
+   Y era un login de mentira: la pagina ya estaba protegida del lado del
+   servidor -sin sesion no se entrega ni el HTML-, asi que este formulario no
+   impedia nada. Solo elegia que rol mostrar, y cualquiera podia elegir el suyo
+   leyendo el codigo.
+
+   Ahora el rol lo dice el servidor, por recurso, y no hay forma de cambiarlo
+   desde el navegador. */
 const ROLE_LABELS={admin:'Administrador',editor:'Editor',viewer:'Visualizador'};
 const ROLE_CLASSES={admin:'role-admin',editor:'role-editor',viewer:'role-viewer'};
 
 let currentUser=null;
 
-function checkSession(){
-  try{
-    const s=localStorage.getItem('vc3_session');
-    if(s){currentUser=JSON.parse(s);return true}
-  }catch(e){}
-  return false;
+/* El servidor habla de permisos ('cargar', 'administrar'); esta app habla de
+   roles. Se traduce en un solo lugar: si mañana aparece un permiso nuevo, no
+   hay que buscarlo en veinte pantallas. */
+function rolDePermisos(permisos){
+  const p = permisos || [];
+  if (p.includes('administrar')) return 'admin';
+  if (p.includes('cargar')) return 'editor';
+  return 'viewer';
 }
 
-function login(){
-  const u=$('log-user').value.trim().toLowerCase();
-  const p=$('log-pass').value;
-  const users=getUsers();
-  const found=users.find(x=>x.user===u&&x.pass===p) || users.find(x=>x.nombre.toLowerCase()===u&&x.pass===p);
-  if(!found){$('log-err').style.display='block';$('log-pass').value='';$('log-pass').focus();return}
-  currentUser={user:found.user,nombre:found.nombre,rol:found.rol};
-  localStorage.setItem('vc3_session',JSON.stringify(currentUser));
-  $('log-err').style.display='none';
-  showApp();
+async function cargarSesion(){
+  let yo;
+  try {
+    const res = await fetch('/api/auth/yo', { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) return false;
+    yo = await res.json();
+  } catch (e) {
+    console.error('[sesion] no se pudo consultar', e);
+    return false;
+  }
+  const mio = (yo.recursos || {})['capacitaciones'];
+  if (!mio) return false;
+  currentUser = {
+    user: yo.usuario,
+    nombre: yo.nombre || yo.usuario,
+    email: yo.email || '',
+    rol: rolDePermisos(mio.permisos),
+  };
+  return true;
 }
 
-function logout(){
-  currentUser=null;
-  localStorage.removeItem('vc3_session');
-  $('login-screen').classList.remove('hidden');
-  $('user-bar').style.display='none';
-  document.querySelector('.hdr').style.display='none';
-  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+/* Sin sesion no se muestra la app: se manda al portal, que es donde esta el
+   login de verdad. No se ofrece "entrar igual" ni un modo de solo lectura,
+   porque cualquiera de las dos cosas seria inventar una identidad para un
+   registro GMP. */
+function sinSesion(motivo){
+  document.body.innerHTML =
+    '<div style="max-width:520px;margin:16vh auto;font-family:system-ui,sans-serif;text-align:center;padding:0 20px">' +
+    '<div style="font-size:44px">🔒</div>' +
+    '<h2 style="color:#1a3352;margin:12px 0 6px">Necesitás iniciar sesión</h2>' +
+    '<p style="color:#64748b;font-size:14px;line-height:1.5">' + h(motivo || '') + '</p>' +
+    '<a href="/" style="display:inline-block;margin-top:14px;padding:10px 22px;background:#1a3352;color:#fff;' +
+    'text-decoration:none;border-radius:8px;font-weight:600">Ir al portal</a></div>';
+}
+
+/* Cerrar sesion cierra la sesion de Vessena entera, no solo esta app: es una
+   sola sesion para todas. Se avisa, porque antes este boton solo borraba una
+   entrada del localStorage de esta pestaña. */
+async function logout(){
+  if (!confirm('Vas a cerrar la sesión de Vessena, no solo esta app.\n\n¿Cerrar sesión?')) return;
+  try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (e) { /* igual se sale */ }
+  currentUser = null;
+  location.href = '/';
 }
 
 function showApp(){
-  $('login-screen').classList.add('hidden');
   $('user-bar').style.display='flex';
   document.querySelector('.hdr').style.display='';
   $('ub-name').textContent=currentUser.nombre;
   $('ub-role-badge').innerHTML='<span class="role-badge '+ROLE_CLASSES[currentUser.rol]+'">'+ROLE_LABELS[currentUser.rol]+'</span>';
   applyPermissions();
   init();
-  // Intento pull inicial desde Sheets (no bloqueante)
-  if (GAS_URL) {
-    pullFromGas().then(ok => {
-      if (ok) {
-        const active = document.querySelector('.section.active')?.id?.replace('sec-','');
-        if (active && V[active]) V[active]();
-      }
-    });
-  } else {
-    updateSyncBadge('unset');
-  }
+  // La primera lectura del servidor. Hasta que termine no se puede guardar
+  // nada: lo frena `yaSeLeyoDelServidor`.
+  pullFromGas().then(ok => {
+    if (ok) {
+      const active = document.querySelector('.section.active')?.id?.replace('sec-','');
+      if (active && V[active]) V[active]();
+    }
+  });
 }
 
 function applyPermissions(){
@@ -4984,9 +4938,6 @@ function canDo(action){
   return(perms[r]||[]).includes(action);
 }
 
-$('log-btn').addEventListener('click',login);
-$('log-pass').addEventListener('keydown',e=>{if(e.key==='Enter')login()});
-$('log-user').addEventListener('keydown',e=>{if(e.key==='Enter')$('log-pass').focus()});
 
 
 // ══════════ GOOGLE SHEETS SYNC ══════════
@@ -5066,16 +5017,58 @@ function poblarAniosGlobal(){
   sel.value = (anterior && anios.has(anterior)) ? anterior : String(new Date().getFullYear());
 }
 
+/* ── Datos: Postgres, no la hoja ─────────────────────────────────────────────
+   Antes se leia y se escribia contra el Apps Script. El corte cambia dos cosas
+   que importan:
+
+     - El `saveAll` del Apps Script no pedia autenticacion. Cualquiera con la
+       URL podia reemplazar los registros de capacitacion de la planta entera.
+       Ahora hace falta la sesion de Vessena, y el permiso se decide en el
+       servidor.
+
+     - Cada escritura declara sobre que version se hizo. El guardado reescribe
+       las colecciones completas, asi que no puede distinguir "borre esto a
+       proposito" de "me quede sin datos y mando lo que tengo". Con version, el
+       servidor rechaza lo segundo en vez de aplicarlo en silencio.
+
+   El OCR, la carga masiva y los recordatorios siguen yendo al Apps Script:
+   dependen de servicios de Google y no son datos, son acciones. */
+const API_CAP = '/api/capacitaciones';
+
+/* Version de cada coleccion tal como se leyo. Se manda de vuelta al guardar; si
+   el servidor tiene otra, alguien escribio en el medio y hay que releer. */
+let versionesServidor = { R: 0, PL: 0, PE: 0, AUDIT: 0 };
+
 async function pullFromGas() {
-  if (!GAS_URL) { updateSyncBadge('unset'); return false; }
   updateSyncBadge('syncing');
-  const data = await gasGet('getAll');
+  let data;
+  try {
+    const res = await fetch(API_CAP + '/datos', { headers: { 'Accept': 'application/json' } });
+    if (res.status === 401) { updateSyncBadge('offline'); alert('Tu sesión venció. Volvé a entrar desde el portal.'); return false; }
+    if (!res.ok) { updateSyncBadge('offline'); console.error('[sync] lectura', res.status); return false; }
+    data = await res.json();
+  } catch (e) {
+    updateSyncBadge('offline');
+    console.error('[sync] no se pudo leer', e);
+    return false;
+  }
   if (!data || !data.ok) { updateSyncBadge('offline'); return false; }
-  // Solo pisar el estado si hay datos válidos
+
+  // Una coleccion ilegible no se esconde: si se dejara pasar, la app mostraria
+  // "0 registros" y eso se lee igual que "no hay nada cargado".
+  if (Array.isArray(data._ilegibles) && data._ilegibles.length) {
+    alert('El servidor no pudo leer: ' + data._ilegibles.join(', ') +
+          '.\nNo guardes nada y avisá, para no escribir encima.');
+    updateSyncBadge('offline');
+    return false;
+  }
+
   if (Array.isArray(data.R))     { R = normalizarR(data.R); _habChips = null; }
   if (Array.isArray(data.PL))    PL = data.PL;
   if (Array.isArray(data.PE))    { PE = normalizarPE(data.PE); limpiarCacheNombres(); }
   if (Array.isArray(data.AUDIT)) AUDIT = data.AUDIT;
+  if (data._versiones) versionesServidor = data._versiones;
+
   // Actualiza cache local
   try {
     localStorage.setItem("vc3r", JSON.stringify(R));
@@ -5083,6 +5076,7 @@ async function pullFromGas() {
     localStorage.setItem("vc3e", JSON.stringify(PE));
     localStorage.setItem("vc3audit", JSON.stringify(AUDIT));
   } catch(e){}
+
   // Recién ahora la app conoce el estado del servidor y puede escribirle.
   yaSeLeyoDelServidor = true;
   poblarAniosGlobal();
@@ -5094,17 +5088,20 @@ async function pullFromGas() {
 // Hasta que no se haya leído el servidor con éxito al menos una vez, NO se
 // escribe. Sin este freno la app empuja lo que tenga en memoria apenas alguien
 // la abre —el registro de auditoría del login ya dispara un guardado— y eso
-// puede ser la caché vieja de esa máquina, o los 172 registros de ejemplo del
-// propio archivo si no hay caché. Cualquiera de los dos reemplaza la hoja
-// entera, porque el guardado no agrega: reescribe.
+// puede ser la caché vieja de esa máquina, o los registros de ejemplo del
+// propio archivo si no hay caché. Cualquiera de los dos reemplaza todo, porque
+// el guardado no agrega: reescribe.
 //
-// Paso de verdad: borrar la caché local dejó a la app con los 172 de ejemplo y
-// esos pisaron 3.130 registros reales. Leer antes de escribir no es una
+// Paso de verdad: borrar la caché local dejó a la app con 172 registros de
+// ejemplo y esos pisaron 3.130 reales. Leer antes de escribir no es una
 // optimización, es lo que evita que abrir la app destruya datos.
+//
+// El servidor ahora tambien lo frena por su cuenta, con la version. Se deja
+// igual: es mejor no mandar el disparate que confiar en que del otro lado lo
+// rechacen.
 let yaSeLeyoDelServidor = false;
 
-async function pushToGas() {
-  if (!GAS_URL) { updateSyncBadge('unset'); return false; }
+async function pushToGas(confirmarBorrado) {
   if (!yaSeLeyoDelServidor) {
     console.warn('[sync] guardado omitido: todavía no se leyó el servidor');
     return false;
@@ -5112,36 +5109,89 @@ async function pushToGas() {
   if (syncBusy) return false;
   syncBusy = true;
   updateSyncBadge('syncing');
-  const data = await gasPost('saveAll', {R, PL, PE, AUDIT});
+
+  let res, data;
+  try {
+    res = await fetch(API_CAP + '/datos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        R, PL, PE, AUDIT,
+        versiones: versionesServidor,
+        confirmarBorrado: confirmarBorrado === true,
+      }),
+    });
+    data = await res.json().catch(() => null);
+  } catch (e) {
+    syncBusy = false;
+    pushCount++;
+    updateSyncBadge('queued');
+    console.error('[sync] no se pudo guardar', e);
+    setTimeout(schedulePush, 15000);
+    return false;
+  }
   syncBusy = false;
-  if (data && data.ok) {
+
+  if (res.ok && data && data.ok) {
+    // Las versiones nuevas quedan como base del proximo guardado.
+    Object.keys(data.guardadas || {}).forEach(k => {
+      versionesServidor[k] = data.guardadas[k].version;
+    });
     lastSync = new Date();
     pushCount = 0;
     updateSyncBadge('online');
     return true;
-  } else {
-    pushCount++;
-    updateSyncBadge('queued');
-    // Reintentar en 15s si falló
-    setTimeout(schedulePush, 15000);
+  }
+
+  // --- El servidor freno el guardado a proposito ---------------------------
+
+  if (res.status === 409 && data && Array.isArray(data.colecciones)) {
+    // Caida brusca: se va a perder mas de la mitad de una coleccion. Se
+    // pregunta con los numeros a la vista, porque "¿confirmás?" sin decir
+    // cuanto se pierde es una pregunta que nadie puede contestar bien.
+    const detalle = data.colecciones
+      .map(c => '  ' + c.clave + ': de ' + c.antes + ' a ' + c.ahora)
+      .join('\n');
+    updateSyncBadge('offline');
+    const seguir = confirm(
+      'El guardado borraría más de la mitad de:\n\n' + detalle +
+      '\n\nEsto pasa cuando la app perdió datos y está mandando lo poco que le quedó.\n' +
+      'Si NO estabas borrando a propósito, cancelá y recargá la página.\n\n' +
+      '¿Guardar igual?'
+    );
+    if (!seguir) { updateSyncBadge('queued'); return false; }
+    return pushToGas(true);
+  }
+
+  if (res.status === 409) {
+    // Otra persona guardó mientras esta pestaña editaba. No se elige un ganador
+    // en silencio: se avisa y se recarga, que es lo unico honesto cuando el
+    // modelo es "reescribo todo" y no hay forma de fusionar.
+    updateSyncBadge('offline');
+    alert(
+      'Otra persona guardó cambios mientras trabajabas.\n\n' +
+      'Se van a recargar los datos del servidor. Revisá si tu último cambio quedó; ' +
+      'si no, volvé a hacerlo.'
+    );
+    await pullFromGas();
+    const activa = document.querySelector('.section.active')?.id?.replace('sec-','');
+    if (activa && V[activa]) V[activa]();
     return false;
   }
+
+  pushCount++;
+  updateSyncBadge('queued');
+  console.error('[sync] el servidor rechazó el guardado', res.status, data);
+  setTimeout(schedulePush, 15000);
+  return false;
 }
 
 function schedulePush() {
-  if (!GAS_URL) return;
   clearTimeout(pushTimer);
   pushTimer = setTimeout(pushToGas, 1500);
 }
 
 async function manualSync() {
-  if (!GAS_URL) {
-    const u = prompt('URL del Web App de Google Apps Script (deployment /exec):','');
-    if (!u) return;
-    localStorage.setItem('vc3_gas_url', u);
-    location.reload();
-    return;
-  }
   updateSyncBadge('syncing');
   const pulled = await pullFromGas();
   if (pulled) {
@@ -5151,20 +5201,32 @@ async function manualSync() {
   }
 }
 
+/* Esta URL ya no tiene nada que ver con los datos: los registros, el plan y el
+   personal viven en Postgres desde el corte. Queda para el OCR de planillas, la
+   carga masiva y los recordatorios, que dependen de servicios de Google.
+
+   Se aclara en el propio texto del prompt porque el boton decia "Sheets" y
+   cualquiera podia pensar que desconectarlo dejaba la app sin datos. */
 function configureSheetsUrl() {
   const cur = localStorage.getItem('vc3_gas_url') || '';
-  const u = prompt('URL del Web App de GAS (termina en /exec). Dejar vacío para desconectar:', cur);
+  const u = prompt(
+    'URL del Web App de Apps Script (termina en /exec).\n\n' +
+    'Los datos de capacitaciones ya NO pasan por acá: viven en Postgres.\n' +
+    'Esta conexión se usa solo para el OCR de planillas, la carga masiva\n' +
+    'y los recordatorios.\n\n' +
+    'Dejar vacío para desconectar:', cur);
   if (u === null) return;
   if (u === '') { localStorage.removeItem('vc3_gas_url'); }
   else { localStorage.setItem('vc3_gas_url', u); }
   location.reload();
 }
 
-// Wrap sv() para que también dispare push
+// Wrap sv() para que tambien dispare push. Ya no depende de que haya una URL
+// de Sheets configurada: los datos viven en Postgres y el guardado va siempre.
 const _originalSv = sv;
 sv = function() {
   _originalSv();
-  if (GAS_URL) schedulePush();
+  schedulePush();
 };
 
 // ══════════ FIN SYNC ══════════
@@ -5799,8 +5861,13 @@ function _wireBulkModal() {
 // ══════════ FIN BULK ══════════
 
 document.addEventListener('DOMContentLoaded',function(){
-  if(checkSession()){showApp()}
-  else{$('login-screen').classList.remove('hidden');setTimeout(()=>$('log-user').focus(),200)}
+  // La sesion se consulta al servidor antes de mostrar nada. Sin ella no se
+  // arma la app: el rol y el nombre que van a quedar en cada registro salen de
+  // ahi, y no de algo que el navegador pueda elegir.
+  cargarSesion().then(hay => {
+    if (hay) showApp();
+    else sinSesion('No pudimos confirmar tu sesión, o tu usuario no tiene acceso a Capacitaciones.');
+  });
   _wireOcrModal();
   _wireBulkModal();
   const btnGrPrint = document.getElementById('btn-gr-print');

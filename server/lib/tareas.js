@@ -111,3 +111,32 @@ export async function documentosDe(dominio, coleccion) {
     );
     return rows.map((r) => r.raw);
 }
+
+/**
+ * Una coleccion de capacitaciones, desde donde hoy sea la fuente de verdad.
+ *
+ * Hasta el corte los avisos leian de `documentos`, o sea de lo que la replica
+ * bajaba de la hoja. Despues del corte la app escribe en `capacitaciones_datos`
+ * y la hoja queda congelada: seguir leyendo la replica habria dejado los
+ * correos mirando una foto vieja, avisando de inducciones ya hechas y callando
+ * las nuevas. Y no se habria notado, porque los correos igual salen.
+ *
+ * Se prefiere la tabla nueva y se cae a la replica solo si esa tabla todavia no
+ * existe -por ejemplo si la migracion no corrio-, para que un despliegue a
+ * medias no deje los avisos sin datos.
+ */
+export async function coleccionCapacitaciones(clave) {
+    try {
+        const { rows } = await consultar(
+            'SELECT valor FROM capacitaciones_datos WHERE clave = $1',
+            [clave]
+        );
+        if (rows.length) {
+            const datos = JSON.parse(rows[0].valor);
+            if (Array.isArray(datos)) return datos;
+        }
+    } catch (err) {
+        console.warn(`[capacitaciones] no se pudo leer ${clave} de capacitaciones_datos:`, err.message);
+    }
+    return documentosDe('capacitaciones', clave);
+}

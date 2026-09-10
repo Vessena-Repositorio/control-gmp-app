@@ -18,7 +18,7 @@
  */
 import { hayCorreo, enviar } from './correo.js';
 import { supervisoresDe, unir } from './destinatarios.js';
-import { correrUnaVezPorDia, documentosDe, relojLocal, comoDia } from './tareas.js';
+import { correrUnaVezPorDia, coleccionCapacitaciones, relojLocal, comoDia } from './tareas.js';
 
 const RECURSO = 'capacitaciones';
 const TAREA_PLAN = 'avisos_capacitaciones_plan';
@@ -190,7 +190,7 @@ export async function revisarRecordatoriosPlan({ forzar = false, soloPrevisualiz
     return correrUnaVezPorDia(TAREA_PLAN, { hora: HORA, forzar, activa: ACTIVOS }, async () => {
         const reloj = await relojLocal();
         const hoy = comoDia(reloj.hoy);
-        const plan = await documentosDe('capacitaciones', 'PL');
+        const plan = await coleccionCapacitaciones('PL');
 
         // Escalamiento opcional del aviso de atrasadas: si alguien se carga en
         // notificacion_supervisores para 'atrasadas', recibe copia. Vacio por
@@ -344,8 +344,8 @@ export async function revisarInduccionesPendientes({ forzar = false, soloPrevisu
             const reloj = await relojLocal();
             const hoy = comoDia(reloj.hoy);
             const [personal, registros] = await Promise.all([
-                documentosDe('capacitaciones', 'PE'),
-                documentosDe('capacitaciones', 'R'),
+                coleccionCapacitaciones('PE'),
+                coleccionCapacitaciones('R'),
             ]);
 
             // Indice de quien hizo que modulo de induccion, por nombre en
