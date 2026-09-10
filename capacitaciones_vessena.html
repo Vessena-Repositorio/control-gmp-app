@@ -151,7 +151,7 @@ summary.leg-y:hover{background:var(--g50)!important}
 
 <div class="hdr">
   <div class="hdr-top">
-    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-10f</span></div></div>
+    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-10g</span></div></div>
     <div class="code">REG-SOP-AC-039-D</div>
   </div>
   <div class="nav" id="nav">
@@ -753,18 +753,28 @@ summary.leg-y:hover{background:var(--g50)!important}
   </div>
 </div>
 
+<!-- Confirmacion de un cambio en el plan.
+
+     Antes pedia una clave -"123", escrita en este archivo, en un repositorio
+     publico- y un nombre a mano. Las dos cosas eran teatro: la clave la sabia
+     cualquiera que abriera el codigo, y el nombre se escribia solo, asi que la
+     auditoria decia lo que el que editaba quisiera que dijera.
+
+     Ahora la firma sale de la sesion de Vessena y no se puede elegir. Lo que
+     queda es la confirmacion, que sigue teniendo sentido: cambiar el plan anual
+     no deberia pasar por un click distraido. -->
 <div class="modal-bg" id="pw-modal">
-  <div class="modal" style="max-width:340px;text-align:center">
-    <div style="font-size:30px;margin-bottom:8px">🔒</div>
-    <div style="font-size:14px;font-weight:700;color:var(--navy);margin-bottom:4px">Confirmar modificación</div>
-    <div style="font-size:11px;color:var(--g500);margin-bottom:14px">Ingresá tu nombre y la clave para guardar</div>
-    <input id="pw-user" placeholder="Tu nombre..." style="text-align:center;font-size:13px;margin-bottom:8px">
-    <input type="password" id="pw-input" placeholder="Clave..." style="text-align:center;font-size:16px;letter-spacing:4px;margin-bottom:14px">
-    <div style="display:flex;gap:8px;justify-content:center">
-      <button class="btn btn-s" id="pw-ok">Confirmar</button>
-      <button class="btn btn-o" id="pw-no">Cancelar</button>
+  <div class="modal" style="max-width:420px">
+    <div style="font-size:14px;font-weight:800;color:var(--navy);margin-bottom:6px">Confirmar cambio en el plan</div>
+    <div id="pw-detalle" style="font-size:12px;color:var(--g700);background:var(--g50);border:1px solid var(--g200);border-radius:var(--r);padding:10px 12px;margin-bottom:10px;max-height:220px;overflow-y:auto"></div>
+    <div style="font-size:11px;color:var(--g500);margin-bottom:14px">
+      Queda registrado en la auditoría a nombre de <b id="pw-quien" style="color:var(--navy)"></b>.
     </div>
-    <div id="pw-err" style="color:var(--red);font-size:11px;margin-top:8px;display:none">Clave incorrecta</div>
+    <input type="hidden" id="pw-user">
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-o" id="pw-no">Cancelar</button>
+      <button class="btn btn-s" id="pw-ok">Confirmar</button>
+    </div>
   </div>
 </div>
 
@@ -2718,7 +2728,8 @@ window.dR=function(id){if(!canDo('delete_reg')){alert('No tenés permisos para e
 
 // ══════════ PLAN GANTT ══════════
 let editPlanId=null;
-const PLAN_PW='123';
+// La clave del plan ('123', escrita acá en un repositorio público) se saco: la
+// firma sale ahora de la sesion de Vessena y no se puede elegir.
 
 // Extraer fechas del campo fr para saber en qué mes se dio
 function frMonths(fr){
@@ -3305,6 +3316,18 @@ window.editPlan=function(id){
 };
 $('m-close').onclick=()=>{$('modal-bg').classList.remove('show')};
 
+/* Prepara y muestra la confirmacion de un cambio en el plan.
+
+   `detalle` es lo que se va a hacer, en palabras. Un "¿confirmás?" pelado no se
+   puede contestar bien: quien lo lee no sabe que esta confirmando, y termina
+   apretando que si por reflejo. */
+function pedirConfirmacion(detalle){
+  const quien = (currentUser && currentUser.nombre) || '—';
+  $('pw-user').value = quien;               // lo leen los pendingSave para la auditoria
+  $('pw-quien').textContent = quien;
+  $('pw-detalle').innerHTML = detalle || 'Se va a guardar el cambio.';
+  $('pw-modal').classList.add('show');
+}
 let pendingSave=null;let pendingAuditInfo=null;
 $('m-save').onclick=()=>{
   // Capture changes before saving
@@ -3320,6 +3343,12 @@ $('m-save').onclick=()=>{
   const nH=parseFloat($('m-hrs').value);if(nH&&nH!==p.h)cambios.push('Horas: '+p.h+' → '+nH);
   const nDc=$('m-doc').value;if(nDc&&nDc!==p.dc)cambios.push('Docente cambiado');
   const nEv=$('m-eval').value;if(nEv&&nEv!==p.ev)cambios.push('Evaluación cambiada');
+  // Los meses son lo que mueve el marcador en el calendario, asi que tienen que
+  // aparecer en la confirmacion. Se comparaban recien al guardar, y el resumen
+  // decia "sin cambios" justo cuando se estaba reprogramando.
+  const mNuevos=$('m-meses').value.split(',').map(Number).filter(n=>n>=1&&n<=12);
+  if($('m-meses').value.trim()&&JSON.stringify(mNuevos)!==JSON.stringify(p.m))
+    cambios.push('Meses: '+p.m.join(',')+' → '+mNuevos.join(','));
   pendingAuditInfo={tema:p.t,cambios:cambios};
   pendingSave=function(){
     const usr=$('pw-user').value.trim()||'—';
@@ -3342,16 +3371,16 @@ $('m-save').onclick=()=>{
     else logAudit('EDICIÓN PLAN','['+pendingAuditInfo.tema+'] Sin cambios detectados',usr);
     sv();$('modal-bg').classList.remove('show');V.plan();
   };
-  $('pw-user').value=localStorage.getItem('vc3lastUser')||'';$('pw-input').value='';$('pw-err').style.display='none';
-  $('pw-modal').classList.add('show');
-  setTimeout(()=>$('pw-user').value?$('pw-input').focus():$('pw-user').focus(),100);
+  pedirConfirmacion(cambios.length
+    ? '<b>Cambios en:</b> ' + h(p.t) + '<ul style="margin:6px 0 0 16px;padding:0">' + cambios.map(c => '<li>' + h(c) + '</li>').join('') + '</ul>'
+    : '<b>' + h(p.t) + '</b><br><span style="color:var(--g500)">No se detectaron cambios en los campos del formulario.</span>');
 };
 $('pw-ok').onclick=()=>{
-  if($('pw-input').value===PLAN_PW){localStorage.setItem('vc3lastUser',$('pw-user').value.trim());$('pw-modal').classList.remove('show');if(pendingSave)pendingSave();pendingSave=null;pendingAuditInfo=null}
-  else{$('pw-err').style.display='block';$('pw-input').value='';$('pw-input').focus()}
+  $('pw-modal').classList.remove('show');
+  if(pendingSave)pendingSave();
+  pendingSave=null;pendingAuditInfo=null;
 };
 $('pw-no').onclick=()=>{$('pw-modal').classList.remove('show');pendingSave=null;pendingAuditInfo=null};
-$('pw-input').addEventListener('keydown',e=>{if(e.key==='Enter')$('pw-ok').click()});
 $('pw-modal').onclick=function(e){if(e.target===this){this.classList.remove('show');pendingSave=null;pendingAuditInfo=null}};
 
 $('m-notify').onclick=()=>{
@@ -3734,9 +3763,7 @@ window.eliminarPlan=function(id){
     logAudit('EDICIÓN PLAN','ELIMINADA: ['+p.t+'] del plan '+(p.year||2026),usr);
     sv();V.plan();V.dash();
   };
-  $('pw-user').value=localStorage.getItem('vc3lastUser')||'';$('pw-input').value='';$('pw-err').style.display='none';
-  $('pw-modal').classList.add('show');
-  setTimeout(()=>$('pw-user').value?$('pw-input').focus():$('pw-user').focus(),100);
+  pedirConfirmacion('<b>Eliminar del plan</b><br>' + h(p.t) + ' (' + (p.year||2026) + ')');
 };
 
 // ══════════ REPETIR PLAN ══════════
@@ -3796,9 +3823,7 @@ window.repetirPlan=function(id){
     logAudit('EDICIÓN PLAN','REPETICIÓN: ['+orig.t+'] → Ronda '+nextRound+' (meses: '+mArr.join(',')+') — Motivo: '+motivo.trim(),usr);
     sv();V.plan();V.dash();
   };
-  $('pw-user').value=localStorage.getItem('vc3lastUser')||'';$('pw-input').value='';$('pw-err').style.display='none';
-  $('pw-modal').classList.add('show');
-  setTimeout(()=>$('pw-user').value?$('pw-input').focus():$('pw-user').focus(),100);
+  pedirConfirmacion('<b>Repetir la capacitación</b><br>' + h(orig.t) + ' → Ronda ' + nextRound + '<br>Meses: ' + mArr.join(', ') + '<br>Motivo: ' + h(motivo.trim()));
 };
 
 // ══════════ SUSPENDER / REACTIVAR PLAN ══════════
@@ -3816,9 +3841,7 @@ window.suspPlan=function(id){
     logAudit('SUSPENSIÓN','['+p.t+'] Motivo: '+motivo.trim()+' (estado anterior: '+p.suspPrevEstado+')',usr);
     sv();V.plan();V.dash();
   };
-  $('pw-user').value=localStorage.getItem('vc3lastUser')||'';$('pw-input').value='';$('pw-err').style.display='none';
-  $('pw-modal').classList.add('show');
-  setTimeout(()=>$('pw-user').value?$('pw-input').focus():$('pw-user').focus(),100);
+  pedirConfirmacion('<b>Suspender la capacitación</b><br>' + h(p.t) + '<br>Motivo: ' + h(motivo.trim()));
 };
 window.reactivarPlan=function(id){
   const p=PL.find(x=>x.id===id);if(!p)return;
@@ -3831,9 +3854,7 @@ window.reactivarPlan=function(id){
     delete p.suspMotivo;delete p.suspFecha;delete p.suspPrevEstado;
     sv();V.plan();V.dash();
   };
-  $('pw-user').value=localStorage.getItem('vc3lastUser')||'';$('pw-input').value='';$('pw-err').style.display='none';
-  $('pw-modal').classList.add('show');
-  setTimeout(()=>$('pw-user').value?$('pw-input').focus():$('pw-user').focus(),100);
+  pedirConfirmacion('<b>Reactivar la capacitación</b><br>' + h(p.t) + '<br>Vuelve al estado: ' + (p.suspPrevEstado||'pendiente'));
 };
 
 // ══════════ CSV UPLOAD ══════════
