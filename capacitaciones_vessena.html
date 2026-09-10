@@ -157,7 +157,7 @@ summary.leg-y:hover{background:var(--g50)!important}
 
 <div class="hdr">
   <div class="hdr-top">
-    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-10i</span></div></div>
+    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-10j</span></div></div>
     <div class="code">REG-SOP-AC-039-D</div>
   </div>
   <div class="nav" id="nav">
@@ -1410,10 +1410,68 @@ function aNumero(obj, campos){
   });
   return obj;
 }
+/* Un registro puede cubrir MAS DE UNA partida del plan.
+
+   Pasa seguido: se juntan dos temas en una sola charla porque van con la misma
+   gente y el mismo dia. "Limpieza de planta - Envasado" cubre a la vez
+   "BP limpieza envasado" y "Proc. limpieza planta". Con un solo `planId` habia
+   que elegir cual de las dos quedaba cumplida y cual seguia figurando atrasada,
+   lo cual es falso en los dos sentidos.
+
+   `planId` sigue siendo la principal -es la que escriben los formularios de
+   carga y la que leen los import viejos- y `planIds` guarda las demas. No se
+   migra nada: un registro sin `planIds` funciona igual que antes.
+
+   Para preguntar "¿este registro cuenta para esta partida?" hay que usar
+   `vinculadoA()`. Comparar `r.planId === p.id` a mano vuelve a dejar afuera las
+   secundarias, que es justo lo que esto viene a arreglar. */
+function planesDe(r){
+  if (!r) return [];
+  const salida = [];
+  const principal = Number(r.planId);
+  if (Number.isFinite(principal) && principal > 0) salida.push(principal);
+  if (Array.isArray(r.planIds)) {
+    r.planIds.forEach(x => {
+      const n = Number(x);
+      if (Number.isFinite(n) && n > 0 && !salida.includes(n)) salida.push(n);
+    });
+  }
+  return salida;
+}
+
+function vinculadoA(r, id){
+  const n = Number(id);
+  return planesDe(r).includes(n);
+}
+
+/* Agrega o saca una partida de un registro, manteniendo `planId` como la
+   principal. Si se saca la principal, asciende la primera de las secundarias:
+   asi un registro nunca queda con planIds y planId en 0, que se leeria como
+   "sin plan" en el codigo viejo. */
+function ponerEnPlan(r, id, poner){
+  const n = Number(id);
+  let planes = planesDe(r);
+  if (poner) {
+    if (!planes.includes(n)) planes.push(n);
+  } else {
+    planes = planes.filter(x => x !== n);
+  }
+  r.planId = planes.length ? planes[0] : 0;
+  r.planIds = planes.slice(1);
+  r.plan = planes.length ? 'SI' : 'NO';
+}
+
 function normalizarR(arr){
-  return Array.isArray(arr)
-    ? arr.map(r => aNumero(aTexto(r, CAMPOS_TEXTO_R), CAMPOS_NUMERO_R))
-    : arr;
+  if (!Array.isArray(arr)) return arr;
+  return arr.map(r => {
+    aNumero(aTexto(r, CAMPOS_TEXTO_R), CAMPOS_NUMERO_R);
+    // planIds son las partidas secundarias. Se saneen o no vengan, tiene que
+    // quedar una lista de numeros: el resto del codigo la recorre sin mirar.
+    r.planIds = Array.isArray(r.planIds)
+      ? r.planIds.map(Number).filter(n => Number.isFinite(n) && n > 0)
+      : [];
+    return r;
+  });
 }
 function normalizarPE(arr){ return Array.isArray(arr) ? arr.map(p => aTexto(p, CAMPOS_TEXTO_PE)) : arr; }
 
@@ -1560,7 +1618,7 @@ function kpiByTraining(target,year){
     const tgtSecs=targetSectors(p.d);
     
     // Find linked records (planId first, then keyword fallback)
-    let linked=R.filter(r=>r.planId===p.id);
+    let linked=R.filter(r=>vinculadoA(r,p.id));
     let method='';
     if(!linked.length){
       const kw=p.t.toLowerCase().split(/[\s\-\/]+/).filter(w=>w.length>3);
@@ -1633,7 +1691,7 @@ function kpiUnplanned(target,year){
   const sc=secCount(year);
   const IND_T=['REGLAMENTO','INDUCCION GMP','INDUCCION SEGURIDAD/SALUD','INDUCCION'];
   const yearR=R.filter(r=>{const ry=r.year||parseInt((r.fecha||'').slice(0,4))||2026;return ry===(year||2026)});
-  const unplanned=yearR.filter(r=>!r.planId&&r.dirigido&&!IND_T.includes(r.tema));
+  const unplanned=yearR.filter(r=>!planesDe(r).length&&r.dirigido&&!IND_T.includes(r.tema));
   // Group by session (fecha+tema+desc)
   const sessions={};
   unplanned.forEach(r=>{
@@ -2679,7 +2737,7 @@ function sub(){
       planItem.fr=f;
       const tgtTotal=planItem.persEst>0?planItem.persEst:targetPeopleCount(planItem.d);
       // Count unique attendees from all records linked to this plan item
-      const linkedRecs=R.filter(r=>r.planId===linkedPlanId);
+      const linkedRecs=R.filter(r=>vinculadoA(r,linkedPlanId));
       const attended=new Set(linkedRecs.map(r=>r.nom.toUpperCase().trim()));
       const pct=tgtTotal>0?Math.round((attended.size/tgtTotal)*100):0;
       if(pct>=80)planItem.e='cumplida';
@@ -2788,21 +2846,23 @@ function candidatosPlan(p){
 
   R.forEach(r => {
     if (String(r.fecha || '').slice(0, 4) !== anio) return;
-    // Ya vinculada a ESTA partida: se muestra igual, tildada, para que se vea
-    // que cuenta. Vinculada a OTRA: se muestra bloqueada, porque moverla seria
-    // sacarsela a la otra sin decirlo.
-    const yaDeOtra = r.planId && Number(r.planId) !== Number(p.id);
     if (habCoincidencias(r, tokens) < tokens.length) return;
     const clave = r.fecha + '||' + r.tema + '||' + r.desc;
     let s = porSesion.get(clave);
     if (!s) {
       s = { clave, fecha: r.fecha, tema: r.tema, desc: r.desc, nombres: [],
-            yaDeEsta: false, otraPartida: null };
+            yaDeEsta: false, otrasPartidas: [] };
       porSesion.set(clave, s);
     }
     s.nombres.push(r.nom);
-    if (r.planId && Number(r.planId) === Number(p.id)) s.yaDeEsta = true;
-    if (yaDeOtra) s.otraPartida = Number(r.planId);
+    // Una sesion puede cubrir varias partidas: se juntan dos temas en una sola
+    // charla porque van con la misma gente el mismo dia. Las otras partidas a
+    // las que ya esta vinculada se muestran, pero no bloquean: sumarle esta no
+    // se la saca a ninguna.
+    planesDe(r).forEach(id => {
+      if (Number(id) === Number(p.id)) s.yaDeEsta = true;
+      else if (!s.otrasPartidas.includes(Number(id))) s.otrasPartidas.push(Number(id));
+    });
   });
 
   return [...porSesion.values()]
@@ -2834,31 +2894,32 @@ function vincRender(){
   }
   let html = '';
   vincCandidatos.forEach((s, i) => {
-    const bloqueada = s.otraPartida != null;
-    const otra = bloqueada ? PL.find(x => Number(x.id) === s.otraPartida) : null;
-    html += '<div style="display:flex;gap:10px;padding:9px 12px;border-bottom:1px solid var(--g100);align-items:flex-start' +
-            (bloqueada ? ';opacity:.55' : '') + '">';
-    html += '<input type="checkbox" id="vinc-c' + i + '"' +
-            (s.yaDeEsta ? ' checked' : '') + (bloqueada ? ' disabled' : '') +
+    // Ya estar vinculada a otra partida NO bloquea: una charla puede cubrir dos
+    // temas del plan. Se muestra a cuales, para que se vea que sumarle esta no
+    // se la saca a ninguna.
+    const otras = s.otrasPartidas
+      .map(id => { const o = PL.find(x => Number(x.id) === id); return o ? o.t : ('partida ' + id); });
+    html += '<div style="display:flex;gap:10px;padding:9px 12px;border-bottom:1px solid var(--g100);align-items:flex-start">';
+    html += '<input type="checkbox" id="vinc-c' + i + '"' + (s.yaDeEsta ? ' checked' : '') +
             ' style="margin-top:3px;width:16px;height:16px;flex:0 0 16px">';
     html += '<div style="flex:1;min-width:0">';
     html += '<div style="font-size:11px;color:var(--g500);font-weight:700">' + h(s.fecha || '—') +
             ' &nbsp;·&nbsp; ' + bg(s.tema, 'blue') +
             ' &nbsp;·&nbsp; <b>' + s.nombres.length + '</b> asistente' + (s.nombres.length === 1 ? '' : 's') +
             (s.yaDeEsta ? ' &nbsp;·&nbsp; <span style="color:var(--green);font-weight:800">YA VINCULADA</span>' : '') +
-            (bloqueada ? ' &nbsp;·&nbsp; <span style="color:#b45309;font-weight:800">vinculada a: ' +
-                h(otra ? otra.t : ('partida ' + s.otraPartida)) + '</span>' : '') +
             '</div>';
     html += '<div style="font-size:12px;color:var(--g700);margin-top:2px">' + h(s.desc) + '</div>';
+    if (otras.length) {
+      html += '<div style="font-size:10px;color:#b45309;margin-top:2px;font-weight:700">' +
+              'También cuenta para: ' + otras.map(t => h(t)).join(' · ') + '</div>';
+    }
     html += '<div style="font-size:10px;color:var(--g500);margin-top:2px">' +
             h(s.nombres.slice(0, 6).join(' · ')) +
             (s.nombres.length > 6 ? ' … y ' + (s.nombres.length - 6) + ' más' : '') + '</div>';
     html += '</div></div>';
   });
   $('vinc-lista').innerHTML = html;
-  const libres = vincCandidatos.filter(s => s.otraPartida == null).length;
-  $('vinc-cuenta').textContent = vincCandidatos.length + ' sesión(es) candidata(s), ' +
-    libres + ' disponible(s) para vincular';
+  $('vinc-cuenta').textContent = vincCandidatos.length + ' sesión(es) candidata(s)';
 }
 
 function vincGuardar(){
@@ -2869,7 +2930,6 @@ function vincGuardar(){
   const detalle = [];
 
   vincCandidatos.forEach((s, i) => {
-    if (s.otraPartida != null) return;              // no se le saca a otra partida
     const casilla = document.getElementById('vinc-c' + i);
     if (!casilla) return;
     const quiere = casilla.checked;
@@ -2877,8 +2937,7 @@ function vincGuardar(){
 
     R.forEach(r => {
       if (r.fecha + '||' + r.tema + '||' + r.desc !== s.clave) return;
-      if (quiere) { r.planId = vincPlanId; r.plan = 'SI'; }
-      else if (Number(r.planId) === vincPlanId) { r.planId = 0; r.plan = 'NO'; }
+      ponerEnPlan(r, vincPlanId, quiere);
     });
     if (quiere) vinculados++; else desvinculados++;
     detalle.push((quiere ? '+ ' : '- ') + s.fecha + ' ' + s.desc + ' (' + s.nombres.length + ')');
@@ -2907,7 +2966,7 @@ function vincGuardar(){
     '. El estado de la partida se recalculó y ya quedó guardado.');
 }
 function coberturaPlan(p){
-  const ligados = R.filter(r => r.planId === p.id);
+  const ligados = R.filter(r => vinculadoA(r, p.id));
   if (!ligados.length) return null;
   const objetivo = p.persEst > 0 ? p.persEst : targetPeopleCount(p.d, p.year || 2026);
   const asistieron = new Set(ligados.map(r => String(r.nom).toUpperCase().trim())).size;
@@ -2939,12 +2998,12 @@ V.plan=function(){
     if(itemYear<curYearNow){
       // Se dicto o no se dicto. La cobertura se muestra aparte, en la columna
       // Estado, y no cambia este valor.
-      p.e = R.some(r=>r.planId===p.id) ? 'cumplida' : 'pendiente';
+      p.e = R.some(r=>vinculadoA(r,p.id)) ? 'cumplida' : 'pendiente';
       return;
     }
     
     // Current year - use month logic
-    const linkedRecs=R.filter(r=>r.planId===p.id);
+    const linkedRecs=R.filter(r=>vinculadoA(r,p.id));
     const hasRecords=linkedRecs.length>0;
     const maxMonth=p.m.length?Math.max(...p.m):12;
     const minMonth=p.m.length?Math.min(...p.m):1;
@@ -3558,7 +3617,7 @@ V.pers=function(){
       let attendedNames=new Set();
       if(training.type==='plan'){
         // Records linked to plan item or keyword match
-        let linked=R.filter(r=>r.planId===training.planId);
+        let linked=R.filter(r=>vinculadoA(r,training.planId));
         if(!linked.length){
           const kw=training.label.replace('📋 ','').toLowerCase().split(/[\s\-\/]+/).filter(w=>w.length>3);
           linked=R.filter(r=>!IND_T.includes(r.tema)&&kw.some(k=>(r.desc+' '+r.tema).toLowerCase().includes(k)));
@@ -4988,7 +5047,7 @@ $('ri-confirm').addEventListener('click',function(){
     if(planItem){
       planItem.fr=d.fecha;
       const tgtTotal=planItem.persEst>0?planItem.persEst:targetPeopleCount(planItem.d,planItem.year||2026);
-      const linkedRecs=R.filter(r=>r.planId===planId);
+      const linkedRecs=R.filter(r=>vinculadoA(r,planId));
       const attended=new Set(linkedRecs.map(r=>r.nom.toUpperCase().trim()));
       const pct=tgtTotal>0?Math.round((attended.size/tgtTotal)*100):0;
       if(pct>=80)planItem.e='cumplida';
@@ -5094,7 +5153,7 @@ $('btn-exp-ppt').addEventListener('click',function(){
     s.addText('% Asistencia: '+p.t+(p.ronda?' (R'+p.ronda+')':''),{x:0.3,y:0.15,w:10,h:0.5,fontSize:18,bold:true,color:NAVY,fontFace:'Arial'});
     s.addText('Dirigido a: '+(p.d||'?')+(p.fr?' | '+p.fr:''),{x:0.3,y:0.6,w:10,h:0.3,fontSize:11,color:GRAY,fontFace:'Arial'});
     
-    let linked=R.filter(r=>r.planId===p.id);
+    let linked=R.filter(r=>vinculadoA(r,p.id));
     if(!linked.length){const kw=p.t.toLowerCase().split(/[\s\-\/]+/).filter(w=>w.length>3);linked=R.filter(r=>!IND_T.includes(r.tema)&&kw.some(k=>(r.desc+' '+r.tema).toLowerCase().includes(k)))}
     
     const tgtSecs=targetSectors(p.d);
@@ -6155,7 +6214,7 @@ function bulkApply() {
         planItem.fr = s.fecha;
         const tgtTotal = planItem.persEst > 0 ? planItem.persEst : targetPeopleCount(planItem.d, regYear);
         // Contar todos los asistentes únicos entre TODOS los registros vinculados a este plan item
-        const linkedRecs = R.filter(r => r.planId === planId);
+        const linkedRecs = R.filter(r => vinculadoA(r, planId));
         const attended = new Set(linkedRecs.map(r => r.nom.toUpperCase().trim()));
         const pct = tgtTotal > 0 ? Math.round((attended.size / tgtTotal) * 100) : 0;
         const prevEstado = planItem.e;
