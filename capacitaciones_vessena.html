@@ -48,6 +48,12 @@ input:focus,select:focus{outline:none;border-color:var(--navy-light);box-shadow:
 .btn-o{background:#fff;color:var(--g600);border:1px solid var(--g300)}.btn-o:hover{background:var(--g50)}
 .btn-d{background:var(--red);color:#fff;opacity:.8}.btn-d:hover{opacity:1}
 .btn-i{background:none;border:none;cursor:pointer;font-size:14px;padding:2px}
+/* Los botones de accion de la fila del plan llevan texto ademas del icono: en
+   una fila con seis acciones, dos parecidas entre si y una destructiva, el
+   icono solo obligaba a dejar el mouse quieto sobre cada uno para saber cual
+   era cual. */
+.gantt .btn-i{font-size:10px;font-weight:700;color:var(--g600);padding:3px 7px;border-radius:6px;white-space:nowrap}
+.gantt .btn-i:hover{background:var(--g100);color:var(--navy)}
 .filters{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
 .filters input,.filters select{max-width:200px}
 .section{display:none}.section.active{display:block}
@@ -151,7 +157,7 @@ summary.leg-y:hover{background:var(--g50)!important}
 
 <div class="hdr">
   <div class="hdr-top">
-    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-10h</span></div></div>
+    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-10i</span></div></div>
     <div class="code">REG-SOP-AC-039-D</div>
   </div>
   <div class="nav" id="nav">
@@ -3033,13 +3039,23 @@ V.plan=function(){
         (cob.pct !== null ? ' &middot; ' + cob.pct + '%' : '') + '</div>'
       : '';
     html+='<td>'+bg(stLb,stCl)+cobHtml+(p.e==='suspendida'&&p.suspMotivo?'<div style="font-size:8px;color:var(--g500);margin-top:2px;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+h(p.suspMotivo)+'">'+h(p.suspMotivo)+'</div>':'')+'</td>';
-    html+='<td style="white-space:nowrap"><button class="btn-i" onclick="event.stopPropagation();editPlan('+p.id+')" title="Editar">⚙️</button>';
-    if(p.e!=='suspendida'){html+='<button class="btn-i" onclick="event.stopPropagation();suspPlan('+p.id+')" title="Suspender">⏸️</button>'}
-    else{html+='<button class="btn-i" onclick="event.stopPropagation();reactivarPlan('+p.id+')" title="Reactivar">▶️</button>'}
-    html+='<button class="btn-i" onclick="event.stopPropagation();reprogramarPlan('+p.id+')" title="Reprogramar: mover esta misma capacitación a otro mes">🗓️</button>';
-    html+='<button class="btn-i" onclick="event.stopPropagation();vincularPlan('+p.id+')" title="Buscar registros que podrían ser esta capacitación y vincularlos">🔗</button>';
-    html+='<button class="btn-i" onclick="event.stopPropagation();repetirPlan('+p.id+')" title="Repetir">🔄</button>';
-    html+='<button class="btn-i" onclick="event.stopPropagation();eliminarPlan('+p.id+')" title="Eliminar" style="color:var(--red)">🗑️</button>';
+    /* Los seis botones de la fila, con etiqueta ademas del icono.
+
+       El de repetir era un 🔄, que se lee como "actualizar" o "recargar". Se uso
+       para reprogramar -que era lo unico parecido que habia- y el resultado fue
+       una partida duplicada: la original quedo en su mes vieja y atrasada, mas
+       una ronda que nadie queria.
+
+       Un icono solo obliga a dejar el mouse quieto sobre cada uno para saber
+       que hace. En una fila con seis acciones, dos de ellas parecidas y una
+       destructiva, eso no alcanza. */
+    html+='<td style="white-space:nowrap"><button class="btn-i" onclick="event.stopPropagation();editPlan('+p.id+')" title="Abrir el formulario completo de esta capacitación">⚙️ Editar</button>';
+    if(p.e!=='suspendida'){html+='<button class="btn-i" onclick="event.stopPropagation();suspPlan('+p.id+')" title="Suspender: la capacitación no se va a dictar. Pide motivo.">⏸️ Suspender</button>'}
+    else{html+='<button class="btn-i" onclick="event.stopPropagation();reactivarPlan('+p.id+')" title="Reactivar: vuelve al estado que tenía antes de suspenderse">▶️ Reactivar</button>'}
+    html+='<button class="btn-i" onclick="event.stopPropagation();reprogramarPlan('+p.id+')" title="Mover ESTA capacitación a otro mes. Sigue habiendo una sola fila.">🗓️ Reprogramar</button>';
+    html+='<button class="btn-i" onclick="event.stopPropagation();vincularPlan('+p.id+')" title="Buscar registros que podrían ser esta capacitación y vincularlos">🔗 Vincular</button>';
+    html+='<button class="btn-i" onclick="event.stopPropagation();repetirPlan('+p.id+')" title="Dictarla de nuevo: crea una fila NUEVA (otra ronda) y deja esta donde está. Para ingresos nuevos o refuerzo.">➕ Nueva ronda</button>';
+    html+='<button class="btn-i" onclick="event.stopPropagation();eliminarPlan('+p.id+')" title="Eliminar del plan" style="color:var(--red)">🗑️ Eliminar</button>';
     html+='</td>';
     html+='</tr>';
   });
