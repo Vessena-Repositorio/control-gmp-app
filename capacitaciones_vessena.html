@@ -158,7 +158,7 @@ summary.leg-y:hover{background:var(--g50)!important}
 
 <div class="hdr">
   <div class="hdr-top">
-    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-10m</span></div></div>
+    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-10n</span></div></div>
     <div class="code">REG-SOP-AC-039-D</div>
   </div>
   <div class="nav" id="nav">
@@ -1567,8 +1567,50 @@ function wasActive(p,year){
 function secCount(year){const c={};PE.forEach(p=>{if(wasActive(p,year)){c[p.s]=(c[p.s]||0)+1}});return c}
 
 // KPI general por sector: % personas capacitadas sobre total del sector
+/* Sectores que efectivamente asistieron a cada partida, en UNA pasada sobre los
+   registros. Devuelve id de partida -> Set de sectores (normalizados).
+
+   El sector sale de la ficha de la persona; si no esta en el padron se usa el
+   que quedo escrito en el registro. */
+function sectoresQueAsistieron(){
+  const m = new Map();
+  R.forEach(r => {
+    const planes = planesDe(r);
+    if (!planes.length) return;
+    const fp = findPerson(r.nom);
+    const s = normTxt(fp ? fp.s : (r.sec || '')).trim();
+    if (!s) return;
+    planes.forEach(id => {
+      if (!m.has(id)) m.set(id, new Set());
+      m.get(id).add(s);
+    });
+  });
+  return m;
+}
+
+/* KPI de cumplimiento del plan POR SECTOR.
+
+   Antes tomaba el estado global de la partida y se lo daba a todos los sectores
+   a los que estaba dirigida. Una capacitacion "para Todos" marcada como
+   cumplida aparecia cumplida en Gerencia aunque no hubiera ido nadie de
+   Gerencia. El numero se leia como cobertura y era otra cosa.
+
+   Ahora, para cada sector, una partida puede estar en tres situaciones:
+
+     - CUMPLIDA: hay un registro vinculado de alguien de ese sector. Es la unica
+       que se cuenta como cumplida.
+     - SIN DATOS: la partida figura dictada pero no tiene registros vinculados,
+       asi que no hay forma de saber quien asistio. No se cuenta ni a favor ni
+       en contra: se muestra aparte. Casi siempre significa que la capacitacion
+       se cargo sin elegir su partida del plan, y se arregla con el boton 🔗.
+     - PENDIENTE / FUTURA / etc.: su estado, como antes.
+
+   Sacar "sin datos" del porcentaje es a proposito. Contarlas como cumplidas es
+   afirmar algo que no consta; contarlas como pendientes castiga a un sector por
+   un problema de carga. Mostrarlas aparte dice la verdad: no lo sabemos. */
 function kpiSectors(target,year){
   const yearPL=PL.filter(p=>(p.year||2026)===(year||2026));
+  const asistieron=sectoresQueAsistieron();
   const secPlan={};
   const secItems={};
   yearPL.forEach(p=>{
@@ -1578,33 +1620,56 @@ function kpiSectors(target,year){
     const isInd=up.includes('REGLAMENTO')||up.includes('INDUCCION')||up.includes('INDUCCIÓN')||up.includes('RI Y COMPORTAMIENTO')||dirUp.includes('INGRESO');
     if(isInd)return;
     const secs=targetSectors(p.d);
+    const conRegistros=asistieron.has(Number(p.id));
     secs.forEach(s=>{
-      if(!secPlan[s])secPlan[s]={total:0,cumplidas:0};
+      if(!secPlan[s])secPlan[s]={total:0,cumplidas:0,sinDatos:0};
       if(!secItems[s])secItems[s]=[];
       secPlan[s].total++;
-      if(p.e==='cumplida')secPlan[s].cumplidas++;
-      secItems[s].push(p);
+
+      const fueEsteSector = conRegistros && asistieron.get(Number(p.id)).has(normTxt(s).trim());
+      let estadoSector;
+      if (fueEsteSector) { estadoSector='cumplida'; secPlan[s].cumplidas++; }
+      else if (!conRegistros && p.e==='cumplida') { estadoSector='sin-datos'; secPlan[s].sinDatos++; }
+      else if (conRegistros && p.e==='cumplida') { estadoSector='no-asistio'; }
+      else { estadoSector=p.e; }
+
+      secItems[s].push({p:p, est:estadoSector});
     });
   });
-  const entries=Object.entries(secPlan).filter(([,d])=>d.total>0).map(([s,d])=>({
-    s,tot:d.total,cu:d.cumplidas,pct:Math.round((d.cumplidas/d.total)*100)
-  })).sort((a,b)=>b.pct-a.pct);
+  const entries=Object.entries(secPlan).filter(([,d])=>d.total>0).map(([s,d])=>{
+    const base=d.total-d.sinDatos;   // solo lo que se puede afirmar
+    return {s,tot:d.total,cu:d.cumplidas,sd:d.sinDatos,base:base,
+            pct:base>0?Math.round((d.cumplidas/base)*100):null};
+  }).sort((a,b)=>(b.pct===null?-1:b.pct)-(a.pct===null?-1:a.pct));
   if(!entries.length){$(target).innerHTML='<div style="font-size:11px;color:var(--g400)">Sin capacitaciones planificadas por sector</div>';return}
   $(target).innerHTML=entries.map(e=>{
-    const col=e.pct>=80?'var(--green)':e.pct>=50?'var(--amber)':'var(--red)';
+    const col=e.pct===null?'var(--g300)':e.pct>=80?'var(--green)':e.pct>=50?'var(--amber)':'var(--red)';
     const items=secItems[e.s]||[];
-    const stIcons={cumplida:'✅',parcial:'🟡',pendiente:'🔴',futura:'⚪',reprogramada:'🔵',suspendida:'🟣'};
-    const stLabels={cumplida:'Cumplida',parcial:'En curso',pendiente:'Pendiente',futura:'Futura',reprogramada:'Reprogramada'};
+    const stIcons={cumplida:'✅','no-asistio':'🔴','sin-datos':'❔',parcial:'🟡',pendiente:'🔴',futura:'⚪',reprogramada:'🔵',suspendida:'🟣'};
+    const stLabels={cumplida:'Asistió este sector','no-asistio':'Se dictó, sin asistentes de este sector','sin-datos':'Se dictó, sin registros vinculados',parcial:'En curso',pendiente:'Pendiente',futura:'Futura',reprogramada:'Reprogramada'};
     const detailId='sec-det-'+e.s.replace(/[\s\/]/g,'_');
     let detail='<div id="'+detailId+'" style="display:none;margin-top:8px;border-top:1px solid var(--g200);padding-top:6px">';
-    items.forEach(p=>{
-      const icon=stIcons[p.e]||'⚪';
-      const lbl=stLabels[p.e]||p.e;
+    items.forEach(it=>{
+      const p=it.p;
+      const icon=stIcons[it.est]||'⚪';
+      const lbl=stLabels[it.est]||it.est;
       const meses=p.m.map(mi=>['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'][mi-1]).join(', ');
-      detail+='<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:10px"><span>'+icon+'</span><span style="flex:1;font-weight:600">'+h(p.t)+(p.ronda?' <span style="color:#1e40af;font-size:8px">(R'+p.ronda+')</span>':'')+'</span><span style="color:var(--g400);min-width:60px">'+meses+'</span><span style="font-size:9px;color:var(--g500)">'+lbl+'</span></div>';
+      detail+='<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:10px"><span>'+icon+'</span><span style="flex:1;font-weight:600">'+h(p.t)+(p.ronda?' <span style="color:#1e40af;font-size:8px">(R'+p.ronda+')</span>':'')+'</span><span style="color:var(--g400);min-width:60px">'+meses+'</span><span style="font-size:9px;color:'+(it.est==='sin-datos'?'#b45309':'var(--g500)')+'">'+lbl+'</span></div>';
     });
+    if(e.sd){
+      detail+='<div style="font-size:9px;color:#b45309;margin-top:6px;border-top:1px dashed var(--g200);padding-top:5px">'+
+        '❔ <b>'+e.sd+'</b> capacitación'+(e.sd===1?'':'es')+' figura'+(e.sd===1?'':'n')+' dictada'+(e.sd===1?'':'s')+' pero sin registros vinculados, '+
+        'así que no se sabe si asistió alguien de este sector. Quedan fuera del porcentaje. '+
+        'Se arregla desde el Plan, con el botón 🔗 de cada capacitación.</div>';
+    }
     detail+='</div>';
-    return'<div class="kpi-card" style="cursor:pointer" onclick="var d=document.getElementById(\''+detailId+'\');d.style.display=d.style.display===\'none\'?\'block\':\'none\'"><div style="display:flex;justify-content:space-between;align-items:center"><div style="font-weight:600;font-size:12px">'+h(e.s)+' <span style="font-size:10px;color:var(--g400)">▼</span></div><div style="font-size:11px;color:var(--g500)">'+e.cu+'/'+e.tot+' cumplidas</div></div><div class="kpi-bar"><div class="kpi-fill" style="width:'+Math.max(e.pct,8)+'%;background:'+col+'">'+e.pct+'%</div></div>'+detail+'</div>'}).join('');
+    const resumen = e.pct===null
+      ? '<div style="font-size:11px;color:#b45309">sin datos suficientes</div>'
+      : '<div style="font-size:11px;color:var(--g500)">'+e.cu+'/'+e.base+' cumplidas'+(e.sd?' <span style="color:#b45309">· '+e.sd+' sin datos</span>':'')+'</div>';
+    const barra = e.pct===null
+      ? '<div class="kpi-bar"><div class="kpi-fill" style="width:100%;background:var(--g300)">—</div></div>'
+      : '<div class="kpi-bar"><div class="kpi-fill" style="width:'+Math.max(e.pct,8)+'%;background:'+col+'">'+e.pct+'%</div></div>';
+    return'<div class="kpi-card" style="cursor:pointer" onclick="var d=document.getElementById(\''+detailId+'\');d.style.display=d.style.display===\'none\'?\'block\':\'none\'"><div style="display:flex;justify-content:space-between;align-items:center"><div style="font-weight:600;font-size:12px">'+h(e.s)+' <span style="font-size:10px;color:var(--g400)">▼</span></div>'+resumen+'</div>'+barra+detail+'</div>'}).join('');
 }
 
 // KPI detallado: por cada capacitación del plan, % asistencia vs público objetivo
