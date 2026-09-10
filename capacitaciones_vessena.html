@@ -151,7 +151,7 @@ summary.leg-y:hover{background:var(--g50)!important}
 
 <div class="hdr">
   <div class="hdr-top">
-    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-10c</span></div></div>
+    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-10d</span></div></div>
     <div class="code">REG-SOP-AC-039-D</div>
   </div>
   <div class="nav" id="nav">
@@ -818,6 +818,19 @@ function nuevoId(prefijo) {
   const a = Math.random().toString(36).slice(2, 8);
   return (prefijo || 'r') + t + a;
 }
+
+/* El id de una partida del plan es un NUMERO, y tiene que seguir siendolo.
+   Los registros se enlazan con `r.planId === p.id`, comparacion estricta, y
+   `planId` se lee con parseInt en varios formularios. Un id de texto los deja
+   sin vincular en silencio: la partida se sigue viendo, pero como pendiente
+   para siempre.
+
+   Se usa el maximo mas uno en vez de tiempo mas azar. Con veinticuatro
+   partidas por año no hay riesgo de colision, y ademas conserva la numeracion
+   corta que ya tienen (1..24), que es la que aparece en las auditorias. */
+function nuevoIdPlan(){
+  return PL.reduce((m, p) => Math.max(m, Number(p.id) || 0), 0) + 1;
+}
 function normTxt(s){
   return String(s == null ? '' : s).toUpperCase()
     .replace(/[ÁÀÄÂ]/g,'A').replace(/[ÉÈËÊ]/g,'E').replace(/[ÍÌÏÎ]/g,'I')
@@ -1322,7 +1335,19 @@ const PERS_VER='p5'; // increment to force personnel refresh
    Hay ~25 lugares que asumen texto sobre estos campos. Se normaliza acá, al
    entrar, en vez de defenderse en cada uno: un solo punto que puede fallar en
    lugar de veinticinco que pueden olvidarse. */
-const CAMPOS_TEXTO_R  = ['id','mes','fecha','tema','desc','cod','nom','sec','hrs','tipo','ev','plan','resp','planId'];
+/* `planId` NO va en la lista de campos de texto.
+
+   Estuvo, y rompió la vinculación entera del plan: el codigo enlaza con
+   `r.planId === p.id`, comparacion estricta, y los id de las partidas son
+   numeros. Texto contra numero nunca coincide, asi que ninguna capacitacion
+   quedo asociada a su partida y el plan mostraba todo como pendiente aunque la
+   capacitacion se hubiera dictado.
+
+   La normalizacion a texto se agrego para otra cosa -los nombres que la hoja
+   devolvia como numero y reventaban .toUpperCase()- y `planId` entro de
+   arrastre. El campo se normaliza igual, pero al tipo que le corresponde. */
+const CAMPOS_TEXTO_R  = ['id','mes','fecha','tema','desc','cod','nom','sec','hrs','tipo','ev','plan','resp'];
+const CAMPOS_NUMERO_R = ['planId'];
 const CAMPOS_TEXTO_PE = ['n','s','tipo','fechaAlta','fechaBaja','sectorDesde'];
 
 function aTexto(obj, campos){
@@ -1334,7 +1359,21 @@ function aTexto(obj, campos){
   return obj;
 }
 
-function normalizarR(arr){ return Array.isArray(arr) ? arr.map(r => aTexto(r, CAMPOS_TEXTO_R)) : arr; }
+/* Vacio, texto vacio o algo que no es numero valen 0, que es como el resto del
+   codigo escribe "sin plan". */
+function aNumero(obj, campos){
+  if (!obj || typeof obj !== 'object') return obj;
+  campos.forEach(k => {
+    const n = Number(obj[k]);
+    obj[k] = Number.isFinite(n) ? n : 0;
+  });
+  return obj;
+}
+function normalizarR(arr){
+  return Array.isArray(arr)
+    ? arr.map(r => aNumero(aTexto(r, CAMPOS_TEXTO_R), CAMPOS_NUMERO_R))
+    : arr;
+}
 function normalizarPE(arr){ return Array.isArray(arr) ? arr.map(p => aTexto(p, CAMPOS_TEXTO_PE)) : arr; }
 
 // Sin caché se arranca VACÍO, no con DEF_REC. Esos 172 registros de ejemplo
@@ -2672,7 +2711,14 @@ V.plan=function(){
   PL.forEach(p=>{if(!p.year)p.year=2026});
   const selYear=parseInt($('global-year').value)||new Date().getFullYear(); // 1-indexed current month
   // Dynamic status recalculation
+  //
+  // Se guarda SOLO si algun estado cambio de verdad. Antes se llamaba a sv() en
+  // cada dibujo, asi que con abrir la pestaña ya se escribia: cinco guardados en
+  // media hora sin que nadie editara nada. Con el control de version del
+  // servidor eso hace que dos personas mirando el plan al mismo tiempo se
+  // rechacen entre si por turnos.
   const curYearNow=new Date().getFullYear();
+  const estadosPrevios=PL.map(p=>p.e);
   PL.forEach(p=>{
     if(p.e==='suspendida'||p.e==='cumplida')return;
     const itemYear=p.year||2026;
@@ -2724,7 +2770,7 @@ V.plan=function(){
       p.e='pendiente';
     }
   });
-  sv();
+  if (PL.some((p,i)=>p.e!==estadosPrevios[i])) sv();
 
   const q=$('psrch').value.toLowerCase();
   const f=PL.filter(p=>p.year===selYear&&(!q||p.t.toLowerCase().includes(q)||p.d.toLowerCase().includes(q)));
@@ -3525,7 +3571,7 @@ window.repetirPlan=function(id){
   const estado=minMonth<=curMonth?'pendiente':'futura';
   
   // Create new plan item
-  const newId=nuevoId("pl");
+  const newId=nuevoIdPlan();
   const newItem={
     id:newId,
     t:orig.t,
@@ -4363,7 +4409,7 @@ function init(){
     const year=parseInt($('plan-year').value)||new Date().getFullYear();
     const tema=prompt('Nombre de la capacitación:');
     if(!tema||!tema.trim())return;
-    const newId=nuevoId("pl");
+    const newId=nuevoIdPlan();
     PL.push({
       id:newId,t:tema.trim(),o:'',d:'',dc:'',ev:'NO',h:1,
       m:[],e:'futura',resp:'',email:'',fr:'',year:year
@@ -4388,7 +4434,7 @@ function init(){
       const curItems=PL.filter(p=>p.year===parseInt($('plan-year').value));
       curItems.forEach(p=>{
         PL.push({
-          id:nuevoId("pl"),
+          id:nuevoIdPlan(),
           t:p.t,o:p.o,d:p.d,dc:p.dc,ev:p.ev,h:p.h,
           m:[...p.m],e:'futura',resp:p.resp,email:p.email,fr:'',year:yr,
           persEst:p.persEst||0
