@@ -48,11 +48,11 @@ input:focus,select:focus{outline:none;border-color:var(--navy-light);box-shadow:
 .btn-o{background:#fff;color:var(--g600);border:1px solid var(--g300)}.btn-o:hover{background:var(--g50)}
 .btn-d{background:var(--red);color:#fff;opacity:.8}.btn-d:hover{opacity:1}
 .btn-i{background:none;border:none;cursor:pointer;font-size:14px;padding:2px}
-/* Los botones de accion de la fila del plan llevan texto ademas del icono: en
-   una fila con seis acciones, dos parecidas entre si y una destructiva, el
-   icono solo obligaba a dejar el mouse quieto sobre cada uno para saber cual
-   era cual. */
-.gantt .btn-i{font-size:10px;font-weight:700;color:var(--g600);padding:3px 7px;border-radius:6px;white-space:nowrap}
+/* Los botones de la fila del plan van con icono solo: con texto la columna se
+   comia media pantalla. La explicacion queda en el title, que aparece al dejar
+   el cursor encima; los dos parecidos -reprogramar y nueva ronda- dicen ahi
+   en que se diferencian. */
+.gantt .btn-i{font-size:15px;padding:3px 5px;border-radius:6px}
 .gantt .btn-i:hover{background:var(--g100);color:var(--navy)}
 .filters{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
 .filters input,.filters select{max-width:200px}
@@ -157,7 +157,7 @@ summary.leg-y:hover{background:var(--g50)!important}
 
 <div class="hdr">
   <div class="hdr-top">
-    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-10j</span></div></div>
+    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-10k</span></div></div>
     <div class="code">REG-SOP-AC-039-D</div>
   </div>
   <div class="nav" id="nav">
@@ -3032,7 +3032,22 @@ V.plan=function(){
   if (PL.some((p,i)=>p.e!==estadosPrevios[i])) sv();
 
   const q=$('psrch').value.toLowerCase();
-  const f=PL.filter(p=>p.year===selYear&&(!q||p.t.toLowerCase().includes(q)||p.d.toLowerCase().includes(q)));
+  /* Las filas se mostraban en el orden en que estaban cargadas, asi que una
+     ronda nueva aparecia ULTIMA, despues de las 24 partidas, lejos de la
+     capacitacion de la que salio. Se veia la etiqueta "Ronda 1" en la original
+     y nada mas: para encontrar la ronda 2 habia que bajar hasta el final y
+     saber que buscar.
+
+     Ahora cada ronda va pegada a su origen. Como los id de las partidas son
+     correlativos (1..24) y las nuevas toman el maximo mas uno, ordenar por
+     origen conserva el orden del plan y solo intercala las rondas donde
+     corresponde. */
+  const f=PL.filter(p=>p.year===selYear&&(!q||p.t.toLowerCase().includes(q)||p.d.toLowerCase().includes(q)))
+    .sort((a,b)=>{
+      const oa=Number(a.origenId||a.id), ob=Number(b.origenId||b.id);
+      if(oa!==ob) return oa-ob;
+      return (Number(a.ronda)||1)-(Number(b.ronda)||1);
+    });
   const sc=secCount();
   let html='<table class="gantt"><thead><tr><th style="min-width:240px">Capacitación</th>';
   MS.forEach((m,i)=>{html+='<th style="min-width:52px;'+(i===cM?'background:#d97706;color:#fff;font-weight:800;font-size:12px':'')+'">'+m.slice(0,3)+'</th>'});
@@ -3108,13 +3123,13 @@ V.plan=function(){
        Un icono solo obliga a dejar el mouse quieto sobre cada uno para saber
        que hace. En una fila con seis acciones, dos de ellas parecidas y una
        destructiva, eso no alcanza. */
-    html+='<td style="white-space:nowrap"><button class="btn-i" onclick="event.stopPropagation();editPlan('+p.id+')" title="Abrir el formulario completo de esta capacitación">⚙️ Editar</button>';
-    if(p.e!=='suspendida'){html+='<button class="btn-i" onclick="event.stopPropagation();suspPlan('+p.id+')" title="Suspender: la capacitación no se va a dictar. Pide motivo.">⏸️ Suspender</button>'}
-    else{html+='<button class="btn-i" onclick="event.stopPropagation();reactivarPlan('+p.id+')" title="Reactivar: vuelve al estado que tenía antes de suspenderse">▶️ Reactivar</button>'}
-    html+='<button class="btn-i" onclick="event.stopPropagation();reprogramarPlan('+p.id+')" title="Mover ESTA capacitación a otro mes. Sigue habiendo una sola fila.">🗓️ Reprogramar</button>';
-    html+='<button class="btn-i" onclick="event.stopPropagation();vincularPlan('+p.id+')" title="Buscar registros que podrían ser esta capacitación y vincularlos">🔗 Vincular</button>';
-    html+='<button class="btn-i" onclick="event.stopPropagation();repetirPlan('+p.id+')" title="Dictarla de nuevo: crea una fila NUEVA (otra ronda) y deja esta donde está. Para ingresos nuevos o refuerzo.">➕ Nueva ronda</button>';
-    html+='<button class="btn-i" onclick="event.stopPropagation();eliminarPlan('+p.id+')" title="Eliminar del plan" style="color:var(--red)">🗑️ Eliminar</button>';
+    html+='<td style="white-space:nowrap"><button class="btn-i" onclick="event.stopPropagation();editPlan('+p.id+')" title="Abrir el formulario completo de esta capacitación">⚙️</button>';
+    if(p.e!=='suspendida'){html+='<button class="btn-i" onclick="event.stopPropagation();suspPlan('+p.id+')" title="Suspender: la capacitación no se va a dictar. Pide motivo.">⏸️</button>'}
+    else{html+='<button class="btn-i" onclick="event.stopPropagation();reactivarPlan('+p.id+')" title="Reactivar: vuelve al estado que tenía antes de suspenderse">▶️</button>'}
+    html+='<button class="btn-i" onclick="event.stopPropagation();reprogramarPlan('+p.id+')" title="Mover ESTA capacitación a otro mes. Sigue habiendo una sola fila.">🗓️</button>';
+    html+='<button class="btn-i" onclick="event.stopPropagation();vincularPlan('+p.id+')" title="Buscar registros que podrían ser esta capacitación y vincularlos">🔗</button>';
+    html+='<button class="btn-i" onclick="event.stopPropagation();repetirPlan('+p.id+')" title="Dictarla de nuevo: crea una fila NUEVA (otra ronda) y deja esta donde está. Para ingresos nuevos o refuerzo.">➕</button>';
+    html+='<button class="btn-i" onclick="event.stopPropagation();eliminarPlan('+p.id+')" title="Eliminar del plan" style="color:var(--red)">🗑️</button>';
     html+='</td>';
     html+='</tr>';
   });
@@ -3945,7 +3960,14 @@ window.repetirPlan=function(id){
     fr:'',
     ronda:nextRound,
     origenId:baseId,
-    motivoRepeticion:motivo.trim()
+    motivoRepeticion:motivo.trim(),
+    // Hereda el anio y la dotacion estimada de la original. Sin year la fila
+    // quedaba fuera del filtro del plan hasta que otro codigo se lo completara,
+    // y sin persEst la cobertura se calcula contra otro denominador que el de la
+    // partida de la que salio.
+    year:orig.year||2026,
+    persEst:orig.persEst||0,
+    dirRules:orig.dirRules
   };
   
   pendingSave=function(){
