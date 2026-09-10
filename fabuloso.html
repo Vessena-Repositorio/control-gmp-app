@@ -1410,13 +1410,13 @@ window.APP_CONFIG = {
               <div>
                 <label>📦 Rótulo caja</label>
                 ${m.foto_rotulo_url
-                  ? `<a href="${esc(m.foto_rotulo_url)}" target="_blank"><img src="${esc(m.foto_rotulo_url)}" style="width:100%; max-height:120px; object-fit:cover; border-radius:8px;"/></a>`
+                  ? `<a href="${esc(m.foto_rotulo_url)}" target="_blank" rel="noopener noreferrer"><img src="${esc(driveImg_(m.foto_rotulo_url))}" style="width:100%; max-height:120px; object-fit:cover; border-radius:8px;"/></a>`
                   : '<div class="chip danger">Falta foto</div>'}
               </div>
               <div>
                 <label>🏷️ Lote envase</label>
                 ${m.foto_lote_url
-                  ? `<a href="${esc(m.foto_lote_url)}" target="_blank"><img src="${esc(m.foto_lote_url)}" style="width:100%; max-height:120px; object-fit:cover; border-radius:8px;"/></a>`
+                  ? `<a href="${esc(m.foto_lote_url)}" target="_blank" rel="noopener noreferrer"><img src="${esc(driveImg_(m.foto_lote_url))}" style="width:100%; max-height:120px; object-fit:cover; border-radius:8px;"/></a>`
                   : '<div class="chip danger">Falta foto</div>'}
               </div>
             </div>
@@ -1426,7 +1426,7 @@ window.APP_CONFIG = {
 
             ${(m.fotos||[]).length ? `
               <h4 class="mt12" style="margin-bottom:4px;">Otras evidencias</h4>
-              <div class="photos">${m.fotos.map(u=>`<div class="thumb"><a href="${esc(u)}" target="_blank"><img src="${esc(u)}"/></a></div>`).join('')}</div>
+              <div class="photos">${m.fotos.map(u=>`<div class="thumb"><a href="${esc(u)}" target="_blank" rel="noopener noreferrer"><img src="${esc(driveImg_(u))}"/></a></div>`).join('')}</div>
             ` : ''}
 
             <div class="hr"></div>
@@ -1660,10 +1660,10 @@ window.APP_CONFIG = {
               <th>Fotos obligatorias</th>
               <td colspan="3">
                 <div style="display:flex;gap:12px;flex-wrap:wrap;">
-                  <div><div class="small">📦 Rótulo caja</div>${m.foto_rotulo_url?`<img class="foto" src="${esc(m.foto_rotulo_url)}"/>`:'<span style="color:red">Falta</span>'}</div>
-                  <div><div class="small">🏷️ Lote envase</div>${m.foto_lote_url?`<img class="foto" src="${esc(m.foto_lote_url)}"/>`:'<span style="color:red">Falta</span>'}</div>
+                  <div><div class="small">📦 Rótulo caja</div>${m.foto_rotulo_url?`<img class="foto" src="${esc(driveImg_(m.foto_rotulo_url))}"/>`:'<span style="color:red">Falta</span>'}</div>
+                  <div><div class="small">🏷️ Lote envase</div>${m.foto_lote_url?`<img class="foto" src="${esc(driveImg_(m.foto_lote_url))}"/>`:'<span style="color:red">Falta</span>'}</div>
                 </div>
-                ${(m.fotos||[]).length ? `<div class="small" style="margin-top:6px;">Otras evidencias:</div><div class="grid-fotos">${m.fotos.map(u=>`<img class="foto" src="${esc(u)}"/>`).join('')}</div>` : ''}
+                ${(m.fotos||[]).length ? `<div class="small" style="margin-top:6px;">Otras evidencias:</div><div class="grid-fotos">${m.fotos.map(u=>`<img class="foto" src="${esc(driveImg_(u))}"/>`).join('')}</div>` : ''}
               </td>
             </tr>
           </table>
@@ -1684,7 +1684,7 @@ window.APP_CONFIG = {
             <div class="firma-box">
               <div class="firma-slot">
                 ${firmas[a.username]
-                  ? `<img src="${esc(firmas[a.username])}" alt="firma"/>`
+                  ? `<img src="${esc(driveImg_(firmas[a.username]))}" alt="firma"/>`
                   : `<div class="firma-empty">firma manuscrita</div>`}
               </div>
               <div class="firma-caption">Analista: <b>${esc(a.nombre)}</b></div>
@@ -1693,7 +1693,7 @@ window.APP_CONFIG = {
           <div class="firma-box">
             <div class="firma-slot">
               ${cerrada && firmas[last.aprobado_por]
-                ? `<img src="${esc(firmas[last.aprobado_por])}" alt="firma"/>`
+                ? `<img src="${esc(driveImg_(firmas[last.aprobado_por]))}" alt="firma"/>`
                 : `<div class="firma-empty">firma manuscrita</div>`}
             </div>
             <div class="firma-caption">Supervisor / Aprobador${cerrada?': <b>'+esc(last.aprobado_por||'')+'</b>':''}</div>
@@ -1713,6 +1713,34 @@ window.APP_CONFIG = {
   }
   function fmtHora_(v) { if(!v) return ''; const d = (v instanceof Date)? v : new Date(v); const p=n=>String(n).padStart(2,'0'); return `${p(d.getHours())}:${p(d.getMinutes())}`; }
   function escAttrJson_(o) { return esc(JSON.stringify(o)); }
+
+  /**
+   * URL de una foto de Drive en un formato que Google sirva embebido.
+   *
+   * Las fotos viejas quedaron guardadas como "uc?export=view&id=...". Google
+   * dejo de servir ese formato dentro de un <img>: la respuesta es una pagina,
+   * no una imagen, asi que el navegador muestra el hueco roto. Se traduce al
+   * endpoint de miniatura, que si funciona embebido.
+   *
+   * Se aplica al MOSTRAR y no al guardar: lo que quedo registrado en el lote es
+   * la URL original, y reescribirla en la base cambiaria un dato de un registro
+   * ya cerrado. La foto de evidencia sigue siendo la misma; lo unico que cambia
+   * es como se pide.
+   *
+   * El id se toma con un patron acotado a [A-Za-z0-9_-], asi que lo que se
+   * interpola no puede traer nada mas que un id. Si la URL no tiene ninguno de
+   * los dos formatos conocidos se devuelve tal cual, que es lo correcto para
+   * las fotos nuevas.
+   */
+  function driveImg_(url) {
+    if (!url) return '';
+    const s = String(url);
+    const m = s.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (m) return `https://drive.google.com/thumbnail?id=${m[1]}&sz=w1200`;
+    const m2 = s.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (m2) return `https://drive.google.com/thumbnail?id=${m2[1]}&sz=w1200`;
+    return s;
+  }
 
   // ---------- LIST ----------
   async function renderList() {
@@ -1777,7 +1805,7 @@ window.APP_CONFIG = {
       }).join('') || '<div class="muted small">Sin defectos registrados.</div>';
       const kind = m.calidad_rango === 'Perfecta' || m.calidad_rango === 'Muy buena' ? 'Muybuena'
                  : m.calidad_rango === 'Aceptable' ? 'Aceptable' : 'Noaceptable';
-      const fotos = (m.fotos||[]).map(u => `<div class="thumb"><a href="${esc(u)}" target="_blank"><img src="${esc(u)}" /></a></div>`).join('') || '<div class="muted small">Sin fotos.</div>';
+      const fotos = (m.fotos||[]).map(u => `<div class="thumb"><a href="${esc(u)}" target="_blank" rel="noopener noreferrer"><img src="${esc(driveImg_(u))}" /></a></div>`).join('') || '<div class="muted small">Sin fotos.</div>';
 
       const canApprove = hasRole(ROLES.COORDINADOR);
       app.innerHTML = `
