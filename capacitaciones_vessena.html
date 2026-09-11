@@ -158,7 +158,7 @@ summary.leg-y:hover{background:var(--g50)!important}
 
 <div class="hdr">
   <div class="hdr-top">
-    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-10n</span></div></div>
+    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-11a</span></div></div>
     <div class="code">REG-SOP-AC-039-D</div>
   </div>
   <div class="nav" id="nav">
@@ -705,7 +705,8 @@ summary.leg-y:hover{background:var(--g50)!important}
         <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
           <select id="m-dir-sec" style="font-size:11px;padding:4px 6px;min-width:130px"><option value="">Sector...</option></select>
           <select id="m-dir-tag" style="font-size:11px;padding:4px 6px;min-width:90px"><option value="">Todos</option></select>
-          <button class="btn btn-p" style="font-size:10px;padding:3px 8px" onclick="addDirRule('m')">＋</button>
+          <button class="btn btn-p" style="font-size:10px;padding:3px 8px" onclick="addDirRule('m')" data-tip="Agregar este sector a los destinatarios">＋ Incluir</button>
+          <button class="btn btn-o" style="font-size:10px;padding:3px 8px" onclick="addDirRule('m',true)" data-tip="Excluir este sector. Para capacitaciones que van a toda la planta menos a alguno, por ejemplo todos menos Gerencia.">− Excluir</button>
         </div>
         <div id="m-dir-count" style="font-size:10px;color:var(--teal);margin-top:4px;font-weight:600"></div>
         <input type="hidden" id="m-dir">
@@ -1507,6 +1508,36 @@ const V={};
 
 // ══════════ KPI: % asistencia por sector ══════════
 // Mapear público objetivo del plan a sectores reales del listado
+/* Sectores que quedan EXCLUIDOS en un "todos menos ...".
+
+   Hay capacitaciones que van a toda la planta salvo algun sector: manipulacion
+   manual de cargas o importancia de la seguridad no se le dictan a Gerencia.
+   Antes habia que elegir entre escribir "Todos" -y que Gerencia figurara como
+   que no asistio, ensuciando su indicador con algo que nunca le correspondio- o
+   listar los quince sectores a mano y acordarse de actualizar la lista cada vez
+   que aparece uno nuevo.
+
+   Se aceptan las tres formas en que uno lo escribiria: "menos", "excepto",
+   "salvo". Los sectores se separan por coma, "y", o barra.
+
+   Devuelve [] si no hay exclusion, para que el caso comun no pague nada. */
+function sectoresExcluidos(d){
+  const up = normTxt(d || '');
+  const m = up.match(/\b(MENOS|EXCEPTO|SALVO)\b(.+)$/);
+  if (!m) return [];
+  const fuera = [];
+  m[2].split(/[,\/]|\sY\s/).forEach(t => {
+    const nombre = t.trim();
+    if (!nombre) return;
+    // Se compara contra los sectores que existen, normalizados, para que
+    // "gerencia" y "GERENCIA" sean lo mismo y un tipeo raro no excluya nada
+    // en silencio.
+    const real = SCS.find(s => normTxt(s).trim() === nombre);
+    if (real) fuera.push(real);
+  });
+  return fuera;
+}
+
 function targetSectors(d){
   if(!d)return [...new Set(PE.filter(p=>wasActive(p)).map(p=>p.s))];
   const up=d.toUpperCase();
@@ -1514,15 +1545,23 @@ function targetSectors(d){
   // Rules format (contains | or :)
   if(up.includes('|')){
     const secs=new Set();
+    // Una regla que empieza con ! EXCLUYE ese sector. Se juntan aparte y se
+    // restan al final, para que no dependa del orden en que se agregaron.
+    const fuera=new Set();
     up.split('|').forEach(r=>{
       const sec=r.split(':')[0];
+      if(sec.startsWith('!')){ const s=sec.slice(1); if(SCS.includes(s))fuera.add(s); return; }
       if(sec==='TODOS')PE.filter(p=>wasActive(p)).forEach(p=>secs.add(p.s));
       else if(SCS.includes(sec))secs.add(sec);
     });
+    fuera.forEach(s=>secs.delete(s));
     return secs.size?[...secs]:[...new Set(PE.filter(p=>wasActive(p)).map(p=>p.s))];
   }
   
-  if(up.includes('TODOS'))return [...new Set(PE.filter(p=>wasActive(p)).map(p=>p.s))];
+  if(up.includes('TODOS')){
+    const fuera=sectoresExcluidos(d);
+    return [...new Set(PE.filter(p=>wasActive(p)).map(p=>p.s))].filter(s=>!fuera.includes(s));
+  }
   
   // Legacy text: try to match exact sector names
   const found=new Set();
@@ -3223,12 +3262,20 @@ function initDirSelects(prefix){
   });
 }
 
-window.addDirRule=function(prefix){
-  const sec=$(prefix+'-dir-sec').value;
-  if(!sec){alert('Seleccioná un sector');return}
-  const tag=$(prefix+'-dir-tag').value;
+window.addDirRule=function(prefix,excluir){
+  const elegido=$(prefix+'-dir-sec').value;
+  if(!elegido){alert('Seleccioná un sector');return}
+  if(excluir&&elegido==='TODOS'){alert('No se puede excluir "TODOS".');return}
+  // La exclusion se guarda como !SECTOR dentro del mismo formato de reglas, asi
+  // no hay un campo aparte que alguien pueda llenar y otro olvidar.
+  const sec=excluir?('!'+elegido):elegido;
+  const tag=excluir?'':$(prefix+'-dir-tag').value;
   const exists=dirRules[prefix].some(r=>r.sec===sec&&r.tag===tag);
   if(exists){alert('Ya está agregado');return}
+  // Incluir y excluir el mismo sector a la vez no quiere decir nada: se queda
+  // con lo ultimo que se pidio.
+  const opuesto=excluir?elegido:('!'+elegido);
+  dirRules[prefix]=dirRules[prefix].filter(r=>r.sec!==opuesto);
   dirRules[prefix].push({sec,tag});
   $(prefix+'-dir-sec').value='';$(prefix+'-dir-tag').value='';
   renderDirRules(prefix);
@@ -3243,9 +3290,14 @@ function renderDirRules(prefix){
   const container=$(prefix+'-dir-rules');
   if(!container)return;
   container.innerHTML=dirRules[prefix].map((r,i)=>{
-    const label=r.sec+(r.tag?' \u2192 solo '+r.tag:'');
+    // Una regla que empieza con ! es una exclusion: se pinta distinto y dice
+    // "menos X", porque leer "GERENCIA" en la lista de destinatarios cuando en
+    // realidad esta excluida seria justo lo contrario de lo que pasa.
+    const excl=String(r.sec).startsWith('!');
+    const label=(excl?'menos '+String(r.sec).slice(1):r.sec)+(r.tag?' → solo '+r.tag:'');
     const cnt=countRule(r);
-    return '<span style="display:inline-flex;align-items:center;gap:4px;background:#dbeafe;color:#1e40af;padding:3px 8px;border-radius:12px;font-size:10px;font-weight:600">'+label+' <span style="color:var(--teal)">('+cnt+')</span><span style="cursor:pointer;color:#93c5fd;font-size:12px;margin-left:2px" onclick="removeDirRule(\''+prefix+'\','+i+')">\u2715</span></span>';
+    const col=excl?'background:#fef3c7;color:#92400e':'background:#dbeafe;color:#1e40af';
+    return '<span style="display:inline-flex;align-items:center;gap:4px;'+col+';padding:3px 8px;border-radius:12px;font-size:10px;font-weight:600">'+label+' <span style="opacity:.75">('+(excl?'−':'')+cnt+')</span><span style="cursor:pointer;font-size:12px;margin-left:2px;opacity:.6" onclick="removeDirRule(\''+prefix+'\','+i+')">✕</span></span>';
   }).join('');
   const val=dirRules[prefix].map(r=>r.sec+(r.tag?':'+r.tag:'')).join('|');
   $(prefix+'-dir').value=val;
@@ -3255,6 +3307,11 @@ function renderDirRules(prefix){
 }
 
 function countRule(r){
+  // Una regla de exclusion informa a cuanta gente saca, no a cuanta alcanza.
+  if(String(r.sec).startsWith('!')){
+    const s=String(r.sec).slice(1);
+    return PE.filter(p=>p.a!==false&&p.s===s).length;
+  }
   if(r.sec==='TODOS'&&!r.tag)return PE.filter(p=>p.a!==false).length;
   if(r.sec==='TODOS'&&r.tag)return PE.filter(p=>p.a!==false&&p.tags&&p.tags.includes(r.tag)).length;
   return PE.filter(p=>{
@@ -3346,6 +3403,13 @@ function targetPeopleCount(d,year){
           }
         });
       }
+    });
+    // Los sectores excluidos se sacan al final, cuando ya se junto todo: si
+    // se filtraran al agregar, el orden de las reglas cambiaria el resultado.
+    rules.forEach(r=>{
+      if(!String(r.sec).startsWith('!'))return;
+      const s=String(r.sec).slice(1);
+      PE.forEach(p=>{ if(p.s===s) allPeople.delete(p.n); });
     });
     return allPeople.size;
   }

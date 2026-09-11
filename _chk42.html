@@ -1,0 +1,40 @@
+<!doctype html><meta charset="utf-8"><title>chk42</title><body style="font:13px monospace;padding:16px;white-space:pre-wrap"><div id="r">…</div>
+<script>
+function normTxt(s){
+  return String(s == null ? '' : s).toUpperCase()
+    .replace(/[ÁÀÄÂ]/g,'A').replace(/[ÉÈËÊ]/g,'E').replace(/[ÍÌÏÎ]/g,'I')
+    .replace(/[ÓÒÖÔ]/g,'O').replace(/[ÚÙÜÛ]/g,'U').replace(/Ñ/g,'N');
+}
+const SCS=['ENVASADO','FABRICACION','GERENCIA','VENTAS','LIMPIEZA','ADMINISTRACION PLANTA'];
+function sectoresExcluidos(d){
+  const up = normTxt(d || '');
+  const m = up.match(/\b(MENOS|EXCEPTO|SALVO)\b(.+)$/);
+  if (!m) return [];
+  const fuera = [];
+  m[2].split(/[,\/]|\sY\s/).forEach(t => {
+    const nombre = t.trim();
+    if (!nombre) return;
+    // Se compara contra los sectores que existen, normalizados, para que
+    // "gerencia" y "GERENCIA" sean lo mismo y un tipeo raro no excluya nada
+    // en silencio.
+    const real = SCS.find(s => normTxt(s).trim() === nombre);
+    if (real) fuera.push(real);
+  });
+  return fuera;
+}
+const L=[];let mal=0;
+function ok(q,d,e){const a=JSON.stringify(d),b=JSON.stringify(e);if(a!==b){mal++;L.push('MAL  '+q+'  dio '+a+'  esperaba '+b)}else L.push('ok   '+q+'  '+a)}
+ok('sin exclusion',            sectoresExcluidos('Todos'), []);
+ok('vacio',                    sectoresExcluidos(''), []);
+ok('menos gerencia',           sectoresExcluidos('Todos menos Gerencia'), ['GERENCIA']);
+ok('excepto gerencia',         sectoresExcluidos('Todos excepto gerencia'), ['GERENCIA']);
+ok('salvo gerencia',           sectoresExcluidos('Todos salvo GERENCIA'), ['GERENCIA']);
+ok('dos con coma',             sectoresExcluidos('Todos menos Gerencia, Ventas'), ['GERENCIA','VENTAS']);
+ok('dos con y',                sectoresExcluidos('Todos menos Gerencia y Ventas'), ['GERENCIA','VENTAS']);
+ok('dos con barra',            sectoresExcluidos('Todos menos Gerencia/Ventas'), ['GERENCIA','VENTAS']);
+ok('con acento',               sectoresExcluidos('Todos menos Administración Planta'), ['ADMINISTRACION PLANTA']);
+ok('sector inexistente',       sectoresExcluidos('Todos menos Marketing'), []);
+ok('no confunde palabra suelta',sectoresExcluidos('Operarios de menos riesgo'), []);
+L.push('');L.push(mal?mal+' MAL':'los 11 casos dan lo esperado');
+document.getElementById('r').textContent=L.join('\n');
+</script>
