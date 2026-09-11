@@ -96,7 +96,7 @@ a.lb{font-size:12.5px;color:var(--td);cursor:pointer;text-decoration:underline;}
 <body>
 <header class="app no-print">
   <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
-    <div><div class="app-title">Programa de Estabilidad · LCC</div><div class="app-sub">SOP-LCC-049 V4.0 · Vessena S.A.</div></div>
+    <div><div class="app-title">Programa de Estabilidad · LCC</div><div class="app-sub">SOP-LCC-049 V4.0 · Vessena S.A. · build 2026-09-11e</div></div>
     <div class="sync-bar" id="syncBar"></div>
     <div style="font-size:10px;color:#7AAFA8;margin-left:8px">v4.1</div>
   </div>
@@ -162,7 +162,6 @@ async function avisarServidor(tipo,estudioId,extra){
 
 async function gRead(){if(!SCRIPT_URL)return null;syncStatus='loading';rSync();try{const r=await gsFetch(SCRIPT_URL+'?t='+Date.now()+Math.random());const d=await r.json();syncStatus='ok';rSync();return d;}catch(e){console.error('gRead:',e);syncStatus='error';rSync();return null;}}
 async function gWrite(key,value){if(!SCRIPT_URL)return;_dirty=true;syncStatus='loading';rSync();try{await gsFetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'save',key,value:JSON.stringify(value)})});syncStatus='ok';rSync();toast('Guardado ✓');setTimeout(()=>{_dirty=false;},15000);}catch(e){syncStatus='error';rSync();toast('Error al guardar');_dirty=false;}}
-async function gWriteSilent(key,value){if(!SCRIPT_URL)return;try{await gsFetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'save',key,value:JSON.stringify(value)})});}catch(e){}}
 const APP_URL='estabilidad.html';
 function studyLink(id,label){return `<a href="${APP_URL}#study=${id}" style="display:inline-block;margin:12px 0;padding:10px 20px;background:#0E6B67;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold">${label||'Abrir estudio →'}</a>`;}
 
@@ -431,7 +430,14 @@ async function logAudit(action,studyId,studyLabel,before,after,extra){
     extra:extra||''
   };
   auditLog.push(evt);
-  await gWriteSilent('auditLog',auditLog);
+  /* Se agrega el evento del lado del servidor. Antes se reescribía la auditoría
+     entera con la copia local, y cada evento borraba los que otra persona había
+     registrado desde que se abrió la página. */
+  try{
+    const r=await fetch('/api/estabilidad/auditoria',{method:'POST',credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({evento:evt})});
+    if(!r.ok)throw new Error('error '+r.status);
+  }catch(e){console.error('auditoria:',e);toast('No se pudo registrar en la auditoría');}
 }
 
 /* hashPin() se quitó junto con el login propio. Era djb2, una función de
@@ -530,7 +536,7 @@ async function saveOneStudy(s){
     await gsFetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'save',key:'studies',value:JSON.stringify(all)})});
     syncStatus='ok';rSync();toast('Guardado ✓');
     setTimeout(()=>{_dirty=false;},15000);
-  }catch(e){syncStatus='error';rSync();toast('Error al guardar');_dirty=false;}
+  }catch(e){syncStatus='error';rSync();_dirty=false;alert('No se pudo guardar el estudio: '+e.message);}
 }
 async function saveStudies(){
   _dirty=true;syncStatus='loading';rSync();
@@ -538,14 +544,30 @@ async function saveStudies(){
     await gsFetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'save',key:'studies',value:JSON.stringify(compress(studies))})});
     syncStatus='ok';rSync();toast('Guardado ✓ ('+studies.length+' estudios)');
     setTimeout(()=>{_dirty=false;},15000);
-  }catch(e){syncStatus='error';rSync();toast('Error');_dirty=false;}
+  }catch(e){syncStatus='error';rSync();_dirty=false;alert('No se pudo guardar: '+e.message);}
 }
-async function saveProductos(){
-  _dirty=true;syncStatus='loading';rSync();
+/* Los productos del catálogo se guardan de a uno. Antes se mandaba el catálogo
+   entero armado con la copia en memoria, y si esa copia estaba vieja (otra
+   persona guardó, o el refresco la reemplazó con el formulario abierto) el
+   guardado pisaba productos que nadie estaba tocando. Ahora el servidor ubica
+   el producto en la lista actual y devuelve la lista como quedó. */
+async function productoAlServidor(metodo,ruta,cuerpo){
+  syncStatus='loading';rSync();
   try{
-    await gsFetch(SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'save',key:'productos',value:JSON.stringify(compress(productos))})});
-    syncStatus='ok';rSync();toast('Guardado ✓');setTimeout(()=>{_dirty=false;},15000);
-  }catch(e){syncStatus='error';rSync();toast('Error');_dirty=false;}
+    const r=await fetch('/api/estabilidad/producto'+ruta,{method:metodo,credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},body:cuerpo?JSON.stringify(cuerpo):undefined});
+    const d=await r.json().catch(()=>null);
+    if(r.status===401)throw new Error('tu sesión venció, volvé a entrar desde el portal');
+    if(!r.ok||!d||!d.ok)throw new Error((d&&d.error)||('error '+r.status));
+    productos=d.productos;
+    window._loadedCounts={p:productos.length,s:studies.length};
+    syncStatus='ok';rSync();
+    return true;
+  }catch(e){
+    console.error('producto:',e);syncStatus='error';rSync();
+    alert('No se pudo guardar: '+e.message);
+    return false;
+  }
 }
 
 /* ============================================================
@@ -635,8 +657,16 @@ function renderCatForm(){
   };
   q('#bAP').onclick=()=>{params.push({p:'',e:'',m:'',lab:'Interno',f:'Rutinario'});rP();};
   q('#bBk').onclick=()=>{catMode='list';editProd=null;render();};
-  q('#bSv').onclick=async()=>{const nom=q('#pN').value.trim();if(!nom){toast('Falta nombre');return;}q('#pR').querySelectorAll('input,select').forEach(el=>{params[parseInt(el.dataset.i)][el.dataset.k]=el.value;});const data={codigo:q('#pC').value.trim(),producto:nom,categoria:q('#pCt').value,envase:q('#pE').value.trim(),presentacion:q('#pPr').value.trim(),almacenamiento:q('#pAl').value.trim(),vidaUtil:q('#pVU').value||24,activo:q('#pAc').value.trim(),concentracion:q('#pCn').value.trim(),params};if(isE)Object.assign(editProd,data);else{data.id=pid();productos.push(data);}await saveProductos();catMode='list';editProd=null;render();toast(isE?'Actualizado':'Creado');};
-  const bd=q('#bDlP');if(bd)bd.onclick=async()=>{if(confirm('¿Eliminar?')){productos=productos.filter(x=>x.id!==editProd.id);await saveProductos();catMode='list';editProd=null;render();}};
+  q('#bSv').onclick=async()=>{const nom=q('#pN').value.trim();if(!nom){toast('Falta nombre');return;}q('#pR').querySelectorAll('input,select').forEach(el=>{params[parseInt(el.dataset.i)][el.dataset.k]=el.value;});const data={codigo:q('#pC').value.trim(),producto:nom,categoria:q('#pCt').value,envase:q('#pE').value.trim(),presentacion:q('#pPr').value.trim(),almacenamiento:q('#pAl').value.trim(),vidaUtil:q('#pVU').value||24,activo:q('#pAc').value.trim(),concentracion:q('#pCn').value.trim(),params};
+    // Se parte de la versión que está en la lista ahora, no de la que había al
+    // abrir el formulario: esa puede haber quedado vieja.
+    const base=isE?(productos.find(x=>x.id===editProd.id)||editProd):{id:pid()};
+    const b=q('#bSv');b.disabled=true;
+    const ok=await productoAlServidor('POST','',{producto:compress(Object.assign({},base,data))});
+    b.disabled=false;
+    if(!ok)return; // lo escrito queda en el formulario
+    catMode='list';editProd=null;render();toast(isE?'Actualizado':'Creado');};
+  const bd=q('#bDlP');if(bd)bd.onclick=async()=>{if(!confirm('¿Eliminar '+(editProd.producto||'este producto')+' del catálogo?'))return;if(await productoAlServidor('DELETE','/'+encodeURIComponent(editProd.id))){catMode='list';editProd=null;render();toast('Eliminado');}};
 }
 
 /* ============================================================
@@ -1398,6 +1428,18 @@ function renderUsuarios(){
     </div>`;
 }
 
+/* El refresco automático vuelve a dibujar la pantalla con lo que hay en el
+   servidor. En una pantalla de consulta es lo que se quiere; en un formulario
+   borra lo que la persona está escribiendo, y si después guarda, guarda los
+   valores viejos que quedaron en los campos. Pasaba en el Catálogo. */
+function editandoAlgo(){
+  if(selSt)return true;
+  if(activeTab==='catalogo'&&catMode==='form')return true;
+  if(['nuevo','informe','usuarios','config'].includes(activeTab))return true;
+  const a=document.activeElement;
+  return !!(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName));
+}
+
 function render(){
   if(!SCRIPT_URL){renderSetup();renderNav();rSync();return;}
   /* La sesión ya se resolvió contra el servidor antes del primer render. Si no
@@ -1425,15 +1467,19 @@ window.goBackToList=function(){
     if(studies.find(s=>s.id===sid)){selSt=sid;activeTab='estudios';}
   }
   render();
-  // Auto-refresh cada 30 seg — NO sobreescribe si hay cambios locales pendientes ni si estás editando un detalle
+  // Auto-refresh cada 30 seg — NO sobreescribe si hay cambios locales pendientes ni si estás editando algo
   if(SCRIPT_URL) setInterval(async()=>{
     if(_dirty){console.log('Auto-refresh: skip (dirty)');return;}
-    if(selSt){console.log('Auto-refresh: skip (viewing detail)');return;}
+    if(editandoAlgo()){console.log('Auto-refresh: skip (editando)');return;}
     try{
       const r=await gsFetch(SCRIPT_URL+'?t='+Date.now()+Math.random());
       const d=await r.json();
+      // La respuesta puede tardar: si en el medio se abrió un formulario o se
+      // guardó algo, lo que llegó ya no sirve y dibujarlo borraría lo escrito.
+      if(_dirty||editandoAlgo())return;
       if(d.productos)try{productos=JSON.parse(d.productos);}catch(e){}
       if(d.studies)try{studies=JSON.parse(d.studies);}catch(e){}
+      if(d.auditLog)try{auditLog=JSON.parse(d.auditLog);}catch(e){}
       studies.forEach(s=>{
         if(s.rechazos&&s.rechazos.length&&!s.approvedManually&&s.stage!==5)s.rechazado=true;
         if(!s.rechazado&&s.stage!==5)s.stage=cS(s);
