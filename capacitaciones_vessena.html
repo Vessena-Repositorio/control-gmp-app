@@ -158,7 +158,7 @@ summary.leg-y:hover{background:var(--g50)!important}
 
 <div class="hdr">
   <div class="hdr-top">
-    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-11b</span></div></div>
+    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-11c</span></div></div>
     <div class="code">REG-SOP-AC-039-D</div>
   </div>
   <div class="nav" id="nav">
@@ -3554,40 +3554,41 @@ window.editPlan=function(id){
   const p=PL.find(x=>x.id===id);if(!p)return;
   editPlanId=id;
   $('m-title').textContent=p.t;
-  const sc=secCount();const tSecs=targetSectors(p.d);
-  const estPers=tSecs.reduce((s,sec)=>s+(sc[sec]||0),0);
+  const tSecs=targetSectors(p.d);
+  // El MISMO denominador que usa la fila del plan. Antes esta pantalla contaba
+  // solo el padron y la fila sumaba ademas los nombres que aparecen en
+  // registros viejos: para Porteria una decia 0 y la otra 5, sobre la misma
+  // capacitacion, a dos clicks de distancia.
+  const estPers=p.persEst>0?p.persEst:targetPeopleCount(p.d,p.year||2026);
 
-  // KPI solo para cumplidas/parciales — NO para pendientes/futuras
+  /* KPI de asistencia.
+
+     Sale de coberturaPlan(), que es lo mismo que muestra la fila del plan: los
+     registros VINCULADOS a esta partida. Antes se calculaba aparte, filtrando
+     por el campo de texto `plan='SI'` y adivinando por palabras del titulo. Dos
+     respuestas distintas a la misma pregunta, y ninguna forma de saber cual
+     creer.
+
+     Adivinar por palabras ademas contaba gente de otra capacitacion que
+     compartiera una palabra con esta. */
   let kpiHtml='';
-  if(p.e==='cumplida'||p.e==='parcial'){
-    // Buscar asistentes reales: registros marcados plan=SI del mismo tema
-    const pool=R.filter(r=>r.plan==='SI');
-    const attended=new Set();
-    pool.forEach(r=>{
-      const rd=(r.desc+' '+r.tema).toLowerCase();const pt=p.t.toLowerCase();
-      const kw=pt.split(/[\s\-\/]+/).filter(w=>w.length>3);
-      const match=kw.some(k=>rd.includes(k));
-      if(match){
-        const fp=findPerson(r.nom);
-        // Prioridad: sector del REGISTRO (donde estaba cuando asistió) sobre sector actual.
-        // Así los transferidos mantienen las capacitaciones vinculadas a su sector histórico.
-        const recSec=r.sec?r.sec.toUpperCase().trim():'';
-        const sec=(recSec&&tSecs.includes(recSec))?recSec:(fp?fp.s:recSec);
-        if(tSecs.includes(sec))attended.add(fp?fp.n:r.nom.toUpperCase().trim());
-      }
-    });
-    const pct=estPers>0?Math.round(attended.size/estPers*100):0;
+  const cob=coberturaPlan(p);
+  if(cob){
+    const pct=cob.pct===null?0:cob.pct;
     const pctCol=pct>=80?'var(--green)':pct>=50?'var(--amber)':'var(--red)';
     kpiHtml='<div style="margin-top:10px;padding:8px 12px;border-radius:8px;background:#fff;border:1px solid var(--g200)">'+
-      '<div style="font-size:11px;font-weight:700;margin-bottom:4px">📊 KPI Asistencia vs Público Objetivo</div>'+
+      '<div style="font-size:11px;font-weight:700;margin-bottom:4px">📊 Asistencia sobre el público objetivo</div>'+
       '<div style="display:flex;align-items:center;gap:8px">'+
       '<div style="flex:1;height:14px;background:var(--g200);border-radius:7px;overflow:hidden"><div style="height:100%;width:'+Math.max(pct,3)+'%;background:'+pctCol+';border-radius:7px"></div></div>'+
       '<span style="font-weight:800;color:'+pctCol+'">'+pct+'%</span></div>'+
-      '<div style="font-size:10px;color:var(--g500);margin-top:2px">'+attended.size+' asistieron de '+estPers+' en sectores objetivo ('+tSecs.join(', ')+')</div></div>';
+      '<div style="font-size:10px;color:var(--g500);margin-top:2px">'+cob.asistieron+' asistieron de '+cob.objetivo+' en sectores objetivo ('+tSecs.join(', ')+')</div></div>';
+  } else if(p.e==='cumplida'||p.e==='parcial'){
+    kpiHtml='<div style="margin-top:10px;padding:8px 12px;border-radius:8px;background:#fef3c7;border:1px solid #fcd34d;font-size:11px;color:#92400e">'+
+      '❔ <b>Figura dictada pero no tiene registros vinculados</b>, así que no se puede decir quién asistió. '+
+      'Se vincula desde la fila del plan, con el botón 🔗.</div>';
   } else {
-    kpiHtml='<div style="margin-top:10px;padding:8px 12px;border-radius:8px;background:#f8fafc;border:1px solid var(--g200);font-size:11px;color:var(--g400)">📊 KPI disponible cuando la capacitación se registre como cumplida o en curso</div>';
+    kpiHtml='<div style="margin-top:10px;padding:8px 12px;border-radius:8px;background:#f8fafc;border:1px solid var(--g200);font-size:11px;color:var(--g400)">📊 La asistencia aparece cuando haya registros vinculados a esta capacitación</div>';
   }
-
   $('m-info').innerHTML=
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;font-size:12px">'+
     '<div>📋 <b>Objetivo:</b> '+h(p.o)+'</div>'+
