@@ -21,6 +21,7 @@
 import { Router } from 'express';
 import { consultar, enTransaccion } from '../db.js';
 import { exigirPermiso } from '../lib/acceso.js';
+import { enviarRecordatorioManual } from '../lib/avisos-capacitaciones.js';
 
 export const rutasCapacitaciones = Router();
 
@@ -324,6 +325,23 @@ rutasCapacitaciones.get('/respaldos/:id', leer, async (req, res, next) => {
         try { datos = JSON.parse(f.valor); } catch { datos = null; }
         res.json({ ok: true, clave: f.clave, version: Number(f.version),
                    guardado_en: f.guardado_en, guardado_por: f.guardado_por, datos });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/**
+ * POST /api/capacitaciones/recordatorio/:id — manda el recordatorio de una
+ * partida a su responsable, a pedido de una persona.
+ *
+ * Hace falta permiso de carga. El destinatario lo decide el servidor con lo que
+ * hay guardado en el plan: del pedido solo se toma el id.
+ */
+rutasCapacitaciones.post('/recordatorio/:id', escribir, async (req, res, next) => {
+    try {
+        const r = await enviarRecordatorioManual(req.params.id);
+        if (!r.ok) return res.status(400).json(r);
+        res.json(r);
     } catch (err) {
         next(err);
     }

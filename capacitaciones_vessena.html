@@ -158,7 +158,7 @@ summary.leg-y:hover{background:var(--g50)!important}
 
 <div class="hdr">
   <div class="hdr-top">
-    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-11d</span></div></div>
+    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-11e</span></div></div>
     <div class="code">REG-SOP-AC-039-D</div>
   </div>
   <div class="nav" id="nav">
@@ -538,7 +538,6 @@ summary.leg-y:hover{background:var(--g50)!important}
       <input id="psrch" placeholder="🔍 Buscar..." style="max-width:200px">
       <button class="btn btn-s" id="btn-add-plan" data-role="admin" style="font-size:11px">＋ Nueva capacitación</button>
       <button class="btn btn-o" id="btn-add-year" data-role="admin" style="font-size:11px">＋ Nuevo año</button>
-      <button class="btn btn-o" id="btn-setup-reminders" data-role="admin" style="font-size:11px;background:#fefce8;border-color:#fcd34d;color:#92400e" title="Instalar el trigger que envía mails 7 días y 1 día antes de cada capacitación con fecha programada">🔔 Recordatorios auto</button>
     </div>
   </div>
   <div class="card" style="padding:0;overflow:hidden">
@@ -1870,22 +1869,31 @@ function renderAlerts(){
     return '<div style="background:'+bgCol+';border-radius:8px;padding:10px 12px;margin-bottom:6px"><div style="font-weight:700;font-size:12px;color:var(--navy)">'+h(a.p.t)+'</div><div style="font-size:11px;color:var(--g600);margin-top:2px">'+a.msg+resp+dirigido+email+'</div></div>'}).join('');
 }
 
-// Enviar recordatorio al responsable desde una alerta del dashboard (usa el endpoint GAS)
+// Recordatorio al responsable desde una alerta del dashboard. Lo manda el
+// servidor con los datos guardados. Antes iba por el Apps Script, que desde el
+// corte lee una planilla congelada: una reprogramacion o un email corregido no
+// llegaban al correo.
 window.avisarResponsable=async function(planId){
   const p=PL.find(x=>x.id===planId);
   if(!p){alert('No encontré la capacitación en el plan');return}
   if(!p.email||!p.email.includes('@')){alert('Falta email del responsable. Cargalo desde Plan → editar el item.');return}
-  if(!GAS_URL){alert('Configurá primero la conexión al Sheet.');return}
   if(!confirm('Se va a enviar un mail de recordatorio a:\n\n'+p.email+'\n\nSobre: '+p.t+'\n\n¿Confirmar?'))return;
   try{
-    const resp=await gasPost('sendReminderNow',{planId:p.id});
-    if(!resp)throw new Error('Sin respuesta del backend (revisá GAS)');
-    if(!resp.ok)throw new Error(resp.error||'Error desconocido');
+    const resp=await enviarRecordatorioServidor(p.id);
     alert('✓ Mail enviado a '+resp.to);
     logAudit('EMAIL MANUAL','Recordatorio enviado desde alertas del dashboard a '+resp.to+' — '+p.t);
   }catch(e){
     alert('❌ Error al enviar:\n\n'+(e.message||e));
   }
+}
+
+/* El destinatario lo decide el servidor con lo guardado en el plan; aca solo se
+   manda el id. Si el servidor no pudo, el motivo que da es el que se muestra. */
+async function enviarRecordatorioServidor(id){
+  const res=await fetch(API_CAP+'/recordatorio/'+encodeURIComponent(id),{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+  const d=await res.json().catch(()=>null);
+  if(!res.ok||!d||!d.ok)throw new Error((d&&d.error)||('el servidor respondió '+res.status));
+  return d;
 }
 
 // ══════════ DASHBOARD ══════════
@@ -3721,22 +3729,21 @@ $('m-notify').onclick=()=>{
 $('m-notify-now').onclick=async ()=>{
   const p=PL.find(x=>x.id===editPlanId);if(!p){alert('Item no encontrado');return}
   if(!$('m-email').value){alert('Falta email del responsable — cargalo primero en el modal.');return}
-  if(!GAS_URL){alert('Configurá primero la conexión al Sheet (⚪ Sheets arriba).');return}
   if(!confirm('Se va a enviar un mail de recordatorio a:\n\n'+$('m-email').value+'\n\n¿Confirmar?'))return;
-  // Guardar cambios primero (email/fp/etc) para que el backend tenga la versión actualizada
+  // Guardar primero (email, fecha, responsable): el servidor manda con lo que
+  // hay guardado, no con lo que dice el formulario.
   p.email=$('m-email').value; p.fp=$('m-fp').value; p.resp=$('m-resp').value;
   sv();
   const btn=$('m-notify-now');const orig=btn.textContent;btn.textContent='⏳ Enviando...';btn.disabled=true;
   try{
-    // Esperar a que se sincronice al Sheet antes de mandar
+    // El guardado sale con 1,5 s de demora; se espera a que llegue antes de
+    // pedir el envio. La respuesta dice a quien le llego de verdad.
     await new Promise(r=>setTimeout(r,2500));
-    const resp=await gasPost('sendReminderNow',{planId:p.id});
-    if(!resp)throw new Error('Sin respuesta del backend');
-    if(!resp.ok)throw new Error(resp.error||'Error desconocido');
+    const resp=await enviarRecordatorioServidor(p.id);
     alert('✓ Mail enviado a '+resp.to+'\n\nAsunto: '+resp.subject);
-    logAudit('EMAIL MANUAL','Recordatorio enviado a '+resp.to+' — '+p.t,currentUser?currentUser.nombre:'admin');
+    logAudit('EMAIL MANUAL','Recordatorio enviado a '+resp.to+' — '+p.t,currentUser?currentUser.nombre:'—');
   }catch(e){
-    alert('❌ Error al enviar mail:\n\n'+(e.message||e)+'\n\nRevisá que el backend esté actualizado y que tenga permiso para enviar mails (MailApp).');
+    alert('❌ Error al enviar mail:\n\n'+(e.message||e));
   }finally{btn.textContent=orig;btn.disabled=false}
 };
 $('modal-bg').onclick=function(e){if(e.target===this)this.classList.remove('show')};
@@ -6573,31 +6580,6 @@ document.addEventListener('DOMContentLoaded',function(){
   _wireBulkModal();
   const btnGrPrint = document.getElementById('btn-gr-print');
   if (btnGrPrint) btnGrPrint.addEventListener('click', () => window.print());
-  const btnSetupRem = document.getElementById('btn-setup-reminders');
-  if (btnSetupRem) btnSetupRem.addEventListener('click', async () => {
-    if (!GAS_URL) { alert('Primero configurá la conexión al Sheet.'); return; }
-    const withFp = PL.filter(p => p.fp && p.email && p.e !== 'cumplida' && p.e !== 'suspendida' && p.e !== 'reprogramada').length;
-    if (!confirm(
-      '🔔 Configurar recordatorios automáticos\n\n' +
-      'Se va a instalar un trigger diario que corre a las 8:00 AM (Montevideo) y para cada item del plan con FECHA PROGRAMADA + EMAIL DEL RESPONSABLE:\n\n' +
-      '• Manda mail 7 días antes\n' +
-      '• Manda mail 1 día antes (mañana)\n\n' +
-      'En este momento hay ' + withFp + ' items del plan configurados (con fecha programada + email).\n\n' +
-      '¿Instalar?'
-    )) return;
-    const btn = document.getElementById('btn-setup-reminders'); const orig = btn.textContent;
-    btn.textContent = '⏳ Instalando...'; btn.disabled = true;
-    try {
-      const resp = await gasPost('setupReminders', {});
-      if (!resp) throw new Error('Sin respuesta del backend');
-      if (!resp.ok) throw new Error(resp.error || 'Error');
-      alert('✓ Recordatorios instalados.\n\n• Corre diariamente a las ' + resp.hour + ':00 (' + resp.timezone + ')\n• Trigger ID: ' + resp.triggerId + '\n\nA partir de ahora, cualquier item del plan con fecha programada + email va a recibir el aviso automático 7 y 1 días antes.');
-    } catch(e) {
-      alert('❌ Error al instalar recordatorios:\n\n' + (e.message || e) + '\n\nRevisá que el backend Codigo.gs esté actualizado a la versión con setupReminderTrigger_.');
-    } finally {
-      btn.textContent = orig; btn.disabled = false;
-    }
-  });
 });
 
 /* ── Tooltip propio ──────────────────────────────────────────────────────────

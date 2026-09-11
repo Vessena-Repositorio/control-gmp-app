@@ -96,7 +96,10 @@ function cuerpoRecordatorio(p, dias) {
     if (dias === 1)      { urgencia = 'MAÑANA';  color = '#dc2626'; }
     else if (dias === 0) { urgencia = 'HOY';     color = '#dc2626'; }
     else if (dias > 0)   { urgencia = `en ${dias} días`; color = '#d97706'; }
-    else                 { urgencia = `atrasada (${Math.abs(dias)} días)`; color = '#dc2626'; }
+    else if (dias < 0)   { urgencia = `atrasada (${Math.abs(dias)} días)`; color = '#dc2626'; }
+    // Sin fecha programada -recordatorio manual de una partida que solo tiene
+    // mes- no se inventa una urgencia: se dice lo que hay.
+    else                 { urgencia = 'según lo planificado'; color = NAV; }
 
     const dirigido = String(p.d || '')
         .replace(/\|/g, ', ').replace(/TODOS:/g, '').replace(/:/g, ' · ') || '—';
@@ -182,6 +185,40 @@ function cuerpoAtrasadas(items) {
             `se reprograme o se suspenda.` +
           `</p>` +
         `</div></div></div>`;
+}
+
+/**
+ * Aviso 11 — el recordatorio que una persona manda a mano desde la app.
+ *
+ * Antes lo mandaba el Apps Script (`sendReminderNow`) leyendo la planilla, que
+ * desde el corte del 10/09/2026 quedo congelada: una partida reprogramada, una
+ * ronda nueva o un email corregido en la app no llegaban al correo, que salia
+ * con los datos viejos o no salia.
+ *
+ * El destinatario sale del plan guardado, NUNCA del pedido. Asi esta ruta no se
+ * puede usar para mandar un correo a cualquiera firmado como Vessena: lo mas que
+ * permite es recordarle su capacitacion al responsable que figura en el plan.
+ */
+export async function enviarRecordatorioManual(id) {
+    if (!hayCorreo) return { ok: false, error: 'el servidor no tiene correo configurado' };
+    const plan = await coleccionCapacitaciones('PL');
+    const p = plan.find((x) => x && Number(x.id) === Number(id));
+    if (!p) return { ok: false, error: 'no existe esa capacitacion en el plan' };
+    const para = String(p.email || '').trim().toLowerCase();
+    if (!para.includes('@')) return { ok: false, error: 'la capacitacion no tiene email de responsable' };
+
+    // Sin fecha programada no hay cuenta regresiva que hacer: el cuerpo lo dice
+    // como "segun lo planificado" en vez de inventar una urgencia.
+    let dias = null;
+    if (p.fp) {
+        const reloj = await relojLocal();
+        dias = diasEntre(comoDia(reloj.hoy), comoDia(p.fp));
+    }
+    const asunto = dias === 1 ? `⏰ MAÑANA: capacitación — ${p.t}`
+                 : (dias !== null && dias < 0) ? `⚠ ATRASADA: capacitación — ${p.t}`
+                 : `📅 Recordatorio: capacitación — ${p.t}`;
+    await enviar({ para: [para], asunto, html: cuerpoRecordatorio(p, dias), texto: asunto });
+    return { ok: true, to: para, subject: asunto };
 }
 
 export async function revisarRecordatoriosPlan({ forzar = false, soloPrevisualizar = false } = {}) {
