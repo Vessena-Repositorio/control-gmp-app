@@ -158,7 +158,7 @@ summary.leg-y:hover{background:var(--g50)!important}
 
 <div class="hdr">
   <div class="hdr-top">
-    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-11f</span></div></div>
+    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-11g</span></div></div>
     <div class="code">REG-SOP-AC-039-D</div>
   </div>
   <div class="nav" id="nav">
@@ -5749,18 +5749,52 @@ function updateSyncBadge(state) {
   }
 }
 
+/* Llamada al Apps Script. Desde el corte solo se usa para leer planillas con IA
+   (OCR de fotos y carga masiva de PDF).
+
+   Antes, cualquier respuesta que no fuera JSON terminaba en `null` y la app
+   decia "Sin respuesta del backend", sin mas. Eso tapaba el caso que de verdad
+   paso: Apps Script corta la ejecucion antes de responder y Google devuelve una
+   pagina de error HTML en vez de datos. Ahora cada falla dice que paso y donde
+   mirar.
+
+   Y hay un tope de espera. Sin el, si Google no contestaba, la pantalla de
+   "extrayendo" quedaba girando para siempre. Para la lectura de planillas es un
+   poco mas que los 6 minutos que Apps Script permite por ejecucion: pasado eso
+   ya no va a llegar nada. */
+const GAS_ESPERA_MS = { ocrForm: 390000, bulkForm: 390000 };
 async function gasPost(action, payload) {
-  if (!GAS_URL) { updateSyncBadge('unset'); return null; }
+  if (!GAS_URL) return { ok: false, error: 'No hay conexión a Apps Script configurada (botón «OCR / Recordatorios»).' };
+  const espera = GAS_ESPERA_MS[action] || 60000;
+  const minutos = String(Math.round(espera / 6000) / 10).replace('.', ',');
+  const ctl = new AbortController();
+  const reloj = setTimeout(() => ctl.abort(), espera);
+  let res, texto;
   try {
-    const res = await fetch(GAS_URL, {
+    res = await fetch(GAS_URL, {
       method: 'POST',
       headers: {'Content-Type': 'text/plain;charset=utf-8'},
-      body: JSON.stringify({action, payload, user: currentUser?.user || 'anon', ts: new Date().toISOString()})
+      body: JSON.stringify({action, payload, user: currentUser?.user || 'anon', ts: new Date().toISOString()}),
+      signal: ctl.signal
     });
-    return await res.json();
+    texto = await res.text();
   } catch(e) {
     console.error('GAS POST error', action, e);
-    return null;
+    return { ok: false, error: e.name === 'AbortError'
+      ? 'Apps Script no respondió en ' + minutos + ' minutos. Google corta cada ejecución a los 6: la lectura del archivo tardó demasiado.'
+      : 'No se pudo contactar a Apps Script (' + (e.message || e) + ').' };
+  } finally {
+    clearTimeout(reloj);
+  }
+  try {
+    return JSON.parse(texto);
+  } catch(e) {
+    console.error('GAS POST respuesta que no es JSON', action, res && res.status, String(texto).slice(0, 200));
+    return { ok: false, error: /^\s*</.test(texto)
+      ? 'Apps Script cortó la ejecución antes de responder: Google devolvió una página de error' +
+        (res ? ' (HTTP ' + res.status + ')' : '') + ' en lugar de datos. Suele pasar al superar el límite de 6 minutos. ' +
+        'El motivo exacto está en el editor de Apps Script → Ejecuciones.'
+      : 'Apps Script devolvió algo que no son datos' + (res ? ' (HTTP ' + res.status + ')' : '') + '.' };
   }
 }
 
