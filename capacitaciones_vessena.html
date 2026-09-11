@@ -158,7 +158,7 @@ summary.leg-y:hover{background:var(--g50)!important}
 
 <div class="hdr">
   <div class="hdr-top">
-    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-11c</span></div></div>
+    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-11d</span></div></div>
     <div class="code">REG-SOP-AC-039-D</div>
   </div>
   <div class="nav" id="nav">
@@ -3086,6 +3086,24 @@ function coberturaPlan(p){
   const pct = objetivo > 0 ? Math.round(asistieron / objetivo * 100) : null;
   return { asistieron, objetivo, pct };
 }
+
+/* Sectores destinatarios cuyo numero de personas NO sale del padron.
+
+   Un sector sin nadie en el padron -porteria, limpieza tercerizada- no tiene de
+   donde sacar su dotacion, asi que targetPeopleCount la completa con los
+   nombres que aparecen en registros de capacitacion viejos. Eso cuenta para
+   siempre a gente que ya se fue: Porteria figuraba con 5 personas cuando
+   quedaban 2, y la cobertura daba 40% en vez de 100%.
+
+   Ninguna regla automatica lo arregla -se probo por antiguedad y alguien con un
+   registro de hace seis semanas ya no estaba-. Lo unico que sirve es que alguien
+   cargue el numero real en "Personas estimadas". Esto solo sirve para avisar
+   que hace falta. Si ese campo esta cargado, no hay nada que avisar. */
+function sectoresSinPadron(p){
+  if (p.persEst > 0) return [];
+  const sc = secCount(p.year || 2026);
+  return targetSectors(p.d).filter(s => !sc[s]);
+}
 V.plan=function(){
   const curMonth=cM+1;
   const curYear=new Date().getFullYear();
@@ -3176,7 +3194,10 @@ V.plan=function(){
     const isSusp=p.e==='suspendida';
     html+='<tr style="cursor:pointer;'+(isSusp?'opacity:0.5;':'')+'" onclick="editPlan('+p.id+')">';
     html+='<td style="font-size:11px;min-width:240px;background:#fff"><div style="font-weight:700">'+h(p.t)+(p.ronda?' <span style="font-size:9px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:8px;font-weight:700">Ronda '+p.ronda+'</span>':'')+'</div>';
-    html+='<div style="font-size:9px;color:var(--g500);margin-top:1px">👥 '+h(p.d)+' — <b>'+estPers+' pers.</b></div></td>';
+    const sinPadron=sectoresSinPadron(p);
+    html+='<div style="font-size:9px;color:var(--g500);margin-top:1px">👥 '+h(p.d)+' — <b>'+estPers+' pers.</b>'+
+      (sinPadron.length?' <span style="color:#b45309;font-weight:700" data-tip="'+h(sinPadron.join(', '))+' no tiene gente en el padrón, así que el número sale de nombres de registros viejos y puede contar a gente que ya no está. Cargá el número real en Personas estimadas.">⚠ estimado del historial</span>':'')+
+      '</div></td>';
 
     MS.forEach((m,i)=>{
       const mi=i+1;const inP=p.m.includes(mi);const cur=i===cM;const past=i<cM;
@@ -3597,7 +3618,10 @@ window.editPlan=function(id){
     '<div>📝 <b>Evaluación:</b> '+h(p.ev)+'</div>'+
     '<div>⏱️ <b>Horas:</b> '+p.h+'</div>'+
     '<div>📅 <b>Meses previstos:</b> '+p.m.map(mi=>MS[mi-1].slice(0,3)).join(', ')+'</div>'+
-    '<div>👥 <b>Personas estimadas:</b> '+estPers+' ('+tSecs.join(', ')+')</div>'+
+    '<div>👥 <b>Personas estimadas:</b> '+estPers+' ('+tSecs.join(', ')+')'+
+      (sectoresSinPadron(p).length?'<div style="font-size:10px;color:#b45309;font-weight:600;margin-top:2px">⚠ '+h(sectoresSinPadron(p).join(', '))+
+        ' no tiene gente en el padrón: el número sale de registros viejos y puede incluir gente que ya no está. Cargá el real en «Personas estimadas», más abajo.</div>':'')+
+    '</div>'+
     '<div>📧 <b>Responsable:</b> '+(p.resp||'Sin asignar')+'</div>'+
     '</div>'+kpiHtml;
 
