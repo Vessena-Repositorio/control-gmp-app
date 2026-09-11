@@ -158,7 +158,7 @@ summary.leg-y:hover{background:var(--g50)!important}
 
 <div class="hdr">
   <div class="hdr-top">
-    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-11a</span></div></div>
+    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-11b</span></div></div>
     <div class="code">REG-SOP-AC-039-D</div>
   </div>
   <div class="nav" id="nav">
@@ -1542,8 +1542,10 @@ function targetSectors(d){
   if(!d)return [...new Set(PE.filter(p=>wasActive(p)).map(p=>p.s))];
   const up=d.toUpperCase();
   
-  // Rules format (contains | or :)
-  if(up.includes('|')){
+  // Formato de reglas. Tambien entra una regla suelta que empieza con ! -una
+  // sola exclusion no lleva barra- que antes caia al camino de texto libre y
+  // terminaba sin excluir nada.
+  if(up.includes('|')||up.startsWith('!')){
     const secs=new Set();
     // Una regla que empieza con ! EXCLUYE ese sector. Se juntan aparte y se
     // restan al final, para que no dependa del orden en que se agregaron.
@@ -1554,6 +1556,12 @@ function targetSectors(d){
       if(sec==='TODOS')PE.filter(p=>wasActive(p)).forEach(p=>secs.add(p.s));
       else if(SCS.includes(sec))secs.add(sec);
     });
+    // Si SOLO hay exclusiones, la base es toda la planta menos esas. Antes esto
+    // caia en el comportamiento por defecto -todos los sectores- y la exclusion
+    // no hacia nada, en silencio.
+    if(!secs.size&&fuera.size){
+      return [...new Set(PE.filter(p=>wasActive(p)).map(p=>p.s))].filter(s=>!fuera.has(s));
+    }
     fuera.forEach(s=>secs.delete(s));
     return secs.size?[...secs]:[...new Set(PE.filter(p=>wasActive(p)).map(p=>p.s))];
   }
@@ -3248,6 +3256,24 @@ V.plan=function(){
 
 // ══════════ DIRIGIDO A — RULES SYSTEM ══════════
 let dirRules={m:[],f:[]};
+
+/* Muchas partidas tienen el "Dirigido a" en texto libre, como vino de la
+   planilla: "Todos (nuevos)", "Op. Fabricacion-Jefes envasado". El formulario
+   solo sabia mostrar el formato de reglas, asi que en esas partidas los chips
+   salian vacios y no habia forma de ver ni de tocar a quien estaba dirigida.
+
+   Se guarda el texto tal cual y se edita SOBRE el, en vez de convertirlo a
+   reglas. Convertirlo perderia lo que el formato de reglas no sabe decir -ese
+   "(nuevos)" significa algo- y reescribir un dato que nadie pidio cambiar es
+   justo lo que no queremos. */
+let dirTexto={m:'',f:''};
+
+/* Agrega o reemplaza la parte "menos X, Y" de un texto libre. */
+function textoConExclusion(texto, sectores){
+  const base=String(texto||'').replace(/\s*\b(menos|excepto|salvo)\b.*$/i,'').trim();
+  if(!sectores.length) return base;
+  return base+' menos '+sectores.join(', ');
+}
 const ROLE_TAGS_LIST=['AUTOELEVADOR','JEFE','OPERARIO','ANALISTA','AUXILIAR','GERENCIA','ADMINISTRACION','LCC','ASEGURAMIENTO DE CALIDAD'];
 
 function initDirSelects(prefix){
@@ -3266,6 +3292,27 @@ window.addDirRule=function(prefix,excluir){
   const elegido=$(prefix+'-dir-sec').value;
   if(!elegido){alert('Seleccioná un sector');return}
   if(excluir&&elegido==='TODOS'){alert('No se puede excluir "TODOS".');return}
+
+  // Partida con "Dirigido a" en texto libre: se edita el texto, no se lo
+  // convierte a reglas. Convertirlo perderia lo que el texto dice y el formato
+  // de reglas no -"(nuevos)", "Jefes envasado"- y reescribiria un dato que
+  // nadie pidio cambiar.
+  if(dirTexto[prefix]){
+    if(!excluir){
+      alert('Esta capacitación tiene el destinatario escrito en texto:\n\n  "'+dirTexto[prefix]+'"\n\n' +
+            'Desde acá solo se puede EXCLUIR un sector, que se agrega al final del texto.\n' +
+            'Para cambiar el resto, escribilo en la planilla o pedímelo.');
+      return;
+    }
+    const actuales=sectoresExcluidos(dirTexto[prefix]);
+    if(actuales.includes(elegido)){alert('Ya está excluido');return}
+    actuales.push(elegido);
+    dirTexto[prefix]=textoConExclusion(dirTexto[prefix],actuales);
+    $(prefix+'-dir-sec').value='';$(prefix+'-dir-tag').value='';
+    renderDirRules(prefix);
+    return;
+  }
+
   // La exclusion se guarda como !SECTOR dentro del mismo formato de reglas, asi
   // no hay un campo aparte que alguien pueda llenar y otro olvidar.
   const sec=excluir?('!'+elegido):elegido;
@@ -3281,6 +3328,12 @@ window.addDirRule=function(prefix,excluir){
   renderDirRules(prefix);
 };
 
+window.quitarExclusionTexto=function(prefix,sector){
+  const quedan=sectoresExcluidos(dirTexto[prefix]).filter(s=>s!==sector);
+  dirTexto[prefix]=textoConExclusion(dirTexto[prefix],quedan);
+  renderDirRules(prefix);
+};
+
 window.removeDirRule=function(prefix,idx){
   dirRules[prefix].splice(idx,1);
   renderDirRules(prefix);
@@ -3289,6 +3342,25 @@ window.removeDirRule=function(prefix,idx){
 function renderDirRules(prefix){
   const container=$(prefix+'-dir-rules');
   if(!container)return;
+
+  // Caso texto libre: se muestra lo que dice, y aparte las exclusiones que se
+  // le agregaron, para que se vea que hay algo y qué es. Antes quedaba vacío y
+  // parecía que la capacitación no estaba dirigida a nadie.
+  if(dirTexto[prefix]){
+    const base=String(dirTexto[prefix]).replace(/\s*\b(menos|excepto|salvo)\b.*$/i,'').trim();
+    const fuera=sectoresExcluidos(dirTexto[prefix]);
+    let html='<div style="font-size:11px;color:var(--g700);background:var(--g50);border:1px solid var(--g200);border-radius:6px;padding:5px 9px;margin-bottom:4px">'+
+      '<span style="font-size:9px;color:var(--g500);font-weight:700">TAL COMO ESTÁ ESCRITO</span><br>'+h(base)+'</div>';
+    html+=fuera.map(s=>'<span style="display:inline-flex;align-items:center;gap:4px;background:#fef3c7;color:#92400e;padding:3px 8px;border-radius:12px;font-size:10px;font-weight:600">menos '+h(s)+
+      ' <span style="opacity:.75">(−'+PE.filter(p=>p.a!==false&&p.s===s).length+')</span>'+
+      '<span style="cursor:pointer;font-size:12px;margin-left:2px;opacity:.6" onclick="quitarExclusionTexto(\''+prefix+'\',\''+s+'\')">✕</span></span>').join(' ');
+    container.innerHTML=html;
+    $(prefix+'-dir').value=dirTexto[prefix];
+    const el=$(prefix+'-dir-count');
+    if(el)el.textContent='👥 Alcanza a '+targetPeopleCount(dirTexto[prefix])+' personas'+(fuera.length?' (ya descontando '+fuera.join(', ')+')':'');
+    return;
+  }
+
   container.innerHTML=dirRules[prefix].map((r,i)=>{
     // Una regla que empieza con ! es una exclusion: se pinta distinto y dice
     // "menos X", porque leer "GERENCIA" en la lista de destinatarios cuando en
@@ -3303,7 +3375,7 @@ function renderDirRules(prefix){
   $(prefix+'-dir').value=val;
   const total=countAllRules(prefix);
   const countEl=$(prefix+'-dir-count');
-  if(countEl)countEl.textContent=dirRules[prefix].length?'\ud83d\udc65 Total: '+total+' personas':'';
+  if(countEl)countEl.textContent=dirRules[prefix].length?'👥 Total: '+total+' personas':'';
 }
 
 function countRule(r){
@@ -3337,6 +3409,7 @@ function countAllRules(prefix){
 
 function loadDirRules(prefix,val){
   dirRules[prefix]=[];
+  dirTexto[prefix]='';
   if(!val)return;
   if(val.includes('|')||val.includes(':')){
     val.split('|').forEach(r=>{
@@ -3349,6 +3422,9 @@ function loadDirRules(prefix,val){
     parts.forEach(p=>{
       if(SCS.includes(p)||p==='TODOS')dirRules[prefix].push({sec:p,tag:''});
     });
+    // Si no se pudo interpretar como sectores, el texto manda. Se guarda tal
+    // cual para mostrarlo y para no reescribirlo al guardar.
+    if(!dirRules[prefix].length)dirTexto[prefix]=val;
   }
 }
 
@@ -3382,7 +3458,7 @@ function targetPeopleCount(d,year){
     return people.size;
   }
   
-  if(d.includes('|')||d.includes(':')){
+  if(d.includes('|')||d.includes(':')||d.trim().startsWith('!')){
     const rules=d.split('|').map(r=>{const parts=r.split(':');return{sec:parts[0],tag:parts[1]||''}});
     const allPeople=new Set();
     rules.forEach(r=>{
