@@ -158,7 +158,7 @@ summary.leg-y:hover{background:var(--g50)!important}
 
 <div class="hdr">
   <div class="hdr-top">
-    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-11g</span></div></div>
+    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-11h</span></div></div>
     <div class="code">REG-SOP-AC-039-D</div>
   </div>
   <div class="nav" id="nav">
@@ -171,7 +171,6 @@ summary.leg-y:hover{background:var(--g50)!important}
     <button data-v="audit">📜 Auditoría</button>
     <button data-v="users" id="nav-users">⚙️ Usuarios</button>
     <select id="global-year" style="margin-left:auto;font-size:13px;font-weight:700;padding:4px 10px;border-radius:8px;border:2px solid rgba(255,255,255,.3);background:rgba(255,255,255,.15);color:#fff;cursor:pointer"></select>
-    <button onclick="configureSheetsUrl()" data-role="admin" style="font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.15);color:#fff;cursor:pointer;font-family:inherit" title="Conexión a Google Apps Script. Ya no se usa para los datos -esos viven en Postgres- sino para el OCR de planillas, la carga masiva y los recordatorios.">⚙️ OCR / Recordatorios</button>
   </div>
 </div>
 <div class="main">
@@ -5717,12 +5716,9 @@ function canDo(action){
 
 
 
-// ══════════ GOOGLE SHEETS SYNC ══════════
-// URL del backend Google Apps Script (Web App /exec)
-// Hardcodeada para que todo el equipo se conecte sin configurar nada.
-// Si querés cambiarla, hacelo acá o desde la app (⚙️ Sheets).
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbztHgoYblBahz1DEw2MeHkx2cplCDfFCGCnTJz8Rt1Opwt64v4x7Mayt3eML0i1pqJF/exec';
-const GAS_URL = localStorage.getItem('vc3_gas_url') || DEFAULT_GAS_URL;
+// ══════════ SINCRONIZACIÓN CON EL SERVIDOR ══════════
+// Los datos viven en Postgres (/api/capacitaciones). La app ya no habla con el
+// Apps Script para nada: ni datos, ni recordatorios, ni lectura de planillas.
 let syncBusy = false;
 let lastSync = null;
 let pushTimer = null;
@@ -5749,65 +5745,37 @@ function updateSyncBadge(state) {
   }
 }
 
-/* Llamada al Apps Script. Desde el corte solo se usa para leer planillas con IA
-   (OCR de fotos y carga masiva de PDF).
+/* Lectura de planillas con IA: la hace el servidor (/api/capacitaciones/leer).
 
-   Antes, cualquier respuesta que no fuera JSON terminaba en `null` y la app
-   decia "Sin respuesta del backend", sin mas. Eso tapaba el caso que de verdad
-   paso: Apps Script corta la ejecucion antes de responder y Google devuelve una
-   pagina de error HTML en vez de datos. Ahora cada falla dice que paso y donde
-   mirar.
+   Antes pasaba por el Apps Script, que cortaba la ejecucion al leer un PDF
+   escaneado, y la app solo mostraba "Sin respuesta del backend". Ahora el
+   servidor llama a la IA con su propio tope de espera y devuelve el motivo
+   cuando algo falla. El formato de la respuesta es el mismo de antes
+   ({ ok, attendees } o { ok, sessions }), asi que el resto no cambia.
 
-   Y hay un tope de espera. Sin el, si Google no contestaba, la pantalla de
-   "extrayendo" quedaba girando para siempre. Para la lectura de planillas es un
-   poco mas que los 6 minutos que Apps Script permite por ejecucion: pasado eso
-   ya no va a llegar nada. */
-const GAS_ESPERA_MS = { ocrForm: 390000, bulkForm: 390000 };
-async function gasPost(action, payload) {
-  if (!GAS_URL) return { ok: false, error: 'No hay conexión a Apps Script configurada (botón «OCR / Recordatorios»).' };
-  const espera = GAS_ESPERA_MS[action] || 60000;
-  const minutos = String(Math.round(espera / 6000) / 10).replace('.', ',');
-  const ctl = new AbortController();
-  const reloj = setTimeout(() => ctl.abort(), espera);
-  let res, texto;
+   La espera de aca es un poco mas larga que la del servidor (4 minutos): si hay
+   que cortar, que corte el servidor y el motivo llegue desde alla. */
+const LECTURA_ESPERA_MS = 300000;
+async function leerPlanilla(tipo, payload) {
+  let res, d;
   try {
-    res = await fetch(GAS_URL, {
+    res = await fetch(API_CAP + '/leer/' + tipo, {
       method: 'POST',
-      headers: {'Content-Type': 'text/plain;charset=utf-8'},
-      body: JSON.stringify({action, payload, user: currentUser?.user || 'anon', ts: new Date().toISOString()}),
-      signal: ctl.signal
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(LECTURA_ESPERA_MS)
     });
-    texto = await res.text();
-  } catch(e) {
-    console.error('GAS POST error', action, e);
-    return { ok: false, error: e.name === 'AbortError'
-      ? 'Apps Script no respondió en ' + minutos + ' minutos. Google corta cada ejecución a los 6: la lectura del archivo tardó demasiado.'
-      : 'No se pudo contactar a Apps Script (' + (e.message || e) + ').' };
-  } finally {
-    clearTimeout(reloj);
+    d = await res.json().catch(() => null);
+  } catch (e) {
+    console.error('[lectura]', tipo, e);
+    return { ok: false, error: (e.name === 'TimeoutError' || e.name === 'AbortError')
+      ? 'La lectura no terminó en ' + Math.round(LECTURA_ESPERA_MS / 60000) + ' minutos. Probá con un archivo de menos páginas.'
+      : 'No se pudo contactar al servidor (' + (e.message || e) + ').' };
   }
-  try {
-    return JSON.parse(texto);
-  } catch(e) {
-    console.error('GAS POST respuesta que no es JSON', action, res && res.status, String(texto).slice(0, 200));
-    return { ok: false, error: /^\s*</.test(texto)
-      ? 'Apps Script cortó la ejecución antes de responder: Google devolvió una página de error' +
-        (res ? ' (HTTP ' + res.status + ')' : '') + ' en lugar de datos. Suele pasar al superar el límite de 6 minutos. ' +
-        'El motivo exacto está en el editor de Apps Script → Ejecuciones.'
-      : 'Apps Script devolvió algo que no son datos' + (res ? ' (HTTP ' + res.status + ')' : '') + '.' };
-  }
-}
-
-async function gasGet(action) {
-  if (!GAS_URL) { updateSyncBadge('unset'); return null; }
-  try {
-    const url = GAS_URL + (GAS_URL.includes('?') ? '&' : '?') + 'action=' + action;
-    const res = await fetch(url);
-    return await res.json();
-  } catch(e) {
-    console.error('GAS GET error', action, e);
-    return null;
-  }
+  if (res.status === 401) return { ok: false, error: 'Tu sesión venció. Volvé a entrar desde el portal.' };
+  if (res.status === 413) return { ok: false, error: 'El archivo es demasiado grande para mandarlo de una vez. Partilo en varios.' };
+  if (!d) return { ok: false, error: 'El servidor respondió sin datos (HTTP ' + res.status + ').' };
+  return d;
 }
 
 /* Años del selector global. Se arma desde los registros, así que hay que
@@ -6012,25 +5980,6 @@ async function manualSync() {
   }
 }
 
-/* Esta URL ya no tiene nada que ver con los datos: los registros, el plan y el
-   personal viven en Postgres desde el corte. Queda para el OCR de planillas, la
-   carga masiva y los recordatorios, que dependen de servicios de Google.
-
-   Se aclara en el propio texto del prompt porque el boton decia "Sheets" y
-   cualquiera podia pensar que desconectarlo dejaba la app sin datos. */
-function configureSheetsUrl() {
-  const cur = localStorage.getItem('vc3_gas_url') || '';
-  const u = prompt(
-    'URL del Web App de Apps Script (termina en /exec).\n\n' +
-    'Los datos de capacitaciones ya NO pasan por acá: viven en Postgres.\n' +
-    'Esta conexión se usa solo para el OCR de planillas, la carga masiva\n' +
-    'y los recordatorios.\n\n' +
-    'Dejar vacío para desconectar:', cur);
-  if (u === null) return;
-  if (u === '') { localStorage.removeItem('vc3_gas_url'); }
-  else { localStorage.setItem('vc3_gas_url', u); }
-  location.reload();
-}
 
 // Wrap sv() para que tambien dispare push. Ya no depende de que haya una URL
 // de Sheets configurada: los datos viven en Postgres y el guardado va siempre.
@@ -6043,7 +5992,7 @@ sv = function() {
 // ══════════ FIN SYNC ══════════
 
 // ══════════ OCR: cargar asistentes desde foto ══════════
-// El backend GAS hace de proxy hacia Gemini y guarda la API key en Script Properties.
+// La lectura la hace el servidor con la IA de Google; la clave vive en Coolify.
 // La foto NO se guarda en ningún lado: se envía, se procesa y se descarta.
 
 let ocrImageB64 = null;
@@ -6051,10 +6000,6 @@ let ocrImageMime = null;
 let ocrDetected = []; // [{name, sector, confidence, appMatch, useIt, editedName, editedSector}]
 
 function openOcrModal() {
-  if (!GAS_URL) {
-    alert('Primero configurá la conexión a Google Sheets (⚙️ Sheets arriba a la derecha).\n\nAl no haber URL de GAS, no se puede procesar la foto.');
-    return;
-  }
   ocrReset();
   document.getElementById('ocr-modal').classList.add('show');
 }
@@ -6109,13 +6054,12 @@ async function ocrRunExtract() {
     // Enviar lista de sectores conocidos y nombres del personal para mejor matching
     const sectors = [...new Set(PE.filter(p => p.a !== false).map(p => p.s).filter(Boolean))];
     const personal = PE.filter(p => p.a !== false).map(p => p.n).slice(0, 300);
-    const resp = await gasPost('ocrForm', {
+    const resp = await leerPlanilla('asistentes', {
       imageBase64: ocrImageB64,
       mimeType: ocrImageMime,
       sectors: sectors,
       personal: personal
     });
-    if (!resp) throw new Error('Sin respuesta del backend (revisá la conexión GAS)');
     if (!resp.ok) throw new Error(resp.error || 'Error desconocido del backend');
     const raw = resp.attendees || [];
     if (!raw.length) {
@@ -6151,7 +6095,8 @@ function ocrRenderResults() {
   const list = document.getElementById('ocr-results-list');
   const selected = ocrDetected.filter(d => d.useIt).length;
   document.getElementById('ocr-count').textContent = ocrDetected.length + ' asistente' + (ocrDetected.length === 1 ? '' : 's') + ' detectado' + (ocrDetected.length === 1 ? '' : 's') + ' · ' + selected + ' seleccionado' + (selected === 1 ? '' : 's');
-  const sectorOptions = [...new Set(PE.map(p => p.s).filter(Boolean))].sort();
+  // Lista completa de sectores, no solo los del padrón: los tercerizados (Limpieza, Portería) no están en el padrón y quedaban sin opción.
+  const sectorOptions = [...new Set([...SCS, ...PE.map(p => p.s)].filter(Boolean))].sort();
   const personOptions = PE.filter(p => p.a !== false).map(p => p.n).sort();
   list.innerHTML = ocrDetected.map((d, i) => {
     const conf = typeof d.confidence === 'number' ? Math.round(d.confidence * 100) : null;
@@ -6254,7 +6199,6 @@ const EVAL_CANONICOS = ['NO APLICA','ESCRITA','ORAL','PRACTICA'];
 const TIPO_CANONICOS = ['TEORICO','PRACTICO','TEORICO-PRACTICO'];
 
 function openBulkModal() {
-  if (!GAS_URL) { alert('Primero configurá la conexión a Google Sheets (⚙️ Sheets arriba a la derecha).'); return; }
   bulkReset();
   document.getElementById('bulk-modal').classList.add('show');
 }
@@ -6282,7 +6226,7 @@ function bulkHandleFile(file) {
   const isPdf = file.type === 'application/pdf';
   const isImg = file.type.startsWith('image/');
   if (!isPdf && !isImg) { alert('Solo se aceptan PDF o imagen (JPG/PNG).'); return; }
-  const MAX_MB = 20;
+  const MAX_MB = 14; // la IA acepta unos 20 MB por pedido, y en base64 el archivo crece un tercio
   if (file.size > MAX_MB * 1024 * 1024) {
     alert('Archivo muy grande (' + (file.size/1024/1024).toFixed(1) + ' MB). Máx ' + MAX_MB + ' MB.');
     return;
@@ -6309,14 +6253,13 @@ async function bulkRunExtract() {
   try {
     const sectors = [...new Set(PE.filter(p => p.a !== false).map(p => p.s).filter(Boolean))];
     const personal = PE.filter(p => p.a !== false).map(p => p.n).slice(0, 400);
-    const resp = await gasPost('bulkForm', {
+    const resp = await leerPlanilla('sesiones', {
       imageBase64: bulkFileB64,
       mimeType: bulkFileMime,
       sectors: sectors,
       personal: personal,
       temasConocidos: TMS || []
     });
-    if (!resp) throw new Error('Sin respuesta del backend (revisá la conexión GAS)');
     if (!resp.ok) throw new Error(resp.error || 'Error desconocido del backend');
     const raw = resp.sessions || [];
     if (!raw.length) {
@@ -6413,7 +6356,8 @@ function bulkRenderResults() {
     selCount + ' sesion' + (selCount === 1 ? '' : 'es') + ' seleccionada' + (selCount === 1 ? '' : 's') +
     ' · ' + totalAtt + ' registro' + (totalAtt === 1 ? '' : 's') + ' a crear';
 
-  const sectorOpts = [...new Set(PE.map(p => p.s).filter(Boolean))].sort();
+  // Lista completa de sectores, no solo los del padrón: los tercerizados (Limpieza, Portería) no están en el padrón y quedaban sin opción.
+  const sectorOpts = [...new Set([...SCS, ...PE.map(p => p.s)].filter(Boolean))].sort();
   const temaOpts = (TMS || []);
   list.innerHTML = bulkSessions.map((s, si) => {
     const personSelectOpts = '<option value="">— Elegir de mi listado de Personal —</option>' +

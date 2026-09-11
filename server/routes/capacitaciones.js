@@ -22,6 +22,7 @@ import { Router } from 'express';
 import { consultar, enTransaccion } from '../db.js';
 import { exigirPermiso } from '../lib/acceso.js';
 import { enviarRecordatorioManual } from '../lib/avisos-capacitaciones.js';
+import { leerAsistentes, leerSesiones, ErrorLectura } from '../lib/lectura-planillas.js';
 
 export const rutasCapacitaciones = Router();
 
@@ -346,3 +347,35 @@ rutasCapacitaciones.post('/recordatorio/:id', escribir, async (req, res, next) =
         next(err);
     }
 });
+
+/**
+ * POST /api/capacitaciones/leer/asistentes  — foto de UNA planilla firmada
+ * POST /api/capacitaciones/leer/sesiones    — PDF (o foto) con una o varias
+ *
+ * Reemplazan a ocrForm / bulkForm del Apps Script y devuelven lo mismo
+ * ({ ok, attendees } y { ok, sessions }), para que la app no cambie como lo usa.
+ * Hace falta permiso de carga: leer una planilla es el paso previo a cargarla.
+ *
+ * Solo se registra quien leyo, que tipo de archivo y cuanto pesaba. El
+ * contenido no se guarda ni se escribe en el registro del servidor: son nombres,
+ * firmas y notas de personas.
+ */
+async function responderLectura(req, res, next, fn, que) {
+    const cuerpo = req.body || {};
+    const kb = Math.round(String(cuerpo.imageBase64 || '').length * 0.75 / 1024);
+    const inicio = Date.now();
+    try {
+        const r = await fn(cuerpo);
+        console.log(`[lectura] ${req.usuario.nombre} · ${que} · ${cuerpo.mimeType} · ${kb} KB · ${r.count} resultado(s) · ${Math.round((Date.now() - inicio) / 1000)} s`);
+        res.json({ ok: true, ...r });
+    } catch (err) {
+        console.warn(`[lectura] ${req.usuario.nombre} · ${que} · ${kb} KB · fallo tras ${Math.round((Date.now() - inicio) / 1000)} s: ${err.message}`);
+        if (err instanceof ErrorLectura) return res.status(err.estado || 502).json({ ok: false, error: err.message });
+        next(err);
+    }
+}
+
+rutasCapacitaciones.post('/leer/asistentes', escribir,
+    (req, res, next) => responderLectura(req, res, next, leerAsistentes, 'foto'));
+rutasCapacitaciones.post('/leer/sesiones', escribir,
+    (req, res, next) => responderLectura(req, res, next, leerSesiones, 'planillas'));
