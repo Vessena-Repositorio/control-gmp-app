@@ -158,7 +158,7 @@ summary.leg-y:hover{background:var(--g50)!important}
 
 <div class="hdr">
   <div class="hdr-top">
-    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-11e</span></div></div>
+    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-11f</span></div></div>
     <div class="code">REG-SOP-AC-039-D</div>
   </div>
   <div class="nav" id="nav">
@@ -796,8 +796,12 @@ summary.leg-y:hover{background:var(--g50)!important}
       <button class="btn btn-o" onclick="document.getElementById('vinc-modal').classList.remove('show')">Cerrar</button>
     </div>
     <div style="font-size:11px;color:var(--g600);background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--r);padding:8px 12px;margin-bottom:10px">
-      Son <b>candidatos</b>, no coincidencias confirmadas: se buscan por las palabras del título en el tema y la descripción.
+      Son <b>candidatos</b>, no coincidencias confirmadas: aparecen los registros del año que tienen <b>todas</b> las palabras de la búsqueda en el tema o la descripción.
       <b>Leé la descripción antes de tildar.</b> Lo que marques queda vinculado a esta partida y su estado se recalcula solo.
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+      <label for="vinc-q" style="font-size:11px;font-weight:700;color:var(--g600);white-space:nowrap">Buscar:</label>
+      <input id="vinc-q" oninput="vincBuscar(this.value)" autocomplete="off" style="flex:1;font-size:12px;padding:6px 10px;border:1px solid var(--g200);border-radius:6px" placeholder="palabras del tema o la descripción — menos palabras traen más resultados">
     </div>
     <div id="vinc-lista" style="flex:1;overflow-y:auto;border:1px solid var(--g200);border-radius:var(--r)"></div>
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:12px">
@@ -1462,10 +1466,31 @@ function ponerEnPlan(r, id, poner){
   r.plan = planes.length ? 'SI' : 'NO';
 }
 
+/* Una fecha como la guardo la planilla: a veces "2026-07-31", a veces
+   "2026-07-31T03:00:00.000Z" -la hoja la tomo como fecha con hora y el Apps
+   Script la mando en UTC: medianoche de Montevideo son las 03:00 Z-.
+
+   No es solo como se ve. La app agrupa las sesiones por fecha+tema+descripcion,
+   asi que la misma charla con las dos formas de fecha contaba como dos sesiones
+   distintas: en el legajo, en la cobertura y en los candidatos del 🔗.
+
+   Se pasa a la fecha LOCAL en vez de cortar el texto: cortar a 10 caracteres da
+   bien para las 03:00 Z, pero una hora cargada despues de las 21 de Montevideo
+   cae al dia siguiente en UTC, y cortando quedaria un dia corrido. */
+function aFechaLocal(v){
+  const s = String(v == null ? '' : v).trim();
+  if (!/^\d{4}-\d{2}-\d{2}T/.test(s)) return s;
+  const d = new Date(s);
+  if (isNaN(d)) return s.slice(0, 10);
+  const dd = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + dd(d.getMonth() + 1) + '-' + dd(d.getDate());
+}
+
 function normalizarR(arr){
   if (!Array.isArray(arr)) return arr;
   return arr.map(r => {
     aNumero(aTexto(r, CAMPOS_TEXTO_R), CAMPOS_NUMERO_R);
+    r.fecha = aFechaLocal(r.fecha);
     // planIds son las partidas secundarias. Se saneen o no vengan, tiene que
     // quedar una lista de numeros: el resto del codigo la recorre sin mirar.
     r.planIds = Array.isArray(r.planIds)
@@ -1474,7 +1499,15 @@ function normalizarR(arr){
     return r;
   });
 }
-function normalizarPE(arr){ return Array.isArray(arr) ? arr.map(p => aTexto(p, CAMPOS_TEXTO_PE)) : arr; }
+function normalizarPE(arr){
+  if (!Array.isArray(arr)) return arr;
+  return arr.map(p => {
+    aTexto(p, CAMPOS_TEXTO_PE);
+    p.fechaAlta = aFechaLocal(p.fechaAlta);
+    p.fechaBaja = aFechaLocal(p.fechaBaja);
+    return p;
+  });
+}
 
 // Sin caché se arranca VACÍO, no con DEF_REC. Esos 172 registros de ejemplo
 // existían para que la app se viera poblada la primera vez, pero en un sistema
@@ -2954,13 +2987,24 @@ function frMonths(fr){
 // pendiente, asi que confirma una persona.
 
 let vincPlanId = null;
-let vincCandidatos = [];   // [{clave, fecha, tema, desc, nombres:[], planIdActual}]
+let vincCandidatos = [];   // lo que muestra la busqueda actual
+/* Lo que la persona tildo o destildo, por sesion, aunque ya no aparezca en la
+   busqueda actual. Sin esto, cambiar la busqueda descartaba en silencio lo que
+   se habia tildado antes: se buscaba "derrame", se tildaba, se buscaba
+   "quimicos", y al guardar la primera ya no estaba. */
+let vincElegidas = new Map();   // clave de sesion -> { s, quiere }
 
 /* Sesiones que podrian ser esta partida. Se agrupan por fecha+tema+descripcion,
    que es como se ve una capacitacion dictada: una fila por asistente en los
-   datos, una sola cosa en la realidad. */
-function candidatosPlan(p){
-  const tokens = habTokens(p.t);
+   datos, una sola cosa en la realidad.
+
+   La busqueda arranca con las palabras del titulo, pero se puede cambiar. Con
+   el titulo solamente, un registro cuya descripcion es mas corta que el nombre
+   de la partida nunca aparecia: "DERRAME" no tiene "prod." ni "quimicos", asi
+   que la capacitacion de derrames de Marcel Faciola quedo sin vincular y
+   Deposito MP figuraba sin asistentes. */
+function candidatosPlan(p, tokens){
+  tokens = tokens || habTokens(p.t);
   if (!tokens.length) return [];
   const anio = String(p.year || 2026);
   const porSesion = new Map();
@@ -2995,22 +3039,48 @@ window.vincularPlan = function(id){
   if (!p) return;
   if (!canDo('register')) { alert('No tenés permisos para vincular registros.'); return; }
   vincPlanId = Number(p.id);
+  vincElegidas = new Map();
+  $('vinc-q').value = habTokens(p.t).join(' ').toLowerCase();
   vincCandidatos = candidatosPlan(p);
 
-  $('vinc-sub').innerHTML = h(p.t) + ' &nbsp;·&nbsp; dirigida a ' + h(p.d || '—') +
-    ' &nbsp;·&nbsp; buscando: <b>' + habTokens(p.t).map(t => h(t)).join(' + ') + '</b>';
+  $('vinc-sub').innerHTML = h(p.t) + ' &nbsp;·&nbsp; dirigida a ' + h(p.d || '—');
   vincRender();
   $('vinc-modal').classList.add('show');
+  setTimeout(() => $('vinc-q').focus(), 50);
 };
 
-function vincRender(){
+window.vincBuscar = function(texto){
+  const p = PL.find(x => Number(x.id) === vincPlanId);
+  if (!p) return;
+  const tokens = habTokens(texto);
+  vincCandidatos = tokens.length ? candidatosPlan(p, tokens) : [];
+  vincRender(tokens.length === 0);
+};
+
+window.vincMarcar = function(i, quiere){
+  const s = vincCandidatos[i];
+  if (!s) return;
+  // Si vuelve a quedar como estaba, deja de ser un cambio pendiente.
+  if (quiere === s.yaDeEsta) vincElegidas.delete(s.clave);
+  else vincElegidas.set(s.clave, { s, quiere });
+  vincContar();
+};
+
+function vincContar(){
+  const n = vincElegidas.size;
+  $('vinc-cuenta').textContent = vincCandidatos.length + ' sesión(es) en esta búsqueda' +
+    (n ? ' · ' + n + ' cambio(s) sin guardar' : '');
+}
+
+function vincRender(sinBusqueda){
   if (!vincCandidatos.length) {
-    $('vinc-lista').innerHTML =
-      '<div style="padding:24px;text-align:center;font-size:12px;color:var(--g500)">' +
-      'Ningún registro del año menciona todas las palabras del título.<br>' +
-      '<span style="font-size:11px">Puede que la capacitación no se haya dictado, o que se haya registrado con otro nombre. ' +
-      'En ese caso conviene buscarla en <b>Habilitados</b> con una sola palabra y vincularla desde el Registro.</span></div>';
-    $('vinc-cuenta').textContent = '';
+    $('vinc-lista').innerHTML = sinBusqueda
+      ? '<div style="padding:24px;text-align:center;font-size:12px;color:var(--g500)">Escribí al menos una palabra de 3 letras o más.</div>'
+      : '<div style="padding:24px;text-align:center;font-size:12px;color:var(--g500)">' +
+        'Ningún registro del año tiene todas esas palabras.<br>' +
+        '<span style="font-size:11px">Probá con menos palabras: la descripción del registro puede ser más corta que el nombre de la partida ' +
+        '(por ejemplo, solo «derrame»).</span></div>';
+    vincContar();
     return;
   }
   let html = '';
@@ -3020,8 +3090,11 @@ function vincRender(){
     // se la saca a ninguna.
     const otras = s.otrasPartidas
       .map(id => { const o = PL.find(x => Number(x.id) === id); return o ? o.t : ('partida ' + id); });
+    const elegida = vincElegidas.get(s.clave);
+    const marcada = elegida ? elegida.quiere : s.yaDeEsta;
     html += '<div style="display:flex;gap:10px;padding:9px 12px;border-bottom:1px solid var(--g100);align-items:flex-start">';
-    html += '<input type="checkbox" id="vinc-c' + i + '"' + (s.yaDeEsta ? ' checked' : '') +
+    html += '<input type="checkbox" id="vinc-c' + i + '"' + (marcada ? ' checked' : '') +
+            ' onchange="vincMarcar(' + i + ',this.checked)"' +
             ' style="margin-top:3px;width:16px;height:16px;flex:0 0 16px">';
     html += '<div style="flex:1;min-width:0">';
     html += '<div style="font-size:11px;color:var(--g500);font-weight:700">' + h(s.fecha || '—') +
@@ -3040,7 +3113,7 @@ function vincRender(){
     html += '</div></div>';
   });
   $('vinc-lista').innerHTML = html;
-  $('vinc-cuenta').textContent = vincCandidatos.length + ' sesión(es) candidata(s)';
+  vincContar();
 }
 
 function vincGuardar(){
@@ -3050,12 +3123,9 @@ function vincGuardar(){
   let vinculados = 0, desvinculados = 0;
   const detalle = [];
 
-  vincCandidatos.forEach((s, i) => {
-    const casilla = document.getElementById('vinc-c' + i);
-    if (!casilla) return;
-    const quiere = casilla.checked;
-    if (quiere === s.yaDeEsta) return;              // sin cambio
-
+  // Se aplica todo lo tildado o destildado en cualquier busqueda de esta
+  // sesion del modal, no solo lo que se ve en la ultima.
+  vincElegidas.forEach(({ s, quiere }) => {
     R.forEach(r => {
       if (r.fecha + '||' + r.tema + '||' + r.desc !== s.clave) return;
       ponerEnPlan(r, vincPlanId, quiere);
