@@ -96,7 +96,7 @@ a.lb{font-size:12.5px;color:var(--td);cursor:pointer;text-decoration:underline;}
 <body>
 <header class="app no-print">
   <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
-    <div><div class="app-title">Programa de Estabilidad · LCC</div><div class="app-sub">SOP-LCC-049 V4.0 · Vessena S.A. · build 2026-09-11e</div></div>
+    <div><div class="app-title">Programa de Estabilidad · LCC</div><div class="app-sub">SOP-LCC-049 V4.0 · Vessena S.A. · build 2026-09-12a</div></div>
     <div class="sync-bar" id="syncBar"></div>
     <div style="font-size:10px;color:#7AAFA8;margin-left:8px">v4.1</div>
   </div>
@@ -798,6 +798,11 @@ function renderCondCp(cp,i,st,rech,cat){
 function renderDetail(){
   const s=studies.find(x=>x.id===selSt);if(!s){selSt=null;render();return;}rS(s);
   const spt=(s.specParams||[]).map(p=>`<tr><td><strong>${E(p.p)}</strong></td><td>${E(p.e)}</td><td>${E(p.m)}</td></tr>`).join('');
+  /* El lote se puede corregir hasta que el estudio queda aprobado: al hacer el
+     T0 el analista puede tener que indicar qué lote está analizando, y antes
+     eso obligaba a borrar el estudio y crearlo de nuevo. Todo cambio queda en
+     la auditoría, y si el T0 ya está registrado se pide confirmar. */
+  const loteEditable=s.stage!==5&&!s.rechazado;
   document.getElementById('mc').innerHTML=`
     <div class="panel pp">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px"><div><button type="button" onclick="goBackToList()" style="background:#0d9488;border:none;color:white;cursor:pointer;font-size:13px;padding:6px 14px;font-family:inherit;border-radius:6px;font-weight:600">← Volver</button><h2 class="st" style="margin-top:8px">${E(s.producto)} — Lote ${E(s.lote)}</h2><p class="sd">${E(catL(s.categoria))} · ${E(norL(s.norma))}${s.tipoLote?' · <strong>'+{desarrollo:'Desarrollo',startup:'Start-up',programa:'Programa',lanzamiento:'Lanzamiento'}[s.tipoLote]+'</strong>':''}</p>
@@ -809,9 +814,10 @@ function renderDetail(){
       <!-- Asignación email -->
       <fieldset style="margin-top:14px"><legend>📧 Asignación</legend>
         <div class="fg c3">
+          <div class="fw"><label class="fi">Lote${loteEditable?'':' (aprobado: no se edita)'}</label><input type="text" id="eLote" value="${E(s.lote||'')}" ${loteEditable?'':'disabled'}></div>
           <div class="fw"><label class="fi">Analista asignado</label>${emailSel('eAn',s.emailAnalista||'')}</div>
           <div class="fw"><label class="fi">Creador (alertas atraso)</label>${emailSel('eCr',s.emailCreador||'')}</div>
-          <div class="fw" style="display:flex;align-items:end;gap:8px"><button class="btn sm ghost" id="bSvMail">Guardar emails</button><button class="btn sm mail" id="bSendAssign">📧 Enviar asignación ahora</button></div>
+          <div class="fw" style="display:flex;align-items:end;gap:8px"><button class="btn sm ghost" id="bSvMail">Guardar</button><button class="btn sm mail" id="bSendAssign">📧 Enviar asignación ahora</button></div>
         </div>
       </fieldset>
     </div>
@@ -961,14 +967,27 @@ function renderDetail(){
     render();toast('Estudio rechazado — notificación enviada');
   };
   q('#bSvMail').onclick=async()=>{
-    const antesA=s.emailAnalista||'',antesC=s.emailCreador||'';
+    const antesA=s.emailAnalista||'',antesC=s.emailCreador||'',antesL=s.lote||'';
+    const nuevoL=loteEditable?q('#eLote').value.trim():antesL;
+    if(nuevoL!==antesL){
+      if(!nuevoL){alert('El lote no puede quedar vacío.');return;}
+      /* Si el T0 ya se hizo, el lote es el que se analizó: se cambia igual
+         -para eso está- pero que quede claro que se está cambiando eso. */
+      const t0=s.checkpoints.find(c=>c.mes===0);
+      if(t0&&t0.fechaReal&&!confirm('El T0 ya está registrado ('+fmt(t0.fechaReal)+').\n\n¿El lote analizado es "'+nuevoL+'" y no "'+antesL+'"?\n\nEl cambio queda en la auditoría.'))return;
+      s.lote=nuevoL;
+    }
     s.emailAnalista=q('#eAn').value.trim();s.emailCreador=q('#eCr').value.trim();
     await saveOneStudy(s);
     const cambios=[];
     if(antesA!==s.emailAnalista)cambios.push('Analista: '+(antesA||'vacío')+' → '+(s.emailAnalista||'vacío'));
     if(antesC!==s.emailCreador)cambios.push('Creador: '+(antesC||'vacío')+' → '+(s.emailCreador||'vacío'));
     if(cambios.length)await logAudit('edicion_asignacion',s.id,s.producto+' (Lote '+s.lote+')','','',cambios.join(' · '));
-    toast('Emails guardados');
+    if(antesL!==s.lote){
+      await logAudit('cambio_lote',s.id,s.producto+' (Lote '+s.lote+')',antesL||'(vacío)',s.lote,'Lote corregido desde el estudio');
+      render();
+    }
+    toast('Guardado');
   };
   q('#bSendAssign').onclick=async()=>{
     s.emailAnalista=q('#eAn').value.trim();s.emailCreador=q('#eCr').value.trim();
