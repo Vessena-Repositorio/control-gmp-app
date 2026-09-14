@@ -26,6 +26,9 @@
 
 const MODELO = process.env.GEMINI_MODELO || 'gemini-3.6-flash';
 const ESPERA_MS = Number(process.env.GEMINI_ESPERA_MS) || 240000;
+const RESPALDO = process.env.GEMINI_MODELO_RESPALDO || '';
+const TRANSITORIOS = new Set([429, 500, 502, 503, 504]);
+const ESPERAS_REINTENTO = [5000, 15000, 30000];
 
 // Gemini acepta hasta ~20 MB por pedido con el archivo adentro. En base64 eso
 // son unos 14 MB de archivo, dejando lugar para el texto de la instruccion.
@@ -77,26 +80,53 @@ async function preguntar({ instruccion, pedido, p, esquema, temperatura }) {
             thinkingConfig: { thinkingLevel: 'low' },
         },
     };
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(MODELO)}:generateContent`;
+    // Google devuelve 503 "high demand" o 429 cuando el modelo esta saturado.
+    // Es pasajero -suele durar segundos o pocos minutos- y no tiene nada que ver
+    // con el archivo, asi que se reintenta solo en vez de hacerle volver a subir
+    // el PDF a quien esta cargando. El 14/09/2026 la primera prueba real fallo
+    // por esto. Los reintentos respetan el mismo tope de espera total.
+    //
+    // Si la saturacion se vuelve frecuente, GEMINI_MODELO_RESPALDO en Coolify
+    // agrega un segundo modelo para los ultimos intentos. No tiene valor por
+    // defecto: un nombre de modelo inventado fallaria siempre.
+    const limite = Date.now() + ESPERA_MS;
+    const plan = [MODELO, MODELO, MODELO, ...(RESPALDO ? [RESPALDO, RESPALDO] : [])];
 
-    let res, texto;
-    try {
-        res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
-            body: JSON.stringify(cuerpo),
-            signal: AbortSignal.timeout(ESPERA_MS),
-        });
-        texto = await res.text();
-    } catch (err) {
-        if (err.name === 'TimeoutError' || err.name === 'AbortError') {
-            throw new ErrorLectura(
-                `La IA no terminó de leer el archivo en ${Math.round(ESPERA_MS / 60000)} minutos. Probá con menos páginas por archivo.`, 504);
+    let res, texto, ultimoMotivo = '';
+    for (let i = 0; i < plan.length; i++) {
+        if (i > 0) {
+            const espera = ESPERAS_REINTENTO[Math.min(i - 1, ESPERAS_REINTENTO.length - 1)];
+            // Sin tiempo para esperar y todavia leer el archivo, no se intenta.
+            if (Date.now() + espera + 20000 > limite) break;
+            console.warn(`[lectura] ${plan[i - 1]} saturado (${ultimoMotivo}); reintento ${i} con ${plan[i]} en ${espera / 1000}s`);
+            await new Promise((r) => setTimeout(r, espera));
         }
-        throw new ErrorLectura('No se pudo contactar a la IA de Google: ' + err.message, 502);
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(plan[i])}:generateContent`;
+        try {
+            res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
+                body: JSON.stringify(cuerpo),
+                signal: AbortSignal.timeout(Math.max(limite - Date.now(), 1000)),
+            });
+            texto = await res.text();
+        } catch (err) {
+            if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+                throw new ErrorLectura(
+                    `La IA no terminó de leer el archivo en ${Math.round(ESPERA_MS / 60000)} minutos. Probá con menos páginas por archivo.`, 504);
+            }
+            throw new ErrorLectura('No se pudo contactar a la IA de Google: ' + err.message, 502);
+        }
+        if (res.ok || !TRANSITORIOS.has(res.status)) break;
+        ultimoMotivo = `HTTP ${res.status}`;
     }
 
     if (!res.ok) {
+        if (TRANSITORIOS.has(res.status)) {
+            throw new ErrorLectura(
+                'La IA de Google está saturada en este momento y no respondió después de varios intentos. ' +
+                'No es un problema del archivo ni de la app: probá de nuevo en unos minutos.', 503);
+        }
         // Google explica el motivo en el cuerpo: clave invalida, cuota, modelo
         // inexistente. Se toma el mensaje y no el cuerpo entero, que es largo.
         let motivo = texto.slice(0, 300);
