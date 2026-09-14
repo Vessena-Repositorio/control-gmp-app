@@ -58,13 +58,22 @@ const PROBABILITIES=["Baja","Moderada","Alta"];
    no están escritas aparte. Antes sí lo estaban y discrepaban en dos celdas:
    el sistema clasificaba distinto de lo que le mostraba a quien clasificaba.
 
-   Dos celdas siguen pendientes de confirmar contra el SOP-AC-036 §5.4 —las
-   marcadas abajo—: se dejaron como estaban en el código hasta poder cotejarlas
-   con el procedimiento. */
+   Valores del SOP-AC-036 V4.0, §(D) 5.1.1. En el documento las columnas son la
+   Severidad y las filas la Probabilidad; acá la clave va al revés
+   (Severidad-Probabilidad), así que conviene leerla por severidad:
+
+     Severidad Alta     → Crítica siempre, sea cual sea la probabilidad.
+     Severidad Moderada → Mayor, salvo probabilidad Baja, que es Menor.
+     Severidad Baja     → Menor, salvo probabilidad Alta, que es Mayor.
+
+   Antes había tres celdas mal: Alta-Moderada y Alta-Baja daban Mayor y Menor
+   (el SOP dice Crítica), y Baja-Alta daba Crítica (el SOP dice Mayor). La tabla
+   que se mostraba en pantalla tenía los valores buenos pero con los ejes
+   invertidos, por eso parecía discrepar en otras celdas. */
 const RISK_MATRIX={
-  "Alta-Alta":"CRITICA","Alta-Moderada":"MAYOR","Alta-Baja":"MENOR",      // Alta-Baja: ¿MENOR o MAYOR?
-  "Moderada-Alta":"MAYOR","Moderada-Moderada":"MAYOR","Moderada-Baja":"MENOR", // Moderada-Alta: ¿MAYOR o CRITICA?
-  "Baja-Alta":"CRITICA","Baja-Moderada":"MENOR","Baja-Baja":"MENOR",
+  "Alta-Alta":"CRITICA",     "Alta-Moderada":"CRITICA",     "Alta-Baja":"CRITICA",
+  "Moderada-Alta":"MAYOR",   "Moderada-Moderada":"MAYOR",   "Moderada-Baja":"MENOR",
+  "Baja-Alta":"MAYOR",       "Baja-Moderada":"MENOR",       "Baja-Baja":"MENOR",
 };
 const DETECTION_SOURCES=["Auditorías","Control Interno","Reclamo clientes","Validaciones y calificaciones","Desvíos de procesos","Revisión por la dirección","Evaluación de tendencias","Evaluación de proveedores","Otros"];
 const ISHIKAWA_CATS=[
