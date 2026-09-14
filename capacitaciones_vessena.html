@@ -158,7 +158,7 @@ summary.leg-y:hover{background:var(--g50)!important}
 
 <div class="hdr">
   <div class="hdr-top">
-    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-11h</span></div></div>
+    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-14a</span></div></div>
     <div class="code">REG-SOP-AC-039-D</div>
   </div>
   <div class="nav" id="nav">
@@ -2760,7 +2760,7 @@ V.reg=function(){
     });
     const indCards=Object.values(indByDate).sort((a,b)=>b.fecha.localeCompare(a.fecha));
     // Render regular sessions
-    let html=regSs.map(s=>'<div class="sess-g"><div class="sess-h" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'none\'?\'block\':\'none\'"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'+bg(s.mes.slice(0,3),'blue')+'<b style="font-size:12px">'+h(s.fecha)+'</b>'+bg(s.tema,TC[s.tema])+'<span style="font-size:11px;color:var(--g600)">'+h(s.desc)+'</span></div><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'+bg(s.att.length+'p','teal')+bg(s.hrs+'h','purple')+(s.plan==='SI'?bg('Plan','green'):'')+'<span style="font-size:10px;color:var(--g400)">▼</span></div></div><div class="att-list" style="display:none"><div style="font-size:10px;color:var(--g400);margin-bottom:3px">Resp: '+h(s.resp)+' · '+h(s.tipo)+' · '+h(s.ev)+'</div>'+s.att.map(a=>'<div class="att-row"><b style="min-width:160px">'+h(a.nom)+'</b><span style="color:var(--g500)">'+h(a.sec)+'</span>'+(a.nota?'<span style="font-weight:700;margin-left:8px">'+a.nota+'</span>':'')+'<span style="margin-left:auto"><button class="btn-i" onclick="eR('+a.id+')">✏️</button><button class="btn-i" onclick="dR('+a.id+')">🗑️</button></span></div>').join('')+'</div></div>').join('');
+    let html=regSs.map(s=>'<div class="sess-g"><div class="sess-h" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'none\'?\'block\':\'none\'"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'+bg(s.mes.slice(0,3),'blue')+'<b style="font-size:12px">'+h(s.fecha)+'</b>'+bg(s.tema,TC[s.tema])+'<span style="font-size:11px;color:var(--g600)">'+h(s.desc)+'</span></div><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'+bg(s.att.length+'p','teal')+bg(s.hrs+'h','purple')+(s.plan==='SI'?bg('Plan','green'):'')+'<span style="font-size:10px;color:var(--g400)">▼</span></div></div><div class="att-list" style="display:none"><div style="font-size:10px;color:var(--g400);margin-bottom:3px">Resp: '+h(s.resp)+' · '+h(s.tipo)+' · '+h(s.ev)+'</div>'+s.att.map(a=>'<div class="att-row"><b style="min-width:160px">'+h(a.nom)+'</b><span style="color:var(--g500)">'+h(a.sec)+'</span>'+(a.nota?'<span style="font-weight:700;margin-left:8px">'+a.nota+'</span>':'')+'<span style="margin-left:auto"><button class="btn-i" onclick="eR(\''+a.id+'\')">✏️</button><button class="btn-i" onclick="dR(\''+a.id+'\')">🗑️</button></span></div>').join('')+'</div></div>').join('');
     // Render induction groups
     if(indCards.length){
       html+='<div style="margin-top:16px;margin-bottom:8px;font-size:12px;font-weight:700;color:var(--amber);border-bottom:2px solid var(--amber);padding-bottom:4px">🆕 INDUCCIONES</div>';
@@ -2787,7 +2787,7 @@ V.reg=function(){
     }
     $('vss').innerHTML=html;
   }else{$('vss').style.display='none';$('vtb').style.display='block';
-    $('rtb').innerHTML=f.map((r,i)=>'<tr style="background:'+(i%2?'var(--g50)':'#fff')+'"><td>'+bg(r.mes.slice(0,3),'blue')+'</td><td>'+h(r.fecha)+'</td><td>'+bg(r.tema,TC[r.tema])+'</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+h(r.desc)+'</td><td><b>'+h(r.nom)+'</b></td><td>'+h(r.sec)+'</td><td>'+r.hrs+'</td><td>'+h(r.tipo)+'</td><td>'+h(r.ev)+'</td><td>'+(r.plan==='SI'?bg('SI','green'):'NO')+'</td><td>'+h(r.resp)+'</td><td>'+(r.nota?'<span style="font-weight:700;color:'+(r.puntajeMin&&parseFloat(r.nota)>=r.puntajeMin?'var(--green)':r.puntajeMin&&parseFloat(r.nota)<r.puntajeMin?'var(--red)':'var(--navy)')+'">'+r.nota+'</span>':'—')+'</td><td><button class="btn-i" onclick="eR('+r.id+')">✏️</button><button class="btn-i" onclick="dR('+r.id+')">🗑️</button></td></tr>').join('')}
+    $('rtb').innerHTML=f.map((r,i)=>'<tr style="background:'+(i%2?'var(--g50)':'#fff')+'"><td>'+bg(r.mes.slice(0,3),'blue')+'</td><td>'+h(r.fecha)+'</td><td>'+bg(r.tema,TC[r.tema])+'</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+h(r.desc)+'</td><td><b>'+h(r.nom)+'</b></td><td>'+h(r.sec)+'</td><td>'+r.hrs+'</td><td>'+h(r.tipo)+'</td><td>'+h(r.ev)+'</td><td>'+(r.plan==='SI'?bg('SI','green'):'NO')+'</td><td>'+h(r.resp)+'</td><td>'+(r.nota?'<span style="font-weight:700;color:'+(r.puntajeMin&&parseFloat(r.nota)>=r.puntajeMin?'var(--green)':r.puntajeMin&&parseFloat(r.nota)<r.puntajeMin?'var(--red)':'var(--navy)')+'">'+r.nota+'</span>':'—')+'</td><td><button class="btn-i" onclick="eR(\''+r.id+'\')">✏️</button><button class="btn-i" onclick="dR(\''+r.id+'\')">🗑️</button></td></tr>').join('')}
 };
 
 // Agregar participante a la lista temporal
@@ -2917,14 +2917,17 @@ function cf(){
 
 // Editar registro individual (desde la lista)
 window.eR=function(id){
-  const r=R.find(x=>x.id===id);if(!r)return;eId=id;
+  // Los id de los registros son texto (ver CAMPOS_TEXTO_R). El boton pasaba el
+  // id sin comillas: un id nuevo ("rm0...") rompia el click y uno viejo llegaba
+  // como numero y no coincidia con ===. El lapiz y el tacho no hacian nada.
+  const r=R.find(x=>String(x.id)===String(id));if(!r)return;eId=String(id);
   $('ef-fecha').value=r.fecha;$('ef-tema').value=r.tema;$('ef-desc').value=r.desc;$('ef-cod').value=r.cod;
   $('ef-nom').value=r.nom;$('ef-sec').value=r.sec;$('ef-hrs').value=r.hrs;$('ef-tipo').value=r.tipo;
   $('ef-ev').value=r.ev;$('ef-plan').value=r.plan;$('ef-resp').value=r.resp;$('ef-nota').value=r.nota||'';
   $('fc').style.display='none';$('fc-edit').style.display='block';$('btn-nw').textContent='✕';
 };
 function saveEdit(){
-  const r=R.find(x=>x.id===eId);if(!r)return;
+  const r=R.find(x=>String(x.id)===String(eId));if(!r)return;
   const cambios=[];
   const nf=$('ef-fecha').value;if(nf!==r.fecha)cambios.push('Fecha: '+r.fecha+' → '+nf);
   const nt=$('ef-tema').value;if(nt!==r.tema)cambios.push('Tema: '+r.tema+' → '+nt);
@@ -2941,7 +2944,7 @@ function saveEdit(){
   if(cambios.length)logAudit('EDICIÓN REG.','['+r.nom+'] '+r.tema+' '+r.fecha+' — '+cambios.join(' | '),'—');
   eId=null;sv();cf();V.reg();
 }
-window.dR=function(id){if(!canDo('delete_reg')){alert('No tenés permisos para eliminar registros.');return}if(!confirm('¿Eliminar?'))return;const r=R.find(x=>x.id===id);if(r)logAudit('ELIMINACIÓN REG.','Eliminado: '+r.nom+' — '+r.tema+' — '+r.desc+' ('+r.fecha+')');R=R.filter(r=>r.id!==id);sv();V.reg()};
+window.dR=function(id){if(!canDo('delete_reg')){alert('No tenés permisos para eliminar registros.');return}if(!confirm('¿Eliminar?'))return;const r=R.find(x=>String(x.id)===String(id));if(r)logAudit('ELIMINACIÓN REG.','Eliminado: '+r.nom+' — '+r.tema+' — '+r.desc+' ('+r.fecha+')');R=R.filter(r=>String(r.id)!==String(id));sv();V.reg()};
 
 // ══════════ PLAN GANTT ══════════
 let editPlanId=null;
