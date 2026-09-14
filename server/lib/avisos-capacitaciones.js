@@ -19,13 +19,13 @@
 import { hayCorreo, enviar } from './correo.js';
 import { supervisoresDe, unir } from './destinatarios.js';
 import { correrUnaVezPorDia, coleccionCapacitaciones, relojLocal, comoDia } from './tareas.js';
+import { buscadorDePersonas } from './personas-capacitaciones.js';
 
 const RECURSO = 'capacitaciones';
 const TAREA_PLAN = 'avisos_capacitaciones_plan';
 const TAREA_INDUCCIONES = 'avisos_capacitaciones_inducciones';
 
 const HORA = Number(process.env.AVISOS_CAPACITACIONES_HORA ?? 8);
-import { buscadorDePersonas } from './personas-capacitaciones.js';
 
 const ACTIVOS = ['1', 'true', 'si'].includes(
     String(process.env.AVISOS_CAPACITACIONES_ACTIVOS || '').toLowerCase()
