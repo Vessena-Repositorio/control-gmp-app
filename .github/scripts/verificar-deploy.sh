@@ -70,6 +70,22 @@ for i in $(seq 1 "$INTENTOS"); do
             exit 0
         fi
 
+        # Version correcta y base conectada, pero alguna replica con error.
+        # Eso casi nunca lo causa el deploy: es el origen (una planilla o un
+        # Apps Script) que dejo de responder. Antes el job esperaba diez minutos
+        # algo que el deploy no puede arreglar, ocupando el unico runner, y el
+        # deploy siguiente quedaba en cola. El 14/09/2026 la replica de sao001
+        # empezo a dar 404 y cada arreglo tardo diez minutos de mas en salir.
+        # Se da por desplegado y el problema queda a la vista como advertencia.
+        # Si hay una replica todavia en curso se sigue esperando, como antes.
+        if printf '%s' "$CUERPO" | grep -q '"base":"conectada"' \
+           && printf '%s' "$CUERPO" | grep -q '"pendientes":\[\]'; then
+            PROBLEMAS=$(printf '%s' "$CUERPO" | sed -n 's/.*"problemas":\(\[[^]]*\]\).*/\1/p')
+            echo "::warning::Desplegado $ESPERADA, pero hay replicas con problemas: $PROBLEMAS"
+            echo "$CUERPO"
+            exit 0
+        fi
+
         if [ $((i % 6)) -eq 0 ]; then
             echo "  [$((i * ESPERA))s] version correcta, todavia no sana: HTTP $CODIGO — ${CUERPO:-sin respuesta}"
         fi
