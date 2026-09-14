@@ -1128,36 +1128,7 @@ function Trail({logs}){
 
 /* ═══ REPORTES ═══ */
 const MONTHS_ES=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-/* Carga inicial. Los 7 expedientes de 2026 y sus 28 acciones venían escritos
-   dentro de este archivo, que era la única copia que existía. Este panel los
-   pasa a la base una sola vez; el servidor rechaza el pedido si ya hay algo
-   cargado, así que un click de más no puede duplicar un expediente.
-
-   Una vez hecho, DEFAULT_NCS y DEFAULT_CAPAS se pueden sacar del archivo. */
-function CargaInicial({onListo,avisar}){
-  const[ocupado,sOcupado]=useState(false);
-  const importar=async()=>{
-    if(!confirm(`Se van a cargar ${DEFAULT_NCS.length} no conformidades y ${DEFAULT_CAPAS.length} acciones. Solo se puede hacer una vez. ¿Continuar?`))return;
-    sOcupado(true);
-    try{
-      const r=await api("/importar",{method:"POST",body:JSON.stringify({ncs:DEFAULT_NCS,capas:DEFAULT_CAPAS})});
-      avisar(`Cargados ${r.ncs} expedientes y ${r.capas} acciones`);
-      onListo&&onListo();
-    }catch(e){avisar("No se pudo importar: "+e.message,"error");}
-    finally{sOcupado(false);}
-  };
-  return(<div style={{...sC,background:K.priL,borderColor:K.pri+"30"}}>
-    <h3 style={{fontSize:14,fontWeight:800,color:K.pri,margin:"0 0 6px"}}>📥 Carga inicial de datos</h3>
-    <p style={{fontSize:12.5,color:K.txS,lineHeight:1.6,margin:"0 0 12px"}}>
-      La base está vacía. Este archivo trae {DEFAULT_NCS.length} no conformidades de 2026 y {DEFAULT_CAPAS.length} acciones
-      cargadas de antemano; desde acá pasan al servidor, donde las va a ver todo el equipo.
-      Es una operación única: después de hacerla, este panel desaparece.
-    </p>
-    <button style={sB("pri")} onClick={importar} disabled={ocupado}>{ocupado?"Cargando…":"Cargar los datos iniciales"}</button>
-  </div>);
-}
-
-function Reports({data,canAdmin,onImportar}){
+function Reports({data}){
   const{ncs,devs,capas}=data;
   const closedNC=ncs.filter(n=>n.phase==="cerrada").length;
   const openNC=ncs.length-closedNC;
@@ -1186,11 +1157,6 @@ function Reports({data,canAdmin,onImportar}){
         <button style={sB("g")} onClick={dl}>⬇ Texto plano</button>
       </div>
     </div>
-
-    {/* La base recién creada está vacía: el administrador puede traer de una vez
-        los expedientes que este archivo trae cargados de antemano. */}
-    {canAdmin&&ncs.length===0&&devs.length===0&&capas.length===0&&
-      <div style={{marginTop:14}}><CargaInicial avisar={data.avisar} onListo={()=>onImportar&&onImportar(data.yr)}/></div>}
 
     {/* ── KPI cards ── */}
     <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:12,margin:"14px 0 16px"}}>
@@ -1529,7 +1495,7 @@ function GuidePage({goTo}){
           <div key={k} style={{padding:"10px 14px",background:v.bg,borderRadius:8}}>
             <div style={{fontWeight:700,color:v.color,fontSize:13}}>{v.icon} {v.label}</div>
             <div style={{fontSize:12,color:K.txS,marginTop:4}}>
-              {v.canAdmin?"Carga, edita y avanza etapas. Además puede eliminar registros y adjuntos, y hacer la carga inicial."
+              {v.canAdmin?"Carga, edita y avanza etapas. Además puede eliminar registros y adjuntos."
                 :v.canEdit?"Crea, edita y avanza etapas de NC, desvíos y acciones. Adjunta evidencia. No puede eliminar."
                 :"Solo lectura: consulta, exporta e imprime, sin modificar nada."}
             </div>
@@ -1643,7 +1609,7 @@ function Accesos({cu,rolRecurso}){
           <div key={k} style={{padding:"10px 14px",background:v.bg,borderRadius:8,border:`1px solid ${v.color}20`}}>
             <div style={{fontWeight:700,color:v.color,fontSize:13}}>{v.icon} {v.label}</div>
             <div style={{fontSize:12,color:K.txS,marginTop:4}}>
-              {v.canAdmin?"Carga, edita y además puede eliminar registros y hacer la carga inicial."
+              {v.canAdmin?"Carga, edita y además puede eliminar registros."
                 :v.canEdit?"Carga y edita no conformidades, desvíos y acciones. No puede eliminar."
                 :"Solo lectura. Consulta e imprime, sin modificar nada."}
             </div>
@@ -1663,114 +1629,6 @@ function Accesos({cu,rolRecurso}){
     </div>
   </div>);
 }
-
-/* ══════════════════════════════════════════════════════
-   DEFAULT DATA — NC 2026 (from PDFs)
-   ══════════════════════════════════════════════════════ */
-const DEFAULT_NCS=[
-{id:"nc001",code:"NC-001-2026",phase:"cerrada",incidentDate:"2026-01-20",openDate:"2026-01-21",openedBy:"Gloria Nuñez",sector:"Seguimiento Gestión Productiva (Envasado)",description:"Durante el cierre del proceso de envasado del producto 61011882 – FABULOSO PASIÓN DE FRUTAS 1 L, Lote 6019UY20F1, se registró un rendimiento del 96%, valor inferior al esperado para un segundo lote de campaña. Posteriormente, en el cierre del envasado del producto 61011878 – FABULOSO NARANJA 1 L, Lote 6020UY20F1 (primer lote de la campaña), se obtuvo un rendimiento del 89%, con una merma de granel aproximada de 4.100 kg, lo que representa una desviación significativa. La especificación de rendimiento de envasado para ambos productos se encuentra en el rango de 97% a 103%.",source:"Control Interno",associatedItem:"61011876 Fabuloso Pasión de Frutas 1L / 61011878 Fabuloso Naranja 1L",lot:"6019UY20F1 / 6020UY20F1",
-ishikawa:{metodo:{0:"SI"}},
-analysisNotes:"Se identificó que una válvula utilizada para la limpieza de cañerías había quedado levemente abierta. El SOP-SAN-198 no contempla explícitamente un punto de control para la verificación del cierre de la válvula de purga del tramo posterior al PIG.",analysisDate:"2026-01-21",analyzedBy:"Gloria Nuñez",
-rootCause:"Previo al inicio del turno de la mañana siguiente, se realizó una verificación del estado de cierre de las válvulas de la línea, identificándose que una válvula utilizada para la limpieza de cañerías (en cambios de variedad o limpiezas profundas) había quedado levemente abierta. Como consecuencia, durante la jornada productiva el producto se descargó de forma continua hacia el desagüe, llegando a la planta de tratamiento. El SOP-SAN-198 Enjuague de línea EQU-081 no contempla de manera explícita un punto de control para la verificación del cierre de la válvula de purga del tramo posterior al PIG.",
-severity:"Baja",probability:"Moderada",classification:"MENOR",
-impactsOthers:"Sí",impactDetail:"",capaType:"Acción Correctiva",conclusions:"",
-rootCauseEliminated:"Sí",coverageComplete:"Sí",negativeImpact:"No",onTime:"Sí",
-effectivenessNotes:"No se reportaron resultados de rendimientos de envasado fuera de % de tendencia post lavado.",
-closeDate:"2026-05-14",closedBy:"Gloria Nuñez",closeNotes:"Se cierra no conformidad por demostrar efectividad en los rendimientos de envasado luego de las acciones cumplidas.",createdAt:"2026-01-21T10:00:00.000Z"},
-
-{id:"nc003",code:"NC-003-2026",phase:"cerrada",incidentDate:"2026-03-02",openDate:"2026-03-09",openedBy:"Gloria Nuñez",sector:"Servicios/Agua/Tanques",description:"Se recibió el informe 513956 de Beltran Zunino que indica un recuento de heterotróficos para muestra de agua de TM8 de 1.1 x 10^5 ufc/100ml, superando la especificación de <10000 ufc/100 ml.",source:"Control Interno",associatedItem:"AGUA DE PROCESO",lot:"TM8-26022026",
-ishikawa:{metodo:{0:"SI"}},
-analysisNotes:"Se constató que la actividad de mantenimiento preventivo correspondiente al mes de febrero 2026, establecida con frecuencia mensual, no fue ejecutada. El sistema actual se basa en seguimiento manual, sin mecanismos formales de control, verificación independiente o alertas.",analysisDate:"2026-03-09",analyzedBy:"Gloria Nuñez",
-rootCause:"A partir del resultado fuera de especificación informado el 02/03/2026 para el punto de muestreo TM8, se verificó que la última limpieza y desmontaje del punto TM8 fue realizada el 17/01/2026, y que los controles microbiológicos posteriores estaban dentro de especificación. Sin embargo, la actividad de mantenimiento preventivo correspondiente al mes de febrero 2026 (frecuencia mensual) no fue ejecutada. Del análisis se identificó que el sistema actual se basa en un seguimiento manual, sin mecanismos formales de control, verificación independiente o alertas que permitan detectar desvíos en el cumplimiento de las tareas programadas.",
-severity:"Alta",probability:"Moderada",classification:"CRITICA",
-impactsOthers:"Sí",impactDetail:"Agua de proceso utilizada en producción",capaType:"Acción Correctiva",conclusions:"",
-rootCauseEliminated:"Sí",coverageComplete:"Sí",negativeImpact:"No",onTime:"Sí",
-effectivenessNotes:"Se evidenció resultados dentro de especificación, por debajo del nivel de alerta, de los controles luego de la limpieza. En mayo ya se coordinó para fin de semana 16/05 la limpieza del sistema y de todos los puntos de uso y de muestreo.",
-closeDate:"2026-05-14",closedBy:"Gloria Nuñez",closeNotes:"Se cierra no conformidad por demostrar que las acciones planteadas fueron efectivas y los resultados microbiológicos están dentro de control.",createdAt:"2026-03-09T10:00:00.000Z"},
-
-{id:"nc020",code:"NC-020-2026",phase:"implementacion",incidentDate:"2026-02-09",openDate:"2026-02-09",openedBy:"Gloria Nuñez",sector:"Aseguramiento de Calidad",description:"Durante la revisión del sistema de gestión se detectó que el plan anual de auditorías internas correspondiente al año 2025 no fue completado en su totalidad, quedando auditorías programadas sin ejecutar dentro del período establecido.",source:"Control Interno",associatedItem:"N/A",lot:"N/A",
-ishikawa:{metodo:{0:"SI"}},
-analysisNotes:"",analysisDate:"2026-02-09",analyzedBy:"Gloria Nuñez",
-rootCause:"",
-severity:"Moderada",probability:"Alta",classification:"MAYOR",
-impactsOthers:"",impactDetail:"",capaType:"Acción Correctiva",conclusions:"",
-rootCauseEliminated:"",coverageComplete:"",negativeImpact:"",onTime:"",
-effectivenessNotes:"",closeDate:"",closedBy:"",closeNotes:"",createdAt:"2026-02-09T10:00:00.000Z"},
-
-{id:"nc021",code:"NC-021-2026",phase:"implementacion",incidentDate:"2026-05-12",openDate:"2026-05-14",openedBy:"Gloria Nuñez",sector:"Control de Calidad",description:"Con fecha 12/05/2026 se recibe reclamo formal vía correo electrónico de cliente, manifestando inconformidad respecto al envase tipo doypack del Jabón Líquido 3 L marca Tienda. El cliente indica que el envase \"es más fino y se tuerce, por lo que queda todo desalineado y feo en la góndola\", comparándolo desfavorablemente con envases de Nevex y Skip.",source:"Reclamo clientes",associatedItem:"5602 PACK CRISTAL - DET LV LIMON 1,25LTS -2 C/DTO (6640 TIENDA INGLESA - JAB LIQ DOYP 3 LT)",lot:"No aplica",
-ishikawa:{metodo:{0:"SI"}},
-analysisNotes:"",analysisDate:"2026-05-14",analyzedBy:"Gloria Nuñez",
-rootCause:"El film flexible del doypack utilizado para el formato 3 L de jabón líquido marca Tienda presenta un espesor/gramaje insuficiente, lo que provoca falta de rigidez estructural y deformación (\"torcedura\") del envase cuando se exhibe lleno en góndola, afectando la presentación del producto en el punto de venta.",
-severity:"Moderada",probability:"Alta",classification:"MAYOR",
-impactsOthers:"Sí",impactDetail:"Presentación en punto de venta, imagen de marca",capaType:"Acción Correctiva",conclusions:"",
-rootCauseEliminated:"",coverageComplete:"",negativeImpact:"",onTime:"",
-effectivenessNotes:"",closeDate:"",closedBy:"",closeNotes:"",createdAt:"2026-05-14T10:00:00.000Z"},
-
-{id:"nc022",code:"NC-022-2026",phase:"implementacion",incidentDate:"2026-05-14",openDate:"2026-05-14",openedBy:"Gloria Nuñez",sector:"Seguimiento Gestión Productiva (Envasado)",description:"El 14/05/2026, a primera hora del turno, durante la verificación de arranque de línea Alwid, se detecta que la codificadora estaba imprimiendo la fecha de vencimiento \"05/208\" en lugar del valor correcto \"05/2028\" (omisión de un dígito en el año).",source:"Control Interno",associatedItem:"5602 PACK CRISTAL - DET LV LIMON 1,25LTS -2 C/DTO",lot:"6134UY20A1",
-ishikawa:{metodo:{0:"SI"}},
-analysisNotes:"La fecha de vencimiento se carga de forma MANUAL en la codificadora, a pesar de que el equipo dispone de la función de seteo automático de fecha. Al no estar activada esta función, el proceso depende íntegramente de la digitación correcta por parte del operario. Los controles de proceso vigentes fallaron en detectar el error durante el arranque del 13/05, presumiblemente por exceso de confianza al observar el dígito final esperado.",analysisDate:"2026-05-14",analyzedBy:"Gloria Nuñez",
-rootCause:"Del análisis de causa raíz se concluye que la fecha de vencimiento se carga de forma MANUAL en la codificadora, a pesar de que el equipo dispone de la función de seteo automático de fecha. Al no estar activada esta función, el proceso depende íntegramente de la digitación correcta por parte del operario, exponiéndolo a error humano.\n\nCausa de detección fallida (Medición): los controles de proceso vigentes (verificación del operario, verificación de CC y carga de foto del codificado en la app) fallaron en detectar el error durante el arranque del 13/05, presumiblemente por exceso de confianza al observar el dígito final esperado (\"8\"), sin lectura atenta del año completo.\n\nAlcance: producción del 13/05/2026 — 13.872 unidades (SKU 5804, 5314 y 5154). Totalidad en planta/depósito, sin despacho al cliente.",
-severity:"Alta",probability:"Moderada",classification:"CRITICA",
-impactsOthers:"Sí",impactDetail:"13.872 unidades afectadas en depósito, sin despacho. SKU 5804, 5314, 5154.",capaType:"Acción Correctiva",conclusions:"",
-rootCauseEliminated:"",coverageComplete:"",negativeImpact:"",onTime:"",
-effectivenessNotes:"",closeDate:"",closedBy:"",closeNotes:"",createdAt:"2026-05-14T11:00:00.000Z"},
-
-{id:"nc023",code:"NC-023-2026",phase:"implementacion",incidentDate:"2026-08-19",openDate:"2026-08-19",openedBy:"Gloria Nuñez",sector:"Seguimiento Gestión Productiva (Envasado)",description:"El 19/08/2026 se recibe reclamo formal del cliente Colgate-Palmolive informando que las etiquetas de las cajas del producto 61011876 – FABULOSO PASIÓN DE FRUTAS 1L indicaban erróneamente el SKU 61011882 – FABULOSO PASIÓN DE FRUTAS 2L. El alcance del evento comprende 40 pallets (506 unidades por pallet, cajas x 12 unidades), totalizando 20.240 cajas del lote 6230UY20F1. De estos, 18 pallets fueron despachados al cliente Colgate-Palmolive y 12 pallets permanecían en planta Vessena al momento de la detección.",source:"Reclamo clientes",associatedItem:"61011876 FABULOSO PASIÓN DE FRUTAS 1L",lot:"6230UY20F1",
-ishikawa:{metodo:{0:"SI",1:"SI",2:"SI",3:"NO",4:"SI"},mano_obra:{0:"SI",1:"SI",2:"SI",3:"NO",4:"SI"},materiales:{0:"N/A",1:"N/A",2:"N/A",3:"N/A",4:"N/A"},maquinas:{0:"SI",1:"SI",2:"SI",3:"NO"},medio_ambiente:{0:"SI",1:"SI",2:"N/A",3:"NO",4:"SI"}},
-analysisNotes:"Método #4: El procedimiento vigente contempla la verificación obligatoria de datos de impresión post-reinicio, pero no fue ejecutado al retomar la producción luego del corte de energía. El procedimiento vinculado no se mantuvo en la práctica operativa.\nMano de Obra #4: Al reiniciar el proceso post-corte, el operario reenvió el archivo de etiqueta sin verificar que correspondiera al SKU correcto, seleccionando por error el SKU 61011882 (2L) en lugar del 61011876 (1L). No ejecutó la verificación post-reinicio prevista en el procedimiento.\nMáquinas #4: La impresora de etiquetas no cuenta con memoria no volátil ni sistema de respaldo de energía ininterrumpible (UPS). Al producirse el apagón, los datos de impresión cargados se perdieron en su totalidad sin posibilidad de recuperación automática, requiriendo reenvío manual del archivo y exponiéndose a error humano.\nMedio Ambiente #4: Se produjo un apagón energético generalizado en el barrio donde se encuentra la planta, provocando la interrupción no planificada del proceso productivo y el reinicio de la impresora de etiquetas.",analysisDate:"2026-08-19",analyzedBy:"Gloria Nuñez",
-rootCause:"A mitad de la jornada productiva se produjo un apagón energético generalizado en el barrio donde se ubica la planta, lo que provocó la interrupción abrupta de la línea de envasado y el reinicio de la impresora de etiquetas de cajas. La impresora no cuenta con memoria no volátil ni sistema de respaldo de energía ininterrumpible (UPS), por lo que al restablecerse el suministro eléctrico los datos del archivo de impresión cargado al inicio del turno se perdieron en su totalidad, sin posibilidad de recuperación automática. Al retomar la producción, el operario reenvió manualmente el archivo de etiqueta, seleccionando por error el correspondiente al SKU 61011882 (Fabuloso Pasión de Frutas 2L) en lugar del SKU 61011876 (1L).\n\nAnálisis de la falla de detección: el procedimiento vigente contempla la verificación obligatoria de datos de impresión (SKU, descripción, lote) como punto de control independiente tras cualquier reinicio de proceso. Dicho control fue correctamente ejecutado y documentado al inicio de la jornada, quedando evidencia del sticker en la hoja de control en proceso. Sin embargo, al reanudarse la producción luego del corte de energía, la verificación post-reinicio no fue ejecutada ni documentada, constituyendo un incumplimiento del procedimiento establecido.\n\nDel análisis se identifican tres factores contribuyentes concurrentes: (1) Vulnerabilidad técnica del equipo: la impresora de etiquetas carece de memoria no volátil y de respaldo de energía (UPS), lo que convierte cada corte eléctrico en un punto crítico de falla que requiere reconfiguración manual completa, exponiéndose al error humano en la selección del archivo. (2) Incumplimiento de procedimiento: el control post-reinicio establecido en el procedimiento no fue ejecutado. Se evidencia una brecha entre el procedimiento documentado y la práctica operativa, lo que indica necesidad de refuerzo de capacitación y supervisión en controles tras paradas no programadas. (3) Ausencia de barrera de verificación independiente: si bien el procedimiento asigna la verificación, no existe un segundo control cruzado (por ejemplo, validación por parte del Jefe de envasado o de Control de Calidad) que actúe como barrera redundante ante el incumplimiento del primer control, particularmente en situaciones de reinicio donde el riesgo de error es elevado.\n\nConclusión: la causa raíz es la combinación de una vulnerabilidad técnica del equipo (sin memoria ni respaldo) con la no ejecución del control post-reinicio previsto en el procedimiento. La falla no se origina en ausencia de procedimiento sino en incumplimiento del mismo, agravada por la falta de una barrera de verificación redundante y la limitación técnica del equipo.",
-severity:"Alta",probability:"Moderada",classification:"CRITICA",
-impactsOthers:"Sí",impactDetail:"Cualquier producto envasado en la línea está expuesto al mismo riesgo ante un corte de energía. El incumplimiento del control post-reinicio podría replicarse en cualquier parada no programada.",capaType:"Acción Correctiva",conclusions:"",
-rootCauseEliminated:"",coverageComplete:"",negativeImpact:"",onTime:"",
-effectivenessNotes:"",closeDate:"",closedBy:"",closeNotes:"",createdAt:"2026-08-19T10:00:00.000Z"},
-
-{id:"nc024",code:"NC-024-2026",phase:"implementacion",incidentDate:"2026-08-10",openDate:"2026-08-10",openedBy:"Gloria Nuñez",sector:"Seguimiento Gestión Productiva (Envasado)",description:"El 10/08/2026, durante una verificación en depósito de producto terminado, se detecta que el sticker de funda del SKU 5602 – PACK CRISTAL DETER LIMÓN 1,25 LTS presenta un código DUN-14 que no corresponde al producto: el DUN-14 impreso corresponde al SKU 2132 – PACK RELAX 900 ML. El alcance del evento comprende 45 pallets (234 unidades por pallet, fundas de 6 unidades cada una), totalizando 10.530 fundas del lote 6218UY20A1, todas en planta al momento de la detección. El producto envasado dentro de las fundas es correcto; la no conformidad se limita al código DUN-14 del sticker de funda, afectando la trazabilidad logística e identificación a nivel de unidad de despacho.",source:"Control Interno",associatedItem:"5602 – PACK CRISTAL DETER LIMÓN 1,25 LTS",lot:"6218UY20A1",
-ishikawa:{metodo:{0:"NO",1:"NO",2:"NO",3:"N/A",4:"NO"},mano_obra:{0:"NO",1:"NO",2:"SI",3:"SI",4:"SI"},materiales:{0:"NO",1:"NO",2:"NO",3:"N/A",4:"SI"},maquinas:{0:"SI",1:"N/A",2:"SI",3:"SI"},medio_ambiente:{0:"SI",1:"SI",2:"N/A",3:"SI",4:"SI"}},
-analysisNotes:"Método #1, #2, #3, #5: No existe procedimiento ni formulario que establezca la verificación del DUN-14 del sticker de funda como punto de control en proceso.\nMano de Obra #1, #2: Al no existir procedimiento ni punto de control definido, el personal no ha sido capacitado en esta verificación.\nMateriales #1, #2, #3: La etiqueta de funda fue impresa con un DUN-14 que no corresponde al SKU del producto. El sticker no fue verificado por CC ya que este dato no forma parte de los controles vigentes.",analysisDate:"2026-08-10",analyzedBy:"Gloria Nuñez",
-rootCause:"El sticker de funda del SKU 5602 fue impreso con el código DUN-14 correspondiente al SKU 2132 – PACK RELAX 900 ML. El SKU 5602 es un producto establecido con historial prolongado en la empresa y no se registraron cambios intencionales recientes en la ficha del producto ni en el archivo de impresión. No fue posible determinar en qué momento ni por qué causa el DUN-14 fue alterado dentro del archivo, dado que el proceso actual de gestión de archivos de etiquetas no cuenta con control de versiones, registro de modificaciones ni permisos restringidos de edición.\n\nDel análisis se identifican tres factores raíz sistémicos:\n(1) Archivos de impresión sin control de integridad: los archivos se gestionan de forma local, sin versionado, sin log de cambios y sin verificación periódica contra datos maestros. Un dato crítico puede alterarse sin detección.\n(2) Ausencia de control del DUN-14 en proceso: el DUN-14 no está incluido en los controles en proceso, formularios de arranque ni verificaciones periódicas. No existía barrera de detección para este atributo en toda la cadena productiva.\n(3) Impresión de etiquetas desvinculada del ERP: los stickers de funda se generan de forma manual e independiente del sistema iDempiere, sin validación automática contra los datos maestros del producto.",
-severity:"Moderada",probability:"Alta",classification:"MAYOR",
-impactsOthers:"Sí",impactDetail:"Cualquier SKU cuya etiqueta de funda se genere mediante el proceso manual actual está expuesto al mismo riesgo.",capaType:"",conclusions:"",
-rootCauseEliminated:"",coverageComplete:"",negativeImpact:"",onTime:"",
-effectivenessNotes:"",closeDate:"",closedBy:"",closeNotes:"",createdAt:"2026-08-10T10:00:00.000Z"},
-];
-
-const DEFAULT_CAPAS=[
-// === NC 001/2026 ===
-{id:"c001",code:"CAPA-0001",ncId:"nc001",devId:"",type:"Acción Preventiva",description:"Actualización del procedimiento SOP-SAN-198 Enjuague de línea EQU-081, incorporando una verificación de cerrado de válvulas una vez retornado el PIG de arrastre por los Jefes de envasado.",responsible:"Gloria Nuñez",responsibleEmail:"gloria.nunez@vessena.com.uy",dueDate:"2026-01-27",status:"Cerrado",verification:"Procedimiento actualizado, versión 3.0 (21/01/2026).",effectiveness:"No se reportaron rendimientos fuera de tendencia post lavado.",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-01-21T10:00:00.000Z"},
-{id:"c002",code:"CAPA-0002",ncId:"nc001",devId:"",type:"Acción Correctiva",description:"Capacitación del personal de la línea y de los jefes de envasado en la nueva versión del procedimiento SOP-SAN-198.",responsible:"Gloria Nuñez",responsibleEmail:"gloria.nunez@vessena.com.uy",dueDate:"2026-01-27",status:"Cerrado",verification:"Personal capacitado (22/01/2026).",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-01-21T10:00:00.000Z"},
-// === NC 003/2026 ===
-{id:"c003",code:"CAPA-0003",ncId:"nc003",devId:"",type:"Corrección",description:"Realizar limpieza y desinfección inmediata de TM8.",responsible:"Arnoldo Braggio",responsibleEmail:"arnoldo.braggio@vessena.com.uy",dueDate:"2026-03-15",status:"Cerrado",verification:"Limpieza y desinfección de TM8 realizada 28/03/2026.",effectiveness:"Resultados dentro de especificación post limpieza.",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-03-09T10:00:00.000Z"},
-{id:"c004",code:"CAPA-0004",ncId:"nc003",devId:"",type:"Acción Correctiva",description:"Realizar hisopado de la válvula.",responsible:"Antonella Nuñez",responsibleEmail:"antonella.nunez@vessena.com.uy",dueDate:"2026-03-15",status:"Cerrado",verification:"Hisopado de válvula realizado 28/03/2026.",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-03-09T10:00:00.000Z"},
-{id:"c005",code:"CAPA-0005",ncId:"nc003",devId:"",type:"Acción Correctiva",description:"Incluir en órdenes de trabajo en Trello el mantenimiento y limpieza de los puntos de uso y tomas de muestra del sistema de agua.",responsible:"Gloria Nuñez",responsibleEmail:"gloria.nunez@vessena.com.uy",dueDate:"2026-03-22",status:"Cerrado",verification:"Se incorporó a las órdenes de trabajo las limpiezas según cronograma del sistema de agua.",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-03-09T10:00:00.000Z"},
-{id:"c006",code:"CAPA-0006",ncId:"nc003",devId:"",type:"Acción Preventiva",description:"Incluir este plan dentro del cronograma de Plan de mantenimiento preventivo general.",responsible:"Gloria Nuñez",responsibleEmail:"gloria.nunez@vessena.com.uy",dueDate:"2026-03-22",status:"Cerrado",verification:"Incluido en plan de mantenimiento preventivo general.",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-03-09T10:00:00.000Z"},
-{id:"c007",code:"CAPA-0007",ncId:"nc003",devId:"",type:"Acción Correctiva",description:"Capacitación del personal de mantenimiento en las órdenes de trabajo del mantenimiento y limpieza de las válvulas.",responsible:"Gloria Nuñez",responsibleEmail:"gloria.nunez@vessena.com.uy",dueDate:"2026-03-22",status:"Cerrado",verification:"Se capacitó al personal de mantenimiento.",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-03-09T10:00:00.000Z"},
-// === NC 020/2026 ===
-{id:"c008",code:"CAPA-0008",ncId:"nc020",devId:"",type:"Acción Correctiva",description:"Reprogramar y completar las auditorías pendientes en el 2026, incluir estos sectores en el plan anual de auditorías 2026. Considerar coordinación con los sectores e identificar períodos críticos operativos.",responsible:"Gloria Nuñez",responsibleEmail:"gloria.nunez@vessena.com.uy",dueDate:"2026-01-18",status:"Cerrado",verification:"Auditorías reprogramadas en plan 2026.",effectiveness:"",followupResp:"Claudia Barlocco",followupEmail:"claudia.barlocco@vessena.com.uy",createdAt:"2026-02-09T10:00:00.000Z"},
-{id:"c009",code:"CAPA-0009",ncId:"nc020",devId:"",type:"Acción Correctiva",description:"Ampliar el equipo de auditores internos.",responsible:"Claudia Barlocco",responsibleEmail:"claudia.barlocco@vessena.com.uy",dueDate:"2026-06-29",status:"En proceso",verification:"",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-02-09T10:00:00.000Z"},
-// === NC 021/2026 ===
-{id:"c010",code:"CAPA-0010",ncId:"nc021",devId:"",type:"Corrección",description:"Relevar stock de doypacks con la especificación de gramaje actual, evaluar alcance del problema.",responsible:"Antonella Nuñez",responsibleEmail:"antonella.nunez@vessena.com.uy",dueDate:"2026-05-20",status:"Cerrado",verification:"Stock relevado.",effectiveness:"",followupResp:"Claudia Barlocco",followupEmail:"claudia.barlocco@vessena.com.uy",createdAt:"2026-05-14T10:00:00.000Z"},
-{id:"c011",code:"CAPA-0011",ncId:"nc021",devId:"",type:"Acción Correctiva",description:"Acelerar la gestión en curso con el proveedor (China) para aumentar el espesor/gramaje del film del doypack. Solicitar muestras del nuevo film y plan de envío.",responsible:"Claudia Barlocco",responsibleEmail:"claudia.barlocco@vessena.com.uy",dueDate:"2026-05-27",status:"Cerrado",verification:"Gestión acelerada con proveedor.",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-05-14T10:00:00.000Z"},
-{id:"c012",code:"CAPA-0012",ncId:"nc021",devId:"",type:"Acción Correctiva",description:"Realizar ensayos de rigidez y estabilidad vertical (\"prueba de góndola\") sobre el envase con el nuevo film, con producto cargado, simulando condiciones de exhibición y apilado.",responsible:"Antonella Nuñez",responsibleEmail:"antonella.nunez@vessena.com.uy",dueDate:"2026-06-09",status:"Abierto",verification:"",effectiveness:"",followupResp:"Claudia Barlocco",followupEmail:"claudia.barlocco@vessena.com.uy",createdAt:"2026-05-14T10:00:00.000Z"},
-{id:"c013",code:"CAPA-0013",ncId:"nc021",devId:"",type:"Acción Correctiva",description:"Actualizar la especificación técnica del envase (Ficha Técnica de Material) incluyendo: espesor/gramaje mínimo del film, criterio de rigidez en góndola y ensayo asociado.",responsible:"Antonella Nuñez",responsibleEmail:"antonella.nunez@vessena.com.uy",dueDate:"2026-06-16",status:"Abierto",verification:"",effectiveness:"",followupResp:"Claudia Barlocco",followupEmail:"claudia.barlocco@vessena.com.uy",createdAt:"2026-05-14T10:00:00.000Z"},
-{id:"c014",code:"CAPA-0014",ncId:"nc021",devId:"",type:"Acción Preventiva",description:"Incorporar al procedimiento de calificación de envases flexibles el ensayo de estabilidad vertical con producto cargado como criterio obligatorio para todo nuevo envase o cambio de especificación.",responsible:"Antonella Nuñez",responsibleEmail:"antonella.nunez@vessena.com.uy",dueDate:"2026-05-27",status:"Abierto",verification:"",effectiveness:"",followupResp:"Claudia Barlocco",followupEmail:"claudia.barlocco@vessena.com.uy",createdAt:"2026-05-14T10:00:00.000Z"},
-// === NC 022/2026 ===
-{id:"c015",code:"CAPA-0015",ncId:"nc022",devId:"",type:"Corrección",description:"Bloqueo en el sistema de las 13.872 unidades del 13/05/2026 y segregarlas en cuarentena en depósito de producto terminado.",responsible:"Viviana Alanis",responsibleEmail:"",dueDate:"2026-05-13",status:"Cerrado",verification:"Unidades bloqueadas y segregadas.",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-05-14T11:00:00.000Z"},
-{id:"c016",code:"CAPA-0016",ncId:"nc022",devId:"",type:"Corrección",description:"Detener línea Alwid hasta corrección de la codificadora láser con el vencimiento correcto.",responsible:"Diego Varela",responsibleEmail:"",dueDate:"2026-05-13",status:"Cerrado",verification:"Línea detenida y codificadora corregida.",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-05-14T11:00:00.000Z"},
-{id:"c017",code:"CAPA-0017",ncId:"nc022",devId:"",type:"Corrección",description:"Reproceso de las unidades obtenidas del SKU 5602 hasta detección del error.",responsible:"Diego Varela",responsibleEmail:"",dueDate:"2026-05-13",status:"Cerrado",verification:"Reproceso completado.",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-05-14T11:00:00.000Z"},
-{id:"c018",code:"CAPA-0018",ncId:"nc022",devId:"",type:"Acción Correctiva",description:"Realizar seteo de fecha automática en la codificadora.",responsible:"Arnoldo Braggio",responsibleEmail:"arnoldo.braggio@vessena.com.uy",dueDate:"2026-05-17",status:"En proceso",verification:"",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-05-14T11:00:00.000Z"},
-// === NC 023/2026 ===
-{id:"c019",code:"CAPA-0019",ncId:"nc023",devId:"",type:"Corrección",description:"Bloquear y segregar los 12 pallets en planta Vessena del lote 6230UY20F1 con etiquetado incorrecto. Proceder al re-etiquetado correcto antes de liberar.",responsible:"Depósito PT / Envasado",responsibleEmail:"",dueDate:"2026-08-20",status:"Abierto",verification:"",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-08-19T10:00:00.000Z"},
-{id:"c020",code:"CAPA-0020",ncId:"nc023",devId:"",type:"Corrección",description:"Coordinar con Colgate-Palmolive la gestión de los 18 pallets despachados con etiquetado incorrecto (re-etiquetado en destino, devolución o retiro según acuerdo comercial).",responsible:"Comercial + Calidad",responsibleEmail:"",dueDate:"2026-08-26",status:"Abierto",verification:"",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-08-19T10:00:00.000Z"},
-{id:"c021",code:"CAPA-0021",ncId:"nc023",devId:"",type:"Acción Correctiva",description:"Actualizar el procedimiento de etiquetado incorporando doble verificación post-reinicio: verificación por el operario + verificación cruzada por el Jefe de envasado o CC, con firma de ambos en la hoja de control.",responsible:"Calidad",responsibleEmail:"gloria.nunez@vessena.com.uy",dueDate:"2026-09-02",status:"Abierto",verification:"",effectiveness:"",followupResp:"Claudia Barlocco",followupEmail:"claudia.barlocco@vessena.com.uy",createdAt:"2026-08-19T10:00:00.000Z"},
-{id:"c022",code:"CAPA-0022",ncId:"nc023",devId:"",type:"Acción Correctiva",description:"Capacitar al personal de la línea de envasado y jefes de turno en el control post-reinicio reforzado, con énfasis en la obligatoriedad del control tras cualquier parada no programada.",responsible:"Calidad",responsibleEmail:"gloria.nunez@vessena.com.uy",dueDate:"2026-09-09",status:"Abierto",verification:"",effectiveness:"",followupResp:"Claudia Barlocco",followupEmail:"claudia.barlocco@vessena.com.uy",createdAt:"2026-08-19T10:00:00.000Z"},
-{id:"c023",code:"CAPA-0023",ncId:"nc023",devId:"",type:"Acción Correctiva",description:"Implementar control de calidad obligatorio (verificación de sticker + registro en hoja de control) cada vez que se reanude la producción tras una interrupción, no solo al inicio de jornada.",responsible:"Control de Calidad",responsibleEmail:"",dueDate:"2026-09-02",status:"Abierto",verification:"",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-08-19T10:00:00.000Z"},
-{id:"c024",code:"CAPA-0024",ncId:"nc023",devId:"",type:"Acción Preventiva",description:"Evaluar e instalar UPS (respaldo de energía ininterrumpible) en la impresora de etiquetas para evitar pérdida de datos ante cortes eléctricos.",responsible:"Ingeniería / Mantenimiento",responsibleEmail:"arnoldo.braggio@vessena.com.uy",dueDate:"2026-09-30",status:"Abierto",verification:"",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-08-19T10:00:00.000Z"},
-{id:"c025",code:"CAPA-0025",ncId:"nc023",devId:"",type:"Acción Preventiva",description:"Evaluar adquisición de impresora con memoria no volátil que retenga el último archivo cargado tras corte de energía.",responsible:"Ingeniería",responsibleEmail:"arnoldo.braggio@vessena.com.uy",dueDate:"2026-09-30",status:"Abierto",verification:"",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-08-19T10:00:00.000Z"},
-{id:"c026",code:"CAPA-0026",ncId:"nc023",devId:"",type:"Acción Preventiva",description:"Evaluar con IT la implementación en el sistema iDempiere de la impresión automática de etiquetas de cajas/fundas directamente desde la orden de producción, según la cantidad teórica de la orden, eliminando la carga manual de archivos en la impresora y el riesgo de selección errónea de SKU.",responsible:"IT / Calidad",responsibleEmail:"",dueDate:"2026-10-31",status:"Abierto",verification:"",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-08-19T10:00:00.000Z"},
-// === NC 024/2026 ===
-{id:"c027",code:"CAPA-0027",ncId:"nc024",devId:"",type:"Corrección",description:"Destinar los 45 pallets del lote 6218UY20A1 exclusivamente a canal distribuidoras, restringiendo el despacho a cadenas que verifican e ingresan el DUN-14 a su sistema de stock.",responsible:"Andrés Rodríguez",responsibleEmail:"andres.rodriguez@vessena.com.uy",dueDate:"2026-08-09",status:"Cerrado",verification:"Pallets destinados a distribuidoras.",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-08-10T10:00:00.000Z"},
-{id:"c028",code:"CAPA-0028",ncId:"nc024",devId:"",type:"Acción Preventiva",description:"Evaluar con IT la implementación en iDempiere de la impresión automática de etiquetas de funda directamente desde la orden de producción, con validación automática del DUN-14 contra los datos maestros del producto, de forma análoga a las etiquetas de pallet.",responsible:"Claudia Barlocco",responsibleEmail:"claudia.barlocco@vessena.com.uy",dueDate:"2026-10-29",status:"En proceso",verification:"",effectiveness:"",followupResp:"Gloria Nuñez",followupEmail:"gloria.nunez@vessena.com.uy",createdAt:"2026-08-10T10:00:00.000Z"},
-];
 
 /* ══════════════════════════════════════════════════════
    MAIN APP
@@ -1998,7 +1856,7 @@ function App(){
       {pg==="dev"&&<DevList data={data} canEdit={canEdit} openDev={openDev}/>}
       {pg==="capa"&&<CAPAList data={data} canEdit={canEdit}/>}
       {pg==="trail"&&<Trail logs={logs}/>}
-      {pg==="rep"&&<Reports data={data} canAdmin={canAdmin} onImportar={cargarDatos}/>}
+      {pg==="rep"&&<Reports data={data}/>}
       {pg==="guide"&&<GuidePage goTo={sPg}/>}
       {pg==="users"&&canAdmin&&<Accesos cu={cu} rolRecurso={rolRecurso}/>}
     </div>
