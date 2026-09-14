@@ -222,7 +222,7 @@ export async function leerSesiones(p) {
         '- Tabla de asistentes con columnas: Fecha | Nombre | Firma | Sector | Nota.\n\n' +
         'TU TAREA: para CADA página del archivo (si es PDF multipágina), devolver UN objeto de sesión con TODA la metadata + la lista de asistentes.\n\n' +
         'REGLAS PARA LA METADATA:\n' +
-        '- fecha: la fecha PRINCIPAL de la sesión. Si en el encabezado no hay una sola fecha clara, usá la fecha más común entre los asistentes (columna Fecha de la tabla). Formato ISO yyyy-mm-dd. Si en la tabla figura dd/mm/yy, convertí a yyyy-mm-dd (asumí año 2000+ salvo evidencia contraria).\n' +
+        '- fecha: la fecha PRINCIPAL de la sesión. Si en el encabezado no hay una sola fecha clara, usá la fecha más común entre los asistentes (columna Fecha de la tabla). Formato ISO yyyy-mm-dd. Si en la tabla figura dd/mm/yy, convertí a yyyy-mm-dd (asumí año 2000+ salvo evidencia contraria). Hoy es ' + new Date().toISOString().slice(0, 10) + ': las planillas que se cargan son casi siempre del año en curso o del anterior. Si el año escrito a mano es ambiguo (por ejemplo un 6 que parece un 4), elegí el más cercano a hoy que no quede en el futuro.\n' +
         '- tema: elegí el título/tema principal. Miralo en este orden: (a) texto en "Otro (indicar)"; (b) si están marcados "Manual de inducción" / "Inducción GMP" / "Capacitación en Procedimientos o Instructivos", usá ese texto; (c) si hay solo un código (SOP/MAN), usá el código como tema.\n' +
         '- descripcion: texto largo del tema (lo escrito a mano en "Otro (indicar)" o similar).\n' +
         '- codigo: código del documento (ej "SOP-AC-026"). Vacío si no hay.\n' +
