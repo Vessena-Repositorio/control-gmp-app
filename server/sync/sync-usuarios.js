@@ -10,24 +10,20 @@ import { consultar, enTransaccion, pool } from '../db.js';
 import { esEjecucionDirecta } from '../lib/entrypoint.js';
 import { descargar, aFecha, aTexto, aBooleano } from '../lib/origen.js';
 
+// El unico padron legible era el de estabilidad, que venia de su Apps Script
+// (`usuarios`, con PIN en djb2). Se saco el 14/09/2026, antes de dar de baja
+// ese script: estabilidad escribe en Postgres desde el 07/09 y entra con la
+// sesion del portal, asi que esa lista quedo congelada en la hoja y el sync
+// solo volvia a copiar lo mismo. Con el script dado de baja, ademas, cada
+// corrida terminaria en error.
+//
+// Los usuarios que ya se copiaron siguen en la base: sacar el padron no borra
+// a nadie, solo deja de actualizarlos. Si hiciera falta volver a traer un
+// padron, la configuracion era:
+//   { origen: 'estabilidad', env: 'ORIGEN_ESTABILIDAD', coleccion: 'usuarios',
+//     anidada: true, esquema: 'djb2', campos: { usuario: email, email, nombre,
+//     rol, activo, creado, credencial: pinHash } }
 const PADRONES = [
-    {
-        origen: 'estabilidad',
-        env: 'ORIGEN_ESTABILIDAD',
-        coleccion: 'usuarios',
-        anidada: true, // este origen manda la coleccion como texto JSON
-        // El PIN se guarda con djb2, que no es un hash de contraseñas.
-        esquema: 'djb2',
-        campos: {
-            usuario: (u) => aTexto(u.email),
-            email: (u) => aTexto(u.email),
-            nombre: (u) => aTexto(u.nombre),
-            rol: (u) => aTexto(u.rol),
-            activo: (u) => aBooleano(u.activo) ?? true,
-            creado: (u) => aFecha(u.creado),
-            credencial: (u) => aTexto(u.pinHash),
-        },
-    },
 ];
 
 async function replicarPadron(cfg) {
