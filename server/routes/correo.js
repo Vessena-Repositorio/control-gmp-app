@@ -18,6 +18,9 @@ import {
     revisarRecordatoriosPlan, revisarInduccionesPendientes, configCapacitaciones,
 } from '../lib/avisos-capacitaciones.js';
 import { revisarPendientesAprobacion, configEnvases } from '../lib/avisos-envases.js';
+import {
+    revisarGranelesPendientes, revisarGranelesResumen, configGraneles,
+} from '../lib/avisos-graneles.js';
 import { consultar } from '../db.js';
 
 export const rutasCorreo = Router();
@@ -87,6 +90,7 @@ rutasCorreo.get('/avisos', exigirTokenSync, async (_req, res, next) => {
             estabilidad: configEstabilidad(),
             capacitaciones: configCapacitaciones(),
             envases: configEnvases(),
+            graneles: configGraneles(),
             corridas: rows,
         });
     } catch (err) {
@@ -117,3 +121,5 @@ endpointDeAviso('/avisos/estabilidad', revisarAvisosEstabilidad);
 endpointDeAviso('/avisos/capacitaciones/plan', revisarRecordatoriosPlan);
 endpointDeAviso('/avisos/capacitaciones/inducciones', revisarInduccionesPendientes);
 endpointDeAviso('/avisos/envases', revisarPendientesAprobacion);
+endpointDeAviso('/avisos/graneles/pendientes', revisarGranelesPendientes);
+endpointDeAviso('/avisos/graneles/resumen', revisarGranelesResumen);

@@ -12,6 +12,7 @@ import { rutasFabuloso } from './routes/fabuloso.js';
 import { rutasDocumentos } from './routes/documentos.js';
 import { rutasDevoluciones } from './routes/devoluciones.js';
 import { rutasNcDesvios } from './routes/nc-desvios.js';
+import { rutasGraneles } from './routes/graneles.js';
 import { rutasCorreo } from './routes/correo.js';
 import { rutasEstabilidad } from './routes/estabilidad.js';
 import { rutasCapacitaciones } from './routes/capacitaciones.js';
@@ -25,6 +26,7 @@ import { revisarAvisosCapa } from './lib/avisos.js';
 import { revisarAvisosEstabilidad } from './lib/avisos-estabilidad.js';
 import { revisarRecordatoriosPlan, revisarInduccionesPendientes } from './lib/avisos-capacitaciones.js';
 import { revisarPendientesAprobacion } from './lib/avisos-envases.js';
+import { revisarGranelesPendientes, revisarGranelesResumen } from './lib/avisos-graneles.js';
 
 const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PUERTO = Number(process.env.PORT) || 3000;
@@ -120,6 +122,7 @@ app.use('/api/fabuloso', rutasFabuloso);
 app.use('/api/documentos', rutasDocumentos);
 app.use('/api/devoluciones', rutasDevoluciones);
 app.use('/api/nc-desvios', rutasNcDesvios);
+app.use('/api/graneles', rutasGraneles);
 app.use('/api/correo', rutasCorreo);
 app.use('/api/estabilidad', rutasEstabilidad);
 app.use('/api/capacitaciones', rutasCapacitaciones);
@@ -226,6 +229,8 @@ function arrancar() {
                 ['capacitaciones:plan', revisarRecordatoriosPlan],
                 ['capacitaciones:inducciones', revisarInduccionesPendientes],
                 ['envases:aprobacion', revisarPendientesAprobacion],
+                ['graneles:pendientes', revisarGranelesPendientes],
+                ['graneles:resumen', revisarGranelesResumen],
             ];
             const revisarAvisos = () => {
                 // Cada una falla por separado: que una se caiga no puede dejar

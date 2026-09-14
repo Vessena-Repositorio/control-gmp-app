@@ -167,6 +167,7 @@ deja sin configurar (ver "Automatización").
    | `AVISOS_ESTABILIDAD_ACTIVOS` | `0` — enciende los avisos 06, 07 y 08 |
    | `AVISOS_CAPACITACIONES_ACTIVOS` | `0` — enciende los avisos 09, 10 y 12 |
    | `AVISOS_ENVASES_ACTIVOS` | `0` — enciende el aviso de los lunes de análisis por aprobar |
+   | `AVISOS_GRANELES_ACTIVOS` | `0` — enciende los avisos de graneles sin aprobar: diario a quien aprueba, resumen de los lunes a Calidad |
 
    Los cuatro valores de `ORIGEN_*` están en `.env.example`. Si falta alguno,
    ese dominio no replica y su dashboard queda sin datos — pero los demás

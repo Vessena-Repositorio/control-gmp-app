@@ -49,6 +49,7 @@ export const RECURSOS = [
     'supervision-envases',
     'panel-supervision-tapas',
     'estandares',
+    'aprobacion-graneles',
 ];
 
 /** Que archivo sirve cada recurso, para que el servidor pueda protegerlos. */
@@ -68,6 +69,7 @@ export const ARCHIVO_POR_RECURSO = {
     'fabuloso-kpi': 'fabuloso_kpi_dashboard.html',
     'supervision-envases': 'supervision-envases.html',
     'panel-supervision-tapas': 'panel-supervision-tapas.html',
+    'aprobacion-graneles': 'aprobacion-graneles.html',
 };
 
 /** true si el rol habilita esa accion sobre el recurso. */

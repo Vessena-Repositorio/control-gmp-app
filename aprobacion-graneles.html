@@ -1,0 +1,2547 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aprobación de Graneles — Vessena S.A.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+  // Registrar preset custom: React con runtime clásico (React.createElement)
+  // El "automatic" runtime inserta imports que fallan en el navegador standalone
+  Babel.registerPreset('reactClassic', {
+    presets: [[Babel.availablePresets['react'], { runtime: 'classic' }]]
+  });
+</script>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: 'Montserrat', sans-serif; background: #F9FAFB; color: #1A1A1A; }
+  input, select, button, textarea { font-family: inherit; }
+  #loading {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: #F9FAFB; font-family: 'Montserrat', sans-serif; color: #6B7280; font-size: 14px;
+    z-index: 9999; transition: opacity .3s;
+  }
+  #loading.hide { opacity: 0; pointer-events: none; }
+  #loading .spinner {
+    width: 32px; height: 32px; border: 3px solid #E5E7EB; border-top-color: #B91C1C;
+    border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 12px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div id="loading"><div class="spinner"></div>Cargando aplicación…</div>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="reactClassic">
+const { useState, useEffect, useCallback } = React;
+
+
+// ── Iconos Lucide inline ──
+const Icon = ({children, size=16, color="currentColor", style={}}) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{display:"inline-block",verticalAlign:"middle",...style}}>{children}</svg>
+);
+const FlaskConical = (p) => <Icon {...p}><path d="M14 2v6a2 2 0 0 0 .245.96l5.51 10.08A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96l5.51-10.08A2 2 0 0 0 10 8V2"/><path d="M6.453 15h11.094"/><path d="M8.5 2h7"/></Icon>;
+const ClipboardList = (p) => <Icon {...p}><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></Icon>;
+const PackagePlus = (p) => <Icon {...p}><path d="M16 16h6"/><path d="M19 13v6"/><path d="M21 10V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0"/><path d="m7.5 4.27 9 5.15"/><polyline points="3.29 7 12 12 20.71 7"/><line x1="12" x2="12" y1="22" y2="12"/></Icon>;
+const BarChart3 = (p) => <Icon {...p}><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></Icon>;
+const Search = (p) => <Icon {...p}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></Icon>;
+const Plus = (p) => <Icon {...p}><path d="M5 12h14"/><path d="M12 5v14"/></Icon>;
+const Trash2 = (p) => <Icon {...p}><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></Icon>;
+const Edit3 = (p) => <Icon {...p}><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></Icon>;
+const Check = (p) => <Icon {...p}><path d="M20 6 9 17l-5-5"/></Icon>;
+const X = (p) => <Icon {...p}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></Icon>;
+const Download = (p) => <Icon {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></Icon>;
+const ChevronDown = (p) => <Icon {...p}><path d="m6 9 6 6 6-6"/></Icon>;
+const ChevronRight = (p) => <Icon {...p}><path d="m9 18 6-6-6-6"/></Icon>;
+const AlertCircle = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></Icon>;
+const CheckCircle2 = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></Icon>;
+const Clock = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></Icon>;
+const FileSpreadsheet = (p) => <Icon {...p}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h2"/><path d="M14 13h2"/><path d="M8 17h2"/><path d="M14 17h2"/></Icon>;
+const Eye = (p) => <Icon {...p}><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></Icon>;
+const ArrowLeft = (p) => <Icon {...p}><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></Icon>;
+const Save = (p) => <Icon {...p}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></Icon>;
+const Filter = (p) => <Icon {...p}><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></Icon>;
+
+
+// (icons defined below as inline SVGs)
+
+// ── Helpers ──
+const uid = () => Math.random().toString(36).slice(2, 10);
+const today = () => new Date().toISOString().split("T")[0];
+const nowTime = () => {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+};
+const fmt = (d) => {
+  if (!d) return "—";
+  const [y, m, dd] = d.split("-");
+  return `${dd}/${m}/${y}`;
+};
+
+
+
+// ── Duración entre dos horas HH:MM (retorna string legible o "") ──
+function calcDuration(tIn, tEnd) {
+  if (!tIn || !tEnd) return "";
+  const [h1, m1] = tIn.split(":").map(Number);
+  const [h2, m2] = tEnd.split(":").map(Number);
+  const diff = (h2 * 60 + m2) - (h1 * 60 + m1);
+  if (isNaN(diff) || diff < 0) return "";
+  if (diff === 0) return "< 1 min";
+  const hh = Math.floor(diff / 60);
+  const mm = diff % 60;
+  return hh > 0 ? `${hh}h ${mm}min` : `${mm} min`;
+}
+
+// ── Evaluación de un valor contra un parámetro ──
+// La misma regla la aplica el servidor al guardar y al aprobar (server/routes/graneles.js):
+// si se cambia una, hay que cambiar la otra.
+//
+// Acepta coma decimal, que es como se escribe acá. Con parseFloat, "7,5" se leía
+// como 7 y un valor fuera de rango podía figurar dentro.
+function numero(v) {
+  const t = String(v ?? "").trim().replace(",", ".");
+  if (t === "") return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+function evalValue(param, val) {
+  if (val === "" || val == null) return null;
+  if (!param) return null;
+  if (param.type === "text") return val.trim() !== "" ? true : null;
+  const n = numero(val);
+  if (n === null) return null;
+  const min = numero(param.min);
+  const max = numero(param.max);
+  return (min === null || n >= min) && (max === null || n <= max);
+}
+// Resultado final del parámetro considerando retest
+// - pass true → true
+// - pass false, retestPass true → true (rescatado)
+// - pass false, retestPass false → false (confirmado fuera)
+// - pass false, retest vacío → null (pendiente retest)
+// - todo vacío → null
+function finalPass(r) {
+  if (r.pass === true) return true;
+  // Texto no tiene retest: "No conforme" es definitivo. Antes caía en "pendiente
+  // retest", no contaba en los KPI de no conformes y pedía un retest imposible.
+  if (r.pass === false && r.type === "text") return false;
+  if (r.pass === false) {
+    if (r.retestPass === true) return true;
+    if (r.retestPass === false) return false;
+    return null; // pendiente retest
+  }
+  return null;
+}
+// Numérico fuera de especificación todavía sin 2° medición.
+const retestPendiente = (r) => r.type !== "text" && r.pass === false && (r.retestValue == null || r.retestValue === "");
+
+const STATUS = { PENDING: "pending", APPROVED: "approved", REJECTED: "rejected" };
+const STATUS_LABEL = { pending: "Pendiente", approved: "Aprobado", rejected: "Rechazado" };
+const STATUS_COLOR = {
+  pending: { bg: "rgb(254 243 199)", text: "rgb(146 64 14)", border: "rgb(253 224 71)" },
+  approved: { bg: "rgb(220 252 231)", text: "rgb(22 101 52)", border: "rgb(74 222 128)" },
+  rejected: { bg: "rgb(254 226 226)", text: "rgb(153 27 27)", border: "rgb(252 165 165)" },
+};
+
+const CATEGORIES = ["Domisanitario", "Cosmético"];
+
+// ── API ──
+// Especificaciones y muestras viven en el servidor, no en el navegador: todas
+// las analistas tienen que ver la misma bitácora, y la firma de quien carga o
+// aprueba sale de la sesión en vez de ser un nombre que se escribe.
+//
+// Las 73 especificaciones que antes venían escritas en este archivo ahora las
+// carga la migración 026_graneles_especificaciones.sql.
+//
+// Toda respuesta que no sea ok levanta una excepción con el mensaje del
+// servidor, para que un fallo nunca pase por guardado.
+const API = "/api/graneles";
+async function api(ruta, opciones = {}) {
+  const r = await fetch(API + ruta, {
+    credentials: "same-origin",
+    headers: opciones.body ? { "Content-Type": "application/json" } : undefined,
+    ...opciones,
+  });
+  if (r.status === 401) {
+    // La sesión venció con la pestaña abierta.
+    location.href = "/?volver=" + encodeURIComponent(location.pathname);
+    throw new Error("sesión vencida");
+  }
+  let d = null;
+  try { d = await r.json(); } catch (e) {}
+  if (!r.ok || !d || d.ok === false) throw new Error((d && d.error) || `error ${r.status}`);
+  return d;
+}
+
+const ROL_LABEL = {
+  administrador: "Administrador", aprobador: "Aprobador", revisor: "Revisor",
+  operador: "Operador", vista: "Visualización",
+};
+
+// ── Vessena palette ──
+const V = {
+  red: "#B91C1C", redLight: "#DC2626", redBg: "#FEF2F2",
+  dark: "#1A1A1A", gray: "#6B7280", grayLight: "#F3F4F6",
+  grayMid: "#E5E7EB", white: "#FFFFFF", greenDark: "#166534",
+};
+
+// ── Badge component ──
+function Badge({ status }) {
+  const c = STATUS_COLOR[status];
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 4,
+      padding: "2px 10px", borderRadius: 999, fontSize: 12, fontWeight: 600,
+      background: c.bg, color: c.text, border: `1px solid ${c.border}`,
+    }}>
+      {status === "pending" && <Clock size={12} />}
+      {status === "approved" && <CheckCircle2 size={12} />}
+      {status === "rejected" && <AlertCircle size={12} />}
+      {STATUS_LABEL[status]}
+    </span>
+  );
+}
+
+// ── Button component ──
+function Btn({ children, variant = "primary", size = "md", onClick, disabled, style = {} }) {
+  const base = {
+    display: "inline-flex", alignItems: "center", gap: 6,
+    borderRadius: 6, fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer",
+    border: "none", fontFamily: "inherit", transition: "opacity .15s",
+    opacity: disabled ? 0.5 : 1,
+    padding: size === "sm" ? "5px 10px" : size === "lg" ? "10px 20px" : "7px 14px",
+    fontSize: size === "sm" ? 12 : size === "lg" ? 15 : 13,
+  };
+  const vars = {
+    primary: { background: V.red, color: V.white },
+    secondary: { background: V.grayLight, color: V.dark },
+    success: { background: "#166534", color: V.white },
+    danger: { background: "#991B1B", color: V.white },
+    ghost: { background: "transparent", color: V.gray, padding: "4px 8px" },
+  };
+  return <button onClick={onClick} disabled={disabled} style={{ ...base, ...vars[variant], ...style }}>{children}</button>;
+}
+
+
+
+
+
+// ── Parser del payload del QR ──
+// Formatos aceptados:
+//   • JSON: {"lote":"X","granel":"Y","salida":"HH:MM"}
+//   • URL/query: https://.../?lote=X&granel=Y&salida=HH:MM
+//   • KV separado por | o salto de línea: LOTE:X|GRANEL:Y|SALIDA:HH:MM
+function parseQrPayload(text) {
+  const out = { batchCode: "", productCode: "", timeFactory: "" };
+  if (!text || typeof text !== "string") return out;
+  const t = text.trim();
+  try {
+    if (t.startsWith("{")) {
+      const obj = JSON.parse(t);
+      out.batchCode = String(obj.lote || obj.batch || obj.batchCode || "").trim();
+      out.productCode = String(obj.granel || obj.product || obj.code || obj.productCode || "").trim();
+      out.timeFactory = String(obj.salida || obj.timeFactory || obj.hora || "").trim();
+      return out;
+    }
+    if (t.includes("=") && (t.includes("&") || t.includes("?"))) {
+      const qs = t.includes("?") ? t.split("?").pop() : t;
+      const params = new URLSearchParams(qs);
+      out.batchCode = (params.get("lote") || params.get("batch") || "").trim();
+      out.productCode = (params.get("granel") || params.get("product") || params.get("code") || "").trim();
+      out.timeFactory = (params.get("salida") || params.get("timeFactory") || params.get("hora") || "").trim();
+      if (out.batchCode || out.productCode) return out;
+    }
+    const parts = t.split(/[|\n]/).map(s => s.trim()).filter(Boolean);
+    for (const p of parts) {
+      const idx = p.indexOf(":");
+      if (idx < 0) continue;
+      const key = p.substring(0, idx).trim().toLowerCase();
+      const val = p.substring(idx + 1).trim();
+      if (!val) continue;
+      if (key.includes("lote") || key === "batch") out.batchCode = val;
+      else if (key.includes("granel") || key === "code" || key === "product") out.productCode = val;
+      else if (key.includes("salida") || key.includes("factory") || key.includes("hora")) out.timeFactory = val;
+    }
+  } catch (e) { console.warn("QR parse error:", e); }
+  return out;
+}
+
+// ── Componente scanner QR (usa html5-qrcode desde CDN) ──
+function QrScanner({ onScan, onCancel }) {
+  const [error, setError] = useState("");
+  const [manualText, setManualText] = useState("");
+
+  useEffect(() => {
+    if (typeof Html5QrcodeScanner === "undefined") {
+      setError("La librería de escaneo no cargó. Usá el pegado manual abajo.");
+      return;
+    }
+    let scanner;
+    try {
+      scanner = new Html5QrcodeScanner("qr-reader", {
+        fps: 10,
+        qrbox: { width: 240, height: 240 },
+        rememberLastUsedCamera: true,
+        showTorchButtonIfSupported: true,
+      }, false);
+      scanner.render(
+        (decodedText) => {
+          try { scanner.clear(); } catch(e) {}
+          onScan(decodedText);
+        },
+        () => {} // ignore per-frame errors
+      );
+    } catch (e) {
+      setError("No se pudo iniciar la cámara. Verificá permisos o pegá el contenido abajo.");
+    }
+    return () => { try { scanner && scanner.clear(); } catch(e) {} };
+  }, []);
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
+      display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
+      padding: 12,
+    }}>
+      <div style={{ background: V.white, borderRadius: 10, maxWidth: 480, width: "100%", maxHeight: "90vh", overflowY: "auto" }}>
+        <div style={{ padding: "12px 16px", borderBottom: `1px solid ${V.grayMid}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Escanear QR de muestra</h3>
+          <button type="button" onClick={onCancel} style={{ border: "none", background: "transparent", cursor: "pointer", padding: 4 }}>
+            <X size={18} color={V.gray} />
+          </button>
+        </div>
+        <div style={{ padding: 16 }}>
+          {!error && (
+            <div id="qr-reader" style={{ width: "100%" }}></div>
+          )}
+          {error && (
+            <div style={{ padding: 10, background: "#FEF3C7", border: "1px solid #FCD34D", borderRadius: 6, fontSize: 12, color: "#78350F", marginBottom: 12 }}>
+              {error}
+            </div>
+          )}
+          <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${V.grayMid}` }}>
+            <div style={{ fontSize: 12, color: V.gray, marginBottom: 6, fontWeight: 600 }}>O pegar contenido del QR manualmente:</div>
+            <textarea value={manualText} onChange={e => setManualText(e.target.value)} rows={3}
+              placeholder='Ejemplo: {"lote":"L2609-001","granel":"G305404","salida":"14:30"}'
+              style={{ width: "100%", padding: 8, borderRadius: 6, border: `1px solid ${V.grayMid}`, fontFamily: "inherit", fontSize: 12, resize: "vertical", boxSizing: "border-box" }} />
+            <Btn onClick={() => manualText.trim() && onScan(manualText)} disabled={!manualText.trim()} style={{ marginTop: 8 }}>
+              Procesar contenido pegado
+            </Btn>
+          </div>
+          <div style={{ marginTop: 14, fontSize: 11, color: V.gray, lineHeight: 1.4 }}>
+            <strong>Formato esperado del QR (fabricación):</strong><br/>
+            JSON: <code style={{background: V.grayLight, padding: "1px 4px"}}>{'{"lote":"L2609-001","granel":"G305404","salida":"14:30"}'}</code><br/>
+            o KV: <code style={{background: V.grayLight, padding: "1px 4px"}}>LOTE:L2609-001|GRANEL:G305404|SALIDA:14:30</code>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+
+// ── Helpers de fechas para KPIs ──
+const currentMonth = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+};
+const shiftMonth = (m, delta) => {
+  const [y, mo] = m.split("-").map(Number);
+  const d = new Date(y, mo - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+};
+const formatMonth = (m) => {
+  const [y, mo] = m.split("-").map(Number);
+  const meses = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+  return `${meses[mo - 1]} ${y}`;
+};
+const last6Months = (m) => Array.from({length: 6}, (_, i) => shiftMonth(m, -5 + i));
+
+// Duración en minutos entre timeIn y timeEnd (mismo día); "" si no calculable
+function durationMinutes(tIn, tEnd) {
+  if (!tIn || !tEnd) return null;
+  const [h1, m1] = tIn.split(":").map(Number);
+  const [h2, m2] = tEnd.split(":").map(Number);
+  const d = (h2 * 60 + m2) - (h1 * 60 + m1);
+  return isNaN(d) || d < 0 ? null : d;
+}
+function minutesToStr(m) {
+  if (m == null) return "—";
+  const hh = Math.floor(m / 60);
+  const mm = Math.round(m % 60);
+  return hh > 0 ? `${hh}h ${mm}min` : `${mm} min`;
+}
+
+// ── Botones Conforme/No conforme para parámetros tipo texto ──
+function TextResultButtons({ result, onChange, disabled = false }) {
+  const isConforme = result.pass === true;
+  const isNoConforme = result.pass === false;
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 4 }}>
+        <button type="button" disabled={disabled} onClick={() => onChange(true)} style={{
+          padding: "5px 10px", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: disabled ? "not-allowed" : "pointer",
+          border: isConforme ? "1.5px solid #166534" : `1px solid ${V.grayMid}`,
+          background: isConforme ? "#DCFCE7" : V.white,
+          color: isConforme ? "#166534" : V.gray,
+          fontFamily: "inherit", opacity: disabled ? 0.6 : 1,
+        }}>✓ Conforme</button>
+        <button type="button" disabled={disabled} onClick={() => onChange(false)} style={{
+          padding: "5px 10px", borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: disabled ? "not-allowed" : "pointer",
+          border: isNoConforme ? "1.5px solid #991B1B" : `1px solid ${V.grayMid}`,
+          background: isNoConforme ? "#FEE2E2" : V.white,
+          color: isNoConforme ? "#991B1B" : V.gray,
+          fontFamily: "inherit", opacity: disabled ? 0.6 : 1,
+        }}>✗ No conforme</button>
+      </div>
+      {isNoConforme && (
+        <div style={{ marginTop: 6 }}>
+          <Input value={result.value || ""} onChange={e => onChange(false, e.target.value)}
+            placeholder="Describir hallazgo…" disabled={disabled}
+            style={{ width: 200, borderColor: "#F87171", fontSize: 12 }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Input field ──
+function Field({ label, children, style = {} }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 3, ...style }}>
+      {label && <label style={{ fontSize: 12, fontWeight: 600, color: V.gray }}>{label}</label>}
+      {children}
+    </div>
+  );
+}
+
+function Input({ ...props }) {
+  return <input {...props} style={{
+    padding: "7px 10px", borderRadius: 6, border: `1px solid ${V.grayMid}`,
+    fontSize: 13, fontFamily: "inherit", outline: "none", width: "100%",
+    boxSizing: "border-box", ...props.style,
+  }} />;
+}
+
+function Select({ children, ...props }) {
+  return <select {...props} style={{
+    padding: "7px 10px", borderRadius: 6, border: `1px solid ${V.grayMid}`,
+    fontSize: 13, fontFamily: "inherit", outline: "none", background: V.white,
+    width: "100%", boxSizing: "border-box", ...props.style,
+  }}>{children}</select>;
+}
+
+// ── Card wrapper ──
+function Card({ children, style = {} }) {
+  return (
+    <div style={{
+      background: V.white, borderRadius: 10, border: `1px solid ${V.grayMid}`,
+      padding: 20, ...style,
+    }}>{children}</div>
+  );
+}
+
+
+
+// ══════════════════════════════════════════════════════════════════
+// ══ KPI DASHBOARD ════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+function KpiDashboard({ entries, specs }) {
+  const [selMonth, setSelMonth] = useState(currentMonth());
+  const prevMonth = shiftMonth(selMonth, -1);
+
+  // ── Cortes por mes ──
+  const inMonth = (m) => (e) => (e.date || "").startsWith(m);
+  const monthE = entries.filter(inMonth(selMonth));
+  const prevE = entries.filter(inMonth(prevMonth));
+
+  const stats = (arr) => {
+    const total = arr.length;
+    const approved = arr.filter(e => e.status === STATUS.APPROVED).length;
+    const rejected = arr.filter(e => e.status === STATUS.REJECTED).length;
+    const pending = arr.filter(e => e.status === STATUS.PENDING).length;
+    const decided = approved + rejected;
+    const rate = decided > 0 ? (approved / decided) * 100 : null;
+    // Duración promedio
+    const durs = arr.map(e => durationMinutes(e.timeIn, e.timeEnd)).filter(v => v != null);
+    const avgDur = durs.length ? durs.reduce((a,b)=>a+b, 0) / durs.length : null;
+    // Pre-análisis (ingreso a control - salida fábrica)
+    const pres = arr.map(e => durationMinutes(e.timeFactory, e.timeIn)).filter(v => v != null);
+    const avgPre = pres.length ? pres.reduce((a,b)=>a+b, 0) / pres.length : null;
+    return { total, approved, rejected, pending, rate, avgDur, avgPre };
+  };
+  const cur = stats(monthE);
+  const prv = stats(prevE);
+
+  // ── Top parámetros con "No conforme" en el mes ──
+  const paramFails = {};
+  monthE.forEach(e => {
+    e.results.forEach(r => {
+      if (finalPass(r) === false) {
+        paramFails[r.paramName] = (paramFails[r.paramName] || 0) + 1;
+      }
+    });
+  });
+  const topParams = Object.entries(paramFails).sort((a,b) => b[1]-a[1]).slice(0, 5);
+
+  // ── Rechazos por producto ──
+  const productFails = {};
+  monthE.forEach(e => {
+    if (e.status === STATUS.REJECTED) {
+      productFails[e.productCode] = (productFails[e.productCode] || 0) + 1;
+    }
+  });
+  const topProducts = Object.entries(productFails).sort((a,b) => b[1]-a[1]).slice(0, 10);
+  const productName = (code) => {
+    const s = specs.find(x => x.code === code);
+    return s ? s.name : code;
+  };
+
+  // ── Pendientes (todos, no del mes) ──
+  const allPending = entries.filter(e => e.status === STATUS.PENDING);
+  const now = new Date();
+  const withAge = allPending.map(e => {
+    const created = new Date(e.createdAt || (e.date + "T00:00:00"));
+    const hours = (now - created) / (1000 * 60 * 60);
+    return { ...e, ageHours: hours };
+  }).sort((a,b) => b.ageHours - a.ageHours);
+
+  // ── Tendencia últimos 6 meses ──
+  const trend = last6Months(selMonth).map(m => {
+    const s = stats(entries.filter(inMonth(m)));
+    return { month: m, rate: s.rate, total: s.total };
+  });
+
+  // ── Delta con mes anterior ──
+  const delta = (curr, prev, digits=1) => {
+    if (curr == null || prev == null) return null;
+    return +(curr - prev).toFixed(digits);
+  };
+
+  // ── Exportar informe mensual ──
+  const exportMonthlyReport = () => {
+    const wb = XLSX.utils.book_new();
+    // Hoja 1: Resumen
+    const resumen = [
+      ["Informe Mensual — Control de Calidad Vessena"],
+      ["Mes:", formatMonth(selMonth)],
+      ["Generado:", new Date().toLocaleString("es-UY")],
+      [],
+      ["MÉTRICAS DEL MES", "Actual", "Mes anterior (" + formatMonth(prevMonth) + ")"],
+      ["Total muestras", cur.total, prv.total],
+      ["Aprobadas", cur.approved, prv.approved],
+      ["Rechazadas", cur.rejected, prv.rejected],
+      ["Pendientes al cierre", cur.pending, prv.pending],
+      ["Tasa de aprobación %", cur.rate != null ? cur.rate.toFixed(1) : "—", prv.rate != null ? prv.rate.toFixed(1) : "—"],
+      ["Duración promedio análisis (min)", cur.avgDur != null ? cur.avgDur.toFixed(0) : "—", prv.avgDur != null ? prv.avgDur.toFixed(0) : "—"],
+      ["Tiempo pre-análisis promedio (min)", cur.avgPre != null ? cur.avgPre.toFixed(0) : "—", prv.avgPre != null ? prv.avgPre.toFixed(0) : "—"],
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resumen), "Resumen");
+
+    // Hoja 2: Top parámetros
+    const paramsSheet = [["Parámetro", "Cant. No conforme"], ...topParams];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(paramsSheet), "Top Parámetros");
+
+    // Hoja 3: Rechazos por producto
+    const prodSheet = [["Código", "Producto", "Rechazos"], ...topProducts.map(([c, n]) => [c, productName(c), n])];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(prodSheet), "Rechazos por Producto");
+
+    // Hoja 4: Tendencia
+    const trendSheet = [["Mes", "Total muestras", "Tasa aprobación %"], ...trend.map(t => [formatMonth(t.month), t.total, t.rate != null ? t.rate.toFixed(1) : "—"])];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(trendSheet), "Tendencia 6 meses");
+
+    // Hoja 5: Detalle muestras del mes
+    if (monthE.length > 0) {
+      const detalle = monthE.map(e => ({
+        Fecha: fmt(e.date),
+        Lote: e.batchCode,
+        Producto: e.productCode,
+        Analista: e.analyst,
+        Estado: STATUS_LABEL[e.status],
+        "Hora fábrica": e.timeFactory || "",
+        "Hora ingreso": e.timeIn || "",
+        "Hora fin": e.timeEnd || "",
+        "Duración (min)": durationMinutes(e.timeIn, e.timeEnd) ?? "",
+        Aprobado_por: e.approvedBy || "",
+      }));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detalle), "Muestras del mes");
+    }
+    XLSX.writeFile(wb, `KPIs_calidad_${selMonth}.xlsx`);
+  };
+
+  // ── Render helpers ──
+  const StatCard = ({ label, value, prevValue, unit = "", suffix = "", invertColor = false, small = null }) => {
+    const d = (typeof value === "number" && typeof prevValue === "number") ? +(value - prevValue).toFixed(1) : null;
+    const isGood = d != null ? (invertColor ? d < 0 : d > 0) : null;
+    return (
+      <Card>
+        <div style={{ fontSize: 11, color: V.gray, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.3 }}>{label}</div>
+        <div style={{ fontSize: 28, fontWeight: 700, color: V.dark, marginTop: 4 }}>
+          {value === null || value === "—" ? "—" : (typeof value === "number" ? value.toFixed(unit === "%" ? 1 : 0) : value)}
+          <span style={{ fontSize: 14, color: V.gray, marginLeft: 3 }}>{unit}{suffix}</span>
+        </div>
+        {d != null && (
+          <div style={{ marginTop: 6, fontSize: 11, color: isGood ? V.greenDark : (d === 0 ? V.gray : "#991B1B"), fontWeight: 600 }}>
+            {d > 0 ? "↑" : d < 0 ? "↓" : "="} {Math.abs(d)}{unit} vs mes anterior
+          </div>
+        )}
+        {small && <div style={{ marginTop: 4, fontSize: 11, color: V.gray }}>{small}</div>}
+      </Card>
+    );
+  };
+
+  const BarList = ({ data, formatLabel, maxColor = V.red }) => {
+    const max = Math.max(...data.map(d => d[1]), 1);
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {data.map(([label, val], i) => (
+          <div key={i}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 }}>
+              <span style={{ fontWeight: 600, color: V.dark }}>{formatLabel ? formatLabel(label) : label}</span>
+              <span style={{ color: V.gray, fontWeight: 700 }}>{val}</span>
+            </div>
+            <div style={{ height: 8, background: V.grayLight, borderRadius: 4, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${(val / max) * 100}%`, background: maxColor, borderRadius: 4 }}></div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      {/* Header con selector de mes */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>KPIs — Control de Calidad</h3>
+          <p style={{ margin: "2px 0 0", fontSize: 12, color: V.gray }}>Análisis mensual del área LCC</p>
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button onClick={() => setSelMonth(shiftMonth(selMonth, -1))} style={{ padding: "6px 10px", border: `1px solid ${V.grayMid}`, background: V.white, borderRadius: 6, cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 600 }}>‹</button>
+          <input type="month" value={selMonth} onChange={e => setSelMonth(e.target.value)}
+            style={{ padding: "6px 10px", borderRadius: 6, border: `1px solid ${V.grayMid}`, fontSize: 13, fontFamily: "inherit" }} />
+          <button onClick={() => setSelMonth(shiftMonth(selMonth, 1))} style={{ padding: "6px 10px", border: `1px solid ${V.grayMid}`, background: V.white, borderRadius: 6, cursor: "pointer", fontFamily: "inherit", fontSize: 13, fontWeight: 600 }}>›</button>
+          <Btn onClick={exportMonthlyReport} disabled={cur.total === 0}>
+            <FileSpreadsheet size={13} /> Informe mensual
+          </Btn>
+        </div>
+      </div>
+
+      {cur.total === 0 && (
+        <Card style={{ textAlign: "center", padding: 40 }}>
+          <BarChart3 size={36} color={V.grayMid} style={{ margin: "0 auto 10px" }} />
+          <p style={{ color: V.gray, fontSize: 14 }}>Sin muestras registradas en {formatMonth(selMonth)}.</p>
+        </Card>
+      )}
+
+      {cur.total > 0 && (
+        <>
+          {/* Fila 1 — Cards clave */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+            <StatCard label="Muestras del mes" value={cur.total} prevValue={prv.total} small={`${cur.approved} aprobadas · ${cur.rejected} rechazadas · ${cur.pending} pendientes`} />
+            <StatCard label="Tasa de aprobación" value={cur.rate} prevValue={prv.rate} unit="%" small={cur.rate == null ? "Sin lotes decididos" : `${cur.approved}/${cur.approved + cur.rejected} lotes`} />
+            <StatCard label="Duración prom. análisis" value={cur.avgDur} prevValue={prv.avgDur} unit=" min" invertColor small="Desde ingreso hasta fin" />
+            <StatCard label="Pendientes en cola" value={allPending.length} prevValue={null} small={withAge.filter(e => e.ageHours > 24).length > 0 ? `${withAge.filter(e => e.ageHours > 24).length} con >24h` : "Todos <24h"} />
+          </div>
+
+          {/* Fila 2 — Rankings */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <Card>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>Top 5 parámetros con "No conforme"</div>
+              {topParams.length === 0 ? (
+                <p style={{ color: V.gray, fontSize: 12 }}>Ningún parámetro no conforme en el mes 🎉</p>
+              ) : <BarList data={topParams} maxColor="#DC2626" />}
+            </Card>
+            <Card>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>Top 10 productos rechazados</div>
+              {topProducts.length === 0 ? (
+                <p style={{ color: V.gray, fontSize: 12 }}>Ningún producto rechazado en el mes 🎉</p>
+              ) : <BarList data={topProducts} formatLabel={(c) => `${c} — ${productName(c)}`} maxColor="#B91C1C" />}
+            </Card>
+          </div>
+
+          {/* Fila 3 — Tendencia y pendientes */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <Card>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>Tendencia últimos 6 meses (% aprobación)</div>
+              <TrendChart data={trend} />
+            </Card>
+            <Card>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>Muestras pendientes ({allPending.length})</div>
+              {withAge.length === 0 ? (
+                <p style={{ color: V.gray, fontSize: 12 }}>Sin pendientes 🎉</p>
+              ) : (
+                <div style={{ maxHeight: 220, overflowY: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ background: V.grayLight }}>
+                        <th style={{ padding: "6px 8px", textAlign: "left", fontSize: 11, color: V.gray, fontWeight: 600 }}>Lote</th>
+                        <th style={{ padding: "6px 8px", textAlign: "left", fontSize: 11, color: V.gray, fontWeight: 600 }}>Producto</th>
+                        <th style={{ padding: "6px 8px", textAlign: "left", fontSize: 11, color: V.gray, fontWeight: 600 }}>Antigüedad</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {withAge.slice(0, 15).map(e => {
+                        const ageStr = e.ageHours < 1 ? "< 1h" : e.ageHours < 24 ? `${Math.round(e.ageHours)}h` : `${Math.round(e.ageHours / 24)}d`;
+                        const isOld = e.ageHours > 24;
+                        return (
+                          <tr key={e.id} style={{ borderBottom: `1px solid ${V.grayLight}` }}>
+                            <td style={{ padding: "6px 8px", fontWeight: 700 }}>{e.batchCode}</td>
+                            <td style={{ padding: "6px 8px", color: V.gray }}>{e.productCode}</td>
+                            <td style={{ padding: "6px 8px", color: isOld ? "#991B1B" : V.gray, fontWeight: isOld ? 700 : 400 }}>{ageStr}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Gráfico de tendencia simple (SVG) ──
+function TrendChart({ data }) {
+  const w = 320, h = 140, pad = 24;
+  const points = data.map((d, i) => ({
+    x: pad + (i * (w - pad * 2)) / Math.max(data.length - 1, 1),
+    y: d.rate == null ? null : h - pad - ((d.rate / 100) * (h - pad * 2)),
+    d
+  }));
+  const valid = points.filter(p => p.y != null);
+  const poly = valid.map(p => `${p.x},${p.y}`).join(" ");
+
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height: "auto" }}>
+      {/* Grid horizontal */}
+      {[0, 25, 50, 75, 100].map(v => {
+        const y = h - pad - ((v / 100) * (h - pad * 2));
+        return (
+          <g key={v}>
+            <line x1={pad} y1={y} x2={w - pad} y2={y} stroke="#E5E7EB" strokeWidth="0.5" />
+            <text x={pad - 4} y={y + 3} fontSize="8" fill="#9CA3AF" textAnchor="end">{v}%</text>
+          </g>
+        );
+      })}
+      {valid.length > 1 && (
+        <polyline points={poly} fill="none" stroke="#B91C1C" strokeWidth="2" />
+      )}
+      {points.map((p, i) => (
+        <g key={i}>
+          {p.y != null && <circle cx={p.x} cy={p.y} r="3" fill="#B91C1C" />}
+          <text x={p.x} y={h - 6} fontSize="8" fill="#6B7280" textAnchor="middle">{formatMonth(p.d.month).split(" ")[0]}</text>
+          {p.y != null && <text x={p.x} y={p.y - 6} fontSize="8" fill="#B91C1C" textAnchor="middle" fontWeight="600">{p.d.rate.toFixed(0)}%</text>}
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+
+
+
+// ══════════════════════════════════════════════════════════════════
+// ══ ANÁLISIS ESTADÍSTICO — CONTROL DE PROCESO ═════════════════════
+// ══════════════════════════════════════════════════════════════════
+
+// ── Valor efectivo de un resultado: prioriza retest, sino usa value ──
+function effectiveValue(r) {
+  const v = (r.retestValue != null && r.retestValue !== "") ? r.retestValue : r.value;
+  const n = parseFloat(v);
+  return isNaN(n) ? null : n;
+}
+
+// ── Estadística descriptiva ──
+function computeStats(values) {
+  const n = values.length;
+  if (n === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const sum = values.reduce((a, b) => a + b, 0);
+  const mean = sum / n;
+  const variance = n > 1 ? values.reduce((acc, v) => acc + (v - mean) ** 2, 0) / (n - 1) : 0;
+  const sd = Math.sqrt(variance);
+  const median = n % 2 === 0 ? (sorted[n/2 - 1] + sorted[n/2]) / 2 : sorted[Math.floor(n/2)];
+  const cv = mean !== 0 ? (sd / Math.abs(mean)) * 100 : null;
+  return { n, mean, median, sd, min: sorted[0], max: sorted[n-1], cv };
+}
+
+// ── Índices de capacidad Cp/Cpk ──
+function capability(mean, sd, lse, lie) {
+  if (sd === 0 || sd == null) return { cp: null, cpk: null };
+  const hasUp = lse != null && !isNaN(lse);
+  const hasLo = lie != null && !isNaN(lie);
+  const cp = (hasUp && hasLo) ? (lse - lie) / (6 * sd) : null;
+  const cpu = hasUp ? (lse - mean) / (3 * sd) : Infinity;
+  const cpl = hasLo ? (mean - lie) / (3 * sd) : Infinity;
+  const cpk = Math.min(cpu, cpl);
+  return { cp, cpk: isFinite(cpk) ? cpk : null };
+}
+
+// ── Reglas de Nelson para gráficos de control ──
+function nelsonAlerts(values, mean, sd) {
+  const alerts = [];
+  if (sd === 0) return alerts;
+  const ucl = mean + 3*sd, lcl = mean - 3*sd;
+  const u2 = mean + 2*sd, l2 = mean - 2*sd;
+  values.forEach((v, i) => {
+    if (v > ucl) alerts.push({ idx: i, rule: 1, msg: "Punto > +3σ (fuera de UCL)" });
+    else if (v < lcl) alerts.push({ idx: i, rule: 1, msg: "Punto < -3σ (fuera de LCL)" });
+  });
+  // Regla 2: 9 consecutivos mismo lado
+  for (let i = 8; i < values.length; i++) {
+    const w = values.slice(i-8, i+1);
+    if (w.every(v => v > mean)) alerts.push({ idx: i, rule: 2, msg: "9 puntos consecutivos > media" });
+    else if (w.every(v => v < mean)) alerts.push({ idx: i, rule: 2, msg: "9 puntos consecutivos < media" });
+  }
+  // Regla 3: tendencia 6 pts
+  for (let i = 5; i < values.length; i++) {
+    const w = values.slice(i-5, i+1);
+    let asc = true, desc = true;
+    for (let j = 1; j < w.length; j++) {
+      if (w[j] <= w[j-1]) asc = false;
+      if (w[j] >= w[j-1]) desc = false;
+    }
+    if (asc) alerts.push({ idx: i, rule: 3, msg: "Tendencia creciente (6 puntos)" });
+    if (desc) alerts.push({ idx: i, rule: 3, msg: "Tendencia decreciente (6 puntos)" });
+  }
+  // Regla 5: 2 de 3 fuera ±2σ mismo lado
+  for (let i = 2; i < values.length; i++) {
+    const w = values.slice(i-2, i+1);
+    const above = w.filter(v => v > u2).length;
+    const below = w.filter(v => v < l2).length;
+    if (above >= 2) alerts.push({ idx: i, rule: 5, msg: "2 de 3 puntos > +2σ" });
+    if (below >= 2) alerts.push({ idx: i, rule: 5, msg: "2 de 3 puntos < -2σ" });
+  }
+  return alerts;
+}
+
+// ══ Componente principal ══
+function StatAnalysis({ entries, specs }) {
+  const [productCode, setProductCode] = useState("");
+  const [paramName, setParamName] = useState("");
+  const today_ = new Date();
+  const d90ago = new Date(today_.getTime() - 90 * 24 * 60 * 60 * 1000);
+  const iso = (d) => d.toISOString().split("T")[0];
+  const [dateFrom, setDateFrom] = useState(iso(d90ago));
+  const [dateTo, setDateTo] = useState(iso(today_));
+
+  // Productos ordenados con datos
+  const productsWithData = [...new Set(entries.map(e => e.productCode))].sort();
+  const selectedSpec = specs.find(s => s.code === productCode);
+  const availableParams = selectedSpec ? selectedSpec.parameters.filter(p => p.type === "numeric") : [];
+
+  // Al cambiar producto, resetear parámetro
+  useEffect(() => { setParamName(""); }, [productCode]);
+
+  // Data filtrada
+  const filteredEntries = entries
+    .filter(e => e.productCode === productCode)
+    .filter(e => e.date >= dateFrom && e.date <= dateTo)
+    .sort((a, b) => (a.date + (a.timeIn || "")).localeCompare(b.date + (b.timeIn || "")));
+
+  const param = availableParams.find(p => p.name === paramName);
+  const dataPoints = filteredEntries.map(e => {
+    const r = e.results.find(x => x.paramName === paramName);
+    return r ? { value: effectiveValue(r), entry: e, hadRetest: r.retestValue != null && r.retestValue !== "", firstValue: parseFloat(r.value) || null } : null;
+  }).filter(p => p && p.value != null);
+
+  const values = dataPoints.map(p => p.value);
+  const stats = values.length > 0 ? computeStats(values) : null;
+  const lse = param?.max !== "" && param?.max != null ? parseFloat(param.max) : null;
+  const lie = param?.min !== "" && param?.min != null ? parseFloat(param.min) : null;
+  const cap = stats ? capability(stats.mean, stats.sd, lse, lie) : null;
+  const nelson = stats && stats.n >= 5 ? nelsonAlerts(values, stats.mean, stats.sd) : [];
+  const alertsByIdx = {};
+  nelson.forEach(a => {
+    if (!alertsByIdx[a.idx]) alertsByIdx[a.idx] = [];
+    alertsByIdx[a.idx].push(a);
+  });
+
+  // Análisis de retest
+  const retestData = dataPoints.filter(p => p.hadRetest);
+  const retestRescued = retestData.filter(p => {
+    const r = p.entry.results.find(x => x.paramName === paramName);
+    return r && r.pass === false && r.retestPass === true;
+  }).length;
+  const retestDiffs = retestData.map(p => Math.abs(p.value - p.firstValue)).filter(v => !isNaN(v));
+  const avgDiff = retestDiffs.length > 0 ? retestDiffs.reduce((a,b) => a+b, 0) / retestDiffs.length : null;
+
+  // Cp/Cpk display
+  const capBadge = (val) => {
+    if (val == null) return { color: V.gray, bg: V.grayLight, label: "N/A" };
+    if (val >= 1.33) return { color: "#166534", bg: "#DCFCE7", label: "Capaz" };
+    if (val >= 1.0) return { color: "#92400E", bg: "#FEF3C7", label: "Marginal" };
+    return { color: "#991B1B", bg: "#FEE2E2", label: "No capaz" };
+  };
+
+  const exportAnalysis = () => {
+    if (!param) return;
+    const wb = XLSX.utils.book_new();
+    const info = [
+      ["Análisis Estadístico — " + productCode],
+      ["Producto:", selectedSpec?.name || ""],
+      ["Parámetro:", paramName + (param.unit ? " (" + param.unit + ")" : "")],
+      ["Rango de fechas:", fmt(dateFrom) + " a " + fmt(dateTo)],
+      ["Especificación LIE:", lie ?? "—"],
+      ["Especificación LSE:", lse ?? "—"],
+      [],
+      ["ESTADÍSTICA DESCRIPTIVA"],
+      ["n", stats?.n],
+      ["Media", stats?.mean.toFixed(4)],
+      ["Mediana", stats?.median.toFixed(4)],
+      ["Desvío estándar (σ)", stats?.sd.toFixed(4)],
+      ["Mínimo", stats?.min],
+      ["Máximo", stats?.max],
+      ["CV%", stats?.cv?.toFixed(2)],
+      [],
+      ["CAPACIDAD DE PROCESO (n≥20)"],
+      ["Cp", cap?.cp?.toFixed(3) ?? "N/A"],
+      ["Cpk", cap?.cpk?.toFixed(3) ?? "N/A"],
+      [],
+      ["ALERTAS REGLAS NELSON"],
+      ...nelson.map(a => [`Punto #${a.idx+1}`, `Regla ${a.rule}`, a.msg]),
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(info), "Resumen");
+    const dataSheet = dataPoints.map((p, i) => ({
+      "#": i+1, Fecha: fmt(p.entry.date), Lote: p.entry.batchCode,
+      "Valor usado": p.value, "1° medición": p.firstValue, "Fue retest": p.hadRetest ? "Sí" : "No",
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dataSheet), "Datos");
+    XLSX.writeFile(wb, `analisis_${productCode}_${paramName.replace(/[^a-zA-Z0-9]/g,"_")}_${today()}.xlsx`);
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div>
+        <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>Análisis Estadístico de Proceso</h3>
+        <p style={{ margin: "2px 0 0", fontSize: 12, color: V.gray }}>Control de proceso Shewhart · Capacidad Cp/Cpk · Reglas de Nelson</p>
+      </div>
+
+      {/* Selectores */}
+      <Card>
+        <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1.5fr 1fr 1fr auto", gap: 10, alignItems: "flex-end" }}>
+          <Field label="Producto (código de granel)">
+            <Select value={productCode} onChange={e => setProductCode(e.target.value)}>
+              <option value="">— Seleccionar producto —</option>
+              {productsWithData.map(c => {
+                const s = specs.find(x => x.code === c);
+                return <option key={c} value={c}>{c}{s ? ` — ${s.name}` : ""}</option>;
+              })}
+            </Select>
+          </Field>
+          <Field label="Parámetro numérico">
+            <Select value={paramName} onChange={e => setParamName(e.target.value)} disabled={!productCode}>
+              <option value="">— Seleccionar parámetro —</option>
+              {availableParams.map(p => <option key={p.id || p.name} value={p.name}>{p.name}{p.unit ? ` (${p.unit})` : ""}</option>)}
+            </Select>
+          </Field>
+          <Field label="Desde">
+            <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+          </Field>
+          <Field label="Hasta">
+            <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+          </Field>
+          <Btn variant="secondary" onClick={exportAnalysis} disabled={!stats || stats.n < 5}>
+            <Download size={13} /> Exportar
+          </Btn>
+        </div>
+      </Card>
+
+      {/* Sin selección */}
+      {(!productCode || !paramName) && (
+        <Card style={{ textAlign: "center", padding: 40 }}>
+          <BarChart3 size={36} color={V.grayMid} style={{ margin: "0 auto 10px" }} />
+          <p style={{ color: V.gray, fontSize: 14 }}>Seleccioná un producto y un parámetro numérico para ver el análisis.</p>
+          {productsWithData.length === 0 && <p style={{ color: V.gray, fontSize: 12, marginTop: 4 }}>Aún no hay muestras cargadas.</p>}
+        </Card>
+      )}
+
+      {/* Datos insuficientes */}
+      {productCode && paramName && (!stats || stats.n < 5) && (
+        <Card style={{ background: "#FEF3C7", border: "1px solid #FCD34D" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#78350F" }}>
+            <AlertCircle size={16} />
+            <span style={{ fontSize: 13, fontWeight: 600 }}>Muestra insuficiente: n = {stats?.n || 0}. Se necesitan al menos 5 mediciones para descriptiva.</span>
+          </div>
+        </Card>
+      )}
+
+      {/* Estadística descriptiva */}
+      {stats && stats.n >= 5 && (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 12 }}>
+            <Card>
+              <div style={{ fontSize: 12, fontWeight: 700, color: V.gray, textTransform: "uppercase", marginBottom: 10 }}>Descriptiva</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, fontSize: 13 }}>
+                {[
+                  ["n", stats.n],
+                  ["Media", stats.mean.toFixed(3)],
+                  ["Mediana", stats.median.toFixed(3)],
+                  ["σ", stats.sd.toFixed(4)],
+                  ["Mínimo", stats.min],
+                  ["Máximo", stats.max],
+                  ["CV%", stats.cv != null ? stats.cv.toFixed(2) + "%" : "—"],
+                  ["Rango", (stats.max - stats.min).toFixed(3)],
+                ].map(([k, v]) => (
+                  <div key={k}>
+                    <div style={{ fontSize: 11, color: V.gray, fontWeight: 600 }}>{k}</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: V.dark }}>{v}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop: 10, fontSize: 11, color: V.gray, paddingTop: 8, borderTop: `1px solid ${V.grayMid}` }}>
+                Especificación: LIE = {lie ?? "—"} · LSE = {lse ?? "—"}{param.unit ? ` (${param.unit})` : ""}
+              </div>
+            </Card>
+
+            {[["Cp", cap?.cp], ["Cpk", cap?.cpk]].map(([label, val]) => {
+              const b = capBadge(val);
+              return (
+                <Card key={label} style={{ background: b.bg, borderColor: "transparent" }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: V.gray, textTransform: "uppercase" }}>{label}</div>
+                  <div style={{ fontSize: 32, fontWeight: 700, color: b.color, marginTop: 4 }}>
+                    {val != null ? val.toFixed(2) : "—"}
+                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: b.color, marginTop: 2 }}>{b.label}</div>
+                  {stats.n < 20 && <div style={{ fontSize: 10, color: V.gray, marginTop: 4 }}>Requiere n≥20 (actual: {stats.n})</div>}
+                </Card>
+              );
+            })}
+          </div>
+
+          {/* Gráfico de control Shewhart */}
+          <Card>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 6 }}>
+              <div style={{ fontSize: 13, fontWeight: 700 }}>Gráfico de control (Shewhart)</div>
+              <div style={{ fontSize: 11, color: V.gray, display: "flex", gap: 12, flexWrap: "wrap" }}>
+                <span><span style={{ display: "inline-block", width: 12, height: 2, background: "#166534", verticalAlign: "middle" }}></span> Media</span>
+                <span><span style={{ display: "inline-block", width: 12, height: 2, background: "#DC2626", verticalAlign: "middle" }}></span> UCL/LCL (±3σ)</span>
+                <span><span style={{ display: "inline-block", width: 12, borderTop: "1px dashed #6B7280", verticalAlign: "middle" }}></span> Spec (LSE/LIE)</span>
+              </div>
+            </div>
+            <ControlChart values={values} mean={stats.mean} sd={stats.sd} lse={lse} lie={lie} alertsByIdx={alertsByIdx} dataPoints={dataPoints} />
+          </Card>
+
+          {/* Alertas Nelson */}
+          {nelson.length > 0 && (
+            <Card style={{ background: "#FEF3C7", border: "1px solid #FCD34D" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <AlertCircle size={16} color="#92400E" />
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#78350F" }}>Alertas de proceso ({nelson.length})</span>
+              </div>
+              <div style={{ maxHeight: 180, overflowY: "auto" }}>
+                <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+                  <thead><tr>
+                    <th style={{ padding: "4px 8px", textAlign: "left", color: "#78350F", fontWeight: 600 }}>Punto</th>
+                    <th style={{ padding: "4px 8px", textAlign: "left", color: "#78350F", fontWeight: 600 }}>Lote</th>
+                    <th style={{ padding: "4px 8px", textAlign: "left", color: "#78350F", fontWeight: 600 }}>Fecha</th>
+                    <th style={{ padding: "4px 8px", textAlign: "left", color: "#78350F", fontWeight: 600 }}>Regla</th>
+                    <th style={{ padding: "4px 8px", textAlign: "left", color: "#78350F", fontWeight: 600 }}>Detalle</th>
+                  </tr></thead>
+                  <tbody>
+                    {nelson.map((a, i) => {
+                      const p = dataPoints[a.idx];
+                      return (
+                        <tr key={i} style={{ borderBottom: "1px dashed #FCD34D" }}>
+                          <td style={{ padding: "4px 8px" }}>#{a.idx + 1}</td>
+                          <td style={{ padding: "4px 8px", fontWeight: 600 }}>{p?.entry.batchCode || "—"}</td>
+                          <td style={{ padding: "4px 8px" }}>{p ? fmt(p.entry.date) : "—"}</td>
+                          <td style={{ padding: "4px 8px" }}>R{a.rule}</td>
+                          <td style={{ padding: "4px 8px" }}>{a.msg}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
+
+          {/* Análisis de retest */}
+          {retestData.length > 0 && (
+            <Card>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Análisis de retest para este parámetro</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, fontSize: 13 }}>
+                <div>
+                  <div style={{ fontSize: 11, color: V.gray, fontWeight: 600 }}>Cantidad de retests</div>
+                  <div style={{ fontSize: 18, fontWeight: 700 }}>{retestData.length}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: V.gray, fontWeight: 600 }}>Rescatados por retest</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: V.greenDark }}>{retestRescued}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: V.gray, fontWeight: 600 }}>Tasa recuperación</div>
+                  <div style={{ fontSize: 18, fontWeight: 700 }}>{retestData.length > 0 ? ((retestRescued / retestData.length) * 100).toFixed(0) : "—"}%</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: V.gray, fontWeight: 600 }}>Diferencia promedio 1° vs retest</div>
+                  <div style={{ fontSize: 18, fontWeight: 700 }}>{avgDiff != null ? avgDiff.toFixed(3) : "—"}{param.unit ? " " + param.unit : ""}</div>
+                </div>
+              </div>
+              <div style={{ marginTop: 10, fontSize: 11, color: V.gray, paddingTop: 8, borderTop: `1px solid ${V.grayMid}` }}>
+                Nota: los valores mostrados en el análisis usan el retest cuando existe (regla definida). Diferencia alta puede indicar problema de instrumento u operador.
+              </div>
+            </Card>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Gráfico de control SVG ──
+function ControlChart({ values, mean, sd, lse, lie, alertsByIdx, dataPoints }) {
+  const w = 700, h = 320, padL = 46, padR = 12, padT = 14, padB = 32;
+  const n = values.length;
+  const ucl = mean + 3*sd, lcl = mean - 3*sd;
+  const u1 = mean + sd, l1 = mean - sd;
+  const u2 = mean + 2*sd, l2 = mean - 2*sd;
+
+  // Escala Y: usar min entre los datos y LCL/LIE, max entre datos y UCL/LSE
+  const allVals = [...values, ucl, lcl];
+  if (lse != null) allVals.push(lse);
+  if (lie != null) allVals.push(lie);
+  const vMin = Math.min(...allVals);
+  const vMax = Math.max(...allVals);
+  const pad = (vMax - vMin) * 0.08 || 1;
+  const yMin = vMin - pad, yMax = vMax + pad;
+  const scaleY = (v) => padT + (h - padT - padB) * (1 - (v - yMin) / (yMax - yMin));
+  const scaleX = (i) => padL + (w - padL - padR) * (n === 1 ? 0.5 : i / (n - 1));
+
+  const linePath = values.map((v, i) => `${i === 0 ? "M" : "L"} ${scaleX(i)} ${scaleY(v)}`).join(" ");
+
+  const yTicks = 5;
+  const tickVals = Array.from({length: yTicks}, (_, i) => yMin + (i / (yTicks - 1)) * (yMax - yMin));
+
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", height: "auto", maxHeight: 380 }}>
+      {/* Grid Y + ticks */}
+      {tickVals.map((v, i) => (
+        <g key={i}>
+          <line x1={padL} y1={scaleY(v)} x2={w - padR} y2={scaleY(v)} stroke="#F3F4F6" strokeWidth="0.5" />
+          <text x={padL - 4} y={scaleY(v) + 3} fontSize="9" fill="#6B7280" textAnchor="end">{v.toFixed(2)}</text>
+        </g>
+      ))}
+
+      {/* Zonas ±1σ y ±2σ (fondo suave) */}
+      <rect x={padL} y={scaleY(u2)} width={w - padL - padR} height={scaleY(l2) - scaleY(u2)} fill="#FEF3C7" opacity="0.3" />
+      <rect x={padL} y={scaleY(u1)} width={w - padL - padR} height={scaleY(l1) - scaleY(u1)} fill="#DCFCE7" opacity="0.4" />
+
+      {/* Media */}
+      <line x1={padL} y1={scaleY(mean)} x2={w - padR} y2={scaleY(mean)} stroke="#166534" strokeWidth="1.5" />
+      <text x={w - padR + 2} y={scaleY(mean) + 3} fontSize="9" fill="#166534" fontWeight="700">μ={mean.toFixed(2)}</text>
+
+      {/* UCL/LCL */}
+      <line x1={padL} y1={scaleY(ucl)} x2={w - padR} y2={scaleY(ucl)} stroke="#DC2626" strokeWidth="1.2" />
+      <text x={w - padR + 2} y={scaleY(ucl) + 3} fontSize="9" fill="#DC2626" fontWeight="700">UCL</text>
+      <line x1={padL} y1={scaleY(lcl)} x2={w - padR} y2={scaleY(lcl)} stroke="#DC2626" strokeWidth="1.2" />
+      <text x={w - padR + 2} y={scaleY(lcl) + 3} fontSize="9" fill="#DC2626" fontWeight="700">LCL</text>
+
+      {/* Spec */}
+      {lse != null && (
+        <>
+          <line x1={padL} y1={scaleY(lse)} x2={w - padR} y2={scaleY(lse)} stroke="#6B7280" strokeWidth="1" strokeDasharray="4 3" />
+          <text x={padL + 4} y={scaleY(lse) - 3} fontSize="9" fill="#6B7280">LSE={lse}</text>
+        </>
+      )}
+      {lie != null && (
+        <>
+          <line x1={padL} y1={scaleY(lie)} x2={w - padR} y2={scaleY(lie)} stroke="#6B7280" strokeWidth="1" strokeDasharray="4 3" />
+          <text x={padL + 4} y={scaleY(lie) + 10} fontSize="9" fill="#6B7280">LIE={lie}</text>
+        </>
+      )}
+
+      {/* Serie */}
+      <path d={linePath} fill="none" stroke="#1F2937" strokeWidth="1" opacity="0.6" />
+      {values.map((v, i) => {
+        const hasAlert = alertsByIdx[i] && alertsByIdx[i].length > 0;
+        const outOfCtrl = v > ucl || v < lcl;
+        const outOfSpec = (lse != null && v > lse) || (lie != null && v < lie);
+        const color = outOfSpec ? "#DC2626" : outOfCtrl ? "#DC2626" : hasAlert ? "#F59E0B" : "#166534";
+        const p = dataPoints[i];
+        const title = `${p?.entry.batchCode || "#" + (i+1)} · ${p ? fmt(p.entry.date) : ""} · ${v}${hasAlert ? " · ⚠ " + alertsByIdx[i].map(a => "R"+a.rule).join(",") : ""}`;
+        return (
+          <g key={i}>
+            <title>{title}</title>
+            <circle cx={scaleX(i)} cy={scaleY(v)} r={hasAlert || outOfCtrl ? 5 : 3.5} fill={color} stroke="white" strokeWidth="1" />
+          </g>
+        );
+      })}
+
+      {/* Ejes */}
+      <line x1={padL} y1={padT} x2={padL} y2={h - padB} stroke="#9CA3AF" strokeWidth="1" />
+      <line x1={padL} y1={h - padB} x2={w - padR} y2={h - padB} stroke="#9CA3AF" strokeWidth="1" />
+      <text x={padL + (w - padL - padR) / 2} y={h - 8} fontSize="10" fill="#6B7280" textAnchor="middle">Lote (orden cronológico) · n = {n}</text>
+    </svg>
+  );
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// ══ MAIN APP ═════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+// Pantalla sola para la carga inicial y para cuando el servidor no contesta.
+function PantallaCentral({ titulo, children }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: 16, fontFamily: "'Montserrat', sans-serif", background: "#F9FAFB" }}>
+      <Card style={{ maxWidth: 440, width: "100%", textAlign: "center" }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: V.red, letterSpacing: "0.1em", textTransform: "uppercase" }}>Vessena S.A.</div>
+        <h1 style={{ fontSize: 18, fontWeight: 700, margin: "6px 0 12px" }}>{titulo}</h1>
+        {children}
+      </Card>
+    </div>
+  );
+}
+
+const botonHeader = {
+  background: "transparent", color: "#E5E7EB", border: "1px solid #374151", borderRadius: 6,
+  padding: "4px 10px", fontSize: 12, fontWeight: 600, fontFamily: "inherit", cursor: "pointer", textDecoration: "none",
+};
+
+function App() {
+  const [view, setView] = useState("dashboard");
+  const [specs, setSpecs] = useState([]);
+  const [entries, setEntries] = useState([]);
+  const [permisos, setPermisos] = useState([]);
+  const [usuario, setUsuario] = useState(null);
+  const [estado, setEstado] = useState("cargando"); // cargando | listo | sin-conexion
+  const [errorConexion, setErrorConexion] = useState("");
+  const [viewPayload, setViewPayload] = useState(null);
+  const [aviso, setAviso] = useState(null);
+
+  const avisar = useCallback((texto, tipo = "ok") => {
+    const id = Date.now();
+    setAviso({ texto, tipo, id });
+    setTimeout(() => setAviso(a => (a && a.id === id ? null : a)), tipo === "error" ? 7000 : 2500);
+  }, []);
+
+  const aplicarDatos = (d) => {
+    setPermisos(d.permisos || []);
+    setSpecs(d.specs || []);
+    setEntries(d.muestras || []);
+  };
+
+  const cargar = useCallback(async () => {
+    setEstado("cargando");
+    try {
+      const r = await fetch("/api/auth/yo", { credentials: "same-origin" });
+      if (!r.ok) {
+        // Sin sesión se vuelve al portal, que es donde está el acceso.
+        location.href = "/?volver=" + encodeURIComponent(location.pathname);
+        return;
+      }
+      const yo = await r.json();
+      const d = await api("/datos");
+      const rec = yo.recursos && yo.recursos["aprobacion-graneles"];
+      setUsuario({ nombre: yo.nombre || yo.usuario, rol: rec ? rec.rol : "" });
+      aplicarDatos(d);
+      setEstado("listo");
+    } catch (e) {
+      // Sin servidor no se muestra una app vacía: haría creer que no hay muestras.
+      setErrorConexion(e.message);
+      setEstado("sin-conexion");
+    }
+  }, []);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  // Trae lo que hayan cargado otras personas desde que se abrió la pestaña.
+  const actualizar = async () => {
+    try {
+      aplicarDatos(await api("/datos"));
+      avisar("Datos actualizados");
+    } catch (e) {
+      avisar("No se pudieron actualizar los datos: " + e.message, "error");
+    }
+  };
+
+  const salir = async () => {
+    // Se cierra en el servidor: si no, la sesión seguiría viva en otra pestaña.
+    try { await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }); } catch (e) {}
+    location.href = "/";
+  };
+
+  const puede = (accion) => permisos.includes(accion);
+
+  /* ─── Escrituras ───────────────────────────────────────────────────────────
+     Siempre igual: se manda al servidor y recién con su respuesta se actualiza
+     la pantalla, con el registro tal como quedó guardado. Devuelven lo guardado,
+     o null si falló (el aviso de error ya se mostró). */
+  const reemplazarMuestra = (m) => setEntries(prev =>
+    prev.some(e => e.id === m.id) ? prev.map(e => (e.id === m.id ? m : e)) : [m, ...prev]
+  );
+
+  const escribir = async (fn, textoOk) => {
+    try {
+      const r = await fn();
+      if (textoOk) avisar(textoOk);
+      return r;
+    } catch (e) {
+      avisar(e.message, "error");
+      return null;
+    }
+  };
+
+  const acciones = {
+    guardarSpec: (spec) => escribir(async () => {
+      const d = await api("/especificaciones", { method: "POST", body: JSON.stringify(spec) });
+      setSpecs(prev => prev.some(s => s.id === d.spec.id) ? prev.map(s => (s.id === d.spec.id ? d.spec : s)) : [...prev, d.spec]);
+      return d.spec;
+    }, "Especificación guardada"),
+    borrarSpec: (id) => escribir(async () => {
+      await api(`/especificaciones/${encodeURIComponent(id)}`, { method: "DELETE" });
+      setSpecs(prev => prev.filter(s => s.id !== id));
+      return true;
+    }, "Especificación eliminada"),
+    crearMuestra: (m) => escribir(async () => {
+      const d = await api("/muestras", { method: "POST", body: JSON.stringify(m) });
+      reemplazarMuestra(d.muestra);
+      return d.muestra;
+    }, "Muestra registrada"),
+    guardarMuestra: (id, campos) => escribir(async () => {
+      const d = await api(`/muestras/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(campos) });
+      reemplazarMuestra(d.muestra);
+      return d.muestra;
+    }, "Cambios guardados"),
+    disponer: (id, status, campos) => escribir(async () => {
+      const d = await api(`/muestras/${encodeURIComponent(id)}/disposicion`, { method: "POST", body: JSON.stringify({ ...campos, status }) });
+      reemplazarMuestra(d.muestra);
+      return d.muestra;
+    }, status === STATUS.APPROVED ? "Lote aprobado" : "Lote rechazado"),
+    borrarMuestra: (id) => escribir(async () => {
+      await api(`/muestras/${encodeURIComponent(id)}`, { method: "DELETE" });
+      setEntries(prev => prev.filter(e => e.id !== id));
+      return true;
+    }, "Muestra eliminada"),
+  };
+
+  const navigate = (v, payload = null) => { setView(v); setViewPayload(payload); };
+
+  const nav = [
+    { id: "dashboard", label: "Dashboard", icon: BarChart3 },
+    { id: "specs", label: "Especificaciones", icon: FlaskConical },
+    puede("cargar") && { id: "new-entry", label: "Nueva Muestra", icon: PackagePlus },
+    { id: "bitacora", label: "Bitácora", icon: ClipboardList },
+    { id: "kpis", label: "KPIs", icon: BarChart3 },
+    { id: "stats", label: "Análisis", icon: BarChart3 },
+  ].filter(Boolean);
+
+  if (estado === "cargando") return (
+    <PantallaCentral titulo="Aprobación de Graneles">
+      <p style={{ color: V.gray, fontSize: 13, margin: 0 }}>Cargando datos…</p>
+    </PantallaCentral>
+  );
+
+  if (estado === "sin-conexion") return (
+    <PantallaCentral titulo="No se pudo conectar con el servidor">
+      <p style={{ color: V.gray, fontSize: 13, lineHeight: 1.5 }}>
+        Las muestras y especificaciones se guardan en el servidor de calidad para que todas vean lo mismo.
+        Sin conexión con él no hay nada que mostrar.
+      </p>
+      {errorConexion && (
+        <div style={{ background: "#FEE2E2", border: "1px solid #FCA5A5", color: "#991B1B", borderRadius: 6, padding: "8px 10px", fontSize: 12, marginBottom: 12, wordBreak: "break-word" }}>{errorConexion}</div>
+      )}
+      <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+        <Btn onClick={cargar}>Reintentar</Btn>
+        <a href="/" style={{ ...botonHeader, color: V.dark, border: `1px solid ${V.grayMid}`, padding: "7px 14px", fontSize: 13 }}>Ir al portal</a>
+      </div>
+    </PantallaCentral>
+  );
+
+  return (
+    <div style={{ fontFamily: "'Montserrat', sans-serif", background: "#F9FAFB", minHeight: "100vh", color: V.dark }}>
+      <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+      {aviso && (
+        <div role="status" style={{
+          position: "fixed", top: 14, right: 14, left: 14, marginLeft: "auto", zIndex: 2000, maxWidth: 380,
+          padding: "10px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600, boxShadow: "0 8px 24px rgba(0,0,0,.15)",
+          background: aviso.tipo === "error" ? "#FEE2E2" : "#DCFCE7",
+          color: aviso.tipo === "error" ? "#991B1B" : "#166534",
+          border: `1px solid ${aviso.tipo === "error" ? "#FCA5A5" : "#86EFAC"}`,
+        }}>{aviso.texto}</div>
+      )}
+
+      {/* Header */}
+      <header style={{
+        background: V.dark, color: V.white, padding: "12px 24px",
+        display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10,
+        borderBottom: `3px solid ${V.red}`,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <FlaskConical size={22} color={V.redLight} />
+          <span style={{ fontWeight: 700, fontSize: 16, letterSpacing: -0.3 }}>Aprobación de Graneles</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 12, color: "#D1D5DB", marginRight: 4 }}>
+            {usuario?.nombre}{usuario?.rol ? ` · ${ROL_LABEL[usuario.rol] || usuario.rol}` : ""}
+          </span>
+          <button type="button" onClick={actualizar} style={botonHeader}>Actualizar</button>
+          <a href="/" style={botonHeader}>Portal</a>
+          <button type="button" onClick={salir} style={botonHeader}>Salir</button>
+        </div>
+      </header>
+
+      {/* Nav tabs */}
+      <nav style={{
+        background: V.white, borderBottom: `1px solid ${V.grayMid}`,
+        display: "flex", gap: 0, padding: "0 16px", overflowX: "auto",
+      }}>
+        {nav.map(n => {
+          const active = view === n.id || (view === "detail" && n.id === "bitacora");
+          return (
+            <button key={n.id} onClick={() => navigate(n.id)} style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: "12px 16px", fontSize: 13, fontWeight: active ? 700 : 500,
+              color: active ? V.red : V.gray, background: "transparent", border: "none",
+              borderBottom: active ? `2px solid ${V.red}` : "2px solid transparent",
+              cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap",
+            }}>
+              <n.icon size={15} /> {n.label}
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* Content */}
+      <main style={{ padding: 20, maxWidth: 1100, margin: "0 auto" }}>
+        {view === "dashboard" && <Dashboard entries={entries} specs={specs} navigate={navigate} />}
+        {view === "specs" && <SpecsManager specs={specs} onSave={acciones.guardarSpec} onDelete={acciones.borrarSpec} canAdmin={puede("administrar")} />}
+        {view === "new-entry" && puede("cargar") && <NewEntry specs={specs} entries={entries} acciones={acciones} usuario={usuario} navigate={navigate} />}
+        {view === "bitacora" && <Bitacora entries={entries} specs={specs} navigate={navigate} />}
+        {view === "kpis" && <KpiDashboard entries={entries} specs={specs} />}
+        {view === "stats" && <StatAnalysis entries={entries} specs={specs} />}
+        {view === "detail" && <Detail entry={viewPayload} specs={specs} entries={entries} acciones={acciones} puede={puede} usuario={usuario} navigate={navigate} />}
+      </main>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ══ DASHBOARD ════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+function Dashboard({ entries, specs, navigate }) {
+  const counts = {
+    total: entries.length,
+    pending: entries.filter(e => e.status === STATUS.PENDING).length,
+    approved: entries.filter(e => e.status === STATUS.APPROVED).length,
+    rejected: entries.filter(e => e.status === STATUS.REJECTED).length,
+  };
+  const recent = [...entries].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+
+  const cards = [
+    { label: "Total Muestras", value: counts.total, color: V.dark, bg: V.grayLight },
+    { label: "Pendientes", value: counts.pending, color: "#92400E", bg: "rgb(254 243 199)" },
+    { label: "Aprobados", value: counts.approved, color: V.greenDark, bg: "rgb(220 252 231)" },
+    { label: "Rechazados", value: counts.rejected, color: "#991B1B", bg: "rgb(254 226 226)" },
+  ];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14 }}>
+        {cards.map(c => (
+          <Card key={c.label} style={{ background: c.bg, borderColor: "transparent" }}>
+            <div style={{ fontSize: 28, fontWeight: 700, color: c.color }}>{c.value}</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: c.color, marginTop: 2 }}>{c.label}</div>
+          </Card>
+        ))}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <Card>
+          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, color: V.dark }}>Últimas muestras</div>
+          {recent.length === 0 ? (
+            <p style={{ color: V.gray, fontSize: 13 }}>Sin muestras registradas. <span onClick={() => navigate("new-entry")} style={{ color: V.red, cursor: "pointer", fontWeight: 600 }}>Crear la primera.</span></p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {recent.map(e => (
+                <div key={e.id} onClick={() => navigate("detail", e)} style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  padding: "8px 10px", borderRadius: 6, background: V.grayLight, cursor: "pointer",
+                  fontSize: 13,
+                }}>
+                  <div>
+                    <span style={{ fontWeight: 600 }}>{e.batchCode}</span>
+                    <span style={{ color: V.gray, marginLeft: 8 }}>{e.productCode}</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 11, color: V.gray }}>{fmt(e.date)}</span>
+                    <Badge status={e.status} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        <Card>
+          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, color: V.dark }}>Productos registrados</div>
+          <div style={{ fontSize: 28, fontWeight: 700, color: V.red }}>{specs.length}</div>
+          <p style={{ color: V.gray, fontSize: 12, marginTop: 4 }}>especificaciones cargadas</p>
+          <Btn variant="secondary" size="sm" onClick={() => navigate("specs")} style={{ marginTop: 12 }}>
+            <FlaskConical size={13} /> Gestionar especificaciones
+          </Btn>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ══ SPECS MANAGER ════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+function SpecsManager({ specs, onSave, onDelete, canAdmin }) {
+  const [editing, setEditing] = useState(null); // null | "new" | spec object
+  const [search, setSearch] = useState("");
+  const [brandFilter, setBrandFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [expanded, setExpanded] = useState(null);
+
+  const brands = [...new Set(specs.map(s => s.brand).filter(Boolean))].sort();
+
+  const filtered = specs.filter(s => {
+    if (brandFilter && s.brand !== brandFilter) return false;
+    if (categoryFilter && s.category !== categoryFilter) return false;
+    if (!search) return true;
+    const q = search.toLowerCase();
+    const commercial = (s.commercialBrands || []).join(" ").toLowerCase();
+    return s.code.toLowerCase().includes(q) ||
+      s.name.toLowerCase().includes(q) ||
+      (s.brand || "").toLowerCase().includes(q) ||
+      (s.docRef || "").toLowerCase().includes(q) ||
+      commercial.includes(q);
+  });
+
+  // El editor queda abierto si el servidor rechaza el guardado, para no perder lo escrito.
+  const handleSave = async (spec) => {
+    const guardada = await onSave(spec);
+    if (guardada) setEditing(null);
+  };
+
+  const handleDelete = async (id) => {
+    const s = specs.find(x => x.id === id);
+    if (confirm(`¿Eliminar la especificación ${s ? s.code : ""}? Las muestras ya cargadas conservan la especificación con la que se evaluaron.`)) {
+      await onDelete(id);
+    }
+  };
+
+  if (editing !== null) {
+    return <SpecEditor spec={editing === "new" ? null : editing} onSave={handleSave} onCancel={() => setEditing(null)} existingCodes={specs.map(s => s.code)} editingId={editing === "new" ? null : editing.id} />;
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", flex: "1 1 auto" }}>
+          <div style={{ position: "relative", flex: "1 1 220px", maxWidth: 320 }}>
+            <Search size={14} style={{ position: "absolute", left: 10, top: 10, color: V.gray }} />
+            <Input placeholder="Buscar por código, nombre, marca…" value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: 32 }} />
+          </div>
+          <Select value={brandFilter} onChange={e => setBrandFilter(e.target.value)} style={{ width: 160 }}>
+            <option value="">Todas las marcas</option>
+            {brands.map(b => <option key={b} value={b}>{b}</option>)}
+          </Select>
+          <Select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} style={{ width: 150 }}>
+            <option value="">Todas las categorías</option>
+            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+          </Select>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 12, color: V.gray }}>{filtered.length} de {specs.length}</span>
+          {canAdmin && <Btn onClick={() => setEditing("new")}><Plus size={14} /> Nuevo producto</Btn>}
+        </div>
+      </div>
+
+      {filtered.length === 0 ? (
+        <Card style={{ textAlign: "center", padding: 40 }}>
+          <FlaskConical size={36} color={V.grayMid} style={{ margin: "0 auto 10px" }} />
+          <p style={{ color: V.gray, fontSize: 14 }}>
+            {specs.length === 0 ? "Sin especificaciones. Crea la primera para comenzar." : "Sin resultados para la búsqueda."}
+          </p>
+        </Card>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {filtered.map(s => (
+            <Card key={s.id} style={{ padding: 0, overflow: "hidden" }}>
+              <div style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                padding: "12px 16px", cursor: "pointer", gap: 10,
+              }} onClick={() => setExpanded(expanded === s.id ? null : s.id)}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
+                  {expanded === s.id ? <ChevronDown size={14} color={V.gray} /> : <ChevronRight size={14} color={V.gray} />}
+                  <span style={{ fontWeight: 700, fontSize: 13, color: V.red, background: V.redBg, padding: "3px 8px", borderRadius: 5, whiteSpace: "nowrap" }}>{s.code}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</span>
+                  {s.brand && <span style={{ fontSize: 11, color: V.gray, background: V.grayLight, padding: "2px 8px", borderRadius: 99, whiteSpace: "nowrap" }}>{s.brand}</span>}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  {s.docRef && <span style={{ fontSize: 11, color: V.gray, whiteSpace: "nowrap" }}>{s.docRef}{s.docVersion ? ` v${s.docVersion}` : ""}</span>}
+                  <span style={{ fontSize: 11, color: V.gray, whiteSpace: "nowrap" }}>{s.parameters.length}p</span>
+                  {canAdmin && <>
+                    <Btn variant="ghost" size="sm" onClick={e => { e.stopPropagation(); setEditing(s); }}><Edit3 size={13} /></Btn>
+                    <Btn variant="ghost" size="sm" onClick={e => { e.stopPropagation(); handleDelete(s.id); }}><Trash2 size={13} color="#991B1B" /></Btn>
+                  </>}
+                </div>
+              </div>
+
+              {expanded === s.id && (
+                <div style={{ borderTop: `1px solid ${V.grayMid}`, padding: 16, background: V.grayLight }}>
+                  {/* Meta info */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "8px 20px", marginBottom: 12, fontSize: 12 }}>
+                    <div><span style={{ color: V.gray, display: "block", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.3, fontWeight: 600 }}>Categoría</span>{s.category}</div>
+                    {s.brand && <div><span style={{ color: V.gray, display: "block", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.3, fontWeight: 600 }}>Marca</span>{s.brand}</div>}
+                    {s.shelfLife && <div><span style={{ color: V.gray, display: "block", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.3, fontWeight: 600 }}>Vida útil</span>{s.shelfLife}</div>}
+                    {s.supplier && <div><span style={{ color: V.gray, display: "block", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.3, fontWeight: 600 }}>Proveedor</span>{s.supplier}</div>}
+                    {s.specType && <div><span style={{ color: V.gray, display: "block", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.3, fontWeight: 600 }}>Tipo</span>{s.specType}</div>}
+                    {s.sharedSpecsWith && s.sharedSpecsWith.length > 0 && <div><span style={{ color: V.gray, display: "block", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.3, fontWeight: 600 }}>Comparte specs</span>{Array.isArray(s.sharedSpecsWith) ? s.sharedSpecsWith.join(", ") : s.sharedSpecsWith}</div>}
+                    {s.commercialBrands && s.commercialBrands.length > 0 && <div style={{ gridColumn: "1 / -1" }}><span style={{ color: V.gray, display: "block", fontSize: 10, textTransform: "uppercase", letterSpacing: 0.3, fontWeight: 600 }}>Marcas comerciales</span>{s.commercialBrands.map(b => <span key={b} style={{ display: "inline-block", background: "#EEF2FF", color: "#3730A3", padding: "2px 8px", borderRadius: 99, fontSize: 11, marginRight: 4, marginTop: 2, fontWeight: 600 }}>{b}</span>)}</div>}
+                  </div>
+                  {s.docNote && <div style={{ background: "#FEF3C7", borderLeft: "3px solid #F59E0B", padding: "8px 12px", borderRadius: 4, fontSize: 12, color: "#78350F", marginBottom: 12 }}>{s.docNote}</div>}
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ textAlign: "left" }}>
+                        {["Parámetro", "Método", "Unidad", "Mín", "Máx", "Objetivo"].map(h => (
+                          <th key={h} style={{ padding: "6px 8px", borderBottom: `1px solid ${V.grayMid}`, fontWeight: 600, color: V.gray }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {s.parameters.map(p => (
+                        <tr key={p.id}>
+                          <td style={{ padding: "6px 8px", fontWeight: 600 }}>{p.name}</td>
+                          <td style={{ padding: "6px 8px", color: V.gray }}>{p.method || "—"}</td>
+                          <td style={{ padding: "6px 8px", color: V.gray }}>{p.unit || "—"}</td>
+                          <td style={{ padding: "6px 8px" }}>{p.min !== "" && p.min != null ? p.min : "—"}</td>
+                          <td style={{ padding: "6px 8px" }}>{p.max !== "" && p.max != null ? p.max : "—"}</td>
+                          <td style={{ padding: "6px 8px" }}>{p.target !== "" && p.target != null ? p.target : "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Spec Editor ──
+function SpecEditor({ spec, onSave, onCancel, existingCodes, editingId }) {
+  const [form, setForm] = useState(spec || {
+    code: "", name: "", category: CATEGORIES[0],
+    brand: "", docRef: "", docVersion: "", shelfLife: "",
+    commercialBrands: [], supplier: "", specType: "", docNote: "",
+    sharedSpecsWith: null,
+    parameters: [emptyParam()],
+  });
+
+  const [guardando, setGuardando] = useState(false);
+
+  function emptyParam() {
+    return { id: uid(), name: "", method: "", unit: "", min: "", max: "", target: "", type: "numeric", note: "" };
+  }
+
+  const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const setParam = (idx, k, v) => {
+    setForm(f => {
+      const p = [...f.parameters];
+      p[idx] = { ...p[idx], [k]: v };
+      return { ...f, parameters: p };
+    });
+  };
+  const addParam = () => setForm(f => ({ ...f, parameters: [...f.parameters, emptyParam()] }));
+  const removeParam = (idx) => setForm(f => ({ ...f, parameters: f.parameters.filter((_, i) => i !== idx) }));
+
+  const codeUsed = existingCodes.filter(c => editingId ? c !== spec?.code : true).includes(form.code.trim());
+  const valid = form.code.trim() && form.name.trim() && form.parameters.length > 0 && form.parameters.every(p => p.name.trim()) && !codeUsed;
+
+  return (
+    <Card>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>
+          {spec ? `Editar ${spec.code}` : "Nuevo producto"}
+        </h3>
+        <Btn variant="ghost" onClick={onCancel}><X size={16} /></Btn>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
+        <Field label="Código de granel *">
+          <Input value={form.code} onChange={e => setField("code", e.target.value.toUpperCase())} placeholder="G000000" />
+          {codeUsed && <span style={{ fontSize: 11, color: "#991B1B" }}>Código ya existe</span>}
+        </Field>
+        <Field label="Nombre del producto *">
+          <Input value={form.name} onChange={e => setField("name", e.target.value)} placeholder="Limpiador multiusos" />
+        </Field>
+        <Field label="Categoría">
+          <Select value={form.category} onChange={e => setField("category", e.target.value)}>
+            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+          </Select>
+        </Field>
+        <Field label="Marca">
+          <Input value={form.brand || ""} onChange={e => setField("brand", e.target.value)} placeholder="Cristal" />
+        </Field>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 2fr", gap: 12, marginBottom: 20 }}>
+        <Field label="Ref. documento">
+          <Input value={form.docRef || ""} onChange={e => setField("docRef", e.target.value)} placeholder="ESP-DOM-000" />
+        </Field>
+        <Field label="Versión">
+          <Input value={form.docVersion || ""} onChange={e => setField("docVersion", e.target.value)} placeholder="1.0" />
+        </Field>
+        <Field label="Vida útil">
+          <Input value={form.shelfLife || ""} onChange={e => setField("shelfLife", e.target.value)} placeholder="24 meses" />
+        </Field>
+        <Field label="Nota (opcional)">
+          <Input value={form.docNote || ""} onChange={e => setField("docNote", e.target.value)} placeholder="Aclaraciones sobre esta especificación" />
+        </Field>
+      </div>
+
+      <div style={{ marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ fontWeight: 700, fontSize: 13 }}>Parámetros de control</span>
+        <Btn variant="secondary" size="sm" onClick={addParam}><Plus size={12} /> Agregar parámetro</Btn>
+      </div>
+
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, minWidth: 640 }}>
+          <thead>
+            <tr>
+              {["Parámetro *", "Tipo", "Método", "Unidad", "Mín", "Máx", "Objetivo", ""].map(h => (
+                <th key={h} style={{ padding: "6px 4px", textAlign: "left", fontWeight: 600, color: V.gray, borderBottom: `1px solid ${V.grayMid}` }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {form.parameters.map((p, i) => (
+              <tr key={p.id}>
+                <td style={{ padding: "4px" }}>
+                  <Input value={p.name} onChange={e => setParam(i, "name", e.target.value)} placeholder="pH" />
+                </td>
+                <td style={{ padding: "4px" }}>
+                  <Select value={p.type || "numeric"} onChange={e => setParam(i, "type", e.target.value)} style={{ minWidth: 90 }}>
+                    <option value="numeric">Numérico</option>
+                    <option value="text">Texto</option>
+                  </Select>
+                </td>
+                <td style={{ padding: "4px" }}>
+                  <Input value={p.method} onChange={e => setParam(i, "method", e.target.value)} placeholder="Potenciométrico" />
+                </td>
+                <td style={{ padding: "4px" }}>
+                  <Input value={p.unit} onChange={e => setParam(i, "unit", e.target.value)} placeholder="cps" style={{ width: 60 }} />
+                </td>
+                <td style={{ padding: "4px" }}>
+                  <Input value={p.min} onChange={e => setParam(i, "min", e.target.value)} placeholder="—"
+                    disabled={p.type === "text"} style={{ width: 70 }} />
+                </td>
+                <td style={{ padding: "4px" }}>
+                  <Input value={p.max} onChange={e => setParam(i, "max", e.target.value)} placeholder="—"
+                    disabled={p.type === "text"} style={{ width: 70 }} />
+                </td>
+                <td style={{ padding: "4px" }}>
+                  {/* Habilitado también para texto: es lo que guarda "Conforme" (ej. "Incoloro"). */}
+                  <Input value={p.target} onChange={e => setParam(i, "target", e.target.value)} placeholder="—"
+                    style={{ width: p.type === "text" ? 140 : 70 }} />
+                </td>
+                <td style={{ padding: "4px" }}>
+                  {form.parameters.length > 1 && (
+                    <Btn variant="ghost" size="sm" onClick={() => removeParam(i)}><Trash2 size={12} color="#991B1B" /></Btn>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, marginTop: 20, justifyContent: "flex-end" }}>
+        <Btn variant="secondary" onClick={onCancel}>Cancelar</Btn>
+        <Btn disabled={!valid || guardando} onClick={async () => { setGuardando(true); await onSave(form); setGuardando(false); }}>
+          <Save size={14} /> Guardar especificación
+        </Btn>
+      </div>
+    </Card>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ══ NEW ENTRY ════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+function NewEntry({ specs, entries, acciones, usuario, navigate }) {
+  const [form, setForm] = useState({ batchCode: "", productCode: "", analyst: "", date: today(), timeFactory: "", timeIn: nowTime(), timeEnd: "", observations: "" });
+  const [results, setResults] = useState([]);
+  const [matchedSpec, setMatchedSpec] = useState(null);
+  const [qrOpen, setQrOpen] = useState(false);
+  const [qrToast, setQrToast] = useState("");
+  const [guardando, setGuardando] = useState(false);
+
+  const handleQrScan = (rawText) => {
+    const parsed = parseQrPayload(rawText);
+    if (!parsed.batchCode && !parsed.productCode) {
+      setQrToast("❌ El QR no tuvo formato reconocido. Verificá el contenido.");
+      setTimeout(() => setQrToast(""), 4000);
+      setQrOpen(false);
+      return;
+    }
+    setForm(f => ({
+      ...f,
+      batchCode: parsed.batchCode || f.batchCode,
+      productCode: parsed.productCode || f.productCode,
+      timeFactory: parsed.timeFactory || f.timeFactory,
+      timeIn: nowTime(), // hora entrada a control = ahora
+    }));
+    if (parsed.productCode) {
+      // Cargar specs del producto escaneado
+      const spec = specs.find(s => s.code === parsed.productCode);
+      setMatchedSpec(spec || null);
+      if (spec) {
+        setResults(spec.parameters.map(p => ({
+          paramId: p.id, paramName: p.name, value: "", pass: null,
+          retestValue: "", retestPass: null,
+          type: p.type || "numeric",
+        })));
+      }
+    }
+    setQrOpen(false);
+    const partes = [];
+    if (parsed.batchCode) partes.push("lote " + parsed.batchCode);
+    if (parsed.productCode) partes.push("granel " + parsed.productCode);
+    if (parsed.timeFactory) partes.push("salida " + parsed.timeFactory);
+    setQrToast("✓ QR leído: " + partes.join(" · "));
+    setTimeout(() => setQrToast(""), 4000);
+  };
+
+  const selectProduct = (code) => {
+    setForm(f => ({ ...f, productCode: code }));
+    const spec = specs.find(s => s.code === code);
+    setMatchedSpec(spec || null);
+    if (spec) {
+      setResults(spec.parameters.map(p => ({
+        paramId: p.id, paramName: p.name, value: "", pass: null,
+        retestValue: "", retestPass: null,
+        type: p.type || "numeric",
+      })));
+    } else {
+      setResults([]);
+    }
+  };
+
+  const setResult = (idx, val, isRetest = false) => {
+    setResults(prev => {
+      const r = [...prev];
+      const param = matchedSpec.parameters.find(p => p.id === r[idx].paramId);
+      if (isRetest) {
+        r[idx] = { ...r[idx], retestValue: val, retestPass: evalValue(param, val) };
+      } else {
+        // Cambiar 1ra medición: si vuelve a estar dentro, limpiar retest
+        const p = evalValue(param, val);
+        r[idx] = { ...r[idx], value: val, pass: p };
+        if (p === true || p === null) {
+          r[idx].retestValue = "";
+          r[idx].retestPass = null;
+        }
+      }
+      return r;
+    });
+  };
+  // Marcar parámetro tipo texto como conforme / no conforme
+  const setTextResult = (idx, isConforme, hallazgo) => {
+    setResults(prev => {
+      const r = [...prev];
+      const param = matchedSpec.parameters.find(p => p.id === r[idx].paramId);
+      if (isConforme === true) {
+        r[idx] = { ...r[idx], value: param?.target || "Conforme", pass: true };
+      } else if (isConforme === false) {
+        r[idx] = { ...r[idx], value: hallazgo !== undefined ? hallazgo : (r[idx].pass === false ? r[idx].value : ""), pass: false };
+      } else {
+        r[idx] = { ...r[idx], value: "", pass: null };
+      }
+      return r;
+    });
+  };
+
+  const batchExists = entries.some(e => e.batchCode === form.batchCode.trim());
+  const canSave = form.batchCode.trim() && matchedSpec && !batchExists && !guardando;
+
+  // El analista, la especificación que queda guardada y el estado los pone el servidor.
+  const handleSave = async () => {
+    setGuardando(true);
+    const muestra = await acciones.crearMuestra({ ...form, batchCode: form.batchCode.trim(), results });
+    setGuardando(false);
+    if (muestra) navigate("detail", muestra);
+  };
+
+  return (
+    <Card>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
+        <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>Registrar nueva muestra</h3>
+        <Btn variant="secondary" onClick={() => setQrOpen(true)}>
+          📷 Escanear QR de fabricación
+        </Btn>
+      </div>
+      {qrToast && (
+        <div style={{
+          padding: "8px 12px", borderRadius: 6, fontSize: 12, marginBottom: 12,
+          background: qrToast.startsWith("✓") ? "#DCFCE7" : "#FEE2E2",
+          border: qrToast.startsWith("✓") ? "1px solid #86EFAC" : "1px solid #FCA5A5",
+          color: qrToast.startsWith("✓") ? "#166534" : "#991B1B",
+        }}>{qrToast}</div>
+      )}
+      {qrOpen && <QrScanner onScan={handleQrScan} onCancel={() => setQrOpen(false)} />}
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 12 }}>
+        <Field label="Código de lote *">
+          <Input value={form.batchCode} onChange={e => setForm(f => ({ ...f, batchCode: e.target.value.toUpperCase() }))} placeholder="L2609-001" />
+          {batchExists && <span style={{ fontSize: 11, color: "#991B1B" }}>Lote ya registrado</span>}
+        </Field>
+        <Field label="Código de granel *">
+          <Select value={form.productCode} onChange={e => selectProduct(e.target.value)}>
+            <option value="">— Seleccionar —</option>
+            {[...specs].sort((a, b) => (a.brand || "").localeCompare(b.brand || "") || a.code.localeCompare(b.code)).map(s => (
+              <option key={s.id} value={s.code}>
+                {s.code} — {s.name}{s.brand ? ` [${s.brand}]` : ""}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Analista">
+          <Input value={usuario?.nombre || ""} readOnly title="Firma quien tiene la sesión abierta"
+            style={{ background: V.grayLight, color: V.gray }} />
+        </Field>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 20 }}>
+        <Field label="Fecha">
+          <Input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
+        </Field>
+        <Field label="Hora salida fabricación">
+          <Input type="time" value={form.timeFactory} onChange={e => setForm(f => ({ ...f, timeFactory: e.target.value }))} />
+        </Field>
+        <Field label="Hora ingreso muestra (a control)">
+          <Input type="time" value={form.timeIn} onChange={e => setForm(f => ({ ...f, timeIn: e.target.value }))} />
+        </Field>
+        <Field label="Hora fin de análisis">
+          <Input type="time" value={form.timeEnd} onChange={e => setForm(f => ({ ...f, timeEnd: e.target.value }))} />
+        </Field>
+      </div>
+
+      {matchedSpec && (
+        <>
+          <div style={{
+            padding: "10px 14px", background: V.redBg, borderRadius: 8,
+            fontSize: 13, marginBottom: 16, display: "flex", alignItems: "center", gap: 8,
+            border: `1px solid #FECACA`,
+          }}>
+            <FlaskConical size={14} color={V.red} />
+            <span>Especificaciones cargadas para <strong>{matchedSpec.name}</strong> ({matchedSpec.parameters.length} parámetros)</span>
+          </div>
+
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginBottom: 16 }}>
+            <thead>
+              <tr style={{ background: V.grayLight }}>
+                {["Parámetro", "Método", "Rango", "Objetivo", "Resultado", "Estado"].map(h => (
+                  <th key={h} style={{ padding: "8px 10px", textAlign: "left", fontWeight: 600, fontSize: 12, color: V.gray, borderBottom: `1px solid ${V.grayMid}` }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {results.map((r, i) => {
+                const param = matchedSpec.parameters.find(p => p.id === r.paramId);
+                const rangeStr = param?.type === "text" ? "Texto" :
+                  `${param?.min ?? "—"} – ${param?.max ?? "—"} ${param?.unit || ""}`.trim();
+                const fp = finalPass(r);
+                const needsRetest = r.pass === false && (param?.type || "numeric") !== "text";
+                const rowBg = fp === false ? "rgb(254 242 242)" : (needsRetest && r.retestValue === "" ? "rgb(255 251 235)" : "transparent");
+                return (
+                  <tr key={r.paramId} style={{ borderBottom: `1px solid ${V.grayMid}`, background: rowBg }}>
+                    <td style={{ padding: "8px 10px", fontWeight: 600 }}>{r.paramName}</td>
+                    <td style={{ padding: "8px 10px", color: V.gray }}>{param?.method || "—"}</td>
+                    <td style={{ padding: "8px 10px", fontSize: 12 }}>{rangeStr}</td>
+                    <td style={{ padding: "8px 10px", fontSize: 12 }}>{param?.target || "—"}</td>
+                    <td style={{ padding: "8px 10px" }}>
+                      {(param?.type || "numeric") === "text" ? (
+                        <TextResultButtons result={r} onChange={(isConf, hallazgo) => setTextResult(i, isConf, hallazgo)} />
+                      ) : (
+                        <>
+                          <Input value={r.value} onChange={e => setResult(i, e.target.value)}
+                            placeholder="0.00"
+                            style={{ width: 120, borderColor: r.pass === false ? "#F87171" : V.grayMid }} />
+                          {needsRetest && (
+                            <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                              <span style={{ fontSize: 10, color: "#92400E", fontWeight: 600, minWidth: 46 }}>Retest:</span>
+                              <Input value={r.retestValue || ""} onChange={e => setResult(i, e.target.value, true)}
+                                placeholder="2° medición"
+                                style={{ width: 120, borderColor: r.retestPass === false ? "#F87171" : (r.retestPass === true ? "#86EFAC" : "#F59E0B") }} />
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </td>
+                    <td style={{ padding: "8px 10px" }}>
+                      {fp === true && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <CheckCircle2 size={18} color="#166534" />
+                          {r.pass === false && r.retestPass === true && <span style={{ fontSize: 10, color: "#166534", fontWeight: 600 }}>retest OK</span>}
+                        </div>
+                      )}
+                      {fp === false && <AlertCircle size={18} color="#991B1B" />}
+                      {fp === null && r.pass === false && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <AlertCircle size={16} color="#F59E0B" />
+                          <span style={{ fontSize: 10, color: "#92400E", fontWeight: 600 }}>retest pend.</span>
+                        </div>
+                      )}
+                      {fp === null && r.pass === null && <span style={{ color: V.grayMid }}>—</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </>
+      )}
+
+      <Field label="Observaciones" style={{ marginBottom: 16 }}>
+        <textarea value={form.observations} onChange={e => setForm(f => ({ ...f, observations: e.target.value }))}
+          rows={2} placeholder="Observaciones adicionales…"
+          style={{ padding: "7px 10px", borderRadius: 6, border: `1px solid ${V.grayMid}`, fontSize: 13, fontFamily: "inherit", resize: "vertical", width: "100%", boxSizing: "border-box" }} />
+      </Field>
+
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <Btn variant="secondary" onClick={() => navigate("dashboard")}>Cancelar</Btn>
+        <Btn disabled={!canSave} onClick={handleSave}>
+          <Save size={14} /> Guardar muestra
+        </Btn>
+      </div>
+    </Card>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ══ BITÁCORA ═════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+function Bitacora({ entries, specs, navigate }) {
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  const filtered = entries.filter(e => {
+    const matchSearch = e.batchCode.toLowerCase().includes(search.toLowerCase()) ||
+      e.productCode.toLowerCase().includes(search.toLowerCase()) ||
+      e.analyst.toLowerCase().includes(search.toLowerCase());
+    const matchStatus = statusFilter === "all" || e.status === statusFilter;
+    return matchSearch && matchStatus;
+  });
+
+  const exportCSV = () => {
+    const rows = [];
+    filtered.forEach(e => {
+      const spec = e.spec || specs.find(s => s.code === e.productCode);
+      e.results.forEach(r => {
+        const param = spec?.parameters.find(p => p.id === r.paramId);
+        const fp = finalPass(r);
+        rows.push({
+          Fecha: fmt(e.date),
+          "Hora salida fábrica": e.timeFactory || "",
+          "Hora Ingreso (control)": e.timeIn || "",
+          "Hora Fin": e.timeEnd || "",
+          Duración: calcDuration(e.timeIn, e.timeEnd),
+          Lote: e.batchCode, Producto: e.productCode,
+          Analista: e.analyst, Parámetro: r.paramName,
+          Mín: param?.min ?? "", Máx: param?.max ?? "",
+          Resultado: r.value,
+          "1° Cumple": r.pass === true ? "Sí" : r.pass === false ? "No" : "",
+          "Retest": r.retestValue || "",
+          "Retest cumple": r.retestPass === true ? "Sí" : r.retestPass === false ? "No" : "",
+          "Estado final": fp === true ? "Cumple" : fp === false ? "Fuera de spec" : (r.pass === false ? "Pendiente retest" : ""),
+          Estado: STATUS_LABEL[e.status], Observaciones: e.observations || "",
+        });
+      });
+    });
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Bitácora");
+    XLSX.writeFile(wb, `bitacora_graneles_${today()}.csv`, { bookType: "csv" });
+  };
+
+  const exportXLSX = () => {
+    const rows = [];
+    filtered.forEach(e => {
+      const spec = e.spec || specs.find(s => s.code === e.productCode);
+      e.results.forEach(r => {
+        const param = spec?.parameters.find(p => p.id === r.paramId);
+        const fp = finalPass(r);
+        rows.push({
+          Fecha: fmt(e.date),
+          "Hora salida fábrica": e.timeFactory || "",
+          "Hora Ingreso (control)": e.timeIn || "",
+          "Hora Fin": e.timeEnd || "",
+          Duración: calcDuration(e.timeIn, e.timeEnd),
+          Lote: e.batchCode, "Código Producto": e.productCode,
+          Analista: e.analyst, Parámetro: r.paramName, Método: param?.method ?? "",
+          Unidad: param?.unit ?? "", Mín: param?.min ?? "", Máx: param?.max ?? "",
+          Objetivo: param?.target ?? "", Resultado: r.value,
+          "1° Cumple": r.pass === true ? "Sí" : r.pass === false ? "No" : "",
+          "Retest (2° medición)": r.retestValue || "",
+          "Retest cumple": r.retestPass === true ? "Sí" : r.retestPass === false ? "No" : "",
+          "Estado final": fp === true ? "Cumple" : fp === false ? "Fuera de spec" : (r.pass === false ? "Pendiente retest" : ""),
+          "Estado General": STATUS_LABEL[e.status], Observaciones: e.observations || "",
+        });
+      });
+    });
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws["!cols"] = Object.keys(rows[0] || {}).map(() => ({ wch: 15 }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Bitácora");
+    XLSX.writeFile(wb, `bitacora_graneles_${today()}.xlsx`);
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+        <div style={{ display: "flex", gap: 8, flex: "1 1 400px", alignItems: "center" }}>
+          <div style={{ position: "relative", flex: 1, maxWidth: 300 }}>
+            <Search size={14} style={{ position: "absolute", left: 10, top: 10, color: V.gray }} />
+            <Input placeholder="Buscar lote, producto, analista…" value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: 32 }} />
+          </div>
+          <Select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ width: 140 }}>
+            <option value="all">Todos</option>
+            <option value="pending">Pendientes</option>
+            <option value="approved">Aprobados</option>
+            <option value="rejected">Rechazados</option>
+          </Select>
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <Btn variant="secondary" size="sm" onClick={exportCSV} disabled={filtered.length === 0}>
+            <Download size={13} /> CSV
+          </Btn>
+          <Btn variant="secondary" size="sm" onClick={exportXLSX} disabled={filtered.length === 0}>
+            <FileSpreadsheet size={13} /> Excel
+          </Btn>
+        </div>
+      </div>
+
+      {filtered.length === 0 ? (
+        <Card style={{ textAlign: "center", padding: 40 }}>
+          <ClipboardList size={36} color={V.grayMid} style={{ margin: "0 auto 10px" }} />
+          <p style={{ color: V.gray, fontSize: 14 }}>
+            {entries.length === 0 ? "Sin registros en la bitácora." : "Sin resultados para el filtro."}
+          </p>
+        </Card>
+      ) : (
+        <Card style={{ padding: 0, overflow: "hidden" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: V.grayLight }}>
+                {["Fecha", "Hora Ingreso", "Duración", "Código Lote", "Producto", "Cargado por", "Resultado", "Estado", ""].map(h => (
+                  <th key={h} style={{ padding: "10px 12px", textAlign: "left", fontWeight: 600, fontSize: 12, color: V.gray, borderBottom: `1px solid ${V.grayMid}` }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.sort((a, b) => b.date.localeCompare(a.date)).map(e => {
+                const filled = e.results.filter(r => r.value !== "");
+                const passed = e.results.filter(r => finalPass(r) === true).length;
+                const failed = e.results.filter(r => finalPass(r) === false).length;
+                const retestPend = e.results.filter(retestPendiente).length;
+                return (
+                  <tr key={e.id} style={{ borderBottom: `1px solid ${V.grayMid}`, cursor: "pointer" }} onClick={() => navigate("detail", e)}>
+                    <td style={{ padding: "10px 12px" }}>{fmt(e.date)}</td>
+                    <td style={{ padding: "10px 12px", fontSize: 12 }}>{e.timeIn || "—"}</td>
+                    <td style={{ padding: "10px 12px", fontSize: 12, color: V.gray }}>{calcDuration(e.timeIn, e.timeEnd) || "—"}</td>
+                    <td style={{ padding: "10px 12px", fontWeight: 700 }}>{e.batchCode}</td>
+                    <td style={{ padding: "10px 12px" }}>{e.productCode}</td>
+                    <td style={{ padding: "10px 12px" }}>{e.analyst}</td>
+                    <td style={{ padding: "10px 12px", fontSize: 12 }}>
+                      {filled.length > 0 ? (
+                        <span>
+                          <span style={{ color: V.greenDark }}>{passed}✓</span>
+                          {failed > 0 && <span style={{ color: "#991B1B", marginLeft: 6 }}>{failed}✗</span>}
+                          {retestPend > 0 && <span style={{ color: "#92400E", marginLeft: 6, fontWeight: 600 }}>{retestPend}⚠retest</span>}
+                          <span style={{ color: V.gray, marginLeft: 6 }}>{filled.length}/{e.results.length}</span>
+                        </span>
+                      ) : <span style={{ color: V.gray }}>Sin datos</span>}
+                    </td>
+                    <td style={{ padding: "10px 12px" }}><Badge status={e.status} /></td>
+                    <td style={{ padding: "10px 12px" }}><Eye size={14} color={V.gray} /></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ══ DETAIL VIEW ══════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+function Detail({ entry: initialEntry, specs, entries, acciones, puede, usuario, navigate }) {
+  const liveEntry = entries.find(e => e.id === initialEntry?.id) || initialEntry;
+  const [results, setResults] = useState(liveEntry?.results || []);
+  const [observations, setObservations] = useState(liveEntry?.observations || "");
+  const [timeFactory, setTimeFactory] = useState(liveEntry?.timeFactory || "");
+  const [timeIn, setTimeIn] = useState(liveEntry?.timeIn || "");
+  const [timeEnd, setTimeEnd] = useState(liveEntry?.timeEnd || "");
+  const [ocupado, setOcupado] = useState(false);
+  // La especificación con la que se creó la muestra, no la vigente: si después
+  // se corrige un rango, este análisis se sigue leyendo contra el que se usó.
+  const spec = liveEntry?.spec || specs.find(s => s.code === liveEntry?.productCode);
+  const editable = !!liveEntry && liveEntry.status === STATUS.PENDING && puede("cargar");
+
+  if (!liveEntry) return <Card><p>Entrada no encontrada.</p></Card>;
+
+  const setResult = (idx, val, isRetest = false) => {
+    setResults(prev => {
+      const r = [...prev];
+      const param = spec?.parameters.find(p => p.id === r[idx].paramId);
+      if (isRetest) {
+        r[idx] = { ...r[idx], retestValue: val, retestPass: evalValue(param, val) };
+      } else {
+        const p = evalValue(param, val);
+        r[idx] = { ...r[idx], value: val, pass: p };
+        if (p === true || p === null) {
+          r[idx].retestValue = "";
+          r[idx].retestPass = null;
+        }
+      }
+      return r;
+    });
+  };
+  const setTextResult = (idx, isConforme, hallazgo) => {
+    setResults(prev => {
+      const r = [...prev];
+      const param = spec?.parameters.find(p => p.id === r[idx].paramId);
+      if (isConforme === true) {
+        r[idx] = { ...r[idx], value: param?.target || "Conforme", pass: true };
+      } else if (isConforme === false) {
+        r[idx] = { ...r[idx], value: hallazgo !== undefined ? hallazgo : (r[idx].pass === false ? r[idx].value : ""), pass: false };
+      } else {
+        r[idx] = { ...r[idx], value: "", pass: null };
+      }
+      return r;
+    });
+  };
+
+  const campos = (extra = {}) => ({ results, observations, timeFactory, timeIn, timeEnd, ...extra });
+
+  const saveResults = async (exitAfter = false) => {
+    // Al guardar y salir, si no hay hora fin la marca en ese momento (fin del análisis)
+    const finalTimeEnd = (exitAfter && !timeEnd) ? nowTime() : timeEnd;
+    setOcupado(true);
+    const m = await acciones.guardarMuestra(liveEntry.id, campos({ timeEnd: finalTimeEnd }));
+    setOcupado(false);
+    if (!m) return;
+    // Lo que quedó guardado: el servidor normaliza la coma decimal y descarta un
+    // retest que ya no corresponde.
+    setResults(m.results);
+    setTimeEnd(m.timeEnd);
+    if (exitAfter) navigate("bitacora");
+  };
+
+  // La disposición guarda también lo que hay en pantalla, y no se deshace.
+  const changeStatus = async (status) => {
+    const verbo = status === STATUS.APPROVED ? "aprobar" : "rechazar";
+    if (!confirm(`Vas a ${verbo} el lote ${liveEntry.batchCode} con la firma de ${usuario?.nombre || "tu usuario"}. No se puede deshacer. ¿Seguir?`)) return;
+    setOcupado(true);
+    const m = await acciones.disponer(liveEntry.id, status, campos());
+    setOcupado(false);
+    if (m) setResults(m.results);
+  };
+
+  const borrar = async () => {
+    if (!confirm(`¿Eliminar la muestra del lote ${liveEntry.batchCode}? Queda registrado quién la eliminó.`)) return;
+    setOcupado(true);
+    const ok = await acciones.borrarMuestra(liveEntry.id);
+    setOcupado(false);
+    if (ok) navigate("bitacora");
+  };
+
+  const allFilled = results.length > 0 && results.every(r => r.pass !== null);
+  const anyFailed = results.some(r => finalPass(r) === false);
+  const anyRetestPending = results.some(retestPendiente);
+  const allPassed = results.length > 0 && results.every(r => finalPass(r) === true);
+  const canApprove = allFilled && !anyFailed && !anyRetestPending && !!timeEnd;
+  // Las mismas condiciones que exige el servidor, dichas para quien aprueba.
+  const faltaParaAprobar = [
+    !allFilled && "completar todos los resultados",
+    anyRetestPending && "hacer el retest pendiente",
+    anyFailed && "no puede haber parámetros fuera de especificación",
+    !timeEnd && "cargar la hora de fin de análisis",
+  ].filter(Boolean);
+
+  const exportSingle = () => {
+    const rows = results.map(r => {
+      const param = spec?.parameters.find(p => p.id === r.paramId);
+      const fp = finalPass(r);
+      return {
+        Parámetro: r.paramName, Método: param?.method ?? "", Unidad: param?.unit ?? "",
+        Mín: param?.min ?? "", Máx: param?.max ?? "", Objetivo: param?.target ?? "",
+        Resultado: r.value,
+        "1° Cumple": r.pass === true ? "Sí" : r.pass === false ? "No" : "",
+        "Retest (2° medición)": r.retestValue || "",
+        "Retest cumple": r.retestPass === true ? "Sí" : r.retestPass === false ? "No" : "",
+        "Estado final": fp === true ? "Cumple" : fp === false ? "Fuera de spec" : (r.pass === false ? "Pendiente retest" : ""),
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws["!cols"] = Object.keys(rows[0] || {}).map(() => ({ wch: 14 }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Análisis");
+
+    const info = XLSX.utils.aoa_to_sheet([
+      ["Informe de Análisis de Granel"],
+      ["Lote:", liveEntry.batchCode],
+      ["Producto:", `${liveEntry.productCode}${spec ? " — " + spec.name : ""}`],
+      ["Fecha:", fmt(liveEntry.date)],
+      ["Hora salida fabricación:", timeFactory || "—"],
+      ["Hora ingreso muestra (control):", timeIn || "—"],
+      ["Hora fin de análisis:", timeEnd || "—"],
+      ["Duración:", calcDuration(timeIn, timeEnd) || "—"],
+      ["Analista:", liveEntry.analyst],
+      ["Estado:", STATUS_LABEL[liveEntry.status]],
+      ["Aprobado por:", liveEntry.approvedBy || "—"],
+      ["Fecha aprobación:", fmt(liveEntry.approvedDate)],
+      ["Observaciones:", observations || "—"],
+    ]);
+    XLSX.utils.book_append_sheet(wb, info, "Info");
+    XLSX.writeFile(wb, `analisis_${liveEntry.batchCode}_${today()}.xlsx`);
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <Btn variant="ghost" onClick={() => navigate("bitacora")}><ArrowLeft size={16} /> Bitácora</Btn>
+      </div>
+
+      <Card>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+              <h3 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Lote {liveEntry.batchCode}</h3>
+              <Badge status={liveEntry.status} />
+            </div>
+            <div style={{ fontSize: 13, color: V.gray }}>
+              {liveEntry.productCode}{spec ? ` — ${spec.name}` : ""} · {fmt(liveEntry.date)} · Analista: {liveEntry.analyst}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            {puede("administrar") && (
+              <Btn variant="ghost" size="sm" onClick={borrar} disabled={ocupado}>
+                <Trash2 size={13} color="#991B1B" /> Eliminar
+              </Btn>
+            )}
+            <Btn variant="secondary" size="sm" onClick={exportSingle}>
+              <FileSpreadsheet size={13} /> Exportar Excel
+            </Btn>
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 16, padding: "12px 14px", background: V.grayLight, borderRadius: 8 }}>
+          <Field label="Hora salida fabricación">
+            <Input type="time" value={timeFactory} onChange={e => setTimeFactory(e.target.value)} disabled={!editable} />
+          </Field>
+          <Field label="Hora ingreso muestra (a control)">
+            <Input type="time" value={timeIn} onChange={e => setTimeIn(e.target.value)} disabled={!editable} />
+          </Field>
+          <Field label="Hora fin de análisis">
+            <div style={{ display: "flex", gap: 6 }}>
+              <Input type="time" value={timeEnd} onChange={e => setTimeEnd(e.target.value)} disabled={!editable} style={{ flex: 1 }} />
+              {editable && (
+                <button type="button" onClick={() => setTimeEnd(nowTime())} style={{
+                  padding: "5px 10px", borderRadius: 6, border: `1px solid ${V.grayMid}`,
+                  background: V.white, color: V.gray, fontSize: 11, fontWeight: 600,
+                  fontFamily: "inherit", cursor: "pointer", whiteSpace: "nowrap"
+                }}>Ahora</button>
+              )}
+            </div>
+          </Field>
+          <Field label="Duración">
+            <div style={{ padding: "7px 10px", fontSize: 13, fontWeight: 600, color: V.dark }}>
+              {calcDuration(timeIn, timeEnd) || "—"}
+            </div>
+          </Field>
+        </div>
+
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, marginBottom: 16 }}>
+          <thead>
+            <tr style={{ background: V.grayLight }}>
+              {["Parámetro", "Método", "Rango", "Objetivo", "Resultado", "Estado"].map(h => (
+                <th key={h} style={{ padding: "8px 10px", textAlign: "left", fontWeight: 600, fontSize: 12, color: V.gray, borderBottom: `1px solid ${V.grayMid}` }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {results.map((r, i) => {
+              const param = spec?.parameters.find(p => p.id === r.paramId);
+              const isText = (param?.type || "numeric") === "text";
+              const rangeStr = isText ? "Texto" : `${param?.min ?? "—"} – ${param?.max ?? "—"} ${param?.unit || ""}`.trim();
+              const fp = finalPass(r);
+              const needsRetest = r.pass === false && !isText;
+              const rowBg = fp === false ? "rgb(254 242 242)" : (needsRetest && !r.retestValue ? "rgb(255 251 235)" : "transparent");
+              return (
+                <tr key={r.paramId} style={{
+                  borderBottom: `1px solid ${V.grayMid}`,
+                  background: rowBg,
+                }}>
+                  <td style={{ padding: "8px 10px", fontWeight: 600 }}>{r.paramName}</td>
+                  <td style={{ padding: "8px 10px", color: V.gray }}>{param?.method || "—"}</td>
+                  <td style={{ padding: "8px 10px", fontSize: 12 }}>{rangeStr}</td>
+                  <td style={{ padding: "8px 10px", fontSize: 12 }}>{param?.target || "—"}</td>
+                  <td style={{ padding: "8px 10px" }}>
+                    {isText ? (
+                      <TextResultButtons result={r} onChange={(isConf, hallazgo) => setTextResult(i, isConf, hallazgo)} disabled={!editable} />
+                    ) : (
+                      <>
+                        <Input value={r.value} onChange={e => setResult(i, e.target.value)}
+                          placeholder="0.00"
+                          style={{ width: 120, borderColor: r.pass === false ? "#F87171" : V.grayMid }}
+                          disabled={!editable} />
+                        {needsRetest && (
+                          <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ fontSize: 10, color: "#92400E", fontWeight: 600, minWidth: 46 }}>Retest:</span>
+                            <Input value={r.retestValue || ""} onChange={e => setResult(i, e.target.value, true)}
+                              placeholder="2° medición"
+                              style={{ width: 120, borderColor: r.retestPass === false ? "#F87171" : (r.retestPass === true ? "#86EFAC" : "#F59E0B") }}
+                              disabled={!editable} />
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </td>
+                  <td style={{ padding: "8px 10px" }}>
+                    {fp === true && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <CheckCircle2 size={18} color="#166534" />
+                        {r.pass === false && r.retestPass === true && <span style={{ fontSize: 10, color: "#166534", fontWeight: 600 }}>retest OK</span>}
+                      </div>
+                    )}
+                    {fp === false && <AlertCircle size={18} color="#991B1B" />}
+                    {fp === null && r.pass === false && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <AlertCircle size={16} color="#F59E0B" />
+                        <span style={{ fontSize: 10, color: "#92400E", fontWeight: 600 }}>retest pend.</span>
+                      </div>
+                    )}
+                    {fp === null && r.pass === null && <span style={{ color: V.grayMid }}>—</span>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        <Field label="Observaciones" style={{ marginBottom: 16 }}>
+          <textarea value={observations} onChange={e => setObservations(e.target.value)}
+            rows={2} disabled={!editable}
+            style={{ padding: "7px 10px", borderRadius: 6, border: `1px solid ${V.grayMid}`, fontSize: 13, fontFamily: "inherit", resize: "vertical", width: "100%", boxSizing: "border-box" }} />
+        </Field>
+
+        {liveEntry.status === STATUS.PENDING && (puede("cargar") || puede("aprobar")) && (
+          <div style={{ borderTop: `1px solid ${V.grayMid}`, paddingTop: 16, display: "flex", flexDirection: "column", gap: 14 }}>
+            {/* Analista: guardar y salir */}
+            {puede("cargar") && (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                <div style={{ fontSize: 12, color: V.gray }}>
+                  <strong style={{ color: V.dark }}>Analista:</strong> guardá los cambios y la muestra queda pendiente para revisión del supervisor.
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <Btn variant="secondary" onClick={() => saveResults(false)} disabled={ocupado}>
+                    <Save size={14} /> Solo guardar
+                  </Btn>
+                  <Btn onClick={() => saveResults(true)} disabled={ocupado}>
+                    <Save size={14} /> Guardar y volver
+                  </Btn>
+                </div>
+              </div>
+            )}
+
+            {/* Supervisor: aprobar o rechazar, con la firma de la sesión */}
+            {puede("aprobar") && (
+              <div style={{ background: V.grayLight, padding: "12px 14px", borderRadius: 8, display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 12 }}>
+                <div>
+                  <div style={{ fontSize: 12, color: V.gray, marginBottom: 6 }}>
+                    <strong style={{ color: V.dark }}>Supervisor:</strong> revisar y aprobar o rechazar el lote.
+                  </div>
+                  <div style={{ fontSize: 12, color: V.dark }}>Firma: <strong>{usuario?.nombre}</strong></div>
+                  {faltaParaAprobar.length > 0 && (
+                    <div style={{ fontSize: 11, color: "#92400E", marginTop: 4 }}>Para aprobar falta: {faltaParaAprobar.join(" · ")}</div>
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <Btn variant="danger" onClick={() => changeStatus(STATUS.REJECTED)} disabled={ocupado}>
+                    <X size={14} /> Rechazar
+                  </Btn>
+                  <Btn variant="success" onClick={() => changeStatus(STATUS.APPROVED)} disabled={!canApprove || ocupado}>
+                    <Check size={14} /> Aprobar
+                  </Btn>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {liveEntry.status !== STATUS.PENDING && liveEntry.approvedBy && (
+          <div style={{
+            borderTop: `1px solid ${V.grayMid}`, paddingTop: 12, fontSize: 13, color: V.gray,
+            display: "flex", gap: 16,
+          }}>
+            <span><strong>Disposición:</strong> {STATUS_LABEL[liveEntry.status]}</span>
+            <span><strong>Por:</strong> {liveEntry.approvedBy}</span>
+            <span><strong>Fecha:</strong> {fmt(liveEntry.approvedDate)}</span>
+          </div>
+        )}
+
+        {allFilled && (
+          <div style={{
+            marginTop: 12, padding: "10px 14px", borderRadius: 8, fontSize: 13,
+            display: "flex", alignItems: "center", gap: 8,
+            background: allPassed ? "rgb(220 252 231)" : anyFailed ? "rgb(254 226 226)" : anyRetestPending ? "rgb(254 243 199)" : V.grayLight,
+            border: `1px solid ${allPassed ? "#86EFAC" : anyFailed ? "#FECACA" : anyRetestPending ? "#FCD34D" : V.grayMid}`,
+            color: allPassed ? V.greenDark : anyFailed ? "#991B1B" : anyRetestPending ? "#92400E" : V.dark,
+          }}>
+            {allPassed ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+            {allPassed
+              ? (results.some(r => r.pass === false && r.retestPass === true)
+                  ? "Todos los parámetros dentro de especificación (incluye retest confirmado)."
+                  : "Todos los parámetros dentro de especificación.")
+              : anyFailed
+                ? `${results.filter(r => finalPass(r) === false).length} parámetro(s) confirmado(s) fuera de especificación tras retest.`
+                : `${results.filter(retestPendiente).length} parámetro(s) fuera de spec — realizar retest antes de aprobar.`
+            }
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+
+// Montaje
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+
+// Ocultar splash
+setTimeout(() => {
+  const el = document.getElementById('loading');
+  if (el) { el.classList.add('hide'); setTimeout(() => el.remove(), 300); }
+}, 100);
+</script>
+</body>
+</html>
