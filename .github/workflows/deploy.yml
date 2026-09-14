@@ -18,9 +18,13 @@ name: Deploy to Coolify
 # por aca. Un push a main actualiza las dos cosas.
 on:
   push:
+    # Solo main. Estaba tambien migracion-postgres, y esos runs no pueden
+    # salir bien: el webhook despliega main, asi que la verificacion espera una
+    # huella que nunca llega y falla a los diez minutos. Mientras tanto ocupan
+    # el unico runner, y el deploy de main queda en cola detras. El 14/09/2026
+    # un arreglo quedo media hora sin desplegar por eso.
     branches:
       - main
-      - migracion-postgres
   # Permite dispararlo a mano desde la pestana Actions, sin tener que commitear
   # algo para forzar un redeploy.
   workflow_dispatch:
