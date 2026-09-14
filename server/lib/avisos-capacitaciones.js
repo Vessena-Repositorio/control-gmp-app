@@ -25,6 +25,8 @@ const TAREA_PLAN = 'avisos_capacitaciones_plan';
 const TAREA_INDUCCIONES = 'avisos_capacitaciones_inducciones';
 
 const HORA = Number(process.env.AVISOS_CAPACITACIONES_HORA ?? 8);
+import { buscadorDePersonas } from './personas-capacitaciones.js';
+
 const ACTIVOS = ['1', 'true', 'si'].includes(
     String(process.env.AVISOS_CAPACITACIONES_ACTIVOS || '').toLowerCase()
 );
@@ -385,16 +387,20 @@ export async function revisarInduccionesPendientes({ forzar = false, soloPrevisu
                 coleccionCapacitaciones('R'),
             ]);
 
-            // Indice de quien hizo que modulo de induccion, por nombre en
-            // mayusculas: es la unica llave que comparten las dos colecciones.
+            // Indice de quien hizo que modulo de induccion, por persona del
+            // padron. El nombre del registro se resuelve igual que en la app
+            // (findPerson): comparar el texto exacto dejaba afuera los registros
+            // con el nombre escrito de otra forma.
             // Se guarda tambien la fecha del primer registro de cada uno, que
             // es lo que permite detectar una fecha de alta que no es el ingreso
             // real (ver ANTES_DEL_SISTEMA mas abajo).
             const hechos = new Map();
             const primerRegistro = new Map();
+            const persona = buscadorDePersonas(personal);
             for (const r of registros) {
-                const nom = String(r.nom || '').toUpperCase().trim();
-                if (!nom) continue;
+                const fp = persona(r.nom);
+                if (!fp) continue;
+                const nom = String(fp.n);
                 const f = String(r.fecha || '').slice(0, 10);
                 if (f && (!primerRegistro.has(nom) || f < primerRegistro.get(nom))) {
                     primerRegistro.set(nom, f);
@@ -435,7 +441,7 @@ export async function revisarInduccionesPendientes({ forzar = false, soloPrevisu
                 // y conviene que eso se vea en vez de desaparecer.
                 if (!p.fechaAlta) { sinFechaAlta++; continue; }
 
-                const nom = String(p.n || '').toUpperCase().trim();
+                const nom = String(p.n);
                 const alta = String(comoDia(p.fechaAlta) || '').slice(0, 10);
                 const primero = primerRegistro.get(nom) || '';
 
