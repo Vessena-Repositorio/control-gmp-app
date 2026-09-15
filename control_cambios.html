@@ -805,7 +805,7 @@
 
 <script>
 // ==================== CONFIG ====================
-const API_URL = 'https://script.google.com/macros/s/AKfycbwiIr60f7GWLPrRV0cVhLFp7Hm3Igc8qKEL1sWZiAd6vgDFD8XyP0Yu29fxof03ipdE/exec';
+// El Apps Script compartido (ORIGEN_NC) ya no se usa desde esta app: ver STORAGE.
 
 let db = { ccs: [], counter: 0 };
 let ccActivaId = null;
@@ -852,13 +852,55 @@ const CHECKLIST_CIERRE = [
 ];
 
 // ==================== STORAGE ====================
+// Desde el 15/09/2026 los datos viven en el servidor de calidad (Postgres), no en
+// el Apps Script compartido con la app vieja de No Conformidades. Las llamadas
+// conservan su nombre (cargarDatos, guardarCC_remoto, eliminarCC_remoto) para no
+// tocar el resto de la app, que las usa en muchos lugares.
+const API = '/api/control-cambios';
+let sesion = null;
+
+/**
+ * Llama a la API y devuelve el cuerpo. Cualquier respuesta que no sea ok lanza
+ * con el mensaje del servidor: antes, contra Google, un guardado fallido podia
+ * pasar por exitoso.
+ */
+async function apiCC(ruta, opciones = {}) {
+  const r = await fetch(API + ruta, {
+    credentials: 'same-origin',
+    ...opciones,
+    headers: opciones.body ? { 'Content-Type': 'application/json' } : undefined,
+  });
+  if (r.status === 401) {
+    // La sesión del portal venció con la pestaña abierta.
+    location.href = '/?volver=' + encodeURIComponent(location.pathname);
+    throw new Error('sesión vencida');
+  }
+  let d = null;
+  try { d = await r.json(); } catch (e) { /* cuerpo vacío */ }
+  if (!r.ok || !d || d.ok === false) {
+    const err = new Error((d && d.error) || ('HTTP ' + r.status));
+    err.status = r.status;
+    err.datos = d;
+    throw err;
+  }
+  return d;
+}
+
+/**
+ * Pisa el objeto en el lugar con lo que devolvió el servidor. No se reemplaza
+ * por uno nuevo porque varias funciones tienen referencias al mismo objeto
+ * (renderDetalle, los update*), y quedarían mirando la versión vieja.
+ */
+function aplicarRespuesta(cc, nuevo) {
+  Object.keys(cc).forEach(k => { if (!(k in nuevo)) delete cc[k]; });
+  Object.assign(cc, nuevo);
+  return cc;
+}
+
 async function cargarDatos() {
   mostrarCargando(true);
   try {
-    const res = await fetch(`${API_URL}?action=getAll_CC`);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
+    const data = await apiCC('/datos');
     db.ccs = data.ccs || [];
     db.counter = db.ccs.reduce((max, cc) => {
       const match = cc.numero && cc.numero.match(/CC (\d+)\/(\d+)/);
@@ -874,45 +916,87 @@ async function cargarDatos() {
   renderLista();
 }
 
-async function guardarCC_remoto(cc, notificar=false) {
+/**
+ * Guarda un cambio. Manda la `version` que tenía al cargarlo: si otra persona lo
+ * guardó en el medio, el servidor contesta 409 en vez de pisar lo suyo.
+ * Al crear, el número (CC NNN/AAAA) lo asigna el servidor y vuelve en la
+ * respuesta; dos personas creando a la vez ya no pueden sacar el mismo.
+ */
+async function guardarCC_remoto(cc) {
   try {
-    const res = await fetch(API_URL, {
+    const { cc: guardado } = await apiCC('/cambio', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: 'action=saveCC&data=' + encodeURIComponent(JSON.stringify(cc))
+      body: JSON.stringify({ cc, version: cc.version }),
     });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    if (data.ok && notificar) {
-      try {
-        await fetch(API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: 'action=notifyCC&data=' + encodeURIComponent(JSON.stringify(cc))
-        });
-      } catch(e) { /* mail error no bloquea */ }
+    aplicarRespuesta(cc, guardado);
+    return true;
+  } catch (e) {
+    if (e.status === 409) {
+      showToast('Otra persona guardó este cambio mientras lo editabas. Se recargaron los datos: volvé a aplicar tu edición.');
+      const abierto = ccActivaId;
+      await cargarDatos();
+      if (abierto && db.ccs.some(c => c.id === abierto)) abrirCC(abierto);
+      return false;
     }
-    return data.ok;
-  } catch(e) {
     console.error('Error guardando CC:', e);
-    showToast('Error al guardar. Verificá la conexión.');
+    showToast('Error al guardar: ' + e.message);
     return false;
   }
 }
 
 async function eliminarCC_remoto(id) {
   try {
-    const res = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: 'action=deleteCC&id=' + encodeURIComponent(id)
-    });
-    const data = await res.json();
-    return data.ok;
-  } catch(e) {
-    showToast('Error al eliminar.');
+    await apiCC('/cambio/' + encodeURIComponent(id), { method: 'DELETE' });
+    return true;
+  } catch (e) {
+    showToast(e.status === 403
+      ? 'Solo un administrador puede eliminar un Control de Cambios.'
+      : 'Error al eliminar: ' + e.message);
     return false;
   }
+}
+
+/**
+ * Día del corte: mientras la app nueva no escribió nada, a un administrador se
+ * le ofrece traer los datos finales de la planilla (el servidor la lee en vivo).
+ * Después de la primera escritura el servidor se niega, y este aviso ya no sale.
+ */
+async function ofrecerDatosFinales() {
+  const rol = sesion && sesion.recursos && sesion.recursos['control-cambios']
+    ? sesion.recursos['control-cambios'].rol : null;
+  if (rol !== 'administrador') return;
+  let est;
+  try { est = await apiCC('/estado'); } catch (e) { return; }
+  if (est.escritos_por_la_app || est.evidencias_en_base) return;
+
+  const ph = document.getElementById('placeholder');
+  if (!ph || document.getElementById('panelDatosFinales')) return;
+  const panel = document.createElement('div');
+  panel.id = 'panelDatosFinales';
+  panel.style.cssText = 'margin-top:20px;max-width:460px;padding:16px;border:1px solid #c8410a;border-radius:6px;background:#fff7f2;text-align:left;';
+  panel.innerHTML = `
+    <div style="font-weight:700;margin-bottom:6px;">Traer los datos finales de la planilla</div>
+    <div style="font-size:12px;line-height:1.5;margin-bottom:10px;">
+      Control de Cambios ya guarda en el servidor. Antes de empezar a usarlo, traé lo último que quedó en la
+      planilla: se copian los cambios tal como están ahora y se quitan los que se borraron allá.
+      Se puede hacer mientras nadie haya guardado todavía en la app nueva.
+    </div>
+    <button class="btn btn-primary btn-sm" id="btnDatosFinales">Traer datos finales</button>`;
+  ph.appendChild(panel);
+  document.getElementById('btnDatosFinales').onclick = async () => {
+    if (!confirm('Se van a copiar los cambios que hay ahora en la planilla. ¿Continuar?')) return;
+    const btn = document.getElementById('btnDatosFinales');
+    btn.disabled = true; btn.textContent = 'Trayendo…';
+    try {
+      const r = await apiCC('/resembrar', { method: 'POST' });
+      showToast(`Listo: ${r.copiados} cambio(s) copiados` + (r.eliminados && r.eliminados.length ? `, ${r.eliminados.length} quitado(s)` : ''));
+      panel.remove();
+      await cargarDatos();
+    } catch (e) {
+      showToast('No se pudo traer: ' + e.message);
+      btn.disabled = false; btn.textContent = 'Traer datos finales';
+    }
+  };
 }
 
 function mostrarCargando(show) {
@@ -1654,35 +1738,29 @@ async function guardarCC(ccId) {
   cc.fechaCierre       = document.getElementById('f_fechaCierre').value;
   cc.obsCierre         = document.getElementById('f_obsCierre').value;
 
-  // Check responsables para notificar
-  const respParaNotif = (cc.responsables || []).filter(r =>
-    r.mail && r.mail.includes('@') && r.tarea && r.plazo && !r._notificado
-  );
-
   showToast('Guardando...');
   const ok = await guardarCC_remoto(cc);
   if (ok) {
-    if (respParaNotif.length > 0) {
-      try {
-        const ccNotif = Object.assign({}, cc, { responsables: respParaNotif });
-        await fetch(API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: 'action=notifyCC&data=' + encodeURIComponent(JSON.stringify(ccNotif))
-        });
-        respParaNotif.forEach(r => r._notificado = true);
-        await guardarCC_remoto(cc);
-        showToast(`${cc.numero} guardado ✔ · ${respParaNotif.length} mail(s) enviado(s)`);
-      } catch(e) {
-        showToast(`${cc.numero} guardado ✔ (mail no enviado)`);
+    // A quién avisar lo decide el servidor mirando lo guardado: tareas con mail,
+    // tarea y plazo que todavía no se notificaron. Él marca _notificado solo en
+    // las que efectivamente salieron. Antes lo decidía el navegador y marcaba
+    // aunque el mail hubiera fallado.
+    try {
+      const r = await apiCC(`/cambio/${cc.id}/aviso-asignacion`, { method: 'POST' });
+      if (r.cc) aplicarRespuesta(cc, r.cc);
+      if (r.enviados) {
+        showToast(`${cc.numero} guardado ✔ · ${r.enviados} mail(s) enviado(s)`);
+      } else if (r.fallidos && r.fallidos.length) {
+        showToast(`${cc.numero} guardado ✔ (no se pudo avisar a: ${r.fallidos.join(', ')})`);
+      } else {
+        showToast(`${cc.numero} guardado ✔`);
       }
-    } else {
-      showToast(`${cc.numero} guardado ✔`);
+    } catch (e) {
+      showToast(`${cc.numero} guardado ✔ (aviso no enviado: ${e.message})`);
     }
     renderLista();
-  } else {
-    showToast('Error al guardar. Intentá de nuevo.');
   }
+  // Si no se guardó, guardarCC_remoto ya mostró el motivo.
 }
 
 async function avanzarEstado(ccId) {
@@ -1980,26 +2058,19 @@ async function subirEvidencias(ccId, files) {
     try {
       const compressed = await comprimirImagen(files[i]);
       status.textContent = 'Subiendo ' + (i+1) + '/' + total + ' (' + compressed.sizeKB + 'KB)...';
-      const ccName = cc.numero.replace(/[\s\/]/g, '_');
-      const res = await fetch(API_URL, {
+      // Va al servidor, no a Drive. El servidor la guarda, la agrega al cambio y
+      // devuelve el cambio actualizado: no hace falta un segundo guardado.
+      const { cc: actualizado } = await apiCC(`/cambio/${cc.id}/evidencias`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'action=uploadImg&imgData=' + encodeURIComponent(compressed.base64) +
-              '&filename=' + encodeURIComponent(compressed.nombre) +
-              '&ncNumero=' + encodeURIComponent(ccName)
+        body: JSON.stringify({ nombre: compressed.nombre, tipo: 'image/jpeg', contenido: compressed.base64 }),
       });
-      const data = await res.json();
-      if (data.ok) {
-        cc.evidencias.push({ fileId: data.fileId, thumbUrl: data.url, viewUrl: data.viewUrl, nombre: compressed.nombre, fecha: new Date().toISOString().split('T')[0], sizeKB: compressed.sizeKB });
-        subidas++;
-      } else showToast('Error al subir ' + compressed.nombre);
-    } catch(e) { showToast('Error: ' + e.message); }
+      aplicarRespuesta(cc, actualizado);
+      subidas++;
+    } catch(e) { showToast('Error al subir ' + files[i].name + ': ' + e.message); }
   }
   if (subidas > 0) {
-    status.textContent = 'Guardando...';
-    const ok = await guardarCC_remoto(cc);
-    if (ok) { renderDetalle(cc); showToast(subidas + ' foto(s) subida(s) ✔'); }
-    else showToast('Error al guardar evidencias');
+    renderDetalle(cc);
+    showToast(subidas + ' foto(s) subida(s) ✔');
   }
   status.textContent = '';
 }
@@ -2171,8 +2242,20 @@ function showToast(msg) {
   window._toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
 }
 
-// Init
-cargarDatos();
+// Init. La identidad la da el portal: esta app no tenia ninguna, y guardaba sin
+// saber quien. Sin sesion se vuelve al portal, que es donde esta el acceso.
+(async () => {
+  try {
+    const r = await fetch('/api/auth/yo', { credentials: 'same-origin' });
+    if (!r.ok) { location.href = '/?volver=' + encodeURIComponent(location.pathname); return; }
+    sesion = await r.json();
+  } catch (e) {
+    showToast('No se pudo verificar la sesión: ' + e.message);
+    return;
+  }
+  await cargarDatos();
+  await ofrecerDatosFinales();
+})();
 </script>
 </body>
 </html>

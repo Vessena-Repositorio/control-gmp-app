@@ -5,6 +5,7 @@ import { exigirPermiso } from '../lib/acceso.js';
 import { auditar } from '../lib/sesiones.js';
 import { hayCorreo, enviar } from '../lib/correo.js';
 import { relojLocal, comoDia } from '../lib/tareas.js';
+import { descargar } from '../lib/origen.js';
 import { dma, esc, BASE, PREFIJO } from '../lib/avisos-control-cambios.js';
 
 /**
@@ -400,9 +401,10 @@ rutasControlCambios.get('/evidencias/:id', leer, async (req, res, next) => {
 /**
  * POST /api/control-cambios/resembrar
  *
- * Vuelve a copiar los cambios desde la replica. Es el paso del dia del corte:
- * la siembra de la migracion es una foto del dia del deploy, y la app siguio
- * guardando en el Apps Script despues.
+ * Vuelve a copiar los cambios leyendo la planilla en vivo (getAll_CC). Es el paso
+ * del dia del corte: la siembra de la migracion es una foto del dia del deploy, y
+ * la app siguio guardando en el Apps Script despues. La marca que deja sigue
+ * siendo 'resembrado desde la replica' para no cambiar MARCAS_DE_SIEMBRA.
  *
  * Se niega si la app ya escribio algo aca (un cambio guardado por una persona o
  * una evidencia subida): desde ese momento la base es la fuente de verdad y la
@@ -418,6 +420,30 @@ rutasControlCambios.get('/evidencias/:id', leer, async (req, res, next) => {
  * numero eliminado queda en cc_actividad.
  */
 rutasControlCambios.post('/resembrar', administrar, async (req, res, next) => {
+    // Se lee la planilla EN VIVO y no la replica. La replica corre cada 15
+    // minutos y en el corte se apaga: copiar de ahi perderia lo que alguien haya
+    // guardado en el Apps Script en el ultimo tramo antes del cambio.
+    const origen = process.env.ORIGEN_NC;
+    if (!origen) {
+        return res.status(500).json({ ok: false, error: 'falta ORIGEN_NC: no se puede leer la planilla' });
+    }
+    let lista;
+    try {
+        const datos = await descargar(`${origen}?action=getAll_CC`);
+        if (datos?.ok === false) throw new Error(datos.error || 'el origen respondio ok=false');
+        lista = Array.isArray(datos?.ccs)
+            ? datos.ccs.filter((x) => x && typeof x === 'object' && !Array.isArray(x))
+            : null;
+    } catch (err) {
+        // Sin planilla no se toca nada: resembrar con datos parciales o viejos es
+        // peor que no resembrar.
+        return res.status(502).json({ ok: false, error: `no se pudo leer la planilla: ${err.message}` });
+    }
+    if (!lista || !lista.length) {
+        // Una lista vacia casi siempre es una falla del origen, no un borrado real.
+        return res.status(409).json({ ok: false, error: 'la planilla no devolvio cambios: no se toca nada' });
+    }
+
     try {
         const resultado = await enTransaccion(async (c) => {
             await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['cc_cambios']);
@@ -433,29 +459,32 @@ rutasControlCambios.post('/resembrar', administrar, async (req, res, next) => {
             }
 
             const { rows: antes } = await c.query('SELECT count(*)::int AS n FROM cc_cambios');
-            const { rows: copiados } = await c.query(
-                `INSERT INTO cc_cambios (id, numero, estado, anio, datos, actualizado_por)
-                 SELECT x.id, x.raw->>'numero',
-                        coalesce(nullif(x.raw->>'estado', ''), 'Solicitado'),
-                        substring(x.raw->>'fechaSolicitud' from '^([0-9]{4})')::int,
-                        jsonb_set(x.raw, '{id}', to_jsonb(x.id)),
-                        'resembrado desde la replica'
-                 FROM (
-                     SELECT CASE WHEN d.raw->>'id' ~ '^[0-9]{1,15}$'
-                                 THEN (d.raw->>'id')::bigint
-                                 ELSE 900000000000000 + d.id END AS id,
-                            d.raw::jsonb AS raw
-                     FROM documentos d
-                     WHERE d.dominio = 'control_cambios' AND d.coleccion = 'ccs'
-                       AND json_typeof(d.raw) = 'object'
-                 ) x
-                 ON CONFLICT (id) DO UPDATE
-                    SET numero = EXCLUDED.numero, estado = EXCLUDED.estado, anio = EXCLUDED.anio,
-                        datos = EXCLUDED.datos, version = cc_cambios.version + 1,
-                        actualizado_en = now(), actualizado_por = EXCLUDED.actualizado_por
-                 RETURNING id`
-            );
-            if (!copiados.length) throw error(409, 'la replica no tiene cambios: no se toca nada');
+            const copiados = [];
+            for (let pos = 0; pos < lista.length; pos++) {
+                const raw = lista[pos];
+                let id = /^\d{1,15}$/.test(String(raw.id ?? '')) ? Number(raw.id) : null;
+                if (id === null && raw.numero) {
+                    // Sin id numerico: se reconoce por numero, para no duplicar el
+                    // que la siembra guardo con un id sintetico.
+                    const { rows: r0 } = await c.query('SELECT id FROM cc_cambios WHERE numero = $1 LIMIT 1', [raw.numero]);
+                    id = r0[0] ? Number(r0[0].id) : null;
+                }
+                if (id === null) id = 900000000000000 + pos;
+
+                const datos = { ...raw, id };
+                const { rows: r1 } = await c.query(
+                    `INSERT INTO cc_cambios (id, numero, estado, anio, datos, actualizado_por)
+                     VALUES ($1,$2,$3,$4,$5,'resembrado desde la replica')
+                     ON CONFLICT (id) DO UPDATE
+                        SET numero = EXCLUDED.numero, estado = EXCLUDED.estado, anio = EXCLUDED.anio,
+                            datos = EXCLUDED.datos, version = cc_cambios.version + 1,
+                            actualizado_en = now(), actualizado_por = EXCLUDED.actualizado_por
+                     RETURNING id`,
+                    [id, raw.numero || null, String(raw.estado || '') || 'Solicitado',
+                     anioDe(raw.fechaSolicitud), JSON.stringify(datos)]
+                );
+                copiados.push(r1[0]);
+            }
 
             const ids = copiados.map((r) => r.id);
 

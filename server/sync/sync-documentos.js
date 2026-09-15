@@ -23,13 +23,14 @@ const DOMINIOS = [
         env: 'ORIGEN_NC',
         peticiones: [{ query: '?action=getAll', colecciones: ['ncs'] }],
     },
-    {
-        // Comparte el Apps Script con no conformidades, pero es otra accion y
-        // otro dominio: conviene que fallen y se cuenten por separado.
-        dominio: 'control_cambios',
-        env: 'ORIGEN_NC',
-        peticiones: [{ query: '?action=getAll_CC', colecciones: ['ccs'] }],
-    },
+    // control_cambios SE APAGO el 15/09/2026: Postgres paso a ser su fuente de
+    // verdad y la app escribe en /api/control-cambios (tabla cc_cambios).
+    //
+    // Volver a habilitarla no pisaria los datos de la app -escribe en
+    // `documentos`, y la app lee `cc_cambios`- pero dejaria una copia vieja de la
+    // planilla conviviendo con la buena. El dia del corte los datos finales se
+    // tomaron de la planilla en vivo con POST /api/control-cambios/resembrar, no
+    // de esta replica.
     // estabilidad SE APAGO el 07/09/2026: Postgres paso a ser su fuente de
     // verdad y la app escribe en /api/estabilidad/datos.
     //
