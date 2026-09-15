@@ -2387,7 +2387,7 @@ function NewEntry({ specs, entries, acciones, usuario, navigate }) {
         <Field label="Hora ingreso muestra (a control)">
           <Input type="time" value={form.timeIn} onChange={e => setForm(f => ({ ...f, timeIn: e.target.value }))} />
         </Field>
-        <Field label="Hora fin de análisis">
+        <Field label="Hora fin de análisis (se completa al guardar)">
           <Input type="time" value={form.timeEnd} onChange={e => setForm(f => ({ ...f, timeEnd: e.target.value }))} />
         </Field>
       </div>
@@ -2694,10 +2694,11 @@ function Detail({ entry: initialEntry, specs, entries, acciones, puede, usuario,
   const campos = (extra = {}) => ({ results, observations, timeFactory, timeIn, timeEnd, ...extra });
 
   const saveResults = async (exitAfter = false) => {
-    // Al guardar y salir, si no hay hora fin la marca en ese momento (fin del análisis)
-    const finalTimeEnd = (exitAfter && !timeEnd) ? nowTime() : timeEnd;
+    // La hora de fin la pone el servidor al guardar el análisis completo (todos
+    // los resultados, sin retest pendiente), con cualquiera de los dos botones.
+    // Antes la marcaba solo "Guardar y volver", aunque faltaran resultados.
     setOcupado(true);
-    const m = await acciones.guardarMuestra(liveEntry.id, campos({ timeEnd: finalTimeEnd }));
+    const m = await acciones.guardarMuestra(liveEntry.id, campos());
     setOcupado(false);
     if (!m) return;
     // Lo que quedó guardado: el servidor normaliza la coma decimal y descarta un
@@ -2714,7 +2715,7 @@ function Detail({ entry: initialEntry, specs, entries, acciones, puede, usuario,
     setOcupado(true);
     const m = await acciones.disponer(liveEntry.id, status, campos());
     setOcupado(false);
-    if (m) setResults(m.results);
+    if (m) { setResults(m.results); setTimeEnd(m.timeEnd); }
   };
 
   const borrar = async () => {
@@ -2815,7 +2816,7 @@ function Detail({ entry: initialEntry, specs, entries, acciones, puede, usuario,
           <Field label="Hora ingreso muestra (a control)">
             <Input type="time" value={timeIn} onChange={e => setTimeIn(e.target.value)} disabled={!editable} />
           </Field>
-          <Field label="Hora fin de análisis">
+          <Field label="Hora fin de análisis (se completa al guardar)">
             <div style={{ display: "flex", gap: 6 }}>
               <Input type="time" value={timeEnd} onChange={e => setTimeEnd(e.target.value)} disabled={!editable} style={{ flex: 1 }} />
               {editable && (

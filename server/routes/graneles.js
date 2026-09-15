@@ -335,6 +335,7 @@ rutasGraneles.post('/muestras', cargar, async (req, res, next) => {
                 parameters: e.parametros || [],
             };
 
+            const resultados = armarResultados(foto.parameters, m.results);
             const { rows } = await c.query(
                 `INSERT INTO gra_muestras
                     (id, lote, producto_code, especificacion, fecha, analista, hora_fabrica,
@@ -344,8 +345,8 @@ rutasGraneles.post('/muestras', cargar, async (req, res, next) => {
                  RETURNING *`,
                 [
                     nuevoId('gm'), lote, codigo, JSON.stringify(foto), fechaValida(m.date), usuario,
-                    horaValida(m.timeFactory), horaValida(m.timeIn), horaValida(m.timeEnd),
-                    JSON.stringify(armarResultados(foto.parameters, m.results)),
+                    horaValida(m.timeFactory), horaValida(m.timeIn), horaFinAlGuardar(m.timeEnd, resultados),
+                    JSON.stringify(resultados),
                     String(m.observations || '').trim() || null, usuario,
                     // La persona, para encontrar su firma al imprimir.
                     req.usuario.id,
@@ -362,14 +363,36 @@ rutasGraneles.post('/muestras', cargar, async (req, res, next) => {
     }
 });
 
+/**
+ * Hora de fin de analisis al guardar. Si no se cargo a mano y el analisis quedo
+ * completo -todos los resultados y ningun retest pendiente-, es la hora en que
+ * se guarda: ese es el fin del analisis, y para produccion el momento en que el
+ * granel pasa a estar apto (pedido de Claudia, 15/09/2026). Con resultados a
+ * medias no se marca: seria un fin que todavia no ocurrio. Una hora cargada a
+ * mano se respeta.
+ */
+function horaFinAlGuardar(enviada, resultados) {
+    const manual = horaValida(enviada);
+    if (manual) return manual;
+    const lista = Array.isArray(resultados) ? resultados : [];
+    const completo = lista.length > 0
+        && lista.every((r) => r.pass !== null)
+        && !lista.some((r) => r.type === 'numeric' && r.pass === false && r.retestValue === '');
+    if (!completo) return null;
+    return new Intl.DateTimeFormat('en-GB', {
+        timeZone: ZONA, hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+    }).format(new Date());
+}
+
 /** Campos que el analista puede cambiar mientras la muestra esta pendiente. */
 function camposEditables(m, fila) {
+    const resultados = armarResultados(fila.especificacion?.parameters, m.results);
     return {
         horaFabrica: horaValida(m.timeFactory),
         horaIngreso: horaValida(m.timeIn),
-        horaFin: horaValida(m.timeEnd),
+        horaFin: horaFinAlGuardar(m.timeEnd, resultados),
         observaciones: String(m.observations || '').trim() || null,
-        resultados: armarResultados(fila.especificacion?.parameters, m.results),
+        resultados,
     };
 }
 
