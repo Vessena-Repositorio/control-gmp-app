@@ -185,6 +185,19 @@ async function api(ruta, opciones = {}) {
   return d;
 }
 
+// Eliminar pide motivo: queda en la actividad de la app y en la auditoría,
+// con quién eliminó y cuándo. Devuelve el motivo, o null si se canceló.
+function pedirMotivo(que) {
+  const motivo = prompt(`Motivo de la eliminación de ${que} (obligatorio, queda registrado):`);
+  if (motivo === null) return null;
+  const limpio = motivo.replace(/\s+/g, " ").trim();
+  if (limpio.length < 10) {
+    alert("El motivo tiene que tener al menos 10 caracteres. No se eliminó nada.");
+    return null;
+  }
+  return limpio;
+}
+
 const ROL_LABEL = {
   administrador: "Administrador", aprobador: "Aprobador", revisor: "Revisor",
   operador: "Operador", vista: "Visualización",
@@ -1307,8 +1320,8 @@ function App() {
       setSpecs(prev => prev.some(s => s.id === d.spec.id) ? prev.map(s => (s.id === d.spec.id ? d.spec : s)) : [...prev, d.spec]);
       return d.spec;
     }, "Especificación guardada"),
-    borrarSpec: (id) => escribir(async () => {
-      await api(`/especificaciones/${encodeURIComponent(id)}`, { method: "DELETE" });
+    borrarSpec: (id, motivo) => escribir(async () => {
+      await api(`/especificaciones/${encodeURIComponent(id)}`, { method: "DELETE", body: JSON.stringify({ motivo }) });
       setSpecs(prev => prev.filter(s => s.id !== id));
       return true;
     }, "Especificación eliminada"),
@@ -1327,8 +1340,8 @@ function App() {
       reemplazarMuestra(d.muestra);
       return d.muestra;
     }, status === STATUS.APPROVED ? "Lote aprobado" : "Lote rechazado"),
-    borrarMuestra: (id) => escribir(async () => {
-      await api(`/muestras/${encodeURIComponent(id)}`, { method: "DELETE" });
+    borrarMuestra: (id, motivo) => escribir(async () => {
+      await api(`/muestras/${encodeURIComponent(id)}`, { method: "DELETE", body: JSON.stringify({ motivo }) });
       setEntries(prev => prev.filter(e => e.id !== id));
       return true;
     }, "Muestra eliminada"),
@@ -1988,9 +2001,10 @@ function SpecsManager({ specs, onSave, onDelete, canAdmin }) {
 
   const handleDelete = async (id) => {
     const s = specs.find(x => x.id === id);
-    if (confirm(`¿Eliminar la especificación ${s ? s.code : ""}? Las muestras ya cargadas conservan la especificación con la que se evaluaron.`)) {
-      await onDelete(id);
-    }
+    if (!confirm(`¿Eliminar la especificación ${s ? s.code : ""}? Las muestras ya cargadas conservan la especificación con la que se evaluaron.`)) return;
+    const motivo = pedirMotivo(`la especificación ${s ? s.code : ""}`);
+    if (!motivo) return;
+    await onDelete(id, motivo);
   };
 
   if (editing !== null) {
@@ -2720,8 +2734,10 @@ function Detail({ entry: initialEntry, specs, entries, acciones, puede, usuario,
 
   const borrar = async () => {
     if (!confirm(`¿Eliminar la muestra del lote ${liveEntry.batchCode}? Queda registrado quién la eliminó.`)) return;
+    const motivo = pedirMotivo(`la muestra del lote ${liveEntry.batchCode}`);
+    if (!motivo) return;
     setOcupado(true);
-    const ok = await acciones.borrarMuestra(liveEntry.id);
+    const ok = await acciones.borrarMuestra(liveEntry.id, motivo);
     setOcupado(false);
     if (ok) navigate("bitacora");
   };

@@ -276,7 +276,21 @@ rutasGraneles.post('/especificaciones', administrar, async (req, res, next) => {
     }
 });
 
+/**
+ * Eliminar pide motivo (pedido de Claudia, 15/09/2026). Queda en la actividad de
+ * la app y en la auditoria junto con quien elimino y cuando: un registro GMP que
+ * desaparece tiene que poder explicarse.
+ */
+function motivoEliminacion(req) {
+    const motivo = String(req.body?.motivo || '').replace(/\s+/g, ' ').trim();
+    if (motivo.length < 10) throw fallo(400, 'escribí el motivo de la eliminación (al menos 10 caracteres)');
+    if (motivo.length > 500) throw fallo(400, 'el motivo es demasiado largo (hasta 500 caracteres)');
+    return motivo;
+}
+
 rutasGraneles.delete('/especificaciones/:id', administrar, async (req, res, next) => {
+    let motivo;
+    try { motivo = motivoEliminacion(req); } catch (e) { return res.status(e.status).json({ ok: false, error: e.message }); }
     try {
         const usuario = req.usuario.nombre;
         const borrada = await enTransaccion(async (c) => {
@@ -284,7 +298,8 @@ rutasGraneles.delete('/especificaciones/:id', administrar, async (req, res, next
                 'DELETE FROM gra_especificaciones WHERE id = $1 RETURNING code, name', [req.params.id]
             );
             if (rows[0]) {
-                await registrar(c, usuario, 'ELIMINAR', 'Especificación', `${rows[0].code} — ${rows[0].name}`);
+                await registrar(c, usuario, 'ELIMINAR', 'Especificación',
+                    `${rows[0].code} — ${rows[0].name} · motivo: ${motivo}`);
             }
             return rows[0];
         });
@@ -292,7 +307,8 @@ rutasGraneles.delete('/especificaciones/:id', administrar, async (req, res, next
 
         await auditar(req, {
             usuarioId: req.usuario.id, usuarioTxt: req.usuario.usuario,
-            accion: 'graneles_eliminar_especificacion', recurso: RECURSO, detalle: borrada.code,
+            accion: 'graneles_eliminar_especificacion', recurso: RECURSO,
+            detalle: `${borrada.code} · motivo: ${motivo}`,
         });
         res.json({ ok: true });
     } catch (err) {
@@ -471,6 +487,8 @@ rutasGraneles.post('/muestras/:id/disposicion', aprobar, async (req, res, next) 
 });
 
 rutasGraneles.delete('/muestras/:id', administrar, async (req, res, next) => {
+    let motivo;
+    try { motivo = motivoEliminacion(req); } catch (e) { return res.status(e.status).json({ ok: false, error: e.message }); }
     try {
         const usuario = req.usuario.nombre;
         const borrada = await enTransaccion(async (c) => {
@@ -480,7 +498,7 @@ rutasGraneles.delete('/muestras/:id', administrar, async (req, res, next) => {
             );
             if (rows[0]) {
                 await registrar(c, usuario, 'ELIMINAR', 'Muestra',
-                    `${rows[0].lote} (${rows[0].producto_code}, ${rows[0].estado})`);
+                    `${rows[0].lote} (${rows[0].producto_code}, ${rows[0].estado}) · motivo: ${motivo}`);
             }
             return rows[0];
         });
@@ -488,7 +506,8 @@ rutasGraneles.delete('/muestras/:id', administrar, async (req, res, next) => {
 
         await auditar(req, {
             usuarioId: req.usuario.id, usuarioTxt: req.usuario.usuario,
-            accion: 'graneles_eliminar_muestra', recurso: RECURSO, detalle: borrada.lote,
+            accion: 'graneles_eliminar_muestra', recurso: RECURSO,
+            detalle: `${borrada.lote} · motivo: ${motivo}`,
         });
         res.json({ ok: true });
     } catch (err) {
