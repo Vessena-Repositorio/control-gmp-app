@@ -408,6 +408,14 @@ rutasControlCambios.get('/evidencias/:id', leer, async (req, res, next) => {
  * una evidencia subida): desde ese momento la base es la fuente de verdad y la
  * planilla quedo congelada, asi que copiar seria volver atras. A diferencia de
  * capacitaciones no hay `forzar`: si hiciera falta, se decide y se hace a mano.
+ *
+ * Tambien elimina los cambios que ya no estan en la replica, siempre que sigan
+ * siendo la siembra original. Son cambios borrados en la planilla despues de
+ * sembrar (el 15/09 se borraron tres de prueba): si quedaran, el corte arrancaria
+ * con registros que ya no existen en el origen. Solo pueden ser siembra, porque
+ * la guarda de arriba ya corto si la app escribio algo; igual se filtra por la
+ * marca, para que esta ruta nunca pueda borrar algo cargado desde la app. Cada
+ * numero eliminado queda en cc_actividad.
  */
 rutasControlCambios.post('/resembrar', administrar, async (req, res, next) => {
     try {
@@ -449,14 +457,37 @@ rutasControlCambios.post('/resembrar', administrar, async (req, res, next) => {
             );
             if (!copiados.length) throw error(409, 'la replica no tiene cambios: no se toca nada');
 
-            // Lo que esta en la base y ya no esta en la replica (un cambio borrado
-            // en la planilla) no se borra: se informa para decidirlo a mano.
+            const ids = copiados.map((r) => r.id);
+
+            // Borrados en la planilla despues de sembrar. Solo se eliminan si
+            // siguen siendo siembra: la marca es la condicion, no un supuesto.
+            const { rows: eliminados } = await c.query(
+                `DELETE FROM cc_cambios
+                  WHERE NOT (id = ANY($1::bigint[]))
+                    AND actualizado_por = ANY($2)
+                  RETURNING id, numero, datos->>'titulo' AS titulo`,
+                [ids, MARCAS_DE_SIEMBRA]
+            );
+            for (const e of eliminados) {
+                await registrar(c, req.usuario.nombre, 'ELIMINAR', e.numero,
+                    `ya no estaba en la planilla al resembrar: ${e.titulo || ''}`);
+            }
+
+            // Lo que quede fuera de la replica y no sea siembra no se toca: se
+            // informa para decidirlo a mano. Con la guarda de arriba no deberia
+            // haber nada.
             const { rows: soloEnBase } = await c.query(
                 `SELECT numero FROM cc_cambios WHERE NOT (id = ANY($1::bigint[])) ORDER BY numero`,
-                [copiados.map((r) => r.id)]
+                [ids]
             );
-            await registrar(c, req.usuario.nombre, 'RESEMBRAR', null, `${copiados.length} desde la replica`);
-            return { antes: antes[0].n, copiados: copiados.length, soloEnBase: soloEnBase.map((r) => r.numero) };
+            await registrar(c, req.usuario.nombre, 'RESEMBRAR', null,
+                `${copiados.length} desde la replica; ${eliminados.length} eliminado(s)`);
+            return {
+                antes: antes[0].n,
+                copiados: copiados.length,
+                eliminados: eliminados.map((e) => `${e.numero} — ${e.titulo || ''}`),
+                soloEnBase: soloEnBase.map((r) => r.numero),
+            };
         });
 
         res.json({ ok: true, ...resultado });
