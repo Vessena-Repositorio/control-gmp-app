@@ -484,30 +484,45 @@ const CODIGO_REGISTRO = 'REG-SOP-AC-029';
 const MAX_FIRMA = 700 * 1024;
 const IMAGEN_FIRMA = /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/]+=*$/;
 
+/** Nombre comparable: sin tildes, sin mayusculas y sin espacios de mas. */
+const nombreComparable = (s) => String(s || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase().replace(/\s+/g, ' ').trim();
+
 /**
  * La firma de una persona para un momento dado: la que estaba vigente cuando
  * firmo. Si en ese momento todavia no tenia ninguna registrada -muestras
  * firmadas antes de cargar las imagenes- se usa la primera que se registro, y
  * se avisa con `posterior` para que la hoja lo diga en vez de aparentar otra
  * cosa.
+ *
+ * Solo cuentan las firmas registradas a nombre de quien figura en el registro.
+ * Un usuario puede pasar de una persona a otra: analista.minilab@ fue de
+ * Lorena Romero y desde el 15/09/2026 lo usa Alexis Araujo. Sin esta condicion
+ * un ensayo de Lorena se imprimiria con la firma de Alexis. La comparacion
+ * ignora tildes, para que "Núñez" y "Nuñez" sean la misma persona.
  */
-async function firmaDe(usuarioId, instante) {
+async function firmaDe(usuarioId, instante, nombreEnRegistro) {
     if (!usuarioId) return null;
     const { rows } = await consultar(
-        `SELECT cargo, imagen, cargada_en,
-                (cargada_en <= $2 AND (reemplazada_en IS NULL OR reemplazada_en > $2)) AS vigente
-         FROM firmas
-         WHERE usuario_id = $1
-         ORDER BY vigente DESC, cargada_en ASC
-         LIMIT 1`,
-        [usuarioId, instante || new Date()]
+        `SELECT cargo, imagen, nombre, cargada_en, reemplazada_en
+         FROM firmas WHERE usuario_id = $1 ORDER BY cargada_en`,
+        [usuarioId]
     );
-    if (!rows[0]) return null;
+    const esperado = nombreComparable(nombreEnRegistro);
+    const propias = rows.filter((f) => esperado && nombreComparable(f.nombre) === esperado);
+    if (!propias.length) return null;
+
+    const t = new Date(instante || Date.now()).getTime();
+    const vigente = propias.find((f) =>
+        new Date(f.cargada_en).getTime() <= t &&
+        (!f.reemplazada_en || new Date(f.reemplazada_en).getTime() > t));
+    const f = vigente || propias[0];
     return {
-        cargo: rows[0].cargo,
-        imagen: rows[0].imagen,
-        imagenCargadaEn: rows[0].cargada_en,
-        posterior: !rows[0].vigente,
+        cargo: f.cargo,
+        imagen: f.imagen,
+        imagenCargadaEn: f.cargada_en,
+        posterior: !vigente,
     };
 }
 
@@ -526,8 +541,8 @@ rutasGraneles.get('/muestras/:id/impresion', leer, async (req, res, next) => {
         const dispuesta = f.estado !== 'pending';
 
         const [firmaAnalista, firmaDisposicion] = await Promise.all([
-            firmaDe(f.analista_id, f.creado_en),
-            dispuesta ? firmaDe(f.aprobado_por_id, f.aprobado_en) : null,
+            firmaDe(f.analista_id, f.creado_en, f.analista),
+            dispuesta ? firmaDe(f.aprobado_por_id, f.aprobado_en, f.aprobado_por) : null,
         ]);
 
         await registrar({ query: consultar }, req.usuario.nombre, 'IMPRIMIR', 'Muestra',
@@ -550,7 +565,19 @@ rutasGraneles.get('/muestras/:id/impresion', leer, async (req, res, next) => {
     }
 });
 
-/** GET /api/graneles/firmas — las personas con acceso a la app y su firma vigente. */
+/**
+ * El usuario con el que una persona entra al sistema. Hay personas con varias
+ * filas en `usuarios` -la del portal y las que trajeron las replicas de las
+ * apps viejas-, y la firma tiene que quedar en la que usa la sesion, que es la
+ * que elige el login: por mail, prefiriendo origen 'vessena' (routes/auth.js).
+ */
+const USUARIOS_DE_INGRESO = `
+    SELECT DISTINCT ON (lower(usuario)) id
+    FROM usuarios
+    WHERE activo
+    ORDER BY lower(usuario), (origen = 'vessena') DESC, id`;
+
+/** GET /api/graneles/firmas — una fila por persona con acceso, con su firma vigente. */
 rutasGraneles.get('/firmas', administrar, async (_req, res, next) => {
     try {
         const { rows } = await consultar(
@@ -560,6 +587,7 @@ rutasGraneles.get('/firmas', administrar, async (_req, res, next) => {
              JOIN usuarios u ON u.id = r.usuario_id
              LEFT JOIN firmas f ON f.usuario_id = u.id AND f.reemplazada_en IS NULL
              WHERE r.recurso = $1 AND u.activo
+               AND u.id IN (${USUARIOS_DE_INGRESO})
              ORDER BY u.nombre NULLS LAST, u.usuario`,
             [RECURSO]
         );
@@ -615,15 +643,22 @@ rutasGraneles.post('/firmas', administrar, async (req, res, next) => {
             if (!rows[0]) throw fallo(404, 'esa persona no tiene acceso a la app');
             const nombre = rows[0].nombre || rows[0].usuario;
 
+            const { rows: ingreso } = await c.query(
+                `SELECT 1 FROM (${USUARIOS_DE_INGRESO}) i WHERE i.id = $1`, [usuarioId]
+            );
+            if (!ingreso[0]) {
+                throw fallo(409, `${nombre} no entra al sistema con ese usuario: la firma tiene que quedar en su usuario del portal`);
+            }
+
             await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['firma:' + usuarioId]);
             await c.query(
                 'UPDATE firmas SET reemplazada_en = now() WHERE usuario_id = $1 AND reemplazada_en IS NULL',
                 [usuarioId]
             );
             const { rows: nueva } = await c.query(
-                `INSERT INTO firmas (usuario_id, cargo, imagen, cargada_por)
-                 VALUES ($1, $2, $3, $4) RETURNING cargada_en`,
-                [usuarioId, cargo, imagen, req.usuario.nombre]
+                `INSERT INTO firmas (usuario_id, cargo, imagen, cargada_por, nombre)
+                 VALUES ($1, $2, $3, $4, $5) RETURNING cargada_en`,
+                [usuarioId, cargo, imagen, req.usuario.nombre, nombre]
             );
             await registrar(c, req.usuario.nombre, 'FIRMA', 'Usuario', `${nombre} (${cargo})`);
             return { nombre, cargadaEn: nueva[0].cargada_en };
