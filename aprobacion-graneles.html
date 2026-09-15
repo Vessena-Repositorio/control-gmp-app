@@ -60,6 +60,7 @@ const Check = (p) => <Icon {...p}><path d="M20 6 9 17l-5-5"/></Icon>;
 const X = (p) => <Icon {...p}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></Icon>;
 const Printer = (p) => <Icon {...p}><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></Icon>;
 const PenLine = (p) => <Icon {...p}><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></Icon>;
+const Link2 = (p) => <Icon {...p}><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></Icon>;
 const Download = (p) => <Icon {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></Icon>;
 const ChevronDown = (p) => <Icon {...p}><path d="m6 9 6 6 6-6"/></Icon>;
 const ChevronRight = (p) => <Icon {...p}><path d="m9 18 6-6-6-6"/></Icon>;
@@ -1343,6 +1344,7 @@ function App() {
     { id: "kpis", label: "KPIs", icon: BarChart3 },
     { id: "stats", label: "Análisis", icon: BarChart3 },
     puede("administrar") && { id: "firmas", label: "Firmas", icon: PenLine },
+    puede("administrar") && { id: "integraciones", label: "Integraciones", icon: Link2 },
   ].filter(Boolean);
 
   if (estado === "cargando") return (
@@ -1431,8 +1433,191 @@ function App() {
         {view === "kpis" && <KpiDashboard entries={entries} specs={specs} />}
         {view === "stats" && <StatAnalysis entries={entries} specs={specs} />}
         {view === "firmas" && puede("administrar") && <FirmasManager avisar={avisar} />}
+        {view === "integraciones" && puede("administrar") && <IntegracionesManager avisar={avisar} />}
         {view === "detail" && <Detail entry={viewPayload} specs={specs} entries={entries} acciones={acciones} puede={puede} usuario={usuario} navigate={navigate} />}
       </main>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ══ INTEGRACIONES ═════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+// Claves para que otro sistema -hoy, el de producción- consulte si un lote de
+// granel está apto para envasado. La clave se muestra una sola vez; en la base
+// queda su huella. Solo sirve para consultar el estado de un lote.
+function IntegracionesManager({ avisar }) {
+  const [claves, setClaves] = useState(null);
+  const [error, setError] = useState("");
+  const [nombre, setNombre] = useState("Sistema de producción");
+  const [nueva, setNueva] = useState(null);
+  const [ocupado, setOcupado] = useState(false);
+
+  const cargarLista = useCallback(async () => {
+    try {
+      const d = await api("/integraciones");
+      setClaves(d.integraciones || []);
+      setError("");
+    } catch (e) {
+      setError(e.message);
+    }
+  }, []);
+  useEffect(() => { cargarLista(); }, [cargarLista]);
+
+  const crear = async () => {
+    if (!nombre.trim()) { avisar("Poné un nombre para reconocer la clave", "error"); return; }
+    setOcupado(true);
+    try {
+      const d = await api("/integraciones", { method: "POST", body: JSON.stringify({ nombre: nombre.trim() }) });
+      setNueva({ clave: d.clave, nombre: nombre.trim() });
+      await cargarLista();
+    } catch (e) {
+      avisar(e.message, "error");
+    }
+    setOcupado(false);
+  };
+
+  const revocar = async (c) => {
+    if (!confirm(`¿Revocar la clave "${c.nombre}"? El sistema que la usa deja de poder consultar desde este momento.`)) return;
+    setOcupado(true);
+    try {
+      await api(`/integraciones/${c.id}/revocar`, { method: "POST" });
+      avisar("Clave revocada");
+      await cargarLista();
+    } catch (e) {
+      avisar(e.message, "error");
+    }
+    setOcupado(false);
+  };
+
+  // En http de la red interna el portapapeles moderno no está disponible: se
+  // selecciona el texto y se usa el copiado clásico, que sí funciona.
+  const copiar = (idCampo) => {
+    const el = document.getElementById(idCampo);
+    if (!el) return;
+    el.focus(); el.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) {}
+    avisar(ok ? "Copiado" : "Seleccioná el texto y copialo con Ctrl+C", ok ? "ok" : "error");
+  };
+
+  const base = `${location.origin}/api/graneles/lotes`;
+  const celda = { padding: "8px 10px", verticalAlign: "top", fontSize: 13 };
+  const pre = { background: V.grayLight, border: `1px solid ${V.grayMid}`, borderRadius: 6, padding: "10px 12px", fontSize: 12, overflowX: "auto", margin: "6px 0 0", whiteSpace: "pre" };
+
+  if (error) return <Card><p style={{ color: "#991B1B", margin: 0 }}>No se pudieron cargar las integraciones: {error}</p></Card>;
+  if (!claves) return <Card><p style={{ margin: 0 }}>Cargando…</p></Card>;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <Card>
+        <h3 style={{ fontSize: 16, fontWeight: 700, margin: "0 0 4px" }}>Integraciones</h3>
+        <p style={{ fontSize: 12, color: V.gray, margin: "0 0 14px" }}>
+          Claves para que otro sistema consulte si un lote de granel está <strong>apto para envasado</strong>.
+          Con la clave solo se puede consultar el estado de un lote: no se ven los resultados ni se puede modificar nada.
+          Apto es el análisis guardado y conforme; la aprobación documental se informa aparte.
+        </p>
+
+        {nueva && (
+          <div style={{ border: "2px solid #F59E0B", background: "#FFFBEB", borderRadius: 8, padding: "12px 14px", marginBottom: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#92400E", marginBottom: 6 }}>
+              Clave para “{nueva.nombre}”: copiala ahora, no se vuelve a mostrar.
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <input id="claveNueva" readOnly value={nueva.clave} onFocus={e => e.target.select()}
+                style={{ flex: "1 1 320px", fontFamily: "monospace", fontSize: 13, padding: "7px 10px", borderRadius: 6, border: `1px solid ${V.grayMid}`, background: V.white }} />
+              <Btn size="sm" variant="secondary" onClick={() => copiar("claveNueva")}>Copiar</Btn>
+              <Btn size="sm" onClick={() => setNueva(null)}>Ya la copié</Btn>
+            </div>
+            <div style={{ fontSize: 11, color: "#92400E", marginTop: 6 }}>
+              Pasásela a quien configura el sistema por un medio directo. Si se pierde, se revoca y se crea otra.
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 16 }}>
+          <Field label="Nombre de la clave" style={{ flex: "1 1 260px" }}>
+            <Input value={nombre} onChange={e => setNombre(e.target.value)} maxLength={80} placeholder="Sistema de producción" />
+          </Field>
+          <Btn onClick={crear} disabled={ocupado}><Plus size={14} /> Crear clave</Btn>
+        </div>
+
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ background: V.grayLight }}>
+                {["Nombre", "Clave", "Creada", "Último uso", "Consultas", "Estado", ""].map(h => (
+                  <th key={h} style={{ padding: "8px 10px", textAlign: "left", fontWeight: 600, fontSize: 12, color: V.gray, borderBottom: `1px solid ${V.grayMid}` }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {claves.length === 0 && (
+                <tr><td colSpan={7} style={{ ...celda, color: V.gray }}>Todavía no se creó ninguna clave.</td></tr>
+              )}
+              {claves.map(c => (
+                <tr key={c.id} style={{ borderBottom: `1px solid ${V.grayMid}`, opacity: c.revocadaEn ? 0.6 : 1 }}>
+                  <td style={celda}><strong>{c.nombre}</strong></td>
+                  <td style={{ ...celda, fontFamily: "monospace" }}>{c.prefijo}…</td>
+                  <td style={celda}>{fechaHora(c.creadaEn)}<div style={{ fontSize: 11, color: V.gray }}>por {c.creadaPor}</div></td>
+                  <td style={celda}>{c.ultimoUso ? fechaHora(c.ultimoUso) : "—"}</td>
+                  <td style={celda}>{c.usos}</td>
+                  <td style={celda}>
+                    {c.revocadaEn
+                      ? <span style={{ color: "#991B1B", fontSize: 12 }}>Revocada el {fechaHora(c.revocadaEn)} por {c.revocadaPor}</span>
+                      : <span style={{ color: V.greenDark, fontWeight: 600, fontSize: 12 }}>Activa</span>}
+                  </td>
+                  <td style={celda}>
+                    {!c.revocadaEn && <Btn size="sm" variant="ghost" onClick={() => revocar(c)} disabled={ocupado}><X size={13} color="#991B1B" /> Revocar</Btn>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <Card>
+        <h3 style={{ fontSize: 14, fontWeight: 700, margin: "0 0 6px" }}>Cómo consulta el sistema de producción</h3>
+        <p style={{ fontSize: 12, color: V.gray, margin: 0 }}>Para quien programa el otro sistema. Con el lote y el granel que ya trae la etiqueta QR:</p>
+        <pre style={pre}>{`GET ${base}/{LOTE}/estado?granel={GRANEL}
+Authorization: Bearer {CLAVE}`}</pre>
+        <p style={{ fontSize: 12, color: V.gray, margin: "10px 0 0" }}>Respuesta (el campo que decide es <code>apto_envasado</code>):</p>
+        <pre style={pre}>{`{
+  "ok": true,
+  "lote": "L2609-014",
+  "granel": "G005908",
+  "producto": "Limpiador multiusos Lavanda",
+  "apto_envasado": true,
+  "estado": "conforme",
+  "detalle": "análisis conforme; aprobación documental pendiente",
+  "analista": "Alexis Araujo",
+  "hora_fin_analisis": "10:20",
+  "analisis_actualizado_en": "2026-09-15T13:20:00.000Z",
+  "disposicion": "pendiente",
+  "dispuesto_por": null,
+  "dispuesto_en": null,
+  "consultado_en": "2026-09-15T13:25:00.000Z"
+}`}</pre>
+        <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 10, fontSize: 12 }}>
+          <tbody>
+            {[
+              ["conforme", "Sí", "Análisis completo, con hora de fin, todo dentro de especificación (incluye retest OK). Puede estar pendiente la aprobación documental."],
+              ["en_analisis", "No", "Faltan resultados, un retest o la hora de fin de análisis."],
+              ["no_conforme", "No", "Hay parámetros fuera de especificación."],
+              ["rechazado", "No", "Control de Calidad rechazó el lote."],
+              ["granel_no_coincide", "No", "El lote está registrado con otro código de granel que el enviado."],
+              ["no_registrado", "No", "No hay muestra registrada de ese lote (responde 404)."],
+            ].map(([estado, apto, que]) => (
+              <tr key={estado} style={{ borderBottom: `1px solid ${V.grayMid}` }}>
+                <td style={{ padding: "6px 8px", fontFamily: "monospace", whiteSpace: "nowrap" }}>{estado}</td>
+                <td style={{ padding: "6px 8px", fontWeight: 700, color: apto === "Sí" ? V.greenDark : "#991B1B" }}>{apto}</td>
+                <td style={{ padding: "6px 8px", color: V.gray }}>{que}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
     </div>
   );
 }

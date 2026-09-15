@@ -3,7 +3,8 @@ import { consultar, enTransaccion } from '../db.js';
 import { exigirPermiso } from '../lib/acceso.js';
 import { PERMISOS_POR_ROL } from '../lib/permisos.js';
 import { auditar } from '../lib/sesiones.js';
-import { armarResultados, bloqueosDeAprobacion, limpiar, numero } from '../lib/graneles-reglas.js';
+import { createHash, randomBytes } from 'node:crypto';
+import { armarResultados, bloqueosDeAprobacion, limpiar, numero, passFinal } from '../lib/graneles-reglas.js';
 
 export const rutasGraneles = Router();
 
@@ -674,5 +675,214 @@ rutasGraneles.post('/firmas', administrar, async (req, res, next) => {
         });
     } catch (err) {
         responder(err, res, next);
+    }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   INTEGRACIONES — estado de un lote para el sistema de produccion
+   ═══════════════════════════════════════════════════════════════════════════ */
+//
+// El sistema de produccion es otro software: imprime la etiqueta QR (lote y
+// orden) que despues se lee en Control de Calidad, y antes de pasar un granel a
+// envasado pregunta aca si esta apto. Para produccion "apto" es el analisis
+// guardado y conforme, sin esperar la aprobacion documental: la respuesta
+// informa las dos cosas por separado para que nadie las confunda.
+
+const ALCANCE_ESTADO_LOTE = 'graneles:estado-lote';
+const huellaClave = (clave) => createHash('sha256').update(String(clave)).digest('hex');
+
+/**
+ * Middleware: exige una clave de integracion vigente con ese alcance. No usa la
+ * sesion ni da acceso a nada mas: la clave del sistema de produccion solo
+ * consulta el estado de un lote.
+ */
+function exigirClaveApi(alcance) {
+    return async (req, res, next) => {
+        const auth = req.get('authorization') || '';
+        const clave = auth.toLowerCase().startsWith('bearer ')
+            ? auth.slice(7).trim()
+            : String(req.get('x-api-key') || '').trim();
+        if (!clave) {
+            return res.status(401).json({ ok: false, error: 'falta la clave (encabezado Authorization: Bearer ...)' });
+        }
+        try {
+            const { rows } = await consultar(
+                `UPDATE api_claves SET ultimo_uso = now(), usos = usos + 1
+                 WHERE huella = $1 AND alcance = $2 AND revocada_en IS NULL
+                 RETURNING id, nombre`,
+                [huellaClave(clave), alcance]
+            );
+            if (!rows[0]) return res.status(401).json({ ok: false, error: 'clave invalida o revocada' });
+            req.integracion = rows[0];
+            next();
+        } catch (err) {
+            next(err);
+        }
+    };
+}
+
+/**
+ * La consulta puede venir desde el navegador de otra aplicacion. Se permite
+ * cualquier origen porque la autorizacion es la clave en el encabezado, no una
+ * cookie: otro sitio no puede usarla sin tenerla.
+ */
+function permitirOrigenes(_req, res, next) {
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Headers', 'Authorization, X-Api-Key');
+    res.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    next();
+}
+
+/** Lo que produccion necesita saber de una muestra, con las mismas reglas que la aprobacion. */
+function estadoParaProduccion(f) {
+    if (f.estado === 'rejected') {
+        return { apto: false, estado: 'rechazado', detalle: 'Control de Calidad rechazó el lote' };
+    }
+    const resultados = Array.isArray(f.resultados) ? f.resultados : [];
+    const motivos = bloqueosDeAprobacion(resultados, hora(f.hora_fin));
+    if (resultados.some((r) => passFinal(r) === false)) {
+        return { apto: false, estado: 'no_conforme', detalle: motivos.join('; ') };
+    }
+    if (motivos.length) {
+        return { apto: false, estado: 'en_analisis', detalle: motivos.join('; ') };
+    }
+    return {
+        apto: true,
+        estado: 'conforme',
+        detalle: f.estado === 'approved'
+            ? 'análisis conforme y aprobado documentalmente'
+            : 'análisis conforme; aprobación documental pendiente',
+    };
+}
+
+const DISPOSICION = { pending: 'pendiente', approved: 'aprobado', rejected: 'rechazado' };
+
+rutasGraneles.options('/lotes/:lote/estado', permitirOrigenes, (_req, res) => res.sendStatus(204));
+
+/**
+ * GET /api/graneles/lotes/:lote/estado[?granel=G000000]
+ * Encabezado: Authorization: Bearer <clave>
+ *
+ * `apto_envasado` es la respuesta que produccion usa para dejar pasar el
+ * granel. Si se manda `granel` y no coincide con el registrado para ese lote,
+ * no es apto: la etiqueta y la muestra no hablan del mismo producto.
+ */
+rutasGraneles.get('/lotes/:lote/estado', permitirOrigenes, exigirClaveApi(ALCANCE_ESTADO_LOTE), async (req, res, next) => {
+    const lote = String(req.params.lote || '').trim().toUpperCase();
+    const granel = String(req.query.granel || '').trim().toUpperCase();
+    const consultadoEn = new Date().toISOString();
+
+    try {
+        const { rows } = await consultar('SELECT * FROM gra_muestras WHERE lote = $1', [lote]);
+        if (!rows[0]) {
+            return res.status(404).json({
+                ok: false, lote, apto_envasado: false, estado: 'no_registrado',
+                detalle: 'Control de Calidad no tiene registrada una muestra de ese lote',
+                consultado_en: consultadoEn,
+            });
+        }
+        const f = rows[0];
+
+        if (granel && granel !== f.producto_code) {
+            return res.json({
+                ok: true, lote: f.lote, granel: f.producto_code, apto_envasado: false,
+                estado: 'granel_no_coincide',
+                detalle: `el lote está registrado con el granel ${f.producto_code}, no con ${granel}`,
+                consultado_en: consultadoEn,
+            });
+        }
+
+        const e = estadoParaProduccion(f);
+        res.json({
+            ok: true,
+            lote: f.lote,
+            granel: f.producto_code,
+            producto: f.especificacion?.name || '',
+            apto_envasado: e.apto,
+            estado: e.estado,
+            detalle: e.detalle,
+            analista: f.analista,
+            hora_fin_analisis: hora(f.hora_fin) || null,
+            analisis_actualizado_en: f.actualizado_en,
+            disposicion: DISPOSICION[f.estado] || f.estado,
+            dispuesto_por: f.aprobado_por || null,
+            dispuesto_en: f.aprobado_en || null,
+            consultado_en: consultadoEn,
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/** GET /api/graneles/integraciones — las claves creadas, sin la clave. */
+rutasGraneles.get('/integraciones', administrar, async (_req, res, next) => {
+    try {
+        const { rows } = await consultar(
+            `SELECT id, nombre, prefijo, creada_por, creada_en, revocada_por, revocada_en, ultimo_uso, usos
+             FROM api_claves WHERE alcance = $1 ORDER BY creada_en DESC`,
+            [ALCANCE_ESTADO_LOTE]
+        );
+        res.json({
+            ok: true,
+            integraciones: rows.map((c) => ({
+                id: Number(c.id), nombre: c.nombre, prefijo: c.prefijo,
+                creadaPor: c.creada_por, creadaEn: c.creada_en,
+                revocadaPor: c.revocada_por, revocadaEn: c.revocada_en,
+                ultimoUso: c.ultimo_uso, usos: Number(c.usos),
+            })),
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/**
+ * POST /api/graneles/integraciones  { nombre }
+ *
+ * Crea una clave y la devuelve UNA sola vez: en la base queda su huella.
+ */
+rutasGraneles.post('/integraciones', administrar, async (req, res, next) => {
+    const nombre = String(req.body?.nombre || '').trim();
+    if (!nombre || nombre.length > 80) {
+        return res.status(400).json({ ok: false, error: 'poné un nombre para reconocer la clave (hasta 80 caracteres)' });
+    }
+    const clave = 'vgr_' + randomBytes(32).toString('base64url');
+    try {
+        const { rows } = await consultar(
+            `INSERT INTO api_claves (nombre, alcance, huella, prefijo, creada_por)
+             VALUES ($1, $2, $3, $4, $5) RETURNING id, creada_en`,
+            [nombre, ALCANCE_ESTADO_LOTE, huellaClave(clave), clave.slice(0, 10), req.usuario.nombre]
+        );
+        await registrar({ query: consultar }, req.usuario.nombre, 'CLAVE_API', 'Integración', `creada: ${nombre}`);
+        await auditar(req, {
+            usuarioId: req.usuario.id, usuarioTxt: req.usuario.usuario,
+            accion: 'clave_api_creada', recurso: RECURSO, detalle: nombre,
+        });
+        res.json({ ok: true, clave, integracion: { id: Number(rows[0].id), nombre, creadaEn: rows[0].creada_en } });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/** POST /api/graneles/integraciones/:id/revocar */
+rutasGraneles.post('/integraciones/:id/revocar', administrar, async (req, res, next) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ ok: false, error: 'id invalido' });
+    try {
+        const { rows } = await consultar(
+            `UPDATE api_claves SET revocada_en = now(), revocada_por = $2
+             WHERE id = $1 AND alcance = $3 AND revocada_en IS NULL
+             RETURNING nombre`,
+            [id, req.usuario.nombre, ALCANCE_ESTADO_LOTE]
+        );
+        if (!rows[0]) return res.status(404).json({ ok: false, error: 'esa clave no existe o ya estaba revocada' });
+        await registrar({ query: consultar }, req.usuario.nombre, 'CLAVE_API', 'Integración', `revocada: ${rows[0].nombre}`);
+        await auditar(req, {
+            usuarioId: req.usuario.id, usuarioTxt: req.usuario.usuario,
+            accion: 'clave_api_revocada', recurso: RECURSO, detalle: rows[0].nombre,
+        });
+        res.json({ ok: true });
+    } catch (err) {
+        next(err);
     }
 });
