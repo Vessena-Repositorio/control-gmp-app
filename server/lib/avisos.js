@@ -61,6 +61,11 @@ async function accionesPendientes() {
     const { rows } = await consultar(
         `SELECT c.code, c.descripcion, c.responsable, c.responsable_email,
                 c.due_date, c.estado,
+                -- La fecha que se muestra sale formateada de la base y no de
+                -- JavaScript: el driver entrega un DATE como Date a medianoche
+                -- de la zona del contenedor, y pasarlo por toISOString puede
+                -- correrlo un dia. En un aviso de vencimiento eso no es cosmetico.
+                to_char(c.due_date, 'DD/MM/YYYY') AS vence,
                 (c.due_date - (now() AT TIME ZONE $1)::date) AS dias,
                 COALESCE(nc.code, d.code) AS origen
          FROM ncd_capa c
@@ -82,13 +87,24 @@ function describir(a) {
     return `vence en ${d} dia(s)`;
 }
 
+/**
+ * 'YYYY-MM-DD' de un DATE, para comparar dias ("ya corrio hoy").
+ *
+ * Con getters locales y no con toISOString: el driver arma el Date a medianoche
+ * de la zona del contenedor, y toISOString lo pasa a UTC. Si el contenedor esta
+ * adelantado respecto de UTC, la fecha retrocede un dia y la comparacion puede
+ * dar que hoy ya corrio cuando no, o al reves.
+ */
 function fechaCorta(v) {
-    return v instanceof Date ? v.toISOString().slice(0, 10) : String(v ?? '');
+    if (!(v instanceof Date)) return String(v ?? '').slice(0, 10);
+    const m = String(v.getMonth() + 1).padStart(2, '0');
+    const d = String(v.getDate()).padStart(2, '0');
+    return `${v.getFullYear()}-${m}-${d}`;
 }
 
 function comoTexto(acciones, titulo) {
     const lineas = acciones.map((a) =>
-        `- ${a.code} (${describir(a)}, ${fechaCorta(a.due_date)})\n` +
+        `- ${a.code} (${describir(a)}, vence el ${a.vence || 'sin fecha'})\n` +
         `  ${a.descripcion || ''}\n` +
         `  Responsable: ${a.responsable || 'sin asignar'}` +
         (a.origen ? ` | Origen: ${a.origen}` : '') +
@@ -109,6 +125,7 @@ function comoHtml(acciones, titulo) {
         const color = Number(a.dias) < 0 ? '#b42318' : '#475467';
         return `<tr>
             <td style="${celda}"><b>${esc(a.code)}</b></td>
+            <td style="${celda};white-space:nowrap">${esc(a.vence || 'sin fecha')}</td>
             <td style="${celda};color:${color}">${esc(describir(a))}</td>
             <td style="${celda}">${esc(a.descripcion)}</td>
             <td style="${celda}">${esc(a.responsable || 'sin asignar')}</td>
@@ -119,7 +136,8 @@ function comoHtml(acciones, titulo) {
         <h2 style="margin:0 0 12px">${esc(titulo)}</h2>
         <table style="border-collapse:collapse;font-size:14px">
           <thead><tr style="text-align:left;background:#f9fafb">
-            <th style="padding:6px 10px">Codigo</th><th style="padding:6px 10px">Plazo</th>
+            <th style="padding:6px 10px">Codigo</th><th style="padding:6px 10px">Vence</th>
+            <th style="padding:6px 10px">Plazo</th>
             <th style="padding:6px 10px">Accion</th><th style="padding:6px 10px">Responsable</th>
             <th style="padding:6px 10px">Estado</th>
           </tr></thead>
