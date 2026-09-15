@@ -16,6 +16,7 @@ import { rutasGraneles } from './routes/graneles.js';
 import { rutasCorreo } from './routes/correo.js';
 import { rutasEstabilidad } from './routes/estabilidad.js';
 import { rutasCapacitaciones } from './routes/capacitaciones.js';
+import { rutasControlCambios } from './routes/control-cambios.js';
 import { rutasEstado } from './routes/estado.js';
 import { rutasUsuarios } from './routes/usuarios.js';
 import { rutasAuth } from './routes/auth.js';
@@ -24,6 +25,7 @@ import { permitirArchivo } from './lib/acceso.js';
 import { REPLICAS } from './lib/dominios.js';
 import { revisarAvisosCapa } from './lib/avisos.js';
 import { revisarAvisosEstabilidad } from './lib/avisos-estabilidad.js';
+import { revisarAvisosControlCambios } from './lib/avisos-control-cambios.js';
 import { revisarRecordatoriosPlan, revisarInduccionesPendientes } from './lib/avisos-capacitaciones.js';
 import { revisarPendientesAprobacion } from './lib/avisos-envases.js';
 import { revisarGranelesPendientes, revisarGranelesResumen } from './lib/avisos-graneles.js';
@@ -126,6 +128,7 @@ app.use('/api/graneles', rutasGraneles);
 app.use('/api/correo', rutasCorreo);
 app.use('/api/estabilidad', rutasEstabilidad);
 app.use('/api/capacitaciones', rutasCapacitaciones);
+app.use('/api/control-cambios', rutasControlCambios);
 app.use('/api/estado', rutasEstado);
 app.use('/api/usuarios', rutasUsuarios);
 app.use('/api/auth', rutasAuth);
@@ -231,6 +234,7 @@ function arrancar() {
                 ['envases:aprobacion', revisarPendientesAprobacion],
                 ['graneles:pendientes', revisarGranelesPendientes],
                 ['graneles:resumen', revisarGranelesResumen],
+                ['control-cambios', revisarAvisosControlCambios],
             ];
             const revisarAvisos = () => {
                 // Cada una falla por separado: que una se caiga no puede dejar
