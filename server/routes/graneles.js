@@ -337,14 +337,17 @@ rutasGraneles.post('/muestras', cargar, async (req, res, next) => {
             const { rows } = await c.query(
                 `INSERT INTO gra_muestras
                     (id, lote, producto_code, especificacion, fecha, analista, hora_fabrica,
-                     hora_ingreso, hora_fin, resultados, observaciones, creado_por, actualizado_por)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12)
+                     hora_ingreso, hora_fin, resultados, observaciones, creado_por, actualizado_por,
+                     analista_id)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12,$13)
                  RETURNING *`,
                 [
                     nuevoId('gm'), lote, codigo, JSON.stringify(foto), fechaValida(m.date), usuario,
                     horaValida(m.timeFactory), horaValida(m.timeIn), horaValida(m.timeEnd),
                     JSON.stringify(armarResultados(foto.parameters, m.results)),
                     String(m.observations || '').trim() || null, usuario,
+                    // La persona, para encontrar su firma al imprimir.
+                    req.usuario.id,
                 ]
             );
 
@@ -426,10 +429,10 @@ rutasGraneles.post('/muestras/:id/disposicion', aprobar, async (req, res, next) 
                 `UPDATE gra_muestras SET
                     hora_fabrica = $1, hora_ingreso = $2, hora_fin = $3, observaciones = $4,
                     resultados = $5, estado = $6, aprobado_por = $7, aprobado_en = now(),
-                    actualizado_por = $7, actualizado_en = now()
+                    actualizado_por = $7, actualizado_en = now(), aprobado_por_id = $9
                  WHERE id = $8 RETURNING *`,
                 [v.horaFabrica, v.horaIngreso, v.horaFin, v.observaciones,
-                 JSON.stringify(v.resultados), body.status, usuario, fila.id]
+                 JSON.stringify(v.resultados), body.status, usuario, fila.id, req.usuario.id]
             );
 
             await registrar(c, usuario, body.status === 'approved' ? 'APROBAR' : 'RECHAZAR',
@@ -466,5 +469,175 @@ rutasGraneles.delete('/muestras/:id', administrar, async (req, res, next) => {
         res.json({ ok: true });
     } catch (err) {
         next(err);
+    }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FIRMAS E IMPRESION DEL REGISTRO
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+// Hoja impresa de cada ensayo, para el dossier fisico.
+const CODIGO_REGISTRO = 'REG-SOP-AC-029';
+
+// Tope del data URL: unos 500 KB de imagen. Una firma escaneada o fotografiada
+// y recortada pesa bastante menos; una foto entera del celular no es una firma.
+const MAX_FIRMA = 700 * 1024;
+const IMAGEN_FIRMA = /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/]+=*$/;
+
+/**
+ * La firma de una persona para un momento dado: la que estaba vigente cuando
+ * firmo. Si en ese momento todavia no tenia ninguna registrada -muestras
+ * firmadas antes de cargar las imagenes- se usa la primera que se registro, y
+ * se avisa con `posterior` para que la hoja lo diga en vez de aparentar otra
+ * cosa.
+ */
+async function firmaDe(usuarioId, instante) {
+    if (!usuarioId) return null;
+    const { rows } = await consultar(
+        `SELECT cargo, imagen, cargada_en,
+                (cargada_en <= $2 AND (reemplazada_en IS NULL OR reemplazada_en > $2)) AS vigente
+         FROM firmas
+         WHERE usuario_id = $1
+         ORDER BY vigente DESC, cargada_en ASC
+         LIMIT 1`,
+        [usuarioId, instante || new Date()]
+    );
+    if (!rows[0]) return null;
+    return {
+        cargo: rows[0].cargo,
+        imagen: rows[0].imagen,
+        imagenCargadaEn: rows[0].cargada_en,
+        posterior: !rows[0].vigente,
+    };
+}
+
+/**
+ * GET /api/graneles/muestras/:id/impresion
+ *
+ * Lo que va en la hoja impresa: la muestra, las dos firmas con su imagen y
+ * cargo, y quien imprime. Cada impresion queda en la actividad de la app: una
+ * copia en papel de un registro es algo que tiene que poder rastrearse.
+ */
+rutasGraneles.get('/muestras/:id/impresion', leer, async (req, res, next) => {
+    try {
+        const { rows } = await consultar('SELECT * FROM gra_muestras WHERE id = $1', [req.params.id]);
+        if (!rows[0]) return res.status(404).json({ ok: false, error: 'la muestra no existe' });
+        const f = rows[0];
+        const dispuesta = f.estado !== 'pending';
+
+        const [firmaAnalista, firmaDisposicion] = await Promise.all([
+            firmaDe(f.analista_id, f.creado_en),
+            dispuesta ? firmaDe(f.aprobado_por_id, f.aprobado_en) : null,
+        ]);
+
+        await registrar({ query: consultar }, req.usuario.nombre, 'IMPRIMIR', 'Muestra',
+            `${f.lote} (${f.producto_code}, ${f.estado})`);
+
+        res.json({
+            ok: true,
+            registro: CODIGO_REGISTRO,
+            muestra: filaAMuestra(f),
+            firmas: {
+                analista: { nombre: f.analista, firmadoEn: f.creado_en, ...(firmaAnalista || {}) },
+                disposicion: dispuesta
+                    ? { nombre: f.aprobado_por, firmadoEn: f.aprobado_en, ...(firmaDisposicion || {}) }
+                    : null,
+            },
+            impreso: { por: req.usuario.nombre, en: new Date().toISOString() },
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/** GET /api/graneles/firmas — las personas con acceso a la app y su firma vigente. */
+rutasGraneles.get('/firmas', administrar, async (_req, res, next) => {
+    try {
+        const { rows } = await consultar(
+            `SELECT u.id, u.nombre, u.usuario, r.rol,
+                    f.cargo, f.imagen, f.cargada_por, f.cargada_en
+             FROM usuario_recursos r
+             JOIN usuarios u ON u.id = r.usuario_id
+             LEFT JOIN firmas f ON f.usuario_id = u.id AND f.reemplazada_en IS NULL
+             WHERE r.recurso = $1 AND u.activo
+             ORDER BY u.nombre NULLS LAST, u.usuario`,
+            [RECURSO]
+        );
+        res.json({
+            ok: true,
+            personas: rows.map((p) => ({
+                id: Number(p.id),
+                nombre: p.nombre || p.usuario,
+                usuario: p.usuario,
+                rol: p.rol,
+                firma: p.imagen
+                    ? { cargo: p.cargo, imagen: p.imagen, cargadaPor: p.cargada_por, cargadaEn: p.cargada_en }
+                    : null,
+            })),
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/**
+ * POST /api/graneles/firmas  { usuarioId, cargo, imagen }
+ *
+ * Registra la firma de una persona. Si ya tenia una, la anterior se cierra y
+ * queda guardada: los ensayos que firmo con ella se siguen imprimiendo igual.
+ */
+rutasGraneles.post('/firmas', administrar, async (req, res, next) => {
+    const usuarioId = Number(req.body?.usuarioId);
+    const cargo = String(req.body?.cargo || '').trim();
+    const imagen = String(req.body?.imagen || '');
+
+    if (!Number.isInteger(usuarioId)) {
+        return res.status(400).json({ ok: false, error: 'falta la persona' });
+    }
+    if (!cargo || cargo.length > 120) {
+        return res.status(400).json({ ok: false, error: 'el cargo es obligatorio (hasta 120 caracteres)' });
+    }
+    if (imagen.length > MAX_FIRMA) {
+        return res.status(413).json({ ok: false, error: 'la imagen de la firma es demasiado grande (máximo 500 KB)' });
+    }
+    if (!IMAGEN_FIRMA.test(imagen)) {
+        return res.status(400).json({ ok: false, error: 'la firma tiene que ser una imagen PNG o JPG' });
+    }
+
+    try {
+        const r = await enTransaccion(async (c) => {
+            const { rows } = await c.query(
+                `SELECT u.nombre, u.usuario
+                 FROM usuario_recursos r JOIN usuarios u ON u.id = r.usuario_id
+                 WHERE r.usuario_id = $1 AND r.recurso = $2`,
+                [usuarioId, RECURSO]
+            );
+            if (!rows[0]) throw fallo(404, 'esa persona no tiene acceso a la app');
+            const nombre = rows[0].nombre || rows[0].usuario;
+
+            await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['firma:' + usuarioId]);
+            await c.query(
+                'UPDATE firmas SET reemplazada_en = now() WHERE usuario_id = $1 AND reemplazada_en IS NULL',
+                [usuarioId]
+            );
+            const { rows: nueva } = await c.query(
+                `INSERT INTO firmas (usuario_id, cargo, imagen, cargada_por)
+                 VALUES ($1, $2, $3, $4) RETURNING cargada_en`,
+                [usuarioId, cargo, imagen, req.usuario.nombre]
+            );
+            await registrar(c, req.usuario.nombre, 'FIRMA', 'Usuario', `${nombre} (${cargo})`);
+            return { nombre, cargadaEn: nueva[0].cargada_en };
+        });
+
+        await auditar(req, {
+            usuarioId: req.usuario.id, usuarioTxt: req.usuario.usuario,
+            accion: 'firma_cargada', recurso: RECURSO, detalle: `${r.nombre} (${cargo})`,
+        });
+        res.json({
+            ok: true,
+            firma: { cargo, imagen, cargadaPor: req.usuario.nombre, cargadaEn: r.cargadaEn },
+        });
+    } catch (err) {
+        responder(err, res, next);
     }
 });

@@ -58,6 +58,8 @@ const Trash2 = (p) => <Icon {...p}><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 
 const Edit3 = (p) => <Icon {...p}><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></Icon>;
 const Check = (p) => <Icon {...p}><path d="M20 6 9 17l-5-5"/></Icon>;
 const X = (p) => <Icon {...p}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></Icon>;
+const Printer = (p) => <Icon {...p}><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></Icon>;
+const PenLine = (p) => <Icon {...p}><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></Icon>;
 const Download = (p) => <Icon {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></Icon>;
 const ChevronDown = (p) => <Icon {...p}><path d="m6 9 6 6 6-6"/></Icon>;
 const ChevronRight = (p) => <Icon {...p}><path d="m9 18 6-6-6-6"/></Icon>;
@@ -1340,6 +1342,7 @@ function App() {
     { id: "bitacora", label: "Bitácora", icon: ClipboardList },
     { id: "kpis", label: "KPIs", icon: BarChart3 },
     { id: "stats", label: "Análisis", icon: BarChart3 },
+    puede("administrar") && { id: "firmas", label: "Firmas", icon: PenLine },
   ].filter(Boolean);
 
   if (estado === "cargando") return (
@@ -1427,9 +1430,273 @@ function App() {
         {view === "bitacora" && <Bitacora entries={entries} specs={specs} navigate={navigate} />}
         {view === "kpis" && <KpiDashboard entries={entries} specs={specs} />}
         {view === "stats" && <StatAnalysis entries={entries} specs={specs} />}
+        {view === "firmas" && puede("administrar") && <FirmasManager avisar={avisar} />}
         {view === "detail" && <Detail entry={viewPayload} specs={specs} entries={entries} acciones={acciones} puede={puede} usuario={usuario} navigate={navigate} />}
       </main>
     </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ══ IMPRESIÓN DEL REGISTRO (REG-SOP-AC-029) ═══════════════════════
+// ══════════════════════════════════════════════════════════════════
+// La hoja va al dossier físico del lote. Lleva lo mismo que la ficha: datos,
+// resultados con retest y disposición, y las dos firmas -imagen, cargo y la
+// fecha y hora de la firma electrónica-. Los datos y las firmas los arma el
+// servidor; acá solo se les da forma de hoja.
+const escHtml = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fechaHora = (iso) => iso
+  ? new Date(iso).toLocaleString("es-UY", { timeZone: "America/Montevideo", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })
+  : "—";
+const fechaCorta = (d) => (d ? String(d).slice(0, 10).split("-").reverse().join("/") : "—");
+const valorOGuion = (x) => (x === null || x === undefined || x === "" ? "—" : x);
+
+function htmlRegistro({ registro, muestra: m, firmas, impreso }) {
+  const spec = m.spec || {};
+  const params = spec.parameters || [];
+  const pendiente = m.status === STATUS.PENDING;
+
+  const filas = (m.results || []).map(r => {
+    const p = params.find(x => x.id === r.paramId) || {};
+    const esTexto = (p.type || r.type) === "text";
+    const fp = finalPass(r);
+    const final = fp === true ? "Cumple" : fp === false ? "No cumple" : (r.pass === false ? "Pendiente retest" : "Sin resultado");
+    const rango = esTexto ? "—" : `${valorOGuion(p.min)} – ${valorOGuion(p.max)} ${p.unit || ""}`.trim();
+    return `<tr>
+      <td>${escHtml(r.paramName)}</td>
+      <td>${escHtml(valorOGuion(p.method))}</td>
+      <td>${escHtml(rango)}</td>
+      <td>${escHtml(valorOGuion(p.target))}</td>
+      <td>${escHtml(valorOGuion(r.value))}</td>
+      <td>${esTexto ? "N/A" : escHtml(valorOGuion(r.retestValue))}</td>
+      <td class="${fp === true ? "bien" : fp === false ? "mal" : ""}">${final}</td>
+    </tr>`;
+  }).join("");
+
+  // La imagen es un data URL que el servidor valida como PNG o JPG en base64:
+  // no puede traer comillas ni otra cosa que rompa el atributo.
+  const bloqueFirma = (titulo, f) => {
+    if (!f) {
+      return `<div class="firma"><div class="t">${titulo}</div><div class="vacia">Pendiente de disposición</div></div>`;
+    }
+    return `<div class="firma"><div class="t">${titulo}</div>
+      ${f.imagen ? `<img src="${f.imagen}" alt="Firma">` : `<div class="vacia">Sin imagen de firma registrada</div>`}
+      <div class="nombre">${escHtml(f.nombre)}</div>
+      <div>${escHtml(f.cargo || "")}</div>
+      <div>Firmado electrónicamente el ${fechaHora(f.firmadoEn)}</div>
+      ${f.imagen && f.posterior ? `<div class="nota">Imagen de firma registrada el ${fechaHora(f.imagenCargadaEn)}, después de la firma electrónica.</div>` : ""}
+    </div>`;
+  };
+
+  const tituloDisposicion = m.status === STATUS.APPROVED ? "Aprobó" : m.status === STATUS.REJECTED ? "Rechazó" : "Aprobó / Rechazó";
+  const version = spec.docVersion ? ` · versión ${spec.docVersion}` : "";
+
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8">
+<title>${escHtml(registro)} · Lote ${escHtml(m.batchCode)}</title>
+<style>
+  @page { size: A4; margin: 14mm 12mm; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 10.5px; color: #111; margin: 0; }
+  table { border-collapse: collapse; width: 100%; }
+  .enc td { border: 1px solid #333; padding: 6px 8px; vertical-align: middle; }
+  .enc .empresa { width: 28%; }
+  .enc .titulo { text-align: center; font-weight: bold; font-size: 13px; }
+  .enc .codigo { width: 24%; }
+  h2 { font-size: 11px; margin: 12px 0 4px; text-transform: uppercase; letter-spacing: .3px; }
+  .datos td { border: 1px solid #999; padding: 4px 6px; }
+  .datos .k { background: #f2f2f2; font-weight: bold; width: 17%; }
+  .res th, .res td { border: 1px solid #999; padding: 4px 5px; text-align: left; vertical-align: top; }
+  .res th { background: #f2f2f2; }
+  .res tr { page-break-inside: avoid; }
+  .bien { color: #166534; font-weight: bold; }
+  .mal { color: #991B1B; font-weight: bold; }
+  .obs { border: 1px solid #999; padding: 6px; min-height: 26px; white-space: pre-wrap; }
+  .disp { font-size: 12px; font-weight: bold; margin-top: 10px; }
+  .firmas { display: flex; gap: 14px; margin-top: 12px; page-break-inside: avoid; }
+  .firma { flex: 1; border: 1px solid #999; padding: 8px; min-height: 130px; }
+  .firma .t { font-weight: bold; margin-bottom: 4px; }
+  .firma img { max-height: 60px; max-width: 100%; display: block; margin: 4px 0; }
+  .firma .vacia { height: 60px; display: flex; align-items: center; color: #777; font-style: italic; }
+  .firma .nombre { font-weight: bold; border-top: 1px solid #333; padding-top: 3px; margin-top: 2px; }
+  .nota { font-size: 9px; color: #555; margin-top: 3px; }
+  .borrador { border: 2px solid #B45309; color: #B45309; padding: 6px; text-align: center; font-weight: bold; margin: 8px 0; }
+  .pie { margin-top: 14px; font-size: 9px; color: #444; border-top: 1px solid #ccc; padding-top: 4px; }
+  .aviso { padding: 8px 12px; background: #FEF3C7; font-family: sans-serif; font-size: 12px; margin-bottom: 10px; }
+  @media print { .aviso { display: none; } }
+</style></head><body>
+<div class="aviso">Si no se abrió el diálogo de impresión, usá Ctrl+P. <button onclick="window.print()">Imprimir</button></div>
+<table class="enc"><tr>
+  <td class="empresa"><b>VESSENA S.A.</b><br>Laboratorio de Control de Calidad</td>
+  <td class="titulo">REGISTRO DE ANÁLISIS Y DISPOSICIÓN DE GRANEL</td>
+  <td class="codigo"><b>${escHtml(registro)}</b><br>Lote: <b>${escHtml(m.batchCode)}</b></td>
+</tr></table>
+${pendiente ? `<div class="borrador">BORRADOR — MUESTRA PENDIENTE DE DISPOSICIÓN. NO VÁLIDO PARA LIBERAR EL LOTE.</div>` : ""}
+<h2>Datos de la muestra</h2>
+<table class="datos">
+  <tr><td class="k">Lote</td><td>${escHtml(m.batchCode)}</td><td class="k">Fecha</td><td>${fechaCorta(m.date)}</td></tr>
+  <tr><td class="k">Granel</td><td>${escHtml(m.productCode)}${spec.name ? " — " + escHtml(spec.name) : ""}</td><td class="k">Marca</td><td>${escHtml(valorOGuion(spec.brand))}</td></tr>
+  <tr><td class="k">Especificación</td><td>${escHtml(valorOGuion(spec.docRef))}${escHtml(version)}</td><td class="k">Analista</td><td>${escHtml(m.analyst)}</td></tr>
+  <tr><td class="k">Hora salida fabricación</td><td>${escHtml(valorOGuion(m.timeFactory))}</td><td class="k">Hora ingreso a control</td><td>${escHtml(valorOGuion(m.timeIn))}</td></tr>
+  <tr><td class="k">Hora fin de análisis</td><td>${escHtml(valorOGuion(m.timeEnd))}</td><td class="k">Estado</td><td>${escHtml(STATUS_LABEL[m.status] || m.status)}</td></tr>
+</table>
+<h2>Resultados</h2>
+<table class="res">
+  <thead><tr><th>Parámetro</th><th>Método</th><th>Rango</th><th>Objetivo</th><th>Resultado</th><th>Retest</th><th>Resultado final</th></tr></thead>
+  <tbody>${filas || `<tr><td colspan="7">Sin parámetros</td></tr>`}</tbody>
+</table>
+<h2>Observaciones</h2>
+<div class="obs">${escHtml(m.observations || "—")}</div>
+<div class="disp">Disposición: ${escHtml(STATUS_LABEL[m.status] || m.status)}</div>
+<div class="firmas">
+  ${bloqueFirma("Analizó", firmas.analista)}
+  ${bloqueFirma(tituloDisposicion, firmas.disposicion)}
+</div>
+<div class="pie">Copia impresa del registro electrónico de la app Aprobación de Graneles (LCC-007). El original y su trazabilidad están en el sistema. Impreso el ${fechaHora(impreso.en)} por ${escHtml(impreso.por)}.</div>
+<script>window.onload = function () { setTimeout(function () { window.print(); }, 300); };<\/script>
+</body></html>`;
+}
+
+async function imprimirRegistro(id) {
+  // La ventana se abre antes de pedir los datos: abierta después de esperar la
+  // respuesta, el navegador la trata como emergente no pedida y la bloquea.
+  const w = window.open("", "_blank");
+  if (!w) {
+    alert("El navegador bloqueó la ventana de impresión. Permití las ventanas emergentes para esta página y volvé a intentar.");
+    return;
+  }
+  w.document.write("<p style='font-family:sans-serif;padding:20px'>Preparando el registro…</p>");
+  try {
+    const d = await api(`/muestras/${encodeURIComponent(id)}/impresion`);
+    w.document.open();
+    w.document.write(htmlRegistro(d));
+    w.document.close();
+  } catch (e) {
+    w.document.open();
+    w.document.write(`<p style='font-family:sans-serif;padding:20px;color:#991B1B'>No se pudo preparar el registro: ${escHtml(e.message)}</p>`);
+    w.document.close();
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ══ FIRMAS ════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════
+// Las carga un administrador para cada persona con acceso a la app. Una firma
+// no se pisa: reemplazarla deja la anterior guardada, y cada ensayo se imprime
+// con la que estaba vigente cuando se firmó.
+function FirmasManager({ avisar }) {
+  const [personas, setPersonas] = useState(null);
+  const [error, setError] = useState("");
+  const [editando, setEditando] = useState(null);
+  const [cargo, setCargo] = useState("");
+  const [imagen, setImagen] = useState("");
+  const [guardando, setGuardando] = useState(false);
+
+  const cargarLista = useCallback(async () => {
+    try {
+      const d = await api("/firmas");
+      setPersonas(d.personas || []);
+      setError("");
+    } catch (e) {
+      setError(e.message);
+    }
+  }, []);
+  useEffect(() => { cargarLista(); }, [cargarLista]);
+
+  const empezar = (p) => {
+    setEditando(p.id);
+    setCargo(p.firma?.cargo || "");
+    setImagen(p.firma?.imagen || "");
+  };
+
+  const leerArchivo = (e) => {
+    const archivo = e.target.files && e.target.files[0];
+    if (!archivo) return;
+    if (!/^image\/(png|jpeg)$/.test(archivo.type)) { avisar("La firma tiene que ser una imagen PNG o JPG", "error"); return; }
+    if (archivo.size > 500 * 1024) { avisar("La imagen pesa más de 500 KB. Recortala a la firma o guardala con menor resolución.", "error"); return; }
+    const lector = new FileReader();
+    lector.onload = () => setImagen(String(lector.result));
+    lector.readAsDataURL(archivo);
+  };
+
+  const guardar = async (p) => {
+    if (!cargo.trim()) { avisar("Completá el cargo", "error"); return; }
+    if (!imagen) { avisar("Elegí la imagen de la firma", "error"); return; }
+    if (p.firma && !confirm(`Vas a reemplazar la firma de ${p.nombre}. Los ensayos que ya firmó se siguen imprimiendo con la firma anterior. ¿Seguir?`)) return;
+    setGuardando(true);
+    try {
+      await api("/firmas", { method: "POST", body: JSON.stringify({ usuarioId: p.id, cargo: cargo.trim(), imagen }) });
+      avisar("Firma guardada");
+      setEditando(null);
+      await cargarLista();
+    } catch (e) {
+      avisar(e.message, "error");
+    }
+    setGuardando(false);
+  };
+
+  const celda = { padding: "8px 10px", verticalAlign: "top" };
+
+  if (error) return <Card><p style={{ color: "#991B1B", margin: 0 }}>No se pudieron cargar las firmas: {error}</p></Card>;
+  if (!personas) return <Card><p style={{ margin: 0 }}>Cargando…</p></Card>;
+
+  return (
+    <Card>
+      <h3 style={{ fontSize: 16, fontWeight: 700, margin: "0 0 4px" }}>Firmas registradas</h3>
+      <p style={{ fontSize: 12, color: V.gray, margin: "0 0 14px" }}>
+        La imagen y el cargo salen en la hoja impresa de cada ensayo (REG-SOP-AC-029), junto a la firma electrónica.
+        Reemplazar una firma no cambia los ensayos ya firmados: cada uno se imprime con la firma vigente cuando se firmó.
+      </p>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <thead>
+            <tr style={{ background: V.grayLight }}>
+              {["Persona", "Perfil", "Cargo", "Firma", ""].map(h => (
+                <th key={h} style={{ padding: "8px 10px", textAlign: "left", fontWeight: 600, fontSize: 12, color: V.gray, borderBottom: `1px solid ${V.grayMid}` }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {personas.map(p => editando === p.id ? (
+              <tr key={p.id} style={{ borderBottom: `1px solid ${V.grayMid}`, background: V.redBg }}>
+                <td style={celda}><strong>{p.nombre}</strong><div style={{ fontSize: 11, color: V.gray }}>{p.usuario}</div></td>
+                <td style={celda}>{ROL_LABEL[p.rol] || p.rol}</td>
+                <td style={celda}>
+                  <Input value={cargo} onChange={e => setCargo(e.target.value)} placeholder="Ej: Q.F. Jefa de Control de Calidad" maxLength={120} />
+                </td>
+                <td style={celda}>
+                  <input type="file" accept="image/png,image/jpeg" onChange={leerArchivo} style={{ fontSize: 12, maxWidth: 220 }} />
+                  {imagen && <img src={imagen} alt="Firma" style={{ display: "block", maxHeight: 50, maxWidth: 220, marginTop: 6, background: V.white, border: `1px solid ${V.grayMid}` }} />}
+                </td>
+                <td style={celda}>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <Btn size="sm" variant="secondary" onClick={() => setEditando(null)} disabled={guardando}>Cancelar</Btn>
+                    <Btn size="sm" onClick={() => guardar(p)} disabled={guardando}><Save size={13} /> Guardar</Btn>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              <tr key={p.id} style={{ borderBottom: `1px solid ${V.grayMid}` }}>
+                <td style={celda}><strong>{p.nombre}</strong><div style={{ fontSize: 11, color: V.gray }}>{p.usuario}</div></td>
+                <td style={celda}>{ROL_LABEL[p.rol] || p.rol}</td>
+                <td style={celda}>{p.firma?.cargo || <span style={{ color: V.gray }}>—</span>}</td>
+                <td style={celda}>
+                  {p.firma ? (
+                    <>
+                      <img src={p.firma.imagen} alt="Firma" style={{ display: "block", maxHeight: 44, maxWidth: 200, background: V.white }} />
+                      <div style={{ fontSize: 10, color: V.gray, marginTop: 2 }}>Cargada por {p.firma.cargadaPor} el {fechaHora(p.firma.cargadaEn)}</div>
+                    </>
+                  ) : <span style={{ color: "#92400E", fontSize: 12, fontWeight: 600 }}>Sin firma</span>}
+                </td>
+                <td style={celda}>
+                  <Btn size="sm" variant="secondary" onClick={() => empezar(p)} disabled={editando !== null}>
+                    <PenLine size={13} /> {p.firma ? "Reemplazar" : "Cargar firma"}
+                  </Btn>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 }
 
@@ -2347,6 +2614,9 @@ function Detail({ entry: initialEntry, specs, entries, acciones, puede, usuario,
                 <Trash2 size={13} color="#991B1B" /> Eliminar
               </Btn>
             )}
+            <Btn variant="secondary" size="sm" onClick={() => imprimirRegistro(liveEntry.id)} disabled={ocupado}>
+              <Printer size={13} /> Imprimir registro
+            </Btn>
             <Btn variant="secondary" size="sm" onClick={exportSingle}>
               <FileSpreadsheet size={13} /> Exportar Excel
             </Btn>
