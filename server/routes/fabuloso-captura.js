@@ -610,8 +610,14 @@ rutasFabulosoCaptura.post('/importar', administrar, async (req, res, next) => {
     try {
         const resumen = await enTransaccion(async (c) => {
             await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['fab-importar']);
-            const { rows: hay } = await c.query('SELECT count(*)::int AS n FROM fab_muestreos');
-            if (hay[0].n) throw fallo(409, `Ya hay ${hay[0].n} muestreos cargados: la importación inicial no se repite`);
+            // "Una sola vez" es que el historial no se haya importado antes, no
+            // que la tabla este vacia: el equipo empieza a cargar en la app nueva
+            // apenas se despliega, y esos controles no pueden trabar la carga
+            // del historial (paso el 16/09/2026 con el primer control nuevo).
+            const { rows: hay } = await c.query(
+                `SELECT count(*)::int AS n FROM fab_muestreos WHERE origen = 'apps-script'`
+            );
+            if (hay[0].n) throw fallo(409, `El historial ya se importó (${hay[0].n} muestreos): la importación no se repite`);
 
             // Catalogo: la planilla manda (clasificaciones vigentes).
             let nDefectos = 0;
@@ -686,8 +692,21 @@ rutasFabulosoCaptura.post('/importar', administrar, async (req, res, next) => {
                 await c.query(
                     `INSERT INTO fab_ordenes (orden_envasado, aprobada_por, aprobada_en, notas,
                         checklist_lote, checklist_vence, checklist_producto, origen)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, 'apps-script')`,
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, 'apps-script')
+                     ON CONFLICT (orden_envasado) DO NOTHING`,
                     [orden, o.aprobadaPor, o.aprobadaEn, o.notas, o.lote, o.vence, o.producto]
+                );
+            }
+            // Una orden cerrada en la planilla deja cerrados tambien los
+            // controles que se le hayan agregado en la app nueva.
+            if (cierres.size) {
+                await c.query(
+                    `UPDATE fab_muestreos m SET estado = 'Aprobado', aprobado_por = o.aprobada_por,
+                            aprobado_en = o.aprobada_en, notas_aprobador = o.notas
+                     FROM fab_ordenes o
+                     WHERE o.orden_envasado = m.orden_envasado AND m.origen = 'app'
+                       AND o.origen = 'apps-script' AND m.orden_envasado = ANY($1)`,
+                    [[...cierres.keys()]]
                 );
             }
 
