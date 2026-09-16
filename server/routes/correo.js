@@ -22,6 +22,7 @@ import {
     revisarGranelesPendientes, revisarGranelesResumen, configGraneles,
 } from '../lib/avisos-graneles.js';
 import { revisarAvisosControlCambios, configControlCambios } from '../lib/avisos-control-cambios.js';
+import { revisarReporteFabuloso, configFabuloso } from '../lib/avisos-fabuloso.js';
 import { consultar } from '../db.js';
 
 export const rutasCorreo = Router();
@@ -93,6 +94,7 @@ rutasCorreo.get('/avisos', exigirTokenSync, async (_req, res, next) => {
             envases: configEnvases(),
             graneles: configGraneles(),
             controlCambios: configControlCambios(),
+            fabuloso: configFabuloso(),
             corridas: rows,
         });
     } catch (err) {
@@ -126,3 +128,4 @@ endpointDeAviso('/avisos/envases', revisarPendientesAprobacion);
 endpointDeAviso('/avisos/graneles/pendientes', revisarGranelesPendientes);
 endpointDeAviso('/avisos/graneles/resumen', revisarGranelesResumen);
 endpointDeAviso('/avisos/control-cambios', revisarAvisosControlCambios);
+endpointDeAviso('/avisos/fabuloso', revisarReporteFabuloso);

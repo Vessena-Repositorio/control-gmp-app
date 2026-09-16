@@ -13,6 +13,7 @@ import { rutasDocumentos } from './routes/documentos.js';
 import { rutasDevoluciones } from './routes/devoluciones.js';
 import { rutasNcDesvios } from './routes/nc-desvios.js';
 import { rutasGraneles } from './routes/graneles.js';
+import { rutasFabulosoCaptura } from './routes/fabuloso-captura.js';
 import { rutasCorreo } from './routes/correo.js';
 import { rutasEstabilidad } from './routes/estabilidad.js';
 import { rutasCapacitaciones } from './routes/capacitaciones.js';
@@ -29,6 +30,7 @@ import { revisarAvisosControlCambios } from './lib/avisos-control-cambios.js';
 import { revisarRecordatoriosPlan, revisarInduccionesPendientes } from './lib/avisos-capacitaciones.js';
 import { revisarPendientesAprobacion } from './lib/avisos-envases.js';
 import { revisarGranelesPendientes, revisarGranelesResumen } from './lib/avisos-graneles.js';
+import { revisarReporteFabuloso } from './lib/avisos-fabuloso.js';
 
 const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PUERTO = Number(process.env.PORT) || 3000;
@@ -125,6 +127,7 @@ app.use('/api/documentos', rutasDocumentos);
 app.use('/api/devoluciones', rutasDevoluciones);
 app.use('/api/nc-desvios', rutasNcDesvios);
 app.use('/api/graneles', rutasGraneles);
+app.use('/api/fabuloso-captura', rutasFabulosoCaptura);
 app.use('/api/correo', rutasCorreo);
 app.use('/api/estabilidad', rutasEstabilidad);
 app.use('/api/capacitaciones', rutasCapacitaciones);
@@ -234,6 +237,7 @@ function arrancar() {
                 ['envases:aprobacion', revisarPendientesAprobacion],
                 ['graneles:pendientes', revisarGranelesPendientes],
                 ['graneles:resumen', revisarGranelesResumen],
+                ['fabuloso:reporte', revisarReporteFabuloso],
                 ['control-cambios', revisarAvisosControlCambios],
             ];
             const revisarAvisos = () => {

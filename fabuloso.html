@@ -208,16 +208,15 @@ table tr:hover td { background: #fafbff; cursor: pointer; }
     <button data-view="new">➕ Nuevo muestreo</button>
     <button data-view="orders_today">🕒 Órdenes de hoy</button>
     <button data-view="list">📋 Muestreos</button>
-    <button data-view="admin_users" data-min-role="Admin">👥 Usuarios</button>
+    <button data-view="admin_import" data-min-role="Admin">📥 Importar historial</button>
     <button data-view="admin_defects" data-min-role="QA">🏷️ Catálogo defectos</button>
     <button data-view="admin_audit" data-min-role="Coordinador">📜 Auditoría</button>
     <button data-view="signature">✍️ Mi firma</button>
-    <button data-view="change_pwd">🔐 Cambiar contraseña</button>
     <div class="spacer"></div>
     <button id="btnLogout" class="danger">🚪 Cerrar sesión</button>
     <div class="drawer-footer">
       <small>Vessena LCC Fabuloso – SOPLCC200 v3.0</small><br/>
-      <small id="verLabel">v1.0.0</small>
+      <small id="verLabel">v2.0.0 · portal · build 2026-09-16a</small>
     </div>
   </nav>
 
@@ -229,13 +228,12 @@ table tr:hover td { background: #fafbff; cursor: pointer; }
   <script>
 /**
  * Vessena LCC – Configuración del frontend
- * URL ya configurada con el Apps Script de Vessena (19/08/2026).
+ * Desde el 16/09/2026 la app habla con la API del portal, no con Apps Script.
  */
 window.APP_CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbxkMcaTX5xXKaPuy5PRzQBQs678qtA4zzGtxyeNYu7xRJwboNR3n2IBZMV2eOgyASqI/exec",
+  API_BASE: "/api/fabuloso-captura",
   PHOTO_MAX_DIM: 800,
   PHOTO_QUALITY: 0.72,
-  SESSION_KEY: "vessena_lcc_session",
   APP_TITLE: "Vessena LCC Fabuloso – Control de atributos en línea",
   LINEAS: ["Fabuloso"],
   DEFAULT_LINE: "Fabuloso",
@@ -303,50 +301,61 @@ window.APP_CONFIG = {
   function nowTime(){ const d=new Date(); const p=n=>String(n).padStart(2,'0'); return `${p(d.getHours())}:${p(d.getMinutes())}`; }
 
   // ---------- API ----------
+  // Antes cada acción era un POST al Apps Script. Ahora es la API del portal;
+  // se conserva la misma función, con las mismas acciones, para no reescribir
+  // cada pantalla. La identidad sale de la sesión del portal: no hay token.
+  const RUTAS = {
+    verify: () => ['GET', '/sesion'],
+    getCatalog: () => ['GET', '/catalogo'],
+    getMyFirma: () => ['GET', '/mi-firma'],
+    updateDefectClassification: (p) => ['POST', '/catalogo/' + encodeURIComponent(p.codigo), { clasificacion: p.clasificacion }],
+    saveMuestreo: (p) => ['POST', '/muestreos', { data: p.data }],
+    listMuestreos: (p) => {
+      const q = new URLSearchParams();
+      if (p.limit) q.set('limit', p.limit);
+      if (p.filter && p.filter.desde) q.set('desde', p.filter.desde);
+      if (p.filter && p.filter.hasta) q.set('hasta', p.filter.hasta);
+      return ['GET', '/muestreos?' + q.toString()];
+    },
+    getMuestreo: (p) => ['GET', '/muestreos/' + encodeURIComponent(p.id)],
+    approveMuestreo: (p) => ['POST', '/muestreos/' + encodeURIComponent(p.id) + '/disposicion', { estado: p.estado, notas: p.notas }],
+    listOrder: (p) => ['GET', '/ordenes/' + encodeURIComponent(p.orden_envasado)],
+    approveOrder: (p) => ['POST', '/ordenes/' + encodeURIComponent(p.orden_envasado) + '/aprobar', { checklist: p.checklist, notas: p.notas }],
+    uploadPhoto: (p) => ['POST', '/fotos', { filename: p.filename, mime: p.mime, dataBase64: p.dataBase64, muestreo_ref: p.muestreo_ref }],
+    getAuditLog: () => ['GET', '/actividad'],
+    importar: (p) => ['POST', '/importar', p.datos],
+  };
+
   async function api(action, payload={}) {
-    if (!CFG.API_URL || CFG.API_URL.startsWith('PEGAR_AQUI')) {
-      throw new Error('Falta configurar API_URL en assets/config.js');
-    }
-    payload = Object.assign({ action, user_agent: navigator.userAgent }, payload);
-    if (state.session && state.session.token && payload.token === undefined) {
-      payload.token = state.session.token;
-    }
-    // Un fallo de transporte no es lo mismo que un rechazo del script: "Google
-    // no contesto" se reintenta, "tu sesion no vale" obliga a loguearse otra
-    // vez. Mezclarlos hacia que un arranque en frio que vencia borrara la
-    // sesion guardada y pidiera la clave sin motivo.
+    const ruta = RUTAS[action];
+    if (!ruta) throw new Error('Acción no disponible: ' + action);
+    const [metodo, camino, cuerpo] = ruta(payload);
+    // Un fallo de transporte no es lo mismo que un rechazo del servidor: el
+    // primero se reintenta, el segundo se muestra.
     let res;
     try {
-      res = await fetch(CFG.API_URL, {
-        method: 'POST',
-        // Content-Type text/plain evita el preflight CORS con Apps Script
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(payload)
+      res = await fetch(CFG.API_BASE + camino, {
+        method: metodo,
+        credentials: 'same-origin',
+        headers: cuerpo ? { 'Content-Type': 'application/json' } : undefined,
+        body: cuerpo ? JSON.stringify(cuerpo) : undefined,
       });
     } catch (e) {
       throw Object.assign(new Error('no se pudo contactar al servidor'), { transporte: true });
     }
-    if (!res.ok) {
-      throw Object.assign(new Error('el servidor respondió ' + res.status), { transporte: true });
+    if (res.status === 401) {
+      // La sesión del portal venció con la pestaña abierta.
+      location.href = '/?volver=' + encodeURIComponent(location.pathname);
+      throw Object.assign(new Error('sesión vencida'), { transporte: true });
     }
-    let data;
-    try { data = await res.json(); }
-    catch (e) {
-      // Apps Script devuelve una pagina de error HTML cuando la ejecucion no
-      // llego a arrancar; parsearla como JSON explota sin decir nada util.
-      throw Object.assign(new Error('el servidor no devolvió datos'), { transporte: true });
-    }
-    if (!data.ok) throw new Error(data.error || 'Error del servidor');
+    let data = null;
+    try { data = await res.json(); } catch (e) {}
+    if (!data) throw Object.assign(new Error('el servidor respondió ' + res.status), { transporte: true });
+    if (!res.ok || data.ok === false) throw new Error(data.error || ('error ' + res.status));
     return data;
   }
 
-  // ---------- Sesión (persistida en localStorage) ----------
-  function loadSession() {
-    try { state.session = JSON.parse(localStorage.getItem(CFG.SESSION_KEY) || 'null'); }
-    catch(e) { state.session = null; }
-  }
-  function saveSession(s) { state.session = s; localStorage.setItem(CFG.SESSION_KEY, JSON.stringify(s)); }
-  function clearSession() { state.session = null; localStorage.removeItem(CFG.SESSION_KEY); }
+  // La sesión es la del portal: no se guarda nada en el navegador.
 
   // ---------- Comprimir foto en el navegador ----------
   function compressImage(file, maxDim, quality) {
@@ -403,7 +412,7 @@ window.APP_CONFIG = {
   }
 
   function render() {
-    if (!state.session) { renderLogin(); return; }
+    if (!state.session) { arrancarConSesion(); return; }
     topbar.classList.remove('hidden');
     refreshDrawer();
     const v = state.currentView && state.currentView.view || 'home';
@@ -415,57 +424,12 @@ window.APP_CONFIG = {
       case 'order_detail': renderOrderDetail(p.orden); break;
       case 'list': renderList(); break;
       case 'detail': renderDetail(p.id); break;
-      case 'change_pwd': renderChangePwd(); break;
       case 'signature': renderSignature(); break;
-      case 'admin_users': renderUsers(); break;
+      case 'admin_import': renderImport(); break;
       case 'admin_defects': renderDefects(); break;
       case 'admin_audit': renderAudit(); break;
       default: renderHome();
     }
-  }
-
-  // ---------- LOGIN ----------
-  function renderLogin() {
-    topbar.classList.add('hidden');
-    drawer.classList.add('hidden');
-    app.innerHTML = `
-      <div class="login-wrap">
-        <div class="logo">
-          <div class="dot">V</div>
-          <h1>Vessena LCC Fabuloso</h1>
-          <div class="muted small">Control de atributos en línea – SOPLCC200 v3.0</div>
-        </div>
-        <div class="card">
-          <label>Usuario</label>
-          <input id="lg_user" type="text" autocomplete="username" placeholder="usuario">
-          <label>Contraseña</label>
-          <input id="lg_pass" type="password" autocomplete="current-password" placeholder="••••••••">
-          <div class="mt12">
-            <button class="primary" id="lg_btn" style="width:100%">Ingresar</button>
-          </div>
-          <div class="muted small mt8 right">
-            ¿No tenés cuenta? Pedile al administrador que te dé de alta.
-          </div>
-        </div>
-      </div>
-    `;
-    document.getElementById('lg_btn').addEventListener('click', doLogin);
-    document.getElementById('lg_pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
-  }
-
-  async function doLogin() {
-    const username = document.getElementById('lg_user').value.trim();
-    const password = document.getElementById('lg_pass').value;
-    if (!username || !password) return toast('Usuario y contraseña requeridos', 'err');
-    try {
-      loading(true);
-      const r = await api('login', { username, password, token: null });
-      saveSession({ token: r.token, user: r.user });
-      await loadCatalog();
-      nav('home');
-    } catch(e) {
-      toast(e.message, 'err');
-    } finally { loading(false); }
   }
 
   async function loadCatalog() {
@@ -486,17 +450,17 @@ window.APP_CONFIG = {
   async function arrancarConSesion() {
     renderVerificando();
     try {
-      const [, cat] = await Promise.all([
+      const [yo, cat] = await Promise.all([
         api('verify'),
         // Si el catalogo falla no se cae el arranque: las pantallas que lo
         // necesitan ya lo vuelven a pedir por su cuenta.
         api('getCatalog').catch(() => null),
       ]);
+      state.session = { user: yo.user };
       if (cat) state.catalog = cat.defectos;
       nav('home');
     } catch (e) {
-      if (e && e.transporte) renderSinConexion(e.message);
-      else { clearSession(); renderLogin(); }
+      renderSinConexion(e.message);
     }
   }
 
@@ -512,7 +476,6 @@ window.APP_CONFIG = {
         <div class="card" style="text-align:center">
           <div class="spin" style="margin:8px auto 14px"></div>
           <div>Verificando tu sesión…</div>
-          <div class="muted small mt8">La primera carga del día puede demorar hasta medio minuto.</div>
         </div>
       </div>
     `;
@@ -533,7 +496,7 @@ window.APP_CONFIG = {
           <div class="mt12">
             <button class="primary" id="bt_reintentar" style="width:100%">Reintentar</button>
           </div>
-          <div class="muted small mt8">Tu sesión sigue guardada: no hace falta escribir la clave de nuevo.</div>
+          <div class="muted small mt8">Si el problema sigue, volvé a entrar desde el portal.</div>
         </div>
       </div>
     `;
@@ -541,8 +504,9 @@ window.APP_CONFIG = {
   }
 
   async function doLogout() {
-    try { loading(true); await api('logout'); } catch(e) {}
-    finally { loading(false); clearSession(); render(); toast('Sesión cerrada', 'ok'); }
+    // Se cierra la sesión del portal: si no, seguiría viva en otra pestaña.
+    try { loading(true); await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }); } catch(e) {}
+    location.href = '/';
   }
 
   // ---------- HOME ----------
@@ -932,7 +896,7 @@ window.APP_CONFIG = {
     // Si el catálogo no tiene "grupo" cargado, ocultamos los botones y mostramos aviso
     const hasGroups = state.catalog.some(d => d.grupo);
     if (!hasGroups) {
-      wrap.innerHTML = '<div class="muted small">Catálogo sin agrupar todavía. Corré <code>setup()</code> en Apps Script.</div>';
+      wrap.innerHTML = '<div class="muted small">Catálogo sin agrupar todavía.</div>';
       return;
     }
     const selected = new Set((state.editingMuestreo.defectos || []).map(d => d.codigo));
@@ -1885,216 +1849,163 @@ window.APP_CONFIG = {
   }
 
   // ---------- MI FIRMA ----------
+  // La firma ya no se dibuja acá: la imagen de cada persona la carga un
+  // administrador en Aprobación de Graneles → Firmas, y es la misma en todas
+  // las apps que imprimen registros. Usuarios y contraseñas son los del portal.
+  // La firma ya no se dibuja acá: la imagen de cada persona la carga un
+  // administrador en Aprobación de Graneles → Firmas, y es la misma en todas
+  // las apps que imprimen registros. Usuarios y contraseñas son los del portal.
   async function renderSignature() {
     titleEl.textContent = 'Mi firma';
     app.innerHTML = '<div class="card"><div class="muted small">Cargando…</div></div>';
     try {
-      const r = await api('getMySignature');
-      const existing = r.url;
+      const r = await api('getMyFirma');
+      const f = r.firma;
       app.innerHTML = `
         <div class="card">
-          <h2>✍️ Mi firma digital</h2>
-          <div class="muted small mb8">Firmá una sola vez y tu firma va a aparecer automáticamente en los reportes impresos donde aparezcas (como analista o como aprobador).</div>
-          ${existing ? `
-            <div class="mt8"><b>Firma actual:</b></div>
+          <h2>✍️ Mi firma</h2>
+          <div class="muted small mb8">Es la firma que aparece en los reportes impresos donde figurás como analista o aprobador. La carga un administrador en <b>Aprobación de Graneles → Firmas</b>; si falta o hay que cambiarla, pedíselo.</div>
+          ${f ? `
             <div style="background:#fff; border:1px solid var(--border); padding:8px; border-radius:8px; display:inline-block; margin:8px 0;">
-              <img src="${esc(existing)}" style="max-height:80px; display:block;"/>
+              <img src="${esc(f.imagen)}" style="max-height:80px; display:block;"/>
             </div>
-            <div class="row">
-              <button class="danger" id="sig_delete">🗑️ Borrar firma actual</button>
-            </div>
-            <div class="hr"></div>
-          ` : '<div class="chip warn">Todavía no tenés firma cargada</div><div class="hr"></div>'}
-          <label>Dibujá tu firma abajo (con el dedo en el celular o con el mouse):</label>
-          <div style="background:#fff; border:2px dashed var(--border); border-radius:8px; touch-action: none; margin-top:6px;">
-            <canvas id="sig_canvas" width="900" height="260" style="width:100%; height:200px; display:block; border-radius:8px; cursor: crosshair;"></canvas>
-          </div>
-          <div class="row mt8">
-            <button class="secondary" id="sig_clear">🧹 Limpiar</button>
-            <button class="primary" id="sig_save">💾 Guardar firma</button>
-          </div>
+            <div class="small">${esc(f.cargo || '')}</div>
+            <div class="muted small">Cargada por ${esc(f.cargadaPor || '')} el ${esc(fmtDate(f.cargadaEn))}</div>
+          ` : '<div class="chip warn">Todavía no tenés firma cargada</div>'}
         </div>
       `;
-      setupSignatureCanvas_();
-      const btnDel = document.getElementById('sig_delete');
-      if (btnDel) btnDel.addEventListener('click', async () => {
-        if (!confirm('¿Borrar tu firma actual?')) return;
-        try { loading(true); await api('clearMySignature'); toast('Firma borrada','ok'); renderSignature(); }
-        catch(e) { toast(e.message,'err'); } finally { loading(false); }
-      });
     } catch(e) {
       app.innerHTML = `<div class="card"><div class="chip danger">${esc(e.message)}</div></div>`;
     }
   }
 
-  function setupSignatureCanvas_() {
-    const canvas = document.getElementById('sig_canvas');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.strokeStyle = '#111';
-    ctx.lineWidth = 4;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    let drawing = false, hasContent = false, lastX = 0, lastY = 0;
-
-    function pos(e) {
-      const r = canvas.getBoundingClientRect();
-      const t = e.touches ? e.touches[0] : e;
-      const sx = canvas.width / r.width, sy = canvas.height / r.height;
-      return { x: (t.clientX - r.left) * sx, y: (t.clientY - r.top) * sy };
-    }
-    function start(e) { e.preventDefault(); drawing = true; hasContent = true; const p = pos(e); lastX = p.x; lastY = p.y; ctx.beginPath(); ctx.moveTo(p.x, p.y); }
-    function move(e)  { if (!drawing) return; e.preventDefault(); const p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); lastX = p.x; lastY = p.y; }
-    function end()    { drawing = false; }
-
-    canvas.addEventListener('mousedown', start);
-    canvas.addEventListener('mousemove', move);
-    canvas.addEventListener('mouseup', end);
-    canvas.addEventListener('mouseleave', end);
-    canvas.addEventListener('touchstart', start, { passive: false });
-    canvas.addEventListener('touchmove', move, { passive: false });
-    canvas.addEventListener('touchend', end);
-
-    document.getElementById('sig_clear').addEventListener('click', () => {
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      hasContent = false;
-    });
-    document.getElementById('sig_save').addEventListener('click', async () => {
-      if (!hasContent) return toast('Dibujá tu firma primero', 'err');
-      const dataUrl = canvas.toDataURL('image/png');
-      const base64 = dataUrl.split(',')[1];
-      try {
-        loading(true);
-        await api('saveMySignature', { dataBase64: base64 });
-        toast('Firma guardada ✔', 'ok');
-        renderSignature();
-      } catch(e) { toast(e.message, 'err'); }
-      finally { loading(false); }
+  // ---------- IMPORTAR HISTORIAL ----------
+  // Carga única de lo que quedó en la planilla de la app vieja. El Excel se lee
+  // en el navegador y se manda solo lo necesario: de la hoja Usuarios, el
+  // usuario, el nombre y la firma; las contraseñas no se leen ni se envían.
+  function cargarLectorExcel_() {
+    if (window.XLSX) return Promise.resolve();
+    return new Promise((ok, mal) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+      s.onload = ok;
+      s.onerror = () => mal(new Error('No se pudo cargar el lector de Excel'));
+      document.head.appendChild(s);
     });
   }
+  const dos_ = n => String(n).padStart(2, '0');
+  function diaDe_(v) {
+    if (v instanceof Date) return `${v.getFullYear()}-${dos_(v.getMonth()+1)}-${dos_(v.getDate())}`;
+    return String(v == null ? '' : v).trim().slice(0, 10);
+  }
+  function horaDe_(v) {
+    if (v instanceof Date) return `${dos_(v.getHours())}:${dos_(v.getMinutes())}`;
+    return String(v == null ? '' : v).trim().slice(0, 5);
+  }
+  function isoDe_(v) {
+    if (v instanceof Date) return isNaN(v) ? null : v.toISOString();
+    if (v === '' || v == null) return null;
+    const d = new Date(v);
+    return isNaN(d) ? null : d.toISOString();
+  }
+  const txt_ = v => String(v == null ? '' : v);
+  const esVerdadero_ = v => v === true || String(v).trim().toLowerCase() === 'true';
+  function hoja_(wb, nombre) {
+    const sh = wb.Sheets[nombre];
+    return sh ? XLSX.utils.sheet_to_json(sh, { defval: '' }) : [];
+  }
+  function leerHistorial_(wb) {
+    const muestreos = hoja_(wb, 'Muestreos').filter(r => txt_(r.id).trim()).map(r => ({
+      id: txt_(r.id).trim(),
+      timestamp: isoDe_(r.timestamp),
+      analista_username: txt_(r.analista_username), analista_nombre: txt_(r.analista_nombre),
+      linea: txt_(r.linea), orden_envasado: txt_(r.orden_envasado).trim(), lote: txt_(r.lote).trim(),
+      codigo_pt: txt_(r.codigo_pt), fecha_muestreo: diaDe_(r.fecha_muestreo), hora_muestreo: horaDe_(r.hora_muestreo),
+      n_muestras: r.n_muestras, DC: r.DC, DM: r.DM, DL: r.DL, QR: r.QR, calidad_rango: txt_(r.calidad_rango),
+      unidades_retiradas: r.unidades_retiradas, motivo_retiro: txt_(r.motivo_retiro),
+      acciones_correctivas: txt_(r.acciones_correctivas),
+      fotos: txt_(r.fotos_urls).split(',').map(s => s.trim()).filter(Boolean),
+      defectos: (() => { try { const d = JSON.parse(r.defectos_json || '[]'); return Array.isArray(d) ? d : []; } catch (e) { return []; } })(),
+      estado: txt_(r.estado), aprobado_por: txt_(r.aprobado_por), aprobado_ts: isoDe_(r.aprobado_ts),
+      notas_aprobador: txt_(r.notas_aprobador),
+      foto_rotulo_url: txt_(r.foto_rotulo_url), foto_lote_url: txt_(r.foto_lote_url),
+      orden_cerrada: esVerdadero_(r.orden_cerrada),
+      checklist_lote: esVerdadero_(r.checklist_lote), checklist_vence: esVerdadero_(r.checklist_vence),
+      checklist_producto: esVerdadero_(r.checklist_producto),
+    }));
+    const defectos = hoja_(wb, 'Defectos').filter(r => txt_(r.codigo).trim()).map(r => ({
+      codigo: txt_(r.codigo).trim(), descripcion: txt_(r.descripcion), clasificacion: txt_(r.clasificacion).trim(),
+      grupo: txt_(r.grupo), activo: r.activo === '' ? true : esVerdadero_(r.activo),
+    }));
+    const auditoria = hoja_(wb, 'Auditoria').filter(r => txt_(r.accion).trim()).map(r => ({
+      timestamp: isoDe_(r.timestamp), usuario: txt_(r.usuario), rol: txt_(r.rol), accion: txt_(r.accion),
+      entidad: txt_(r.entidad), entidad_id: txt_(r.entidad_id), detalles: txt_(r.detalles), user_agent: txt_(r.user_agent),
+    }));
+    const firmas = hoja_(wb, 'Usuarios').filter(r => txt_(r.firma_url).trim()).map(r => ({
+      username: txt_(r.username), nombre: txt_(r.nombre), firma_url: txt_(r.firma_url).trim(),
+    }));
+    return { muestreos, defectos, auditoria, firmas };
+  }
 
-  // ---------- CAMBIAR CONTRASEÑA ----------
-  function renderChangePwd() {
-    titleEl.textContent = 'Cambiar contraseña';
+  function renderImport() {
+    if (!hasRole(ROLES.ADMIN)) { nav('home'); return; }
+    titleEl.textContent = 'Importar historial';
     app.innerHTML = `
       <div class="card">
-        <h2>Cambiar contraseña</h2>
-        <label>Contraseña actual</label>
-        <input id="pw_old" type="password" />
-        <label>Nueva contraseña (≥ 6)</label>
-        <input id="pw_new" type="password" />
-        <label>Repetir nueva</label>
-        <input id="pw_new2" type="password" />
-        <div class="mt12"><button class="primary" id="pw_save">Guardar</button></div>
+        <h2>📥 Importar historial de la app anterior</h2>
+        <div class="muted small mb8">Se hace una sola vez. En la planilla de Google de la app vieja: <b>Archivo → Descargar → Microsoft Excel (.xlsx)</b>, y elegí ese archivo acá. Antes de importar vas a ver qué trae.</div>
+        <div class="muted small mb8">Se leen las hojas Muestreos, Defectos y Auditoria, y de Usuarios solo el usuario, el nombre y la firma: las contraseñas no se leen ni se envían.</div>
+        <input id="imp_file" type="file" accept=".xlsx" />
+        <div id="imp_box" class="mt12"></div>
       </div>
     `;
-    document.getElementById('pw_save').addEventListener('click', async () => {
-      const oldP = document.getElementById('pw_old').value;
-      const n1 = document.getElementById('pw_new').value;
-      const n2 = document.getElementById('pw_new2').value;
-      if (n1 !== n2) return toast('Las nuevas no coinciden', 'err');
-      try { loading(true); await api('changePassword', { oldPassword: oldP, newPassword: n1 }); toast('Contraseña actualizada','ok'); nav('home'); }
-      catch(e) { toast(e.message,'err'); } finally { loading(false); }
-    });
-  }
-
-  // ---------- ADMIN USUARIOS ----------
-  async function renderUsers() {
-    if (!hasRole(ROLES.ADMIN) && !hasRole(ROLES.COORDINADOR)) { nav('home'); return; }
-    titleEl.textContent = 'Usuarios';
-    app.innerHTML = '<div class="card"><div class="muted small">Cargando…</div></div>';
-    try {
-      const r = await api('listUsers');
-      const rows = r.rows || [];
-      const isAdmin = hasRole(ROLES.ADMIN);
-      app.innerHTML = `
-        <div class="card">
-          <h2>Usuarios (${rows.length})</h2>
-          ${isAdmin?`<div class="row mt8">
-            <button class="primary" id="u_new">➕ Nuevo usuario</button>
-          </div>`:''}
-        </div>
-        <div class="card">
+    document.getElementById('imp_file').addEventListener('change', async (ev) => {
+      const archivo = ev.target.files && ev.target.files[0];
+      if (!archivo) return;
+      const box = document.getElementById('imp_box');
+      box.innerHTML = '<div class="muted small">Leyendo el archivo…</div>';
+      try {
+        await cargarLectorExcel_();
+        const wb = XLSX.read(await archivo.arrayBuffer(), { type: 'array', cellDates: true });
+        const datos = leerHistorial_(wb);
+        const m = datos.muestreos;
+        const sinFecha = m.filter(x => !x.timestamp).length;
+        const ordenes = new Set(m.map(x => x.orden_envasado)).size;
+        const cerradas = new Set(m.filter(x => x.orden_cerrada).map(x => x.orden_envasado)).size;
+        const fechas = m.map(x => x.timestamp).filter(Boolean).sort();
+        const periodo = fechas.length ? `${fmtDay(fechas[0])} al ${fmtDay(fechas[fechas.length - 1])}` : '—';
+        const puede = m.length > 0 && sinFecha === 0;
+        box.innerHTML = `
           <table>
-            <thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Estado</th><th></th></tr></thead>
             <tbody>
-              ${rows.map(u => `
-                <tr>
-                  <td><b>${esc(u.username)}</b></td>
-                  <td>${esc(u.nombre||'')}</td>
-                  <td>${esc(u.rol)}</td>
-                  <td>${u.activo?'<span class="chip ok">Activo</span>':'<span class="chip warn">Inactivo</span>'}</td>
-                  <td>
-                    ${isAdmin?`
-                    <button class="secondary" data-reset="${esc(u.username)}">🔑 Reset</button>
-                    <button class="secondary" data-toggle="${esc(u.username)}">${u.activo?'Desactivar':'Activar'}</button>
-                    `:''}
-                  </td>
-                </tr>
-              `).join('')}
+              <tr><td>Muestreos (controles)</td><td><b>${m.length}</b></td></tr>
+              <tr><td>Período</td><td>${esc(periodo)}</td></tr>
+              <tr><td>Órdenes</td><td><b>${ordenes}</b> (${cerradas} aprobadas y cerradas)</td></tr>
+              <tr><td>Defectos del catálogo</td><td>${datos.defectos.length}</td></tr>
+              <tr><td>Registros de auditoría</td><td>${datos.auditoria.length}</td></tr>
+              <tr><td>Firmas dibujadas</td><td>${datos.firmas.length}</td></tr>
             </tbody>
           </table>
-        </div>
-      `;
-      if (isAdmin) {
-        document.getElementById('u_new').addEventListener('click', openNewUserForm);
-        app.querySelectorAll('[data-reset]').forEach(b => b.addEventListener('click', ()=> resetPwd(b.dataset.reset)));
-        app.querySelectorAll('[data-toggle]').forEach(b => b.addEventListener('click', ()=> toggleUser(b.dataset.toggle)));
+          ${!m.length ? '<div class="chip danger mt8">El archivo no tiene la hoja Muestreos o está vacía.</div>' : ''}
+          ${sinFecha ? `<div class="chip danger mt8">${sinFecha} muestreo(s) sin fecha válida: no se puede importar así.</div>` : ''}
+          <div class="mt12"><button class="primary" id="imp_ok" ${puede ? '' : 'disabled'}>📥 Importar</button></div>
+        `;
+        const boton = document.getElementById('imp_ok');
+        if (boton) boton.addEventListener('click', async () => {
+          if (!confirm(`Se van a importar ${m.length} muestreos y ${cerradas} órdenes cerradas. Se hace una sola vez. ¿Seguir?`)) return;
+          try {
+            loading(true);
+            const r = await api('importar', { datos });
+            box.innerHTML = `<div class="chip ok">Importado: ${r.muestreos} muestreos, ${r.ordenes} órdenes cerradas, ${r.defectos} defectos, ${r.auditoria} registros de auditoría y ${r.firmas} firmas.</div>`;
+            await loadCatalog();
+          } catch (e) {
+            toast(e.message, 'err');
+          } finally { loading(false); }
+        });
+      } catch (e) {
+        box.innerHTML = `<div class="chip danger">${esc(e.message)}</div>`;
       }
-    } catch(e) { app.innerHTML = `<div class="card"><div class="chip danger">${esc(e.message)}</div></div>`; }
-  }
-
-  function openNewUserForm() {
-    const html = `
-      <div class="card">
-        <h2>Nuevo usuario</h2>
-        <div class="row">
-          <div><label>Usuario</label><input id="nu_u" /></div>
-          <div><label>Nombre completo</label><input id="nu_n" /></div>
-        </div>
-        <div class="row">
-          <div><label>Rol</label>
-            <select id="nu_r">
-              <option>Analista</option><option>Coordinador</option><option>QA</option><option>Admin</option>
-            </select>
-          </div>
-          <div><label>Contraseña inicial (≥6)</label><input id="nu_p" type="text" /></div>
-        </div>
-        <div class="row mt8">
-          <button class="secondary" id="nu_cancel">Cancelar</button>
-          <button class="primary" id="nu_save">Crear</button>
-        </div>
-      </div>
-    `;
-    const div = document.createElement('div');
-    div.innerHTML = html;
-    app.prepend(div);
-    document.getElementById('nu_cancel').addEventListener('click', ()=> div.remove());
-    document.getElementById('nu_save').addEventListener('click', async () => {
-      const data = {
-        username: document.getElementById('nu_u').value.trim(),
-        nombre: document.getElementById('nu_n').value.trim(),
-        rol: document.getElementById('nu_r').value,
-        password: document.getElementById('nu_p').value
-      };
-      try { loading(true); await api('createUser', { data }); toast('Usuario creado','ok'); renderUsers(); }
-      catch(e) { toast(e.message,'err'); } finally { loading(false); }
     });
-  }
-
-  async function resetPwd(username) {
-    const np = prompt(`Nueva contraseña para ${username} (≥6):`);
-    if (!np) return;
-    try { loading(true); await api('resetPassword', { username, newPassword: np }); toast('Contraseña reseteada','ok'); }
-    catch(e) { toast(e.message,'err'); } finally { loading(false); }
-  }
-  async function toggleUser(username) {
-    if (!confirm(`Cambiar estado activo/inactivo de "${username}"?`)) return;
-    try { loading(true); await api('toggleUserActive', { username }); renderUsers(); }
-    catch(e) { toast(e.message,'err'); } finally { loading(false); }
   }
 
   // ---------- DEFECTS ADMIN ----------
@@ -2105,7 +2016,7 @@ window.APP_CONFIG = {
     app.innerHTML = `
       <div class="card">
         <h2>Catálogo (${state.catalog.length})</h2>
-        <div class="muted small">Podés reclasificar cada defecto. Cambios quedan en la Google Sheet y en la auditoría.</div>
+        <div class="muted small">Podés reclasificar cada defecto. El cambio queda en la auditoría, y los controles ya cargados conservan la clasificación con la que se calculó su QR.</div>
       </div>
       <div class="card">
         ${state.catalog.map(d => {
@@ -2169,12 +2080,7 @@ window.APP_CONFIG = {
     nav(b.dataset.view);
   }));
 
-  loadSession();
-  if (state.session) {
-    arrancarConSesion();
-  } else {
-    renderLogin();
-  }
+  arrancarConSesion();
 })();
 
 </script>
