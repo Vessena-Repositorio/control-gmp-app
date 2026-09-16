@@ -6,7 +6,9 @@ import { auditar } from '../lib/sesiones.js';
 import { hayCorreo, enviar } from '../lib/correo.js';
 import { relojLocal, comoDia } from '../lib/tareas.js';
 import { descargar } from '../lib/origen.js';
-import { dma, esc, BASE, PREFIJO } from '../lib/avisos-control-cambios.js';
+import {
+    dma, esc, BASE, PREFIJO, revisarAvisosControlCambios, configControlCambios,
+} from '../lib/avisos-control-cambios.js';
 
 /**
  * API de Control de Cambios, sobre Postgres.
@@ -522,5 +524,26 @@ rutasControlCambios.post('/resembrar', administrar, async (req, res, next) => {
         res.json({ ok: true, ...resultado });
     } catch (err) {
         responderError(res, next, err);
+    }
+});
+
+/* ═══ Avisos ═════════════════════════════════════════════════════════════════ */
+
+/**
+ * GET /api/control-cambios/avisos — previsualizacion de los avisos de tareas
+ * por vencer: arma los mismos mensajes que la corrida diaria y devuelve a quien
+ * irian y cuantas tareas lleva cada uno, sin mandar nada ni marcar el dia.
+ *
+ * Existe para revisarlo con la sesion del portal. La previsualizacion de
+ * /api/correo es un POST que pide SYNC_TOKEN: sirve para diagnostico, pero no
+ * para que quien administra la app mire una lista desde el navegador, y ese
+ * token no tiene por que circular para eso.
+ */
+rutasControlCambios.get('/avisos', administrar, async (_req, res, next) => {
+    try {
+        const r = await revisarAvisosControlCambios({ forzar: true, soloPrevisualizar: true });
+        res.json({ ok: true, config: configControlCambios(), ...r });
+    } catch (err) {
+        next(err);
     }
 });
