@@ -9,7 +9,7 @@ import { consultar } from '../db.js';
 
 /** Nombre comparable: sin tildes, sin mayusculas y sin espacios de mas. */
 export const nombreComparable = (s) => String(s || '')
-    .normalize('NFD').replace(/[0300-036f]/g, '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .toLowerCase().replace(/\s+/g, ' ').trim();
 
 /**
