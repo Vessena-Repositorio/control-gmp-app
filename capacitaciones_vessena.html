@@ -158,7 +158,7 @@ summary.leg-y:hover{background:var(--g50)!important}
 
 <div class="hdr">
   <div class="hdr-top">
-    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-16a</span></div></div>
+    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-16b</span></div></div>
     <div class="code">REG-SOP-AC-039-D</div>
   </div>
   <div class="nav" id="nav">
@@ -4554,11 +4554,21 @@ function guardarNumeros(p,ep){
 function attrTxt(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}
 /* Al elegir "ya está en la app" para una alta, esa persona deja de figurar
    entre las que pasan a inactivas. */
+function personaDeTexto(v){
+  const t=String(v||'').trim().toUpperCase();
+  if(!t)return null;
+  return PE.find(x=>x.n===t)||PE.find(x=>nombreClave(x.n)===nombreClave(t))||null;
+}
 function importLinkCambio(){
   const elegidos=new Set();
   document.querySelectorAll('.new-link').forEach(s=>{
-    if(s.value)elegidos.add(s.value);
-    const sec=$('new-sec-'+s.dataset.i);if(sec)sec.disabled=!!s.value;
+    const p=personaDeTexto(s.value);
+    if(p)elegidos.add(p.n);
+    const sec=$('new-sec-'+s.dataset.i);if(sec)sec.disabled=!!p;
+    const est=$('new-link-est-'+s.dataset.i);
+    if(est)est.innerHTML=!s.value.trim()?'':p
+      ?'<span style="color:var(--green)">✓ se vincula con '+h(p.n)+'</span>'
+      :'<span style="color:var(--red)">No está en la app: elegila de la lista</span>';
   });
   document.querySelectorAll('[id^="keep-active-"]').forEach(k=>{
     const chip=$('chip-inact-'+k.id.slice('keep-active-'.length));
@@ -4764,15 +4774,19 @@ $('xlsx-admin').addEventListener('change',function(e){
           newHtml+='<option value="__nuevo__">+ Crear nuevo sector...</option>';
           newHtml+='</select></td>';
           newHtml+='<td>'+bg(p.tipo,p.tipo==='MANPOWER'?'amber':'blue')+'</td>';
-          const opc=x=>'<option value="'+attrTxt(x.n)+'">'+h(x.n)+(x.a===false?' (inactivo)':'')+' — '+h(x.s||'')+'</option>';
-          const conPuntaje=libres.map(x=>({x,s:parecidoSugerencia(p.name,x.n)}));
-          const parecidos=conPuntaje.filter(c=>c.s>=1).sort((a,b)=>b.s-a.s).slice(0,8).map(c=>c.x);
+          // Campo con lista para escribir parte del nombre: con un desplegable
+          // de cien personas no habia forma de encontrar a nadie. Van primero
+          // los parecidos, despues el resto y al final los ya reconocidos
+          // (elegir uno de esos obliga a desvincularlo arriba).
+          const etiqueta=x=>(x.a===false?'inactivo · ':'')+(x.s||'')+(matched.has(x.n)?' · ya reconocido como '+matched.get(x.n).name:'');
+          const opc=x=>'<option value="'+attrTxt(x.n)+'" label="'+attrTxt(etiqueta(x))+'"></option>';
+          const parecidos=libres.map(x=>({x,s:parecidoSugerencia(p.name,x.n)}))
+            .filter(c=>c.s>=1).sort((a,b)=>b.s-a.s).slice(0,8).map(c=>c.x);
           const resto=libres.filter(x=>!parecidos.includes(x)).sort((a,b)=>a.n.localeCompare(b.n));
-          newHtml+='<td><select id="new-link-'+i+'" class="new-link" data-i="'+i+'" onchange="importLinkCambio()" style="font-size:11px;padding:3px 6px;width:100%;max-width:220px">';
-          newHtml+='<option value="">No, es nueva</option>';
-          if(parecidos.length)newHtml+='<optgroup label="Nombres parecidos">'+parecidos.map(opc).join('')+'</optgroup>';
-          newHtml+='<optgroup label="Resto del personal">'+resto.map(opc).join('')+'</optgroup>';
-          newHtml+='</select></td>';
+          const asignados=PE.filter(x=>matched.has(x.n)).sort((a,b)=>a.n.localeCompare(b.n));
+          newHtml+='<td><input id="new-link-'+i+'" class="new-link" data-i="'+i+'" list="pe-lista-'+i+'" oninput="importLinkCambio()" placeholder="No, es nueva — escribí para buscar" autocomplete="off" style="font-size:11px;padding:3px 6px;width:100%;max-width:240px">';
+          newHtml+='<datalist id="pe-lista-'+i+'">'+parecidos.concat(resto,asignados).map(opc).join('')+'</datalist>';
+          newHtml+='<div id="new-link-est-'+i+'" style="font-size:9px;margin-top:2px"></div></td>';
           newHtml+='</tr>';
         });
         newHtml+='</tbody></table>';
@@ -4814,8 +4828,14 @@ $('import-confirm').addEventListener('click',function(){
   });
   for(const [i,ep] of newPeople.entries()){
     const link=document.getElementById('new-link-'+i);
-    const app=link?link.value:'';
-    if(!app){nuevos.push({ep,i});continue}
+    const texto=link?link.value.trim():'';
+    if(!texto){nuevos.push({ep,i});continue}
+    const elegida=personaDeTexto(texto);
+    if(!elegida){
+      alert('«'+texto+'» (para '+ep.name+') no está en el personal de la app. Elegila de la lista o dejá el campo vacío si es nueva.');
+      return;
+    }
+    const app=elegida.n;
     if(finales.has(app)){
       alert(app+' quedó asignado a dos personas del Excel ('+finales.get(app).name+' y '+ep.name+'). Corregí la revisión antes de aplicar.');
       return;
