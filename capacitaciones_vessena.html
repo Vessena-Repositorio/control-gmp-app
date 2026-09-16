@@ -158,7 +158,7 @@ summary.leg-y:hover{background:var(--g50)!important}
 
 <div class="hdr">
   <div class="hdr-top">
-    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-16b</span></div></div>
+    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-16c</span></div></div>
     <div class="code">REG-SOP-AC-039-D</div>
   </div>
   <div class="nav" id="nav">
@@ -1358,6 +1358,8 @@ function _findPersonReal(recName){
   // 2. Alias match
   const alias=NAME_ALIAS[rn];
   if(alias){p=PE.find(x=>x.n===alias);if(p)return p}
+  // 2b. Nombre de una ficha duplicada que se unifico en esta (unificarPersona)
+  p=PE.find(x=>Array.isArray(x.alias)&&x.alias.includes(rn));if(p)return p;
   // 3. Fuzzy: all words of recName in personnel full name
   const parts=new Set(rn.split(' ').filter(w=>w.length>2&&!['DE','DEL','LOS','LA'].includes(w)));
   for(const pe of PE){
@@ -4573,8 +4575,29 @@ function importLinkCambio(){
   document.querySelectorAll('[id^="keep-active-"]').forEach(k=>{
     const chip=$('chip-inact-'+k.id.slice('keep-active-'.length));
     if(!chip)return;
-    chip.style.display=(elegidos.has(k.dataset.name)||k.value==='1')?'none':'';
+    chip.style.display=elegidos.has(k.dataset.name)?'none':'';
   });
+  document.querySelectorAll('.inact-unif').forEach(u=>{
+    const est=$('inact-unif-est-'+u.dataset.i);
+    const keep=$('keep-active-'+u.dataset.i);
+    const p=personaDeTexto(u.value);
+    const ok=p&&p.n!==u.dataset.name&&pendingImport&&pendingImport.matched.has(p.n);
+    if(keep){keep.disabled=!!ok;if(ok)keep.checked=false}
+    if(est)est.innerHTML=!u.value.trim()?'':ok
+      ?'<span style="color:var(--green)">✓ se unifica en '+h(p.n)+'</span>'
+      :'<span style="color:var(--red)">Elegí de la lista a alguien que venga en el Excel</span>';
+  });
+}
+
+/* Unifica una ficha duplicada en la que viene en el Excel. Los registros de
+   capacitacion no se tocan: el nombre duplicado queda como alias de la ficha
+   que sigue (p.alias) y findPerson -y su copia del servidor- lo resuelven ahi.
+   La fecha de alta que queda es la mas vieja de las dos. */
+function unificarPersona(dup,destino){
+  destino.alias=[...new Set([...(destino.alias||[]),dup.n,...(dup.alias||[])])];
+  if(dup.fechaAlta&&(!destino.fechaAlta||dup.fechaAlta<destino.fechaAlta))destino.fechaAlta=dup.fechaAlta;
+  const i=PE.indexOf(dup);
+  if(i>=0)PE.splice(i,1);
 }
 
 let pendingImport=null;
@@ -4735,13 +4758,20 @@ $('xlsx-admin').addEventListener('change',function(e){
       let inactHtml='';
       if(inactivePeople.length){
         inactHtml='<div style="font-size:11px;font-weight:700;color:var(--red);margin-bottom:6px">➖ A marcar como INACTIVOS ('+inactivePeople.length+')</div>';
-        inactHtml+='<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">';
+        inactHtml+='<div style="font-size:9px;color:var(--g500);margin-bottom:6px">Si alguien figura dos veces en la app (por ejemplo con el nombre corto y con el completo del Excel), usá «Es la misma persona que…»: se unifican en una sola ficha y sus capacitaciones siguen contando.</div>';
+        inactHtml+='<table style="width:100%;font-size:11px;margin-bottom:12px"><thead><tr><th>En la app</th><th>Mantener activo</th><th>Es la misma persona que…</th></tr></thead><tbody>';
+        const reconocidos=PE.filter(x=>matched.has(x.n));
         inactivePeople.forEach((p,i)=>{
-          inactHtml+='<span id="chip-inact-'+i+'" class="bg bg-red" style="font-size:10px;cursor:pointer" onclick="this.style.display=\'none\';document.getElementById(\'keep-active-'+i+'\').value=\'1\'" title="Click para mantener activo">'+h(p.n)+' ('+h(p.s)+') ✕</span>';
-          inactHtml+='<input type="hidden" id="keep-active-'+i+'" value="0" data-name="'+attrTxt(p.n)+'">';
+          const sug=reconocidos.map(x=>({x,s:parecidoSugerencia(p.n,x.n)})).filter(c=>c.s>=1).sort((a,b)=>b.s-a.s);
+          const orden=sug.map(c=>c.x).concat(reconocidos.filter(x=>!sug.some(c=>c.x===x)).sort((a,b)=>a.n.localeCompare(b.n)));
+          inactHtml+='<tr id="chip-inact-'+i+'"><td style="font-weight:600;color:var(--red)">'+h(p.n)+' <span style="font-weight:400;color:var(--g500)">('+h(p.s)+')</span>'+numTxt(p)+'</td>';
+          inactHtml+='<td style="text-align:center"><input type="checkbox" id="keep-active-'+i+'" data-name="'+attrTxt(p.n)+'" onchange="importLinkCambio()"></td>';
+          inactHtml+='<td><input class="inact-unif" id="inact-unif-'+i+'" data-i="'+i+'" data-name="'+attrTxt(p.n)+'" list="pe-unif-'+i+'" oninput="importLinkCambio()" placeholder="Escribí para buscar" autocomplete="off" style="font-size:11px;padding:3px 6px;width:100%;max-width:240px">';
+          inactHtml+='<datalist id="pe-unif-'+i+'">'+orden.map(x=>'<option value="'+attrTxt(x.n)+'" label="'+attrTxt((x.s||'')+' · Excel: '+matched.get(x.n).name)+'"></option>').join('')+'</datalist>';
+          if(sug.length)inactHtml+='<div style="font-size:9px;margin-top:2px">¿<a href="#" onclick="var e=document.getElementById(\'inact-unif-'+i+'\');e.value=this.dataset.n;importLinkCambio();return false" data-n="'+attrTxt(sug[0].x.n)+'">'+h(sug[0].x.n)+'</a>?</div>';
+          inactHtml+='<div id="inact-unif-est-'+i+'" style="font-size:9px;margin-top:2px"></div></td></tr>';
         });
-        inactHtml+='</div>';
-        inactHtml+='<div style="font-size:9px;color:var(--g400);margin-bottom:10px">Hacé click en un nombre para mantenerlo activo</div>';
+        inactHtml+='</tbody></table>';
       }
       $('import-inactive').innerHTML=inactHtml;
 
@@ -4844,9 +4874,26 @@ $('import-confirm').addEventListener('click',function(){
     linkCount++;
   }
 
+  // Duplicados a unificar: se validan todos antes de tocar nada
+  const unificar=[];
+  for(const u of document.querySelectorAll('.inact-unif')){
+    const texto=u.value.trim();
+    if(!texto||finales.has(u.dataset.name))continue;
+    const destino=personaDeTexto(texto);
+    if(!destino||destino.n===u.dataset.name||!finales.has(destino.n)){
+      alert('Para unificar '+u.dataset.name+' elegí de la lista a una persona que venga en el Excel («'+texto+'» no sirve).');
+      return;
+    }
+    unificar.push([u.dataset.name,destino.n]);
+  }
+  unificar.forEach(([dupN,destN])=>{
+    const dup=PE.find(x=>x.n===dupN),destino=PE.find(x=>x.n===destN);
+    if(dup&&destino)unificarPersona(dup,destino);
+  });
+
   // Mark inactive (unless user clicked to keep)
   const mantener=new Set([...document.querySelectorAll('[id^="keep-active-"]')]
-    .filter(x=>x.value==='1').map(x=>x.dataset.name));
+    .filter(x=>x.checked).map(x=>x.dataset.name));
   PE.forEach(p=>{
     if(p.a===false||finales.has(p.n)||mantener.has(p.n))return;
     p.a=false;p.fechaBaja=p.fechaBaja||hoy;deactCount++;
@@ -4903,6 +4950,7 @@ $('import-confirm').addEventListener('click',function(){
     (reactCount?', ↻'+reactCount+' reactivados':'')+
     (linkCount?', '+linkCount+' vinculados a mano':'')+
     (unlinkCount?', '+unlinkCount+' desvinculados en la revisión':'')+
+    (unificar.length?', unificados: '+unificar.map(u=>u[0]+' → '+u[1]).join('; '):'')+
     (newSectors.length?', nuevos sectores: '+newSectors.join(', '):'');
   logAudit('PERSONAL',det);
 
@@ -4913,7 +4961,7 @@ $('import-confirm').addEventListener('click',function(){
   alert('✓ Importación completada:\n' +
     '• '+finales.size+' personas existentes (sector y fecha alta original preservadas)'+(linkCount?', '+linkCount+' vinculadas a mano':'')+'\n' +
     '• '+addedCount+' incorporaciones\n' +
-    '• '+deactCount+' marcados inactivos'+(reactCount?'\n• '+reactCount+' reactivados (se les limpió la fecha de baja)':'')+
+    '• '+deactCount+' marcados inactivos'+(unificar.length?'\n• '+unificar.length+' duplicado(s) unificado(s)':'')+(reactCount?'\n• '+reactCount+' reactivados (se les limpió la fecha de baja)':'')+
     (newSectors.length?'\n• Nuevos sectores: '+newSectors.join(', '):''));
 });
 

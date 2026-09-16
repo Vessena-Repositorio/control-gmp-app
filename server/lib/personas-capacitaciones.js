@@ -58,6 +58,8 @@ export function buscadorDePersonas(personal) {
         let p = lista.find((x) => String(x.n) === rn);
         // 2. Alias
         if (!p && ALIAS[rn]) p = lista.find((x) => String(x.n) === ALIAS[rn]);
+        // 2b. Nombre de una ficha duplicada que se unifico en esta
+        if (!p) p = lista.find((x) => Array.isArray(x.alias) && x.alias.includes(rn));
         // 3. Todas las palabras del registro en el nombre del padron
         if (!p) {
             const partes = palabras(rn);
