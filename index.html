@@ -1006,10 +1006,6 @@
       roles: ['admin'],
       items: [
         {
-          // PENDIENTE: Control de Cambios usa el mismo Apps Script que la app
-          // vieja de No Conformidades (ORIGEN_NC, AKfycbwiIr60f7...). Hasta que
-          // se desasocie, ese Apps Script no se puede archivar aunque la app vieja
-          // de NC ya no se use.
           id: 'cambios',
           name: 'Control de Cambios',
           desc: 'Gestión, evaluación y aprobación de cambios en procesos y productos.',
@@ -1020,7 +1016,8 @@
         // La tarjeta de la app vieja de No Conformidades (no_conformidades.html,
         // CGM-002) se quitó el 14/09/2026: las NC se cargan en No Conformidades -
         // Desvíos. Con las dos en el portal alguien podía cargar una NC en la
-        // equivocada. El archivo sigue existiendo para consulta por URL.
+        // equivocada. El archivo se borro el 16/09/2026, al
+        // dejar de usar su Apps Script.
         {
           id: 'nc-desvios',
           name: 'No Conformidades - Desvíos',

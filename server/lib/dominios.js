@@ -2,7 +2,6 @@ import { sincronizarEnvases } from '../sync/sync-envases.js';
 import { sincronizarProceso } from '../sync/sync-proceso.js';
 import { sincronizarSao001 } from '../sync/sync-sao001.js';
 import { sincronizarFabuloso } from '../sync/sync-fabuloso.js';
-import { sincronizarDocumentos, DOMINIOS_DOCUMENTOS } from '../sync/sync-documentos.js';
 import { sincronizarUsuarios } from '../sync/sync-usuarios.js';
 
 /**
@@ -21,7 +20,10 @@ export const REPLICAS = [
     { nombre: 'proceso', fn: sincronizarProceso, dominios: ['proceso'] },
     { nombre: 'sao001', fn: sincronizarSao001, dominios: ['sao001'] },
     { nombre: 'fabuloso', fn: sincronizarFabuloso, dominios: ['fabuloso'] },
-    { nombre: 'documentos', fn: sincronizarDocumentos, dominios: DOMINIOS_DOCUMENTOS },
+    // 'documentos' se retiro el 16/09/2026: los cinco dominios de gestion que
+    // replicaba ya tienen su fuente de verdad en Postgres (el ultimo,
+    // no_conformidades, con la baja de la app vieja). La tabla `documentos` queda
+    // como copia historica y la sigue leyendo /api/documentos/estado.
     { nombre: 'usuarios', fn: sincronizarUsuarios, dominios: ['usuarios'] },
 ];
 

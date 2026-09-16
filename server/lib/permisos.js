@@ -36,7 +36,7 @@ export const RECURSOS = [
     'portal',
     'control-en-proceso',
     'control-calidad-envases',
-    'no-conformidades',
+    // 'no-conformidades' (app vieja, no_conformidades.html) se retiro el 16/09/2026.
     'no-conformidades-desvios',
     'control-cambios',
     'estabilidad',
@@ -57,7 +57,6 @@ export const ARCHIVO_POR_RECURSO = {
     'portal': 'index.html',
     'control-en-proceso': 'control-en-proceso.html',
     'control-calidad-envases': 'control-calidad-envases.html',
-    'no-conformidades': 'no_conformidades.html',
     'no-conformidades-desvios': 'no-conformidades-desvios.html',
     'control-cambios': 'control_cambios.html',
     'estabilidad': 'estabilidad.html',

@@ -18,11 +18,10 @@ import { descargar } from '../lib/origen.js';
 const CAMPOS_CLAVE = ['id', 'seq', 'numero', 'nombre', 'n'];
 
 const DOMINIOS = [
-    {
-        dominio: 'no_conformidades',
-        env: 'ORIGEN_NC',
-        peticiones: [{ query: '?action=getAll', colecciones: ['ncs'] }],
-    },
+    // no_conformidades SE APAGO el 16/09/2026, junto con la baja de la app vieja
+    // (no_conformidades.html). Las no conformidades viven en la app No
+    // Conformidades - Desvios, sobre Postgres (tablas ncd_*), desde el 07/09. Era
+    // la ultima replica de este archivo: el Apps Script ORIGEN_NC se puede archivar.
     // control_cambios SE APAGO el 15/09/2026: Postgres paso a ser su fuente de
     // verdad y la app escribe en /api/control-cambios (tabla cc_cambios).
     //
@@ -179,6 +178,11 @@ async function replicarDominio(cfg) {
  * un Apps Script este caido no puede impedir que se repliquen los demas.
  */
 export async function sincronizarDocumentos() {
+    // Desde el 16/09/2026 no queda ningun dominio que replicar: todos pasaron a
+    // Postgres. Se devuelve vacio en vez de lanzar, para que `npm run sync` siga
+    // andando; la replica periodica ya no la llama (ver lib/dominios.js).
+    if (!DOMINIOS.length) return { dominios: [], fallos: [] };
+
     const resultados = [];
     const fallos = [];
 
