@@ -158,7 +158,7 @@ summary.leg-y:hover{background:var(--g50)!important}
 
 <div class="hdr">
   <div class="hdr-top">
-    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-14b</span></div></div>
+    <div><h1>Vessena S.A.</h1><div class="sub">Seguimiento de Capacitaciones 2026 <span style="opacity:.55;font-size:11px">· build 2026-09-16a</span></div></div>
     <div class="code">REG-SOP-AC-039-D</div>
   </div>
   <div class="nav" id="nav">
@@ -742,13 +742,14 @@ summary.leg-y:hover{background:var(--g50)!important}
 </div>
 <!-- MODAL clave -->
 <div class="modal-bg" id="import-modal">
-  <div class="modal" style="max-width:700px;max-height:90vh;display:flex;flex-direction:column">
+  <div class="modal" style="max-width:900px;max-height:90vh;display:flex;flex-direction:column">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div style="font-size:15px;font-weight:800;color:var(--navy)">📊 Revisión de importación</div>
       <button class="btn-i" onclick="document.getElementById('import-modal').classList.remove('show')" style="font-size:20px">✕</button>
     </div>
     <div id="import-summary" style="font-size:11px;color:var(--g600);margin-bottom:10px"></div>
     <div style="overflow-y:auto;flex:1;margin-bottom:12px">
+      <div id="import-review"></div>
       <div id="import-inactive" style="margin-bottom:12px"></div>
       <div id="import-new"></div>
     </div>
@@ -3977,7 +3978,7 @@ V.pers=function(){
   // Filter
   stats=stats.filter(x=>{
     const p=x.p;
-    if(q&&!p.n.toLowerCase().includes(q))return false;
+    if(q&&!p.n.toLowerCase().includes(q)&&!String(p.nro||"").includes(q)&&!String(p.ci||"").includes(q))return false;
     if(secFlt&&p.s!==secFlt)return false;
     if(tipoFlt&&(p.tipo||'VESSENA')!==tipoFlt)return false;
     if(tagFlt&&(!p.tags||!p.tags.includes(tagFlt)))return false;
@@ -4473,6 +4474,99 @@ function fuzzyMatch(name,candidates){
   return bestS>=0.4?best:null;
 }
 
+/* Emparejamiento de la importacion mensual de personal.
+
+   El Excel trae un numero por persona: numero de empleado en la hoja VESSENA,
+   "Nº" en MANPOWER (si algun mes trae una columna de cedula, se usa esa). Es la
+   unica señal inequivoca. Se guarda en cada persona (p.nro / p.ci) y, desde que
+   todos lo tienen, decide sola quien es quien aunque el nombre venga escrito
+   distinto.
+
+   Mientras una persona no tenga numero guardado, se la reconoce por nombre:
+   identico (sin tildes ni espacios de mas), por la tabla de alias, o por un
+   parecido ESTRICTO: todas las palabras del nombre mas corto tienen que estar
+   en el otro, al menos una identica, tolerando una letra cambiada
+   (JHONATAN / JONATHAN), y solo si no hay otro candidato igual de bueno.
+
+   El criterio anterior aceptaba UNA palabra parecida en un nombre de dos
+   (ALEXIS ~ ALEX alcanzaba): emparejaba a quien entraba con alguien que ya no
+   estaba, lo sacaba de las altas y dejaba activo al que se fue, sin mostrarlo.
+   Ahora todo lo que no sea numero o nombre identico se lista para revisar
+   antes de aplicar. */
+const PALABRAS_VACIAS=new Set(['DE','DEL','LA','LAS','LOS','Y']);
+function palabrasNombre(s){
+  return normTxt(s).replace(/[^A-Z ]/g,' ').split(/\s+/).filter(w=>w.length>1&&!PALABRAS_VACIAS.has(w));
+}
+function nombreClave(s){return palabrasNombre(s).join(' ')}
+function numeroLimpio(v){const d=String(v==null?'':v).replace(/\D/g,'');return d.length>=3?d:''}
+function levenshtein(a,b){
+  let prev=Array.from({length:b.length+1},(_,j)=>j);
+  for(let i=1;i<=a.length;i++){
+    const cur=[i];
+    for(let j=1;j<=b.length;j++)cur[j]=Math.min(prev[j]+1,cur[j-1]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1));
+    prev=cur;
+  }
+  return prev[b.length];
+}
+function palabraParecida(a,b){
+  if(a===b)return 1;
+  if(a.length<5||b.length<5)return 0;   // en palabras cortas una letra ya es otro nombre
+  const s=1-levenshtein(a,b)/Math.max(a.length,b.length);
+  return s>=0.75?s:0;
+}
+/* Parecido estricto entre dos nombres; 0 si no alcanza. */
+function parecidoEstricto(n1,n2){
+  let A=palabrasNombre(n1),B=palabrasNombre(n2);
+  if(A.length>B.length)[A,B]=[B,A];
+  if(A.length<2)return 0;
+  const usadas=new Set();let total=0,exactas=0;
+  for(const w of A){
+    let mejor=-1,ms=0;
+    B.forEach((x,j)=>{if(usadas.has(j))return;const s=palabraParecida(w,x);if(s>ms){ms=s;mejor=j}});
+    if(mejor<0)return 0;
+    usadas.add(mejor);total+=ms;if(ms===1)exactas++;
+  }
+  if(!exactas)return 0;
+  return A.length+total/B.length;   // mas palabras en comun pesa mas
+}
+/* Parecido flojo: solo ordena las sugerencias de "ya está en la app". */
+function parecidoSugerencia(n1,n2){
+  const B=palabrasNombre(n2);let s=0;
+  palabrasNombre(n1).forEach(w=>{
+    let m=0;
+    B.forEach(x=>{
+      if(x===w)m=1;
+      else if(x.length>=4&&w.length>=4&&(x.startsWith(w)||w.startsWith(x)))m=Math.max(m,0.6);
+      else m=Math.max(m,palabraParecida(w,x));
+    });
+    s+=m;
+  });
+  return s;
+}
+function numeroDe(x){return x.ci||x.nro||''}
+function guardarNumeros(p,ep){
+  ['ci','nro'].forEach(k=>{
+    if(!ep[k]||p[k]===ep[k])return;
+    if(p[k])p.numerosAnteriores=(p.numerosAnteriores||[]).concat(p[k]);
+    p[k]=ep[k];
+  });
+}
+function attrTxt(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}
+/* Al elegir "ya está en la app" para una alta, esa persona deja de figurar
+   entre las que pasan a inactivas. */
+function importLinkCambio(){
+  const elegidos=new Set();
+  document.querySelectorAll('.new-link').forEach(s=>{
+    if(s.value)elegidos.add(s.value);
+    const sec=$('new-sec-'+s.dataset.i);if(sec)sec.disabled=!!s.value;
+  });
+  document.querySelectorAll('[id^="keep-active-"]').forEach(k=>{
+    const chip=$('chip-inact-'+k.id.slice('keep-active-'.length));
+    if(!chip)return;
+    chip.style.display=(elegidos.has(k.dataset.name)||k.value==='1')?'none':'';
+  });
+}
+
 let pendingImport=null;
 
 
@@ -4519,11 +4613,13 @@ $('xlsx-admin').addEventListener('change',function(e){
         const json=XLSX.utils.sheet_to_json(ws,{defval:''});
         const isManpower=sheetName.toUpperCase().includes('MANPOWER');
         json.forEach(row=>{
-          let nombre='',sector='';
+          let nombre='',sector='',nro='',ci='';
           Object.keys(row).forEach(k=>{
             const kup=k.toUpperCase().trim();
             if(kup.includes('NOMBRE')||kup==='NOMBRE')nombre=String(row[k]||'').trim();
             if(kup.includes('SECTOR')||kup==='SECTOR'||kup==='SECTOR ')sector=String(row[k]||'').trim();
+            if(/C[EÉ]DULA|^C\.?\s?I\.?$|DOCUMENTO/.test(kup))ci=ci||numeroLimpio(row[k]);
+            else if(/N[UÚ]MERO|^N\s?[º°O]\.?$|LEGAJO/.test(kup))nro=nro||numeroLimpio(row[k]);
           });
           if(!nombre||!sector){
             const vals=Object.values(row).map(v=>String(v||'').trim());
@@ -4534,67 +4630,118 @@ $('xlsx-admin').addEventListener('change',function(e){
           if(nombre&&sector){
             const parsed=parseSectorTags(sector);
             excelPeople.push({
-              name:nombre.toUpperCase(),sectorOrig:sector.toUpperCase(),
-              sectorApp:parsed.sector,tags:parsed.tags,tipo:isManpower?'MANPOWER':'VESSENA',sheet:sheetName
+              name:nombre.toUpperCase().replace(/\s+/g,' ').trim(),sectorOrig:sector.toUpperCase(),
+              sectorApp:parsed.sector,tags:parsed.tags,tipo:isManpower?'MANPOWER':'VESSENA',sheet:sheetName,
+              nro,ci
             });
           }
         });
       });
-      
+
       if(!excelPeople.length){alert('No se encontraron datos de personal en el archivo.');return}
-      
-      // Match against current PE
-      const appNames=PE.map(p=>p.n);
-      const matched=new Map();
-      const aliasMap={};
-      
+
+      // Emparejar con el personal de la app (criterio arriba de parecidoEstricto)
+      const matched=new Map();   // nombre en la app -> fila del Excel
+      const porque=new Map();    // nombre en la app -> numero | nombre | alias | parecido | numero-distinto
+      const tomadas=new Set();   // filas del Excel ya asignadas
+      const libre=p=>!matched.has(p.n);
+      const asignar=(p,ep,m)=>{matched.set(p.n,ep);porque.set(p.n,m);tomadas.add(ep)};
+      const sinAsignar=()=>excelPeople.filter(ep=>!tomadas.has(ep));
+
+      // 1. Por numero: inequivoco
       excelPeople.forEach(ep=>{
-        const direct=PE.find(p=>p.n===ep.name);
-        if(direct&&!matched.has(direct.n)){matched.set(direct.n,ep);return}
-        const aliased=NAME_ALIAS[ep.name];
-        if(aliased){const ap=PE.find(p=>p.n===aliased);if(ap&&!matched.has(ap.n)){matched.set(ap.n,ep);return}}
-        const unmatched=appNames.filter(n=>!matched.has(n));
-        const fm=fuzzyMatch(ep.name,unmatched);
-        if(fm){matched.set(fm,ep);aliasMap[ep.name]=fm}
+        const p=PE.find(x=>libre(x)&&((ep.ci&&x.ci===ep.ci)||(ep.nro&&x.nro===ep.nro)));
+        if(p)asignar(p,ep,'numero');
       });
-      
+      // 2. Nombre identico, 3. tabla de alias
+      sinAsignar().forEach(ep=>{
+        const clave=nombreClave(ep.name);
+        let p=PE.find(x=>libre(x)&&nombreClave(x.n)===clave),m='nombre';
+        if(!p&&NAME_ALIAS[ep.name]){p=PE.find(x=>libre(x)&&x.n===NAME_ALIAS[ep.name]);m='alias'}
+        if(!p)return;
+        // Mismo nombre y otro numero: suele ser un pase de Manpower a Vessena
+        const otroNumero=(ep.ci&&p.ci&&p.ci!==ep.ci)||(ep.nro&&p.nro&&p.nro!==ep.nro);
+        asignar(p,ep,otroNumero?'numero-distinto':m);
+      });
+      // 4. Parecido estricto, solo cuando es el unico mejor para las dos partes
+      const cand=[];
+      sinAsignar().forEach(ep=>PE.filter(libre).forEach(p=>{
+        if((ep.ci&&p.ci)||(ep.nro&&p.nro))return;   // los dos con numero y distinto: no son la misma
+        const s=parecidoEstricto(ep.name,p.n);
+        if(s)cand.push({ep,p,s});
+      }));
+      const unicoMejor=l=>{const o=l.slice().sort((a,b)=>b.s-a.s);return o.length&&(o.length===1||o[0].s>o[1].s)?o[0]:null};
+      cand.forEach(c=>{
+        if(unicoMejor(cand.filter(x=>x.ep===c.ep))!==c)return;
+        if(unicoMejor(cand.filter(x=>x.p===c.p))!==c)return;
+        asignar(c.p,c.ep,'parecido');
+      });
+
       // New people
-      const matchedExcel=new Set();
-      matched.forEach(ep=>{matchedExcel.add(ep.name)});
       const newPeople=[];const seenNew=new Set();
-      excelPeople.forEach(ep=>{
-        if(!matchedExcel.has(ep.name)&&!seenNew.has(ep.name)){seenNew.add(ep.name);newPeople.push(ep)}
+      sinAsignar().forEach(ep=>{
+        if(!seenNew.has(ep.name)){seenNew.add(ep.name);newPeople.push(ep)}
       });
-      
+
       // Inactive
       const inactivePeople=PE.filter(p=>p.a!==false&&!matched.has(p.n));
-      
+
+      // Lo que se reconocio sin numero ni nombre identico se muestra
+      const revisar=[...matched].filter(([n])=>porque.get(n)!=='numero'&&porque.get(n)!=='nombre');
+      const conNumero=excelPeople.filter(ep=>numeroDe(ep)).length;
+
       // Build modal content
-      let summ='<b>Archivo:</b> '+h(file.name)+' — '+excelPeople.length+' personas en '+wb.SheetNames.length+' hojas<br>';
+      let summ='<b>Archivo:</b> '+h(file.name)+' — '+excelPeople.length+' personas en '+wb.SheetNames.length+' hojas'+
+        (conNumero?' · '+conNumero+' con número de empleado/cédula':' · <b style="color:var(--red)">sin columna de número</b>')+'<br>';
       summ+='✅ <b>'+matched.size+'</b> existentes <span style="color:var(--g500);font-size:10px">(se mantiene sector y fecha de alta original)</span> &nbsp;·&nbsp; ';
+      if(revisar.length)summ+='🔎 <b>'+revisar.length+'</b> para revisar &nbsp;·&nbsp; ';
       summ+='➕ <b>'+newPeople.length+'</b> nuevos <span style="color:var(--g500);font-size:10px">(fecha de alta = hoy, o la de su primera capacitación si ya tenía)</span> &nbsp;·&nbsp; ';
       summ+='➖ <b>'+inactivePeople.length+'</b> a marcar inactivos <span style="color:var(--g500);font-size:10px">(fecha baja = hoy)</span>';
       $('import-summary').innerHTML=summ;
-      
+
+      const numTxt=x=>numeroDe(x)?' <span style="font-size:9px;color:var(--g500);font-weight:400">Nº '+h(numeroDe(x))+'</span>':'';
+
+      // Review section
+      let revHtml='';
+      if(revisar.length){
+        revHtml='<div style="font-size:11px;font-weight:700;color:#b45309;margin-bottom:4px">🔎 Reconocidos con otro nombre — revisar ('+revisar.length+')</div>';
+        revHtml+='<div style="font-size:9px;color:var(--g500);margin-bottom:6px">Si alguno NO es la misma persona, marcá la casilla: el nombre del Excel entra como alta y el de la app pasa a inactivo.</div>';
+        revHtml+='<table style="width:100%;font-size:11px;margin-bottom:12px"><thead><tr><th>En el Excel</th><th>En la app</th><th>Por qué</th><th>No es la misma</th></tr></thead><tbody>';
+        revisar.forEach(([appName,ep])=>{
+          const p=PE.find(x=>x.n===appName)||{};
+          const m=porque.get(appName);
+          const mot=m==='alias'?'tabla de alias':m==='parecido'?'nombre parecido':
+            'mismo nombre, otro número ('+h(numeroDe(p))+' → '+h(numeroDe(ep))+'): se actualiza el número';
+          revHtml+='<tr><td style="font-weight:600">'+h(ep.name)+numTxt(ep)+'</td>';
+          revHtml+='<td>'+h(appName)+numTxt(p)+(p.a===false?' '+bg('inactivo','gray'):'')+'</td>';
+          revHtml+='<td style="font-size:10px;color:var(--g500)">'+mot+'</td>';
+          revHtml+='<td style="text-align:center">'+(m==='numero-distinto'?'—':'<input type="checkbox" class="rev-desvincular" data-app="'+attrTxt(appName)+'">')+'</td></tr>';
+        });
+        revHtml+='</tbody></table>';
+      }
+      $('import-review').innerHTML=revHtml;
+
       // Inactive section
       let inactHtml='';
       if(inactivePeople.length){
         inactHtml='<div style="font-size:11px;font-weight:700;color:var(--red);margin-bottom:6px">➖ A marcar como INACTIVOS ('+inactivePeople.length+')</div>';
         inactHtml+='<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">';
         inactivePeople.forEach((p,i)=>{
-          inactHtml+='<span class="bg bg-red" style="font-size:10px;cursor:pointer" onclick="this.style.display=\'none\';document.getElementById(\'keep-active-'+i+'\').value=\'1\'" title="Click para mantener activo">'+h(p.n)+' ('+h(p.s)+') ✕</span>';
-          inactHtml+='<input type="hidden" id="keep-active-'+i+'" value="0" data-name="'+p.n.replace(/"/g,'&quot;')+'">';
+          inactHtml+='<span id="chip-inact-'+i+'" class="bg bg-red" style="font-size:10px;cursor:pointer" onclick="this.style.display=\'none\';document.getElementById(\'keep-active-'+i+'\').value=\'1\'" title="Click para mantener activo">'+h(p.n)+' ('+h(p.s)+') ✕</span>';
+          inactHtml+='<input type="hidden" id="keep-active-'+i+'" value="0" data-name="'+attrTxt(p.n)+'">';
         });
         inactHtml+='</div>';
         inactHtml+='<div style="font-size:9px;color:var(--g400);margin-bottom:10px">Hacé click en un nombre para mantenerlo activo</div>';
       }
       $('import-inactive').innerHTML=inactHtml;
-      
+
       // New people section with editable sectors
       let newHtml='';
       if(newPeople.length){
+        const libres=PE.filter(libre);
         newHtml='<div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:6px">➕ Nuevas incorporaciones ('+newPeople.length+')</div>';
-        newHtml+='<table style="width:100%;font-size:11px"><thead><tr><th>Nombre</th><th>Excel dice</th><th>Sector en la app</th><th>Tipo</th></tr></thead><tbody>';
+        newHtml+='<div style="font-size:9px;color:var(--g500);margin-bottom:6px">Si alguien ya está en la app con el nombre escrito distinto, elegilo en «¿Ya está en la app?»: se le guarda el número y no se duplica.</div>';
+        newHtml+='<table style="width:100%;font-size:11px"><thead><tr><th>Nombre</th><th>Excel dice</th><th>Sector en la app</th><th>Tipo</th><th>¿Ya está en la app?</th></tr></thead><tbody>';
         newPeople.forEach((p,i)=>{
           newHtml+='<tr>';
           // Si ese nombre ya tiene capacitaciones registradas, no es un
@@ -4602,7 +4749,7 @@ $('xlsx-admin').addEventListener('change',function(e){
           // o alguien que se fue y volvio. Se avisa ANTES de aceptar, porque
           // despues queda duplicado en el padron y con el legajo partido en dos.
           const prev = historiaPrevia(p.name);
-          newHtml+='<td style="font-weight:600">'+h(p.name);
+          newHtml+='<td style="font-weight:600">'+h(p.name)+numTxt(p);
           if (prev) {
             newHtml+='<div style="font-size:9px;font-weight:700;color:#b45309;margin-top:2px">' +
               '⚠ Ya tiene ' + prev.cuantos + ' capacitación' + (prev.cuantos===1?'':'es') +
@@ -4617,6 +4764,15 @@ $('xlsx-admin').addEventListener('change',function(e){
           newHtml+='<option value="__nuevo__">+ Crear nuevo sector...</option>';
           newHtml+='</select></td>';
           newHtml+='<td>'+bg(p.tipo,p.tipo==='MANPOWER'?'amber':'blue')+'</td>';
+          const opc=x=>'<option value="'+attrTxt(x.n)+'">'+h(x.n)+(x.a===false?' (inactivo)':'')+' — '+h(x.s||'')+'</option>';
+          const conPuntaje=libres.map(x=>({x,s:parecidoSugerencia(p.name,x.n)}));
+          const parecidos=conPuntaje.filter(c=>c.s>=1).sort((a,b)=>b.s-a.s).slice(0,8).map(c=>c.x);
+          const resto=libres.filter(x=>!parecidos.includes(x)).sort((a,b)=>a.n.localeCompare(b.n));
+          newHtml+='<td><select id="new-link-'+i+'" class="new-link" data-i="'+i+'" onchange="importLinkCambio()" style="font-size:11px;padding:3px 6px;width:100%;max-width:220px">';
+          newHtml+='<option value="">No, es nueva</option>';
+          if(parecidos.length)newHtml+='<optgroup label="Nombres parecidos">'+parecidos.map(opc).join('')+'</optgroup>';
+          newHtml+='<optgroup label="Resto del personal">'+resto.map(opc).join('')+'</optgroup>';
+          newHtml+='</select></td>';
           newHtml+='</tr>';
         });
         newHtml+='</tbody></table>';
@@ -4624,13 +4780,13 @@ $('xlsx-admin').addEventListener('change',function(e){
         newHtml='<div style="font-size:11px;color:var(--g400)">Sin nuevas incorporaciones.</div>';
       }
       $('import-new').innerHTML=newHtml;
-      
+
       // Store pending data
-      pendingImport={matched,newPeople,inactivePeople,aliasMap,file:file.name};
-      
+      pendingImport={matched,newPeople,file:file.name};
+
       // Show modal
       $('import-modal').classList.add('show');
-      
+
     }catch(err){
       alert('Error al leer el archivo: '+err.message);
       console.error(err);
@@ -4642,19 +4798,43 @@ $('xlsx-admin').addEventListener('change',function(e){
 
 $('import-confirm').addEventListener('click',function(){
   if(!pendingImport)return;
-  const {matched,newPeople,inactivePeople,aliasMap}=pendingImport;
-  let addedCount=0,deactCount=0,reactCount=0,newSectors=[];
-  
-  // Mark inactive (unless user clicked to keep)
-  inactivePeople.forEach((p,i)=>{
-    const keep=document.getElementById('keep-active-'+i);
-    if(keep&&keep.value==='1')return;
-    p.a=false;p.fechaBaja=p.fechaBaja||new Date().toISOString().slice(0,10);deactCount++;
+  const {matched,newPeople}=pendingImport;
+  const hoy=new Date().toISOString().slice(0,10);
+  let addedCount=0,deactCount=0,reactCount=0,linkCount=0,unlinkCount=0,newSectors=[];
+
+  // Decisiones de la revision: primero se arma el resultado, despues se toca PE
+  const finales=new Map(matched);
+  const nuevos=[];
+  document.querySelectorAll('.rev-desvincular:checked').forEach(cb=>{
+    const ep=finales.get(cb.dataset.app);
+    if(!ep)return;
+    finales.delete(cb.dataset.app);
+    nuevos.push({ep,i:null});
+    unlinkCount++;
   });
-  
+  for(const [i,ep] of newPeople.entries()){
+    const link=document.getElementById('new-link-'+i);
+    const app=link?link.value:'';
+    if(!app){nuevos.push({ep,i});continue}
+    if(finales.has(app)){
+      alert(app+' quedó asignado a dos personas del Excel ('+finales.get(app).name+' y '+ep.name+'). Corregí la revisión antes de aplicar.');
+      return;
+    }
+    finales.set(app,ep);
+    linkCount++;
+  }
+
+  // Mark inactive (unless user clicked to keep)
+  const mantener=new Set([...document.querySelectorAll('[id^="keep-active-"]')]
+    .filter(x=>x.value==='1').map(x=>x.dataset.name));
+  PE.forEach(p=>{
+    if(p.a===false||finales.has(p.n)||mantener.has(p.n))return;
+    p.a=false;p.fechaBaja=p.fechaBaja||hoy;deactCount++;
+  });
+
   // Reactivate matched + update tipo. fechaAlta se PRESERVA (regla: siempre la primera).
   // Al reactivar limpiamos fechaBaja para no dejar contradicción (activo con fecha de baja vieja).
-  matched.forEach((ep,appName)=>{
+  finales.forEach((ep,appName)=>{
     const p=PE.find(x=>x.n===appName);
     if(!p) return;
     if(p.a===false){
@@ -4664,12 +4844,16 @@ $('import-confirm').addEventListener('click',function(){
     }
     p.tipo=ep.tipo;
     if(ep.tags&&ep.tags.length)p.tags=ep.tags;
+    guardarNumeros(p,ep);
+    // El nombre en la app no se cambia: los registros de capacitacion lo usan.
+    if(ep.name!==p.n)p.nombreExcel=ep.name;else delete p.nombreExcel;
     // Nota: p.fechaAlta NO se toca — mantiene la primera fecha de ingreso original
   });
-  
+
   // Add new people with user-selected sectors
-  newPeople.forEach((ep,i)=>{
-    let sec=document.getElementById('new-sec-'+i).value;
+  nuevos.forEach(({ep,i})=>{
+    if(PE.some(x=>x.n===ep.name))return;   // nunca dos personas con el mismo nombre
+    let sec=i==null?ep.sectorApp:document.getElementById('new-sec-'+i).value;
     if(sec==='__nuevo__'){
       const n=prompt('Nombre del nuevo sector para '+ep.name+':');
       if(!n||!n.trim()){sec=ep.sectorApp}
@@ -4687,25 +4871,28 @@ $('import-confirm').addEventListener('click',function(){
     // ya tiene historia. Poner HOY para todos es lo que convertia veteranos en
     // ingresos recientes y les volvia a pedir la induccion.
     const _prev = historiaPrevia(ep.name);
-    const _alta = (_prev && _prev.primera) ? _prev.primera : new Date().toISOString().slice(0,10);
-    PE.push({n:ep.name,s:sec,a:true,tipo:ep.tipo,tags:ep.tags||[],fechaAlta:_alta});
+    const _alta = (_prev && _prev.primera) ? _prev.primera : hoy;
+    const persona={n:ep.name,s:sec,a:true,tipo:ep.tipo,tags:ep.tags||[],fechaAlta:_alta};
+    guardarNumeros(persona,ep);
+    PE.push(persona);
     addedCount++;
   });
-  
-  // Add new aliases
-  Object.keys(aliasMap).forEach(k=>{NAME_ALIAS[k]=aliasMap[k]});
-  
+
   // Audit
-  const det='Importación Admin: '+pendingImport.file+' — '+matched.size+' existentes, +'+addedCount+' nuevos, -'+deactCount+' inactivos'+(reactCount?', ↻'+reactCount+' reactivados':'')+(newSectors.length?', nuevos sectores: '+newSectors.join(', '):'');
+  const det='Importación Admin: '+pendingImport.file+' — '+finales.size+' existentes, +'+addedCount+' nuevos, -'+deactCount+' inactivos'+
+    (reactCount?', ↻'+reactCount+' reactivados':'')+
+    (linkCount?', '+linkCount+' vinculados a mano':'')+
+    (unlinkCount?', '+unlinkCount+' desvinculados en la revisión':'')+
+    (newSectors.length?', nuevos sectores: '+newSectors.join(', '):'');
   logAudit('PERSONAL',det);
-  
+
   sv();V.pers();V.dash();
   $('import-modal').classList.remove('show');
   pendingImport=null;
-  
+
   alert('✓ Importación completada:\n' +
-    '• '+matched.size+' personas existentes (sector y fecha alta original preservadas)\n' +
-    '• '+addedCount+' incorporaciones (fecha alta = hoy)\n' +
+    '• '+finales.size+' personas existentes (sector y fecha alta original preservadas)'+(linkCount?', '+linkCount+' vinculadas a mano':'')+'\n' +
+    '• '+addedCount+' incorporaciones\n' +
     '• '+deactCount+' marcados inactivos'+(reactCount?'\n• '+reactCount+' reactivados (se les limpió la fecha de baja)':'')+
     (newSectors.length?'\n• Nuevos sectores: '+newSectors.join(', '):''));
 });
