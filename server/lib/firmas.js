@@ -21,8 +21,9 @@ export const nombreComparable = (s) => String(s || '')
  *
  * Solo cuentan las firmas registradas a nombre de quien figura en el registro.
  * Un usuario puede pasar de una persona a otra: analista.minilab@ fue de
- * Lorena Romero y desde el 15/09/2026 lo usa Alexis Araujo. Sin esta condicion
- * un ensayo de Lorena se imprimiria con la firma de Alexis. La comparacion
+ * Lorena Romero, del 15/09/2026 lo uso Alexis Araujo y desde el 17/09/2026 lo
+ * usa Melani Pampillón. Sin esta condicion un ensayo de Lorena o de Alexis se
+ * imprimiria con la firma de quien tenga la casilla hoy. La comparacion
  * ignora tildes, para que "Núñez" y "Nuñez" sean la misma persona.
  */
 export async function firmaDe(usuarioId, instante, nombreEnRegistro) {
