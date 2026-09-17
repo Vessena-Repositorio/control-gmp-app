@@ -13,7 +13,9 @@
  *   - La fecha y el numero de control los pone el servidor, en hora de
  *     Montevideo. La pantalla usaba toISOString: despues de las 21 horas los
  *     controles quedaban con la fecha del dia siguiente.
- *   - Las fotos nuevas van a la base; las viejas quedan como enlace a Drive.
+ *   - Las fotos van a la base, y son obligatorias la del sticker y la de lote y
+ *     vencimiento, como en Fabuloso. Las viejas de Drive se copian a la base
+ *     (lib/copia-fotos-drive.js).
  *
  * Los controles van a proceso_controles, la misma tabla que leia la replica,
  * asi el informe gerencial (/api/proceso) no cambia.
@@ -24,6 +26,7 @@ import { exigirPermiso } from '../lib/acceso.js';
 import { PERMISOS_POR_ROL } from '../lib/permisos.js';
 import { ZONA } from '../lib/tareas.js';
 import { sincronizarProceso } from '../sync/sync-proceso.js';
+import { contarPendientes, estadoCopia, iniciarCopia } from '../lib/copia-fotos-drive.js';
 
 export const rutasControlEnProceso = Router();
 
@@ -221,6 +224,9 @@ rutasControlEnProceso.post('/controles', cargar, async (req, res, next) => {
         .map((x) => (x == null || x === '' ? null : Number(x)));
     if (idsFoto.some((x) => x !== null && !Number.isInteger(x))) {
         return res.status(400).json({ ok: false, error: 'Hay una foto no válida' });
+    }
+    if (!idsFoto[0] || !idsFoto[1]) {
+        return res.status(400).json({ ok: false, error: 'Faltan las fotos obligatorias: sticker y lote/vencimiento' });
     }
 
     try {
@@ -455,5 +461,31 @@ rutasControlEnProceso.post('/importar', administrar, async (req, res, next) => {
         res.json({ ok: true, importado: resumen });
     } catch (err) {
         responder(err, res, next);
+    }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Copia de las fotos viejas de Drive
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/** GET /api/control-en-proceso/fotos-drive — cuantas faltan y como va la copia. */
+rutasControlEnProceso.get('/fotos-drive', administrar, async (_req, res, next) => {
+    try {
+        res.json({ ok: true, ...(await contarPendientes()), trabajo: estadoCopia() });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/** POST /api/control-en-proceso/fotos-drive/copiar — la lanza en segundo plano. */
+rutasControlEnProceso.post('/fotos-drive/copiar', administrar, async (req, res, next) => {
+    try {
+        if (!(await planillaCerrada())) {
+            return res.status(409).json({ ok: false, error: 'Primero hay que cerrar la planilla' });
+        }
+        const trabajo = await iniciarCopia(req.usuario.nombre || req.usuario.usuario);
+        res.json({ ok: true, trabajo });
+    } catch (err) {
+        next(err);
     }
 });

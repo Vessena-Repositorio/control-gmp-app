@@ -262,7 +262,7 @@ const LIMP_DEFECTS=[
 <!-- MAIN -->
 <div id="mainApp" style="display:none">
 <div class="hdr"><div class="hdr-ico">⚗️</div><div><h1>Control GMP</h1><span id="hdrInfo">Envasado</span></div>
-  <div class="hdr-r"><button id="btnImp" onclick="abrirImp()" style="display:none;background:none;border:1px solid var(--amber);border-radius:5px;padding:3px 7px;color:var(--amber);font-size:8px;cursor:pointer;font-family:var(--f)">📥 Cerrar planilla</button><span class="hdr-u" id="hdrU"></span><button onclick="logout()" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 7px;color:var(--text3);font-size:8px;cursor:pointer;font-family:var(--f)">Salir</button></div>
+  <div class="hdr-r"><button id="btnFotos" onclick="abrirFotos()" style="display:none;background:none;border:1px solid var(--border);border-radius:5px;padding:3px 7px;color:var(--text2);font-size:8px;cursor:pointer;font-family:var(--f)">🖼️ Fotos de Drive</button><button id="btnImp" onclick="abrirImp()" style="display:none;background:none;border:1px solid var(--amber);border-radius:5px;padding:3px 7px;color:var(--amber);font-size:8px;cursor:pointer;font-family:var(--f)">📥 Cerrar planilla</button><span class="hdr-u" id="hdrU"></span><button onclick="logout()" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 7px;color:var(--text3);font-size:8px;cursor:pointer;font-family:var(--f)">Salir</button></div>
 </div>
 <div class="tabs"><div class="tab on" onclick="showTab(0)">📝 Control</div><div class="tab" onclick="showTab(1)">📊 Dashboard</div></div>
 <div class="toast" id="toast"></div>
@@ -373,7 +373,7 @@ const LIMP_DEFECTS=[
     </div>
 
     <!-- Photos -->
-    <div class="fs"><div class="st">📸 Fotos</div>
+    <div class="fs"><div class="st">📸 Fotos <span style="color:var(--red);font-size:8px">· sticker y lote/vence obligatorias</span></div>
       <div class="pr">
         <div style="flex:1"><div class="pb" id="pB0" onclick="takeP(0)"><span style="font-size:16px">📦</span><span style="font-size:7px;color:var(--text3)">Sticker</span></div></div>
         <div style="flex:1"><div class="pb" id="pB1" onclick="takeP(1)"><span style="font-size:16px">🏷️</span><span style="font-size:7px;color:var(--text3)">Lote/Vence</span></div></div>
@@ -480,6 +480,7 @@ async function arrancar(){
   }catch(e){msg.textContent='No se pudo verificar tu sesión: '+e.message;btn.style.display='inline-block';return}
   document.getElementById('loginScreen').style.display='none';document.getElementById('mainApp').style.display='block';document.getElementById('hdrU').textContent=USER;
   document.getElementById('btnImp').style.display=(PERMISOS.includes('administrar')&&!PLANILLA_CERRADA)?'inline-block':'none';
+  document.getElementById('btnFotos').style.display=(PERMISOS.includes('administrar')&&PLANILLA_CERRADA)?'inline-block':'none';
   if(!PERMISOS.includes('cargar'))document.getElementById('newBtn').style.display='none';
   const prev=leerLocal();
   shift={fecha:hoyLocal(),analista:USER};
@@ -635,6 +636,8 @@ function saveCtrl(){
   const vence=document.getElementById('cVence').value.trim();if(!vence){toast('⚠️ Ingresá Vencimiento',true);return}
   const granel=document.getElementById('cGranel').value.trim();if(!granel){toast('⚠️ Ingresá Cód. Granel',true);return}
   const codPT=document.getElementById('cCodPT').value.trim();if(!codPT){toast('⚠️ Ingresá Cód. PT',true);return}
+  // Como en Fabuloso: sin la foto del sticker y la de lote/vencimiento no se guarda
+  if(!fotos[0]||!fotos[1]){toast('⚠️ Faltan las fotos obligatorias: sticker y lote/vencimiento',true);document.getElementById('pB0').scrollIntoView({behavior:'smooth',block:'center'});return}
   const isLimp=maq==='Limpiadores';
   const pesos=isLimp?['','','','','']:[1,2,3,4,5].map(i=>document.getElementById('cP'+i).value);
   const vs=pesos.map(Number).filter(v=>!isNaN(v)&&v>0);
@@ -717,7 +720,35 @@ function abrirImp(){
     '<div id="impRes" style="font-size:10px;margin-top:8px"></div>';
   document.getElementById('impMo').classList.add('open');document.body.style.overflow='hidden';
 }
-function cerrarImp(){document.getElementById('impMo').classList.remove('open');document.body.style.overflow=''}
+// COPIA DE LAS FOTOS VIEJAS (Drive -> servidor)
+let fotosTimer=null;
+async function abrirFotos(){
+  document.getElementById('impMo').querySelector('h2').textContent='🖼️ Fotos viejas de Drive';
+  document.getElementById('impBody').innerHTML='<div id="fotosRes" style="font-size:10px;color:var(--text2);line-height:1.7">⏳ Consultando…</div>';
+  document.getElementById('impMo').classList.add('open');document.body.style.overflow='hidden';
+  await refrescarFotos();
+}
+async function refrescarFotos(){
+  const el=document.getElementById('fotosRes');if(!el)return;
+  clearTimeout(fotosTimer);
+  let d;try{d=await api('/fotos-drive')}catch(e){el.innerHTML='<span style="color:var(--red)">⚠️ '+esc(e.message)+'</span>';return}
+  const t=d.trabajo||{};
+  let h='<p style="margin:0 0 8px">Las fotos de los controles anteriores al 17/09/2026 están en la carpeta "Fotos GMP" de Google Drive. Copiarlas al servidor hace que el registro no dependa de esa carpeta.</p>'+
+    '<div style="background:var(--s1);border:1px solid var(--border);border-radius:var(--rs);padding:8px">'+
+    '✅ Ya copiadas: <b>'+d.copiadas+'</b><br>⏳ Por copiar: <b>'+d.pendientes+'</b>'+
+    (d.sin_copia?'<br>⚠️ No se pudieron copiar (quedan con el enlace a Drive): <b>'+d.sin_copia+'</b>':'')+'</div>';
+  if(t.enCurso){
+    h+='<p style="margin:8px 0 0;color:var(--amber)">Copiando en segundo plano… '+t.copiadas+' fotos copiadas'+(t.fallidas?', '+t.fallidas+' con error':'')+'. Podés cerrar esta ventana: sigue sola.</p>';
+    fotosTimer=setTimeout(refrescarFotos,5000);
+  }else{
+    if(t.terminado)h+='<p style="margin:8px 0 0">Última copia: '+t.copiadas+' copiadas, '+t.fallidas+' con error'+(t.ultimoError?' ('+esc(t.ultimoError)+')':'')+'.</p>';
+    if(d.pendientes)h+='<button class="lb1" style="margin-top:10px" onclick="copiarFotos()">Copiar '+d.pendientes+' fotos al servidor</button>';
+    else h+='<p style="margin:8px 0 0;color:var(--mint)">No quedan fotos por copiar.</p>';
+  }
+  el.innerHTML=h;
+}
+async function copiarFotos(){try{await api('/fotos-drive/copiar',{method:'POST',body:'{}'})}catch(e){toast('⚠️ '+e.message,true)}refrescarFotos()}
+function cerrarImp(){clearTimeout(fotosTimer);document.getElementById('impMo').querySelector('h2').textContent='📥 Cerrar la planilla de Google';document.getElementById('impMo').classList.remove('open');document.body.style.overflow=''}
 function cargarXLSX(){
   if(window.XLSX)return Promise.resolve();
   return new Promise((ok,mal)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';s.onload=ok;s.onerror=()=>mal(new Error('No se pudo cargar el lector de Excel'));document.head.appendChild(s)});
@@ -775,7 +806,7 @@ async function confirmarImp(){
     const r=await api('/importar',{method:'POST',body:JSON.stringify(Object.assign({},IMP,{confirmar:true}))});
     const p=r.importado;
     res.innerHTML='<div style="color:var(--mint);line-height:1.7">✅ Listo. Se completaron '+p.actualizados+' controles ('+p.fotos+' fotos) y '+p.entrenamientos+' entrenamientos. La planilla quedó cerrada: ya se puede archivar el Apps Script.</div>';
-    PLANILLA_CERRADA=true;document.getElementById('btnImp').style.display='none';IMP=null;loadShift();
+    PLANILLA_CERRADA=true;document.getElementById('btnImp').style.display='none';document.getElementById('btnFotos').style.display='inline-block';IMP=null;loadShift();
   }catch(e){res.innerHTML='<div style="color:var(--red)">⚠️ '+esc(e.message)+'</div>'}
 }
 
