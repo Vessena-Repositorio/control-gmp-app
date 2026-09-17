@@ -27,6 +27,7 @@ import { PERMISOS_POR_ROL } from '../lib/permisos.js';
 import { ZONA } from '../lib/tareas.js';
 import { sincronizarProceso } from '../sync/sync-proceso.js';
 import { contarPendientes, estadoCopia, iniciarCopia } from '../lib/copia-fotos-drive.js';
+import { comprimirFoto } from '../lib/comprimir-foto.js';
 
 export const rutasControlEnProceso = Router();
 
@@ -308,16 +309,17 @@ rutasControlEnProceso.post('/fotos', cargar, async (req, res, next) => {
     if (!dataBase64) return res.status(400).json({ ok: false, error: 'Falta la imagen' });
     if (!TIPOS_FOTO.has(tipo)) return res.status(415).json({ ok: false, error: 'Solo se aceptan fotos JPG, PNG o WEBP' });
 
-    const bytes = Buffer.from(String(dataBase64).replace(/^data:[^,]*,/, ''), 'base64');
-    if (!bytes.length) return res.status(400).json({ ok: false, error: 'La imagen no es válida' });
-    if (bytes.length > MAX_FOTO) return res.status(413).json({ ok: false, error: 'La foto supera los 5 MB' });
+    const recibida = Buffer.from(String(dataBase64).replace(/^data:[^,]*,/, ''), 'base64');
+    if (!recibida.length) return res.status(400).json({ ok: false, error: 'La imagen no es válida' });
+    if (recibida.length > MAX_FOTO) return res.status(413).json({ ok: false, error: 'La foto supera los 5 MB' });
+    const { bytes, tipo: tipoFinal } = await comprimirFoto(recibida, tipo);
 
     try {
         const id = await enTransaccion(async (c) => {
             const { rows } = await c.query(
                 `INSERT INTO proceso_fotos (nombre, tipo, tamano, contenido, subida_por)
                  VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-                [texto(nombre, 200) || `control_${Date.now()}.jpg`, tipo, bytes.length, bytes,
+                [(texto(nombre, 200) || `control_${Date.now()}`).replace(/\.\w+$/, '') + '.' + tipoFinal.split('/')[1], tipoFinal, bytes.length, bytes,
                     req.usuario.nombre || req.usuario.usuario]
             );
             await registrar(c, req, 'foto_subida', 'foto', rows[0].id, `${bytes.length} bytes`);

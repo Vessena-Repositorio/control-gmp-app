@@ -689,7 +689,7 @@ async function sendCtrl(c){
     const pos=c.fotosPos||[];
     for(let i=0;i<3;i++){
       if(pos[i]&&!c.fotoIds[i]){
-        const r=await api('/fotos',{method:'POST',body:JSON.stringify({dataBase64:pos[i].replace(/^data:image\/\w+;base64,/,''),mime:'image/jpeg',nombre:'control_'+String(c.lote||'').replace(/[^\w-]/g,'_')+'_'+['sticker','lote_vence','desvio'][i]+'.jpg'})});
+        const r=await api('/fotos',{method:'POST',body:JSON.stringify({dataBase64:pos[i].replace(/^data:image\/\w+;base64,/,''),mime:(pos[i].match(/^data:(image\/\w+);/)||[])[1]||'image/jpeg',nombre:'control_'+String(c.lote||'').replace(/[^\w-]/g,'_')+'_'+['sticker','lote_vence','desvio'][i]})});
         c.fotoIds[i]=r.id;saveLocal();
       }
     }
@@ -812,8 +812,8 @@ async function confirmarImp(){
 
 // PHOTOS
 function takeP(s){curSlot=s;document.getElementById('camIn').click()}
-function gotP(e){const f=e.target.files[0];if(!f)return;compP(f,800,.6).then(c=>{fotos[curSlot]=c;renP();toast('📸')});e.target.value=''}
-function compP(file,mx,q){return new Promise(res=>{const rd=new FileReader();rd.onload=e=>{const img=new Image();img.onload=()=>{const cv=document.createElement('canvas');let w=img.width,h=img.height;if(w>mx||h>mx){if(w>h){h=Math.round(h*mx/w);w=mx}else{w=Math.round(w*mx/h);h=mx}}cv.width=w;cv.height=h;cv.getContext('2d').drawImage(img,0,0,w,h);res(cv.toDataURL('image/jpeg',q))};img.src=e.target.result};rd.readAsDataURL(file)})}
+function gotP(e){const f=e.target.files[0];if(!f)return;compP(f,800,.55).then(c=>{fotos[curSlot]=c;renP();toast('📸')});e.target.value=''}
+function compP(file,mx,q){return new Promise(res=>{const rd=new FileReader();rd.onload=e=>{const img=new Image();img.onload=()=>{const cv=document.createElement('canvas');let w=img.width,h=img.height;if(w>mx||h>mx){if(w>h){h=Math.round(h*mx/w);w=mx}else{w=Math.round(w*mx/h);h=mx}}cv.width=w;cv.height=h;cv.getContext('2d').drawImage(img,0,0,w,h);const wp=cv.toDataURL('image/webp',q);res(wp.startsWith('data:image/webp')?wp:cv.toDataURL('image/jpeg',q))};img.src=e.target.result};rd.readAsDataURL(file)})}
 function renP(){const lb=[['📦','Sticker'],['🏷️','Lote/Vence'],['📷','Desvío']];for(let i=0;i<3;i++){const b=document.getElementById('pB'+i);if(!b)continue;if(fotos[i])b.innerHTML=`<img src="${fotos[i]}"/><button class="rx" onclick="event.stopPropagation();rmP(${i})">✕</button>`;else b.innerHTML=`<span style="font-size:16px">${lb[i][0]}</span><span style="font-size:7px;color:var(--text3)">${lb[i][1]}</span>`}}
 function rmP(i){fotos[i]=null;renP()}
 function tgC(e){e.classList.toggle('on')}

@@ -233,7 +233,7 @@ table tr:hover td { background: #fafbff; cursor: pointer; }
 window.APP_CONFIG = {
   API_BASE: "/api/fabuloso-captura",
   PHOTO_MAX_DIM: 800,
-  PHOTO_QUALITY: 0.72,
+  PHOTO_QUALITY: 0.55,   // WebP; el servidor la achica mas si puede (lib/comprimir-foto.js)
   APP_TITLE: "Vessena LCC Fabuloso – Control de atributos en línea",
   LINEAS: ["Fabuloso"],
   DEFAULT_LINE: "Fabuloso",
@@ -372,16 +372,22 @@ window.APP_CONFIG = {
           cvs.width = w; cvs.height = h;
           const ctx = cvs.getContext('2d');
           ctx.drawImage(img, 0, 0, w, h);
-          cvs.toBlob(blob => {
+          // WebP pesa bastante menos que JPEG con el rotulo igual de legible.
+          // Si el navegador no sabe hacerlo devuelve otro formato: se usa JPEG.
+          const comprimir = (tipo, listo) => cvs.toBlob(blob => {
+            if (blob && tipo === 'image/webp' && blob.type !== 'image/webp') return comprimir('image/jpeg', listo);
+            listo(blob);
+          }, tipo, quality);
+          comprimir('image/webp', blob => {
             if (!blob) return reject(new Error('No se pudo comprimir'));
             const fr = new FileReader();
             fr.onload = () => {
               const dataUrl = fr.result;
               const base64 = String(dataUrl).split(',')[1];
-              resolve({ blob, base64, mime: 'image/jpeg', size: blob.size, dataUrl });
+              resolve({ blob, base64, mime: blob.type || 'image/jpeg', size: blob.size, dataUrl });
             };
             fr.readAsDataURL(blob);
-          }, 'image/jpeg', quality);
+          });
         };
         img.onerror = () => reject(new Error('Archivo de imagen inválido'));
         img.src = reader.result;
@@ -740,7 +746,7 @@ window.APP_CONFIG = {
 
       <div class="card">
         <h2>Fotos obligatorias <span class="chip danger">Requeridas</span></h2>
-        <div class="muted small mb8">Las fotos se comprimen automáticamente a ${CFG.PHOTO_MAX_DIM}px (~100-150 KB). Sin estas 2 fotos, el control no se puede guardar.</div>
+        <div class="muted small mb8">Las fotos se comprimen automáticamente a ${CFG.PHOTO_MAX_DIM}px (~30-80 KB). Sin estas 2 fotos, el control no se puede guardar.</div>
 
         <div class="row">
           <div id="req_rotulo_wrap"></div>

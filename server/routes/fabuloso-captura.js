@@ -24,6 +24,7 @@ import { PERMISOS_POR_ROL } from '../lib/permisos.js';
 import { auditar } from '../lib/sesiones.js';
 import { firmaDe } from '../lib/firmas.js';
 import { ZONA } from '../lib/tareas.js';
+import { comprimirFoto } from '../lib/comprimir-foto.js';
 
 export const rutasFabulosoCaptura = Router();
 
@@ -520,18 +521,20 @@ rutasFabulosoCaptura.post('/fotos', cargar, async (req, res, next) => {
     if (!dataBase64) return res.status(400).json({ ok: false, error: 'Falta la imagen' });
     if (!TIPOS_FOTO.has(tipo)) return res.status(415).json({ ok: false, error: 'Solo se aceptan fotos JPG, PNG o WEBP' });
 
-    let bytes;
-    try { bytes = Buffer.from(String(dataBase64), 'base64'); } catch { bytes = null; }
-    if (!bytes || !bytes.length) return res.status(400).json({ ok: false, error: 'La imagen no es válida' });
-    if (bytes.length > MAX_FOTO) return res.status(413).json({ ok: false, error: 'La foto supera los 5 MB' });
+    let recibida;
+    try { recibida = Buffer.from(String(dataBase64), 'base64'); } catch { recibida = null; }
+    if (!recibida || !recibida.length) return res.status(400).json({ ok: false, error: 'La imagen no es válida' });
+    if (recibida.length > MAX_FOTO) return res.status(413).json({ ok: false, error: 'La foto supera los 5 MB' });
 
-    const nombre = texto(filename, 200) || `muestreo_${Date.now()}.jpg`;
+    // Se guarda lo mas liviana posible sin perder la lectura del rotulo (lib/comprimir-foto.js)
+    const { bytes, tipo: tipoFinal } = await comprimirFoto(recibida, tipo);
+    const nombre = (texto(filename, 200) || `muestreo_${Date.now()}`).replace(/\.\w+$/, '') + '.' + tipoFinal.split('/')[1];
     try {
         const id = await enTransaccion(async (c) => {
             const { rows } = await c.query(
                 `INSERT INTO fab_fotos (nombre, tipo, tamano, contenido, referencia, subida_por)
                  VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-                [nombre, tipo, bytes.length, bytes, texto(referencia, 200), req.usuario.nombre]
+                [nombre, tipoFinal, bytes.length, bytes, texto(referencia, 200), req.usuario.nombre]
             );
             await registrar(c, req, 'photo_upload', 'foto', rows[0].id,
                 `ref=${texto(referencia, 200)} size=${bytes.length}`);

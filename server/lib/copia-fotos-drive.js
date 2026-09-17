@@ -11,6 +11,7 @@
  * donde quedo: las ya copiadas se reconocen por origen_url.
  */
 import { consultar, enTransaccion } from '../db.js';
+import { comprimirFoto } from './comprimir-foto.js';
 
 const SIMULTANEAS = 3;
 const MAX_FOTO = 5 * 1024 * 1024;
@@ -75,7 +76,8 @@ async function copiarUna(url) {
     const id = idDeDrive(url);
     try {
         if (!id) throw new Error('enlace de Drive sin id');
-        const { bytes, tipo } = await descargar(id);
+        const original = await descargar(id);
+        const { bytes, tipo } = await comprimirFoto(original.bytes, original.tipo);
         const { rows } = await consultar(
             `INSERT INTO proceso_fotos (nombre, tipo, tamano, contenido, subida_por, origen_url)
              VALUES ($1, $2, $3, $4, 'copia de Drive', $5)
