@@ -15,6 +15,7 @@ import { rutasNcDesvios } from './routes/nc-desvios.js';
 import { rutasGraneles } from './routes/graneles.js';
 import { rutasFabulosoCaptura } from './routes/fabuloso-captura.js';
 import { rutasControlEnProceso } from './routes/control-en-proceso.js';
+import { hayCompresion } from './lib/comprimir-foto.js';
 import { rutasCorreo } from './routes/correo.js';
 import { rutasEstabilidad } from './routes/estabilidad.js';
 import { rutasCapacitaciones } from './routes/capacitaciones.js';
@@ -109,7 +110,9 @@ app.get('/api/salud', async (_req, res) => {
     }
     try {
         await pool.query('SELECT 1');
-        res.json({ estado: 'ok', base: 'conectada', ...HUELLA });
+        // 'fotos' dice si sharp esta disponible: sin el, las fotos se guardarian
+        // sin comprimir y la base creceria al doble sin que nadie se entere.
+        res.json({ estado: 'ok', base: 'conectada', fotos: hayCompresion() ? 'comprimidas' : 'sin comprimir', ...HUELLA });
     } catch (err) {
         res.status(503).json({
             estado: 'sitio ok, api degradada',
