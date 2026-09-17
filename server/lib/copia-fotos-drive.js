@@ -60,9 +60,17 @@ export async function contarPendientes() {
         [MAX_INTENTOS]
     );
     const { rows: copiadas } = await consultar(
-        'SELECT count(*)::int AS n FROM proceso_fotos WHERE origen_url IS NOT NULL'
+        `SELECT count(*)::int AS n,
+                COALESCE(sum(tamano), 0)::bigint AS bytes,
+                count(*) FILTER (WHERE origen_url IS NOT NULL)::int AS de_drive
+         FROM proceso_fotos`
     );
-    return { ...rows[0], copiadas: copiadas[0].n };
+    return {
+        ...rows[0],
+        copiadas: copiadas[0].de_drive,
+        fotos: copiadas[0].n,
+        megas: Math.round(Number(copiadas[0].bytes) / 1048576),
+    };
 }
 
 export function estadoCopia() {

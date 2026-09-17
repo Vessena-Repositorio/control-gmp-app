@@ -735,14 +735,14 @@ async function refrescarFotos(){
   const t=d.trabajo||{};
   let h='<p style="margin:0 0 8px">Las fotos de los controles anteriores al 17/09/2026 están en la carpeta "Fotos GMP" de Google Drive. Copiarlas al servidor hace que el registro no dependa de esa carpeta.</p>'+
     '<div style="background:var(--s1);border:1px solid var(--border);border-radius:var(--rs);padding:8px">'+
-    '✅ Ya copiadas: <b>'+d.copiadas+'</b><br>⏳ Por copiar: <b>'+d.pendientes+'</b>'+
+    '✅ Ya copiadas: <b>'+d.copiadas+'</b><br>⏳ Por copiar: <b>'+d.pendientes+'</b><br>💾 Fotos en el servidor: <b>'+d.fotos+'</b> ('+d.megas+' MB)'+
     (d.sin_copia?'<br>⚠️ No se pudieron copiar (quedan con el enlace a Drive): <b>'+d.sin_copia+'</b>':'')+'</div>';
   if(t.enCurso){
     h+='<p style="margin:8px 0 0;color:var(--amber)">Copiando en segundo plano… '+t.copiadas+' fotos copiadas'+(t.fallidas?', '+t.fallidas+' con error':'')+'. Podés cerrar esta ventana: sigue sola.</p>';
     fotosTimer=setTimeout(refrescarFotos,5000);
   }else{
     if(t.terminado)h+='<p style="margin:8px 0 0">Última copia: '+t.copiadas+' copiadas, '+t.fallidas+' con error'+(t.ultimoError?' ('+esc(t.ultimoError)+')':'')+'.</p>';
-    if(d.pendientes)h+='<button class="lb1" style="margin-top:10px" onclick="copiarFotos()">Copiar '+d.pendientes+' fotos al servidor</button>';
+    if(d.pendientes)h+='<button class="lb1" style="margin-top:10px" onclick="copiarFotos()">Copiar '+d.pendientes+(d.pendientes===1?' foto':' fotos')+' al servidor</button>';
     else h+='<p style="margin:8px 0 0;color:var(--mint)">No quedan fotos por copiar.</p>';
   }
   el.innerHTML=h;
