@@ -21,6 +21,24 @@ export async function sincronizarProceso() {
     const t0 = Date.now();
 
     try {
+        // Con la planilla cerrada (034) la fuente de verdad es la app: la
+        // replica no baja nada y registra lo que hay, para que /estado la siga
+        // viendo sana en vez de fallar contra un Apps Script archivado.
+        const { rows: corte } = await consultar('SELECT cerrado_en FROM proceso_corte');
+        if (corte.length) {
+            const { rows: n } = await consultar(
+                `SELECT count(*)::int AS controles,
+                        (SELECT count(*)::int FROM proceso_pesos) AS pesos
+                 FROM proceso_controles WHERE duplicado_de IS NULL`
+            );
+            await consultar(
+                `UPDATE sync_log SET fin_en = now(), estado = 'ok', controles = $2, mediciones = $3
+                 WHERE id = $1`,
+                [logId, n[0].controles, n[0].pesos]
+            );
+            return { controles: n[0].controles, pesos: n[0].pesos, duplicados: 0, planillaCerrada: true };
+        }
+
         const url = process.env.ORIGEN_PROCESO;
         if (!url) throw new Error('Falta ORIGEN_PROCESO en las variables de entorno.');
 
@@ -59,9 +77,9 @@ export async function sincronizarProceso() {
                         (pos, fecha, analista, orden, lote, vence, maquina, presentacion,
                          granel, cod_pt, control_num, hora, promedio, spec, ph, has_dev,
                          dev_desc, dev_qty, is_rep, num_fotos, obs, raw,
-                         huella, duplicado_de, sincronizado_en)
+                         huella, duplicado_de, fila_hoja, origen, sincronizado_en)
                      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
-                             $17,$18,$19,$20,$21,$22,$23,$24, now())
+                             $17,$18,$19,$20,$21,$22,$23,$24,$25, 'planilla', now())
                      ON CONFLICT (pos) DO UPDATE SET
                         fecha = EXCLUDED.fecha, analista = EXCLUDED.analista,
                         orden = EXCLUDED.orden, lote = EXCLUDED.lote,
@@ -73,7 +91,8 @@ export async function sincronizarProceso() {
                         dev_desc = EXCLUDED.dev_desc, dev_qty = EXCLUDED.dev_qty,
                         is_rep = EXCLUDED.is_rep, num_fotos = EXCLUDED.num_fotos,
                         obs = EXCLUDED.obs, raw = EXCLUDED.raw, huella = EXCLUDED.huella,
-                        duplicado_de = EXCLUDED.duplicado_de, sincronizado_en = now()
+                        duplicado_de = EXCLUDED.duplicado_de, fila_hoja = EXCLUDED.fila_hoja,
+                        sincronizado_en = now()
                      RETURNING id`,
                     [
                         pos,
@@ -100,6 +119,8 @@ export async function sincronizarProceso() {
                         JSON.stringify(r),
                         huella,
                         original === undefined ? null : original,
+                        // doGet recorre la hoja de abajo hacia arriba
+                        registros.length - pos + 1,
                     ]
                 );
 

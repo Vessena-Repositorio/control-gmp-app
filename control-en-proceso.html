@@ -249,20 +249,20 @@ const LIMP_DEFECTS=[
 
 <!-- LOGIN -->
 <div id="loginScreen">
-<div class="hdr"><div class="hdr-ico">⚗️</div><div><h1>Control en Proceso GMP</h1><span>Envasado</span></div></div>
+<div class="hdr"><div class="hdr-ico">⚗️</div><div><h1>Control en Proceso GMP</h1><span>Envasado · portal</span></div></div>
 <div class="lw"><div class="lb">
   <div style="font-size:36px;margin-bottom:8px">👤</div>
-  <h2>Identificación</h2>
-  <p>Ingresa tu nombre para registrar controles</p>
-  <input class="lf" id="loginName" placeholder="Tu nombre..." maxlength="30" />
-  <button class="lb1" onclick="doLogin()">Entrar</button>
+  <h2>Control en proceso</h2>
+  <p id="loginMsg">Verificando tu sesión…</p>
+  <button class="lb1" id="loginRetry" style="display:none" onclick="arrancar()">Reintentar</button>
+  <p style="margin-top:10px"><a href="/" style="color:var(--text3);font-size:10px">Volver al portal</a></p>
 </div></div>
 </div>
 
 <!-- MAIN -->
 <div id="mainApp" style="display:none">
 <div class="hdr"><div class="hdr-ico">⚗️</div><div><h1>Control GMP</h1><span id="hdrInfo">Envasado</span></div>
-  <div class="hdr-r"><span class="hdr-u" id="hdrU"></span><button onclick="logout()" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 7px;color:var(--text3);font-size:8px;cursor:pointer;font-family:var(--f)">Salir</button></div>
+  <div class="hdr-r"><button id="btnImp" onclick="abrirImp()" style="display:none;background:none;border:1px solid var(--amber);border-radius:5px;padding:3px 7px;color:var(--amber);font-size:8px;cursor:pointer;font-family:var(--f)">📥 Cerrar planilla</button><span class="hdr-u" id="hdrU"></span><button onclick="logout()" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 7px;color:var(--text3);font-size:8px;cursor:pointer;font-family:var(--f)">Salir</button></div>
 </div>
 <div class="tabs"><div class="tab on" onclick="showTab(0)">📝 Control</div><div class="tab" onclick="showTab(1)">📊 Dashboard</div></div>
 <div class="toast" id="toast"></div>
@@ -272,6 +272,10 @@ const LIMP_DEFECTS=[
 <div class="md"><div class="mh"><h2 id="mTitle"></h2><button class="mx" onclick="closeM()">✕</button></div><div class="mb" id="mBody"></div>
 <div class="mf"><button class="mb2" onclick="dlCSV()">📥 CSV</button></div></div>
 </div>
+<!-- CIERRE DE LA PLANILLA -->
+<div class="mo" id="impMo" onclick="if(event.target===this)cerrarImp()">
+<div class="md"><div class="mh"><h2>📥 Cerrar la planilla de Google</h2><button class="mx" onclick="cerrarImp()">✕</button></div><div class="mb" id="impBody"></div></div>
+</div>
 
 <!-- PAGE 0: CONTROL -->
 <div class="page on" id="page0"><div class="wrap">
@@ -279,7 +283,7 @@ const LIMP_DEFECTS=[
   <div class="sb" id="shiftBan">
     <div class="sb-info">📅 <b id="shiftDate"></b> · 👤 <b id="shiftUser"></b> · <span id="shiftCount">0</span> controles</div>
     <div style="display:flex;gap:5px">
-      <button class="btn b2" onclick="loadShiftFromSheet()" style="padding:5px 10px;font-size:9px" title="Sincronizar con otros analistas">🔄</button>
+      <button class="btn b2" onclick="sincronizar()" style="padding:5px 10px;font-size:9px" title="Actualizar y reintentar los pendientes">🔄</button>
       <button class="btn b2" onclick="endShift()" style="padding:5px 10px;font-size:9px">🏁</button>
     </div>
   </div>
@@ -433,86 +437,91 @@ const LIMP_DEFECTS=[
 </div>
 
 <script>
-const SURL='https://script.google.com/macros/s/AKfycbxmayMAPlLCrozmZRM3gLSf5MgcWO9lC5y_ayR0DkRdi_hHYaoLRI43OgIJ9d7nTPDGug/exec';
-let USER='',shift=null,ctrls=[],allR=[],curSlot=0,fotos=[null,null,null],hasDev=false,isRep=false,curSpec=null,maqCache={};
+/* Los controles se guardan en el servidor (/api/control-en-proceso) con la
+   sesion del portal. Antes iban al Apps Script con un POST no-cors: la pantalla
+   no podia saber si se habian guardado, y el nombre del analista se escribia a
+   mano. Un control que no se pudo enviar queda "pendiente" en este equipo hasta
+   que se reintenta. */
+const API='/api/control-en-proceso';
+let USER='',PERMISOS=[],PLANILLA_CERRADA=true,shift=null,ctrls=[],allR=[],curSlot=0,fotos=[null,null,null],hasDev=false,isRep=false,curSpec=null,maqCache={};
 
 // Populate machine selects
 (function(){['cMaq','dMaq'].forEach(id=>{const s=document.getElementById(id);MACHINES.forEach(m=>{const o=document.createElement('option');o.value=m;o.textContent=m;s.appendChild(o)})})})();
 
-// LOGIN
-function doLogin(){const n=document.getElementById('loginName').value.trim();if(!n){toast('Ingresa tu nombre',true);return}USER=n;localStorage.setItem('gmp_user',n);document.getElementById('loginScreen').style.display='none';document.getElementById('mainApp').style.display='block';document.getElementById('hdrU').textContent=USER;
-// Always start a new local shift for today and load any controls from the Sheet
-shift={fecha:new Date().toISOString().slice(0,10),analista:USER};ctrls=[];maqCache={};saveLocal();initShift();
-loadShiftFromSheet();
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+// Fecha local del equipo. toISOString da la de Greenwich: despues de las 21
+// horas era la del dia siguiente.
+function hoyLocal(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function diaDe(f){
+  if(typeof f!=='string')return null;
+  const iso=f.match(/(\d{4})-(\d{2})-(\d{2})/);if(iso)return iso[1]+'-'+iso[2]+'-'+iso[3];
+  const p=f.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/);if(p)return p[3]+'-'+p[2].padStart(2,'0')+'-'+p[1].padStart(2,'0');
+  return null;
 }
-function logout(){USER='';localStorage.removeItem('gmp_user');location.reload()}
-(function(){const u=localStorage.getItem('gmp_user');if(u){document.getElementById('loginName').value=u;doLogin()}})();
+// La hora de los controles viejos llega como fecha de 1899 (asi la devolvia la hoja)
+function horaDe(h){const s=String(h==null?'':h);const m=s.match(/^1899-12-3\dT/);if(m){const d=new Date(s);if(!isNaN(d))return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')}return s}
+function idEnvio(){const b=new Uint8Array(8);(window.crypto||window.msCrypto).getRandomValues(b);return Date.now().toString(36)+'-'+Array.from(b,x=>x.toString(16).padStart(2,'0')).join('')}
 
-// Load today's controls from Google Sheets (shared shift)
-function loadShiftFromSheet(){
-  if(!SURL)return;
-  fetch(SURL).then(r=>r.json()).then(d=>{
-    if(d.status!=='ok'||!d.records)return;
-    const today=new Date().toISOString().slice(0,10);
-    // Filter records for today
-    const todayCtrls=d.records.filter(r=>{
-      const f=r.fecha||'';let dt=null;
-      if(typeof f==='string'){
-        const iso=f.match(/(\d{4})-(\d{2})-(\d{2})/);
-        if(iso)dt=iso[1]+'-'+iso[2]+'-'+iso[3];
-        if(!dt){const p=f.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/);
-          if(p)dt=p[3]+'-'+p[2].padStart(2,'0')+'-'+p[1].padStart(2,'0')}
-      }
-      return dt===today;
-    });
-    if(todayCtrls.length===0){
-      // No shift open, load all records for dashboard
-      allR=d.records;allR.forEach(r=>{r.promedio=r.promedio!=null?String(r.promedio):'';r.ph=r.ph!=null?String(r.ph):'';r.maquina=r.maquina?String(r.maquina).trim():'';r.presentacion=r.presentacion?String(r.presentacion).trim():'';r.lote=r.lote?String(r.lote).trim():'';r.analista=r.analista?String(r.analista).trim():'';if(r.pesos)r.pesos=r.pesos.map(p=>p!=null?String(p):'')});
-      return;
-    }
-    // Sort by control number ascending
-    todayCtrls.sort((a,b)=>(parseInt(a.controlNum)||0)-(parseInt(b.controlNum)||0));
-    // Convert sheet records to local control format
-    ctrls=todayCtrls.map(r=>({
-      hora:String(r.hora||''),
-      maquina:String(r.maquina||'').trim(),
-      presentacion:String(r.presentacion||'').trim(),
-      lote:String(r.lote||'').trim(),
-      orden:String(r.orden||'').trim(),
-      vence:String(r.vence||'').trim(),
-      granel:String(r.granel||'').trim(),
-      codPT:String(r.codPT||'').trim(),
-      ph:String(r.ph||''),
-      pesos:(r.pesos||['','','','','']).map(p=>p!=null?String(p):''),
-      promedio:String(r.promedio||''),
-      checks:Array.isArray(r.checks)?r.checks:[],
-      hasDev:r.hasDev===true||r.hasDev==='SÍ',
-      devDesc:String(r.devDesc||''),
-      devQty:String(r.devQty||''),
-      isRep:r.isRep===true||r.isRep==='SÍ',
-      fotos:[],
-      obs:String(r.obs||''),
-      timestamp:r.fecha+' '+r.hora,
-      analista:String(r.analista||'').trim(),
-      isLimp:String(r.maquina||'').trim()==='Limpiadores',
-      limpDefects:[],
-      fromSheet:true
-    }));
-    // Rebuild maqCache from previous controls
-    ctrls.forEach(c=>{
-      if(c.maquina)maqCache[c.maquina]={pres:c.presentacion,cLote:c.lote,cOrden:c.orden,cVence:c.vence,cGranel:c.granel,cCodPT:c.codPT};
-    });
-    saveLocal();initShift();
-    // Also keep allR for dashboard
-    allR=d.records;allR.forEach(r=>{r.promedio=r.promedio!=null?String(r.promedio):'';r.ph=r.ph!=null?String(r.ph):'';r.maquina=r.maquina?String(r.maquina).trim():'';r.presentacion=r.presentacion?String(r.presentacion).trim():'';r.lote=r.lote?String(r.lote).trim():'';r.analista=r.analista?String(r.analista).trim():'';if(r.pesos)r.pesos=r.pesos.map(p=>p!=null?String(p):'')});
-    toast('🔄 '+ctrls.length+' controles del turno cargados');
-  }).catch(()=>{});
+async function api(ruta,opciones){
+  const r=await fetch(API+ruta,Object.assign({credentials:'same-origin',headers:{'Content-Type':'application/json'}},opciones||{}));
+  let d=null;try{d=await r.json()}catch(e){}
+  if(r.status===401){location.href='/?volver='+encodeURIComponent(location.pathname);throw new Error('La sesión venció')}
+  if(!r.ok||(d&&d.ok===false))throw new Error((d&&d.error)||('Error '+r.status));
+  return d;
 }
 
-function startNewShift(){shift={fecha:new Date().toISOString().slice(0,10),analista:USER};ctrls=[];maqCache={};saveLocal();initShift()}
+// SESIÓN: la del portal
+async function arrancar(){
+  const msg=document.getElementById('loginMsg'),btn=document.getElementById('loginRetry');
+  msg.textContent='Verificando tu sesión…';btn.style.display='none';
+  try{
+    const s=await api('/sesion');
+    USER=s.nombre;PERMISOS=s.permisos||[];PLANILLA_CERRADA=!!s.planillaCerrada;
+  }catch(e){msg.textContent='No se pudo verificar tu sesión: '+e.message;btn.style.display='inline-block';return}
+  document.getElementById('loginScreen').style.display='none';document.getElementById('mainApp').style.display='block';document.getElementById('hdrU').textContent=USER;
+  document.getElementById('btnImp').style.display=(PERMISOS.includes('administrar')&&!PLANILLA_CERRADA)?'inline-block':'none';
+  if(!PERMISOS.includes('cargar'))document.getElementById('newBtn').style.display='none';
+  const prev=leerLocal();
+  shift={fecha:hoyLocal(),analista:USER};
+  // Lo que no se llego a enviar se conserva, aunque sea de otro dia
+  ctrls=((prev&&prev.ctrls)||[]).filter(c=>c.pendiente);
+  maqCache=(prev&&prev.shift&&prev.shift.fecha===shift.fecha&&prev.maqCache)||{};
+  saveLocal();initShift();
+  await reintentarPendientes();
+  loadShift();
+}
+async function logout(){try{await fetch('/api/auth/logout',{method:'POST',credentials:'same-origin'})}catch(e){}location.href='/'}
+function leerLocal(){try{return JSON.parse(localStorage.getItem('gmp_shift')||'null')}catch(e){return null}}
+arrancar();
+
+function normalizar(r){r.promedio=r.promedio!=null?String(r.promedio):'';r.ph=r.ph!=null?String(r.ph):'';r.maquina=r.maquina?String(r.maquina).trim():'';r.presentacion=r.presentacion?String(r.presentacion).trim():'';r.lote=r.lote?String(r.lote).trim():'';r.analista=r.analista?String(r.analista).trim():'';r.hora=horaDe(r.hora);if(r.pesos)r.pesos=r.pesos.map(p=>p!=null?String(p):'');return r}
+
+// Los controles de hoy de todos los analistas (turno compartido)
+async function loadShift(){
+  let d;try{d=await api('/controles')}catch(e){toast('⚠️ No se pudieron leer los controles: '+e.message,true);return}
+  allR=(d.records||[]).map(normalizar);
+  const hoy=hoyLocal();
+  const deHoy=allR.filter(r=>diaDe(r.fecha)===hoy).sort((a,b)=>(parseInt(a.controlNum)||0)-(parseInt(b.controlNum)||0));
+  const pend=ctrls.filter(c=>c.pendiente);
+  ctrls=deHoy.map(r=>({
+    hora:String(r.hora||''),maquina:r.maquina,presentacion:r.presentacion,lote:r.lote,
+    orden:String(r.orden||'').trim(),vence:String(r.vence||'').trim(),granel:String(r.granel||'').trim(),codPT:String(r.codPT||'').trim(),
+    ph:String(r.ph||''),pesos:(r.pesos||['','','','','']),promedio:String(r.promedio||''),
+    checks:Array.isArray(r.checks)?r.checks:[],hasDev:r.hasDev===true||r.hasDev==='SÍ',devDesc:String(r.devDesc||''),devQty:String(r.devQty||''),
+    isRep:r.isRep===true||r.isRep==='SÍ',fotos:[],fotosUrl:Array.isArray(r.photoLinks)?r.photoLinks:[],obs:String(r.obs||''),
+    analista:r.analista,controlNum:r.controlNum,isLimp:r.maquina==='Limpiadores',limpDefects:Array.isArray(r.limpDefects)?r.limpDefects:[],fromSheet:true
+  })).concat(pend);
+  deHoy.forEach(c=>{if(c.maquina)maqCache[c.maquina]={pres:c.presentacion,cLote:c.lote,cOrden:String(c.orden||''),cVence:String(c.vence||''),cGranel:String(c.granel||''),cCodPT:String(c.codPT||'')}});
+  saveLocal();initShift();
+  if(document.getElementById('page1').classList.contains('on'))renderDash();
+  if(deHoy.length)toast('🔄 '+deHoy.length+' controles del turno');
+}
+async function sincronizar(){await reintentarPendientes();await loadShift()}
+
+function startNewShift(){shift={fecha:hoyLocal(),analista:USER};ctrls=ctrls.filter(c=>c.pendiente);maqCache={};saveLocal();initShift()}
 function initShift(){document.getElementById('shiftDate').textContent=shift.fecha;document.getElementById('shiftUser').textContent=USER;document.getElementById('shiftCount').textContent=ctrls.length;document.getElementById('hdrInfo').textContent=shift.fecha;renderTL()}
-function endShift(){if(!confirm('¿Salir del turno? Los controles ya cargados quedan guardados en Google Sheets. Esto solo limpia tu pantalla.'))return;shift=null;ctrls=[];maqCache={};localStorage.removeItem('gmp_shift');startNewShift();toast('🏁 Pantalla limpiada')}
-function saveLocal(){localStorage.setItem('gmp_shift',JSON.stringify({shift,ctrls,maqCache}))}
+function endShift(){if(!confirm('¿Limpiar la pantalla? Los controles ya guardados quedan en el servidor; los pendientes de envío se conservan.'))return;startNewShift();toast('🏁 Pantalla limpiada')}
+function saveLocal(){try{localStorage.setItem('gmp_shift',JSON.stringify({shift,ctrls,maqCache}))}catch(e){toast('⚠️ Este equipo no tiene lugar para guardar los pendientes',true)}}
 
 // TABS
 function showTab(n){document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('on',i===n));document.querySelectorAll('.page').forEach((p,i)=>p.classList.toggle('on',i===n));if(n===1){loadSheet();renderDash()}}
@@ -638,34 +647,137 @@ function saveCtrl(){
     limpMotivo=document.getElementById('cLimpMotivo')?document.getElementById('cLimpMotivo').value:'';
     limpAccion=document.getElementById('cLimpAccion')?document.getElementById('cLimpAccion').value:'';
   }
-  const c={hora:document.getElementById('cHora').value,maquina:maq,presentacion:pres,lote,orden,vence,granel,codPT,ph:isLimp?'':document.getElementById('cPH').value,pesos,promedio:prom,checks:isLimp?[]:([...document.querySelectorAll('#cChk .ci.on .ct')].map(l=>l.textContent)),hasDev,devDesc:hasDev?document.getElementById('cDevD').value:'',devQty:hasDev?document.getElementById('cDevQ').value:'',isRep:hasDev?isRep:false,fotos:fotos.filter(Boolean),obs:document.getElementById('cObs').value,timestamp:new Date().toLocaleString('es-ES'),analista:USER,isLimp,limpDefects,limpUds,limpMotivo,limpAccion};
+  const c={hora:document.getElementById('cHora').value,maquina:maq,presentacion:pres,lote,orden,vence,granel,codPT,ph:isLimp?'':document.getElementById('cPH').value,pesos,promedio:prom,checks:isLimp?[]:([...document.querySelectorAll('#cChk .ci.on .ct')].map(l=>l.textContent)),hasDev,devDesc:hasDev?document.getElementById('cDevD').value:'',devQty:hasDev?document.getElementById('cDevQ').value:'',isRep:hasDev?isRep:false,fotos:fotos.filter(Boolean),fotosPos:fotos.slice(),obs:document.getElementById('cObs').value,analista:USER,isLimp,limpDefects,limpUds,limpMotivo,limpAccion,idEnvio:idEnvio(),pendiente:true};
   maqCache[maq]={pres,cLote:lote,cOrden:orden,cVence:vence,cGranel:granel,cCodPT:codPT};
-  ctrls.push(c);saveLocal();sendCtrl(c,ctrls.length);
+  ctrls.push(c);saveLocal();
   document.getElementById('cForm').style.display='none';document.getElementById('newBtn').style.display='block';
-  document.getElementById('shiftCount').textContent=ctrls.length;renderTL();toast('✅ Control #'+ctrls.length)}
+  document.getElementById('shiftCount').textContent=ctrls.length;renderTL();toast('⏳ Guardando control…');
+  sendCtrl(c)}
 
 // TIMELINE
 function renderTL(){
   const el=document.getElementById('timeline');
   if(!ctrls.length){el.innerHTML='<div style="text-align:center;color:var(--text3);font-size:9px;padding:12px;border:1px dashed var(--border);border-radius:var(--r);margin-bottom:8px">Sin controles en este turno</div>';return}
   el.innerHTML=ctrls.map((c,i)=>{
-    const tags=(c.checks||[]).map(ch=>`<span class="ti-tag">${ch}</span>`).join('');
-    const dev=c.hasDev?`<span class="ti-tag red">⚠️ ${c.devQty||'?'}u</span>`:'';
-    const ph=c.ph?' · pH:'+c.ph:'';
+    const tags=(c.checks||[]).map(ch=>`<span class="ti-tag">${esc(ch)}</span>`).join('');
+    const dev=c.hasDev?`<span class="ti-tag red">⚠️ ${esc(c.devQty||'?')}u</span>`:'';
+    const ph=c.ph?' · pH:'+esc(c.ph):'';
     const isL=c.isLimp||c.maquina==='Limpiadores';
     const dataLine=isL
-      ?`Lote: ${c.lote} · Defectos: ${(c.limpDefects||[]).length||'0'}`
-      :`Lote: ${c.lote} · Pesos: ${(c.pesos||[]).filter(p=>p).join('|')||'—'} → <b>${c.promedio||'—'}</b>${ph}`;
-    const limpTags=isL?(c.limpDefects||[]).map(d=>`<span class="ti-tag red">${d}</span>`).join(''):'';
-    const ana=c.analista?`<span style="color:var(--text3);font-size:9px"> · 👤 ${c.analista}</span>`:'';
-    return `<div class="ti" onclick="viewC(${i})"><div class="ti-h"><span class="ti-t">🕐 ${c.hora||'--:--'}${ana}</span><span class="ti-m">${c.maquina} · ${c.presentacion||''}</span></div><div class="ti-d">${dataLine}</div><div class="ti-tags">${tags}${limpTags}${dev}</div></div>`}).join('')}
+      ?`Lote: ${esc(c.lote)} · Defectos: ${(c.limpDefects||[]).length||'0'}`
+      :`Lote: ${esc(c.lote)} · Pesos: ${esc((c.pesos||[]).filter(p=>p).join('|'))||'—'} → <b>${esc(c.promedio)||'—'}</b>${ph}`;
+    const limpTags=isL?(c.limpDefects||[]).map(d=>`<span class="ti-tag red">${esc(d)}</span>`).join(''):'';
+    const ana=c.analista?`<span style="color:var(--text3);font-size:9px"> · 👤 ${esc(c.analista)}</span>`:'';
+    const num=c.controlNum?`#${esc(c.controlNum)} · `:'';
+    const estado=c.pendiente
+      ?`<span class="ti-tag red" onclick="event.stopPropagation();sendCtrl(ctrls[${i}])">${c.enviando?'⏳ enviando…':'⚠️ sin guardar · tocá para reintentar'}</span>`
+      :'';
+    return `<div class="ti" onclick="viewC(${i})"><div class="ti-h"><span class="ti-t">${num}🕐 ${esc(c.hora)||'--:--'}${ana}</span><span class="ti-m">${esc(c.maquina)} · ${esc(c.presentacion||'')}</span></div><div class="ti-d">${dataLine}</div><div class="ti-tags">${estado}${tags}${limpTags}${dev}</div></div>`}).join('')}
 
 // SHEETS
-function sendCtrl(c,num){if(!SURL)return;const pd=(c.fotos||[]).map(p=>p.replace(/^data:image\/\w+;base64,/,''));
-// Lookup spec for the product
-let spec='';if(c.maquina&&c.presentacion){const sp=(SPECS[c.maquina]||[]).find(s=>s.pres===c.presentacion);if(sp&&sp.qn>0)spec='Qn:'+sp.qn+'g · Rango empresa:'+sp.min+'-'+sp.max+'g · Dec.129/009 T='+sp.t.toFixed(1)+'g (Qn-T:'+sp.qnT.toFixed(1)+'g · Qn-2T:'+sp.qn2T.toFixed(1)+'g)'}
-fetch(SURL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:JSON.stringify({type:'control',fecha:shift.fecha,analista:USER,orden:c.orden,lote:c.lote,vence:c.vence,maquina:c.maquina,presentacion:c.presentacion,granel:c.granel,codPT:c.codPT,controlNum:num,hora:c.hora,pesos:c.pesos,promedio:c.promedio,spec:spec,ph:c.ph,checks:c.checks,hasDev:c.hasDev,devDesc:c.devDesc,devQty:c.devQty,isRep:c.isRep,obs:c.obs,timestamp:c.timestamp,numFotos:pd.length,photos:pd,isLimp:c.isLimp,limpDefects:c.limpDefects,limpUds:c.limpUds,limpMotivo:c.limpMotivo,limpAccion:c.limpAccion})}).catch(()=>toast('⚠️ Error',true))}
-function loadSheet(){if(!SURL)return;fetch(SURL).then(r=>r.json()).then(d=>{if(d.status==='ok'&&d.records){allR=d.records;allR.forEach(r=>{r.promedio=r.promedio!=null?String(r.promedio):'';r.ph=r.ph!=null?String(r.ph):'';r.maquina=r.maquina?String(r.maquina).trim():'';r.presentacion=r.presentacion?String(r.presentacion).trim():'';r.lote=r.lote?String(r.lote).trim():'';r.analista=r.analista?String(r.analista).trim():'';if(r.pesos)r.pesos=r.pesos.map(p=>p!=null?String(p):'')});renderDash();toast('📊 '+allR.length+' registros')}}).catch(()=>{toast('⚠️ Error carga',true)})}
+// SERVIDOR
+async function sendCtrl(c){
+  if(c.enviando)return;
+  if(c.analista&&c.analista!==USER){toast('⚠️ Hay un control pendiente de '+c.analista+': tiene que enviarlo esa persona',true);return}
+  c.enviando=true;renderTL();
+  try{
+    // Primero las fotos: cada una que sube queda anotada, asi un reintento no la vuelve a subir
+    c.fotoIds=c.fotoIds||[null,null,null];
+    const pos=c.fotosPos||[];
+    for(let i=0;i<3;i++){
+      if(pos[i]&&!c.fotoIds[i]){
+        const r=await api('/fotos',{method:'POST',body:JSON.stringify({dataBase64:pos[i].replace(/^data:image\/\w+;base64,/,''),mime:'image/jpeg',nombre:'control_'+String(c.lote||'').replace(/[^\w-]/g,'_')+'_'+['sticker','lote_vence','desvio'][i]+'.jpg'})});
+        c.fotoIds[i]=r.id;saveLocal();
+      }
+    }
+    let spec='';if(c.maquina&&c.presentacion){const sp=(SPECS[c.maquina]||[]).find(s=>s.pres===c.presentacion);if(sp&&sp.qn>0)spec='Qn:'+sp.qn+'g · Rango empresa:'+sp.min+'-'+sp.max+'g · Dec.129/009 T='+sp.t.toFixed(1)+'g (Qn-T:'+sp.qnT.toFixed(1)+'g · Qn-2T:'+sp.qn2T.toFixed(1)+'g)'}
+    const r=await api('/controles',{method:'POST',body:JSON.stringify({id_envio:c.idEnvio,hora:c.hora,maquina:c.maquina,presentacion:c.presentacion,lote:c.lote,orden:c.orden,vence:c.vence,granel:c.granel,codPT:c.codPT,ph:c.ph,pesos:c.pesos,spec,checks:c.checks,hasDev:c.hasDev,devDesc:c.devDesc,devQty:c.devQty,isRep:c.isRep,obs:c.obs,fotos:c.fotoIds,isLimp:c.isLimp,limpDefects:c.limpDefects,limpUds:c.limpUds,limpMotivo:c.limpMotivo,limpAccion:c.limpAccion})});
+    c.pendiente=false;c.controlNum=r.record.controlNum;c.promedio=String(r.record.promedio||'');c.fotosUrl=r.record.photoLinks||[];
+    // Las fotos ya estan en el servidor: no hace falta ocupar el almacenamiento del equipo
+    delete c.fotosPos;c.fotos=[];
+    toast('✅ Control #'+c.controlNum+' guardado');
+  }catch(e){
+    c.pendiente=true;
+    toast('⚠️ No se guardó: '+e.message+'. Quedó pendiente: tocá 🔄 para reintentar',true);
+  }finally{
+    c.enviando=false;saveLocal();renderTL();document.getElementById('shiftCount').textContent=ctrls.length;
+  }
+}
+async function reintentarPendientes(){for(const c of ctrls.filter(x=>x.pendiente&&(!x.analista||x.analista===USER)))await sendCtrl(c)}
+async function loadSheet(){let d;try{d=await api('/controles')}catch(e){toast('⚠️ Error de carga: '+e.message,true);return}allR=(d.records||[]).map(normalizar);renderDash();toast('📊 '+allR.length+' registros')}
+
+// CIERRE DE LA PLANILLA DE GOOGLE (una sola vez, administradoras)
+function abrirImp(){
+  document.getElementById('impBody').innerHTML=
+    '<div style="font-size:10px;color:var(--text2);line-height:1.6">'+
+    '<p style="margin:0 0 8px">Se hace <b>una sola vez</b>, para dejar de usar la planilla de Google. Los controles ya están en el servidor; del Excel se toman los <b>enlaces de las fotos</b>, la hora, los datos de Limpiadores y los <b>entrenamientos</b>.</p>'+
+    '<ol style="margin:0 0 8px 16px;padding:0"><li>Avisá que nadie use el link viejo de la app.</li><li>En la planilla: <b>Archivo → Descargar → Microsoft Excel (.xlsx)</b>.</li><li>Elegí ese archivo acá y revisá lo que trae.</li><li>Confirmá. Después archivá el Apps Script.</li></ol>'+
+    '<p style="margin:0 0 8px">Si el Excel no tiene exactamente los mismos controles que la planilla, no se importa nada.</p></div>'+
+    '<input type="file" id="impFile" accept=".xlsx" style="font-size:10px;margin:6px 0" onchange="elegirImp(this.files[0])">'+
+    '<div id="impRes" style="font-size:10px;margin-top:8px"></div>';
+  document.getElementById('impMo').classList.add('open');document.body.style.overflow='hidden';
+}
+function cerrarImp(){document.getElementById('impMo').classList.remove('open');document.body.style.overflow=''}
+function cargarXLSX(){
+  if(window.XLSX)return Promise.resolve();
+  return new Promise((ok,mal)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';s.onload=ok;s.onerror=()=>mal(new Error('No se pudo cargar el lector de Excel'));document.head.appendChild(s)});
+}
+// Serial de Excel -> fecha y hora de Montevideo (UTC-3, sin horario de verano)
+function serialAIso(v){const ms=Math.round((v-25569)*86400000);const d=new Date(ms);const p=n=>String(n).padStart(2,'0');return d.getUTCFullYear()+'-'+p(d.getUTCMonth()+1)+'-'+p(d.getUTCDate())+'T'+p(d.getUTCHours())+':'+p(d.getUTCMinutes())+':'+p(d.getUTCSeconds())+'-03:00'}
+function leerPlanilla(wb){
+  const ws=wb.Sheets[wb.SheetNames.find(n=>{const s=wb.Sheets[n];return s&&s.A1&&String(s.A1.v).trim()==='Fecha'&&s.J1&&/control/i.test(String(s.J1.v))})];
+  if(!ws)throw new Error('No encontré la hoja de controles (la que empieza con Fecha, Analista, … Control #)');
+  const celda=(r,c)=>ws[XLSX.utils.encode_cell({r,c})];
+  const rango=XLSX.utils.decode_range(ws['!ref']);
+  // Ultima fila con algo escrito: es la que contaba el Apps Script
+  let ultima=0;
+  for(let r=1;r<=rango.e.r;r++){for(let c=0;c<=rango.e.c;c++){const x=celda(r,c);if(x&&x.v!==undefined&&x.v!==''){ultima=r;break}}}
+  const enlace=x=>{if(!x)return '';if(x.l&&x.l.Target)return x.l.Target;const m=x.f&&String(x.f).match(/HYPERLINK\(\s*"([^"]+)"/i);return m?m[1]:''};
+  const txt=x=>x&&x.v!==undefined?String(x.v).trim():'';
+  const filas=[];
+  for(let r=1;r<=ultima;r++){
+    const k=celda(r,10);let hora='';
+    if(k&&k.t==='n'){let min=Math.round((k.v%1)*1440);if(min>=1440)min=1439;hora=String(Math.floor(min/60)).padStart(2,'0')+':'+String(min%60).padStart(2,'0')}
+    else if(k&&/^\d{1,2}:\d{2}/.test(txt(k)))hora=txt(k).slice(0,5).padStart(5,'0');
+    const def=txt(celda(r,29));
+    filas.push({fila:r+1,hora,fotos:[enlace(celda(r,26)),enlace(celda(r,27)),enlace(celda(r,28))],
+      limp:{defectos:def?def.split(', ').map(s=>s.trim()).filter(Boolean):[],uds:txt(celda(r,30)),motivo:txt(celda(r,31)),accion:txt(celda(r,32))}});
+  }
+  const hojaE=wb.Sheets['Entrenamientos'];
+  const entrenamientos=hojaE?XLSX.utils.sheet_to_json(hojaE,{defval:''}).map(e=>({
+    fecha:typeof e['Fecha']==='number'?serialAIso(e['Fecha']):String(e['Fecha']||''),analista:e['Analista'],puntaje:e['Puntaje %'],
+    correctas:e['Correctas'],total:e['Total'],aprobado:e['Aprobado'],detalle:e['Detalle Respuestas']})):[];
+  return {cantidad:ultima,filas,entrenamientos};
+}
+let IMP=null;
+async function elegirImp(file){
+  const res=document.getElementById('impRes');if(!file)return;
+  res.innerHTML='⏳ Leyendo el Excel y haciendo una última copia de la planilla…';
+  try{
+    await cargarXLSX();
+    const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellFormula:true});
+    IMP=leerPlanilla(wb);
+    const r=await api('/importar',{method:'POST',body:JSON.stringify(IMP)});
+    const p=r.preview;
+    res.innerHTML='<div style="background:var(--s1);border:1px solid var(--border);border-radius:var(--rs);padding:8px;line-height:1.7">'+
+      '✅ El Excel coincide con la planilla: <b>'+p.controles+'</b> controles.<br>'+
+      '📷 Fotos a recuperar: <b>'+p.fotos+'</b> (en '+p.conFotos+' controles)<br>'+
+      '🕐 Horas: <b>'+p.conHora+'</b> · 🧴 Con datos de Limpiadores: <b>'+p.conLimpiadores+'</b><br>'+
+      '🎓 Entrenamientos: <b>'+p.entrenamientos+'</b></div>'+
+      '<p style="color:var(--amber);margin:8px 0">Al confirmar, la planilla deja de usarse y esto no se repite.</p>'+
+      '<button class="lb1" onclick="confirmarImp()">Confirmar e importar</button>';
+  }catch(e){res.innerHTML='<div style="color:var(--red)">⚠️ '+esc(e.message)+'</div>'}
+}
+async function confirmarImp(){
+  const res=document.getElementById('impRes');if(!IMP)return;
+  res.innerHTML='⏳ Importando…';
+  try{
+    const r=await api('/importar',{method:'POST',body:JSON.stringify(Object.assign({},IMP,{confirmar:true}))});
+    const p=r.importado;
+    res.innerHTML='<div style="color:var(--mint);line-height:1.7">✅ Listo. Se completaron '+p.actualizados+' controles ('+p.fotos+' fotos) y '+p.entrenamientos+' entrenamientos. La planilla quedó cerrada: ya se puede archivar el Apps Script.</div>';
+    PLANILLA_CERRADA=true;document.getElementById('btnImp').style.display='none';IMP=null;loadShift();
+  }catch(e){res.innerHTML='<div style="color:var(--red)">⚠️ '+esc(e.message)+'</div>'}
+}
 
 // PHOTOS
 function takeP(s){curSlot=s;document.getElementById('camIn').click()}
@@ -712,16 +824,21 @@ if(/desvio|desviacion/.test(t)){setDev(1);lg('✅','Desvío');n++}else if(/sin\s
 document.getElementById('tLog').innerHTML=logs.map(l=>`<div style="color:${l.i==='✅'?'var(--mint)':'var(--text3)'}">${l.i} ${l.m}</div>`).join('');return n}
 
 // VIEW CONTROL
-function viewC(i){const c=ctrls[i];if(!c)return;document.getElementById('mTitle').textContent=c.maquina+' #'+(i+1)+' '+c.hora;
+function viewC(i){const c=ctrls[i];if(!c)return;document.getElementById('mTitle').textContent=c.maquina+' #'+(c.controlNum||i+1)+' '+(c.hora||'');
 let h=`<div class="ms"><div class="mt">Identificación</div>`;
-[['Máquina',c.maquina],['Presentación',c.presentacion],['Lote',c.lote],['Orden',c.orden],['Vence',c.vence]].forEach(([l,v])=>{h+=`<div class="mr"><span style="color:var(--text2)">${l}</span><span style="font-family:var(--m);font-weight:600">${v||'—'}</span></div>`});h+=`</div>`;
-h+=`<div class="ms"><div class="mt">Pesos</div>`;c.pesos.forEach((p,j)=>{h+=`<div class="mr"><span style="color:var(--text2)">P${j+1}</span><span style="font-family:var(--m);font-weight:600">${p||'—'}</span></div>`});
-h+=`<div class="mr"><span style="color:var(--text2)"><b>Promedio</b></span><span style="font-family:var(--m);font-weight:700;color:var(--mint)">${c.promedio||'—'}</span></div></div>`;
-if(c.ph)h+=`<div class="ms"><div class="mt">pH</div><div class="mr"><span style="color:var(--text2)">Valor</span><span style="font-family:var(--m);font-weight:600">${c.ph}</span></div></div>`;
-if(c.checks.length)h+=`<div class="ms"><div class="mt">Controles</div><div style="display:flex;flex-wrap:wrap;gap:3px">${c.checks.map(ch=>`<span class="ti-tag">${ch}</span>`).join('')}</div></div>`;
-if(c.fotos&&c.fotos.length)h+=`<div class="ms"><div class="mt">📸</div><div style="display:grid;grid-template-columns:repeat(2,1fr);gap:4px">${c.fotos.map(p=>`<img src="${p}" style="width:100%;border-radius:var(--rs);border:1px solid var(--border)"/>`).join('')}</div></div>`;
-if(c.hasDev)h+=`<div class="ms"><div class="mt red">⚠️ Desvío</div><div class="mr"><span style="color:var(--text2)">Desc.</span><span style="font-family:var(--m)">${c.devDesc||'—'}</span></div><div class="mr"><span style="color:var(--text2)">Uds</span><span style="font-family:var(--m)">${c.devQty||'—'}</span></div><div class="mr"><span style="color:var(--text2)">Reproc.</span><span style="font-family:var(--m);color:${c.isRep?'var(--red)':'var(--mint)'}">${c.isRep?'SÍ':'NO'}</span></div></div>`;
-if(c.obs)h+=`<div class="ms"><div class="mt">Obs</div><div style="font-size:9px;color:var(--text2);font-style:italic">${c.obs}</div></div>`;
+[['Analista',c.analista],['Máquina',c.maquina],['Presentación',c.presentacion],['Lote',c.lote],['Orden',c.orden],['Vence',c.vence],['Granel',c.granel],['Cód. PT',c.codPT]].forEach(([l,v])=>{h+=`<div class="mr"><span style="color:var(--text2)">${l}</span><span style="font-family:var(--m);font-weight:600">${esc(v)||'—'}</span></div>`});h+=`</div>`;
+if(c.pendiente)h+=`<div class="ms"><div class="mt red">⚠️ Sin guardar en el servidor</div><div style="font-size:9px;color:var(--text2)">Este control está solo en este equipo. Cerrá esta ventana y tocá el aviso rojo para reintentar.</div></div>`;
+h+=`<div class="ms"><div class="mt">Pesos</div>`;(c.pesos||[]).forEach((p,j)=>{h+=`<div class="mr"><span style="color:var(--text2)">P${j+1}</span><span style="font-family:var(--m);font-weight:600">${esc(p)||'—'}</span></div>`});
+h+=`<div class="mr"><span style="color:var(--text2)"><b>Promedio</b></span><span style="font-family:var(--m);font-weight:700;color:var(--mint)">${esc(c.promedio)||'—'}</span></div></div>`;
+if(c.ph)h+=`<div class="ms"><div class="mt">pH</div><div class="mr"><span style="color:var(--text2)">Valor</span><span style="font-family:var(--m);font-weight:600">${esc(c.ph)}</span></div></div>`;
+if((c.checks||[]).length)h+=`<div class="ms"><div class="mt">Controles</div><div style="display:flex;flex-wrap:wrap;gap:3px">${c.checks.map(ch=>`<span class="ti-tag">${esc(ch)}</span>`).join('')}</div></div>`;
+if((c.limpDefects||[]).length)h+=`<div class="ms"><div class="mt red">Defectos Limpiadores</div><div style="display:flex;flex-wrap:wrap;gap:3px">${c.limpDefects.map(d=>`<span class="ti-tag red">${esc(d)}</span>`).join('')}</div></div>`;
+const img=u=>`<img src="${esc(u)}" style="width:100%;border-radius:var(--rs);border:1px solid var(--border)"/>`;
+const enServidor=(c.fotosUrl||[]).filter(u=>/^(\/api\/control-en-proceso\/fotos\/\d+|https:\/\/)/.test(String(u||'')));
+if(c.fotos&&c.fotos.length)h+=`<div class="ms"><div class="mt">📸</div><div style="display:grid;grid-template-columns:repeat(2,1fr);gap:4px">${c.fotos.map(img).join('')}</div></div>`;
+else if(enServidor.length)h+=`<div class="ms"><div class="mt">📸</div><div style="display:grid;grid-template-columns:repeat(2,1fr);gap:4px">${enServidor.map(u=>u.startsWith('/api/')?`<a href="${esc(u)}" target="_blank">${img(u)}</a>`:`<a href="${esc(u)}" target="_blank" rel="noopener" class="mb2" style="text-align:center;text-decoration:none">📷 Ver en Drive</a>`).join('')}</div></div>`;
+if(c.hasDev)h+=`<div class="ms"><div class="mt red">⚠️ Desvío</div><div class="mr"><span style="color:var(--text2)">Desc.</span><span style="font-family:var(--m)">${esc(c.devDesc)||'—'}</span></div><div class="mr"><span style="color:var(--text2)">Uds</span><span style="font-family:var(--m)">${esc(c.devQty)||'—'}</span></div><div class="mr"><span style="color:var(--text2)">Reproc.</span><span style="font-family:var(--m);color:${c.isRep?'var(--red)':'var(--mint)'}">${c.isRep?'SÍ':'NO'}</span></div></div>`;
+if(c.obs)h+=`<div class="ms"><div class="mt">Obs</div><div style="font-size:9px;color:var(--text2);font-style:italic">${esc(c.obs)}</div></div>`;
 document.getElementById('mBody').innerHTML=h;document.getElementById('mover').classList.add('open');document.body.style.overflow='hidden'}
 function closeM(){document.getElementById('mover').classList.remove('open');document.body.style.overflow=''}
 

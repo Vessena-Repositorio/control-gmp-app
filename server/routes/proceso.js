@@ -17,7 +17,9 @@ export const rutasProceso = Router();
  * veces infla los totales y sesga los promedios del informe. Siguen guardados
  * en la base; para auditarlos, ?incluirDuplicados=1.
  *
- * El orden es por `pos`, la posicion en la hoja de origen.
+ * El orden es el de la hoja (la ultima fila primero): primero los controles
+ * cargados desde la app (034), del mas nuevo al mas viejo, y despues los de la
+ * planilla por `pos`.
  */
 rutasProceso.get('/', async (req, res, next) => {
     try {
@@ -25,7 +27,9 @@ rutasProceso.get('/', async (req, res, next) => {
         const { rows } = await consultar(
             `SELECT raw FROM proceso_controles
              ${incluirDup ? '' : 'WHERE duplicado_de IS NULL'}
-             ORDER BY pos`
+             ORDER BY (origen = 'app') DESC,
+                      CASE WHEN origen = 'app' THEN id END DESC,
+                      pos`
         );
         res.json({ status: 'ok', records: rows.map((f) => f.raw) });
     } catch (err) {
