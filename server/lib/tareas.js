@@ -47,6 +47,11 @@ export function comoDia(v) {
  * Si un dia no llega a correr -deploy, corte, contenedor caido- la corrida del
  * dia siguiente igual sucede. Lo unico que se garantiza es no repetir, no que
  * cada dia tenga exactamente una.
+ *
+ * Las semanales corren una vez por semana a partir de `diaSemana`: si el lunes
+ * el contenedor estaba caido, sale el martes. Esa recuperacion es solo para
+ * tareas que ya corrieron alguna vez; una recien encendida espera a su dia, para
+ * que prender un aviso un jueves no mande un resumen semanal ese mismo jueves.
  */
 export async function correrUnaVezPorDia(nombre, opciones, fn) {
     const { hora = 8, diaSemana = null, forzar = false, activa = true } = opciones || {};
@@ -63,17 +68,26 @@ export async function correrUnaVezPorDia(nombre, opciones, fn) {
         const reloj = await relojLocal();
 
         if (!forzar) {
-            if (diaSemana && reloj.dia_semana !== diaSemana) {
-                return { estado: 'no es el dia', diaSemana: reloj.dia_semana };
-            }
-            if (reloj.hora < hora) return { estado: 'todavia no es la hora', hora: reloj.hora };
-
             const { rows } = await consultar(
                 'SELECT ultimo_dia FROM tarea_diaria WHERE nombre = $1', [nombre]
             );
             const ultimo = rows[0]?.ultimo_dia;
-            if (ultimo && comoDia(ultimo) >= comoDia(reloj.hoy)) {
-                return { estado: 'ya corrio hoy' };
+            const hoy = comoDia(reloj.hoy);
+
+            if (diaSemana) {
+                const esElDia = reloj.dia_semana === diaSemana;
+                const recupera = ultimo && reloj.dia_semana > diaSemana;
+                if (!esElDia && !recupera) {
+                    return { estado: 'no es el dia', diaSemana: reloj.dia_semana };
+                }
+            }
+            if (reloj.hora < hora) return { estado: 'todavia no es la hora', hora: reloj.hora };
+
+            // Diaria: ya corrio hoy. Semanal: ya corrio desde el dia que le toca
+            // esta semana.
+            const desde = diaSemana ? sumarDias(hoy, diaSemana - reloj.dia_semana) : hoy;
+            if (ultimo && comoDia(ultimo) >= desde) {
+                return { estado: diaSemana ? 'ya corrio esta semana' : 'ya corrio hoy' };
             }
         }
 
@@ -87,6 +101,32 @@ export async function correrUnaVezPorDia(nombre, opciones, fn) {
     } finally {
         await consultar('SELECT pg_advisory_unlock(hashtext($1))', [nombre]).catch(() => {});
     }
+}
+
+/** 'AAAA-MM-DD' corrido `n` dias (n puede ser negativo). */
+export function sumarDias(dia, n) {
+    const [y, m, d] = String(dia).split('-').map(Number);
+    const f = new Date(Date.UTC(y, m - 1, d + n));
+    const p = (x) => String(x).padStart(2, '0');
+    return `${f.getUTCFullYear()}-${p(f.getUTCMonth() + 1)}-${p(f.getUTCDate())}`;
+}
+
+const DIAS = { lunes: 1, martes: 2, miercoles: 3, jueves: 4, viernes: 5, sabado: 6, domingo: 7 };
+
+/**
+ * Dia de la semana de una variable de entorno: 1..7 (lunes=1) o el nombre del
+ * dia. "diario" o 0 devuelven null, que es correr todos los dias. Un valor que
+ * no se entiende usa el de por defecto y lo avisa, en vez de apagar el aviso.
+ */
+export function diaDeEntorno(variable, porDefecto) {
+    const v = String(process.env[variable] ?? '').trim().toLowerCase()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '');
+    if (!v) return porDefecto;
+    if (v === 'diario' || v === '0') return null;
+    const n = DIAS[v] ?? Number(v);
+    if (Number.isInteger(n) && n >= 1 && n <= 7) return n;
+    console.warn(`[tareas] ${variable}="${process.env[variable]}" no es un dia valido; se usa ${porDefecto ?? 'diario'}`);
+    return porDefecto;
 }
 
 async function marcar(nombre, detalle) {

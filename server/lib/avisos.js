@@ -6,13 +6,15 @@
  *
  * Dos decisiones que valen mas que el codigo:
  *
- *  - Un resumen por persona y por dia, no un correo por accion. Si cada accion
- *    manda el suyo, en una semana nadie los abre y el aviso deja de servir.
+ *  - Un resumen por persona y por semana (los lunes, AVISOS_CAPA_DIA), no un
+ *    correo por accion. Si cada accion manda el suyo, nadie los abre y el aviso
+ *    deja de servir. Hasta el 17/09/2026 salia todos los dias y era demasiado.
  *  - La corrida se ancla al dia en la tabla `tarea_diaria`. Atarla al arranque
  *    haria que cada deploy dispare otra tanda de correos.
  */
 import { consultar } from '../db.js';
 import { hayCorreo, enviar } from './correo.js';
+import { correrUnaVezPorDia, diaDeEntorno } from './tareas.js';
 
 const TAREA = 'avisos_capa';
 
@@ -23,6 +25,9 @@ const TAREA = 'avisos_capa';
 const ZONA = process.env.ZONA_HORARIA || 'America/Montevideo';
 const HORA = Number(process.env.AVISOS_CAPA_HORA ?? 8);
 const DIAS_PREVIOS = Number(process.env.AVISOS_CAPA_DIAS_PREVIOS ?? 7);
+// Semanal, los lunes. "diario" vuelve al envio de todos los dias.
+const DIA = diaDeEntorno('AVISOS_CAPA_DIA', 1);
+const CADA = DIA ? 'semanal' : 'diario';
 
 // Quienes reciben el resumen consolidado. Acepta varias direcciones separadas
 // por coma: que dependa de una sola persona es fragil, porque el resumen deja
@@ -87,21 +92,6 @@ function describir(a) {
     return `vence en ${d} dia(s)`;
 }
 
-/**
- * 'YYYY-MM-DD' de un DATE, para comparar dias ("ya corrio hoy").
- *
- * Con getters locales y no con toISOString: el driver arma el Date a medianoche
- * de la zona del contenedor, y toISOString lo pasa a UTC. Si el contenedor esta
- * adelantado respecto de UTC, la fecha retrocede un dia y la comparacion puede
- * dar que hoy ya corrio cuando no, o al reves.
- */
-function fechaCorta(v) {
-    if (!(v instanceof Date)) return String(v ?? '').slice(0, 10);
-    const m = String(v.getMonth() + 1).padStart(2, '0');
-    const d = String(v.getDate()).padStart(2, '0');
-    return `${v.getFullYear()}-${m}-${d}`;
-}
-
 function comoTexto(acciones, titulo) {
     const lineas = acciones.map((a) =>
         `- ${a.code} (${describir(a)}, vence el ${a.vence || 'sin fecha'})\n` +
@@ -150,47 +140,18 @@ function comoHtml(acciones, titulo) {
 }
 
 /**
- * Corre la revision si corresponde. `forzar` saltea el horario y el "ya corrio
- * hoy": es lo que usa el endpoint de prueba para no esperar a mañana.
+ * Corre la revision si corresponde. `forzar` saltea el dia, el horario y el "ya
+ * corrio": es lo que usa el endpoint de prueba para no esperar al lunes.
  */
 export async function revisarAvisosCapa({ forzar = false, soloCalidad = false } = {}) {
     if (!hayCorreo) return { estado: 'sin correo configurado' };
-    if (!forzar && !ACTIVOS) return { estado: 'envio automatico apagado (AVISOS_CAPA_ACTIVOS)' };
 
-    // Si hubiera mas de una instancia, solo una manda. Sin esto cada una
-    // mandaria su propia copia del mismo resumen.
-    const { rows: candado } = await consultar(
-        'SELECT pg_try_advisory_lock(hashtext($1)) AS tomado', [TAREA]
-    );
-    if (!candado[0].tomado) return { estado: 'otra instancia lo esta corriendo' };
-
-    try {
-        const { rows: reloj } = await consultar(
-            `SELECT (now() AT TIME ZONE $1)::date                     AS hoy,
-                    EXTRACT(hour FROM now() AT TIME ZONE $1)::int     AS hora`,
-            [ZONA]
-        );
-        const { hoy, hora } = reloj[0];
-
-        if (!forzar) {
-            if (hora < HORA) return { estado: 'todavia no es la hora', hora };
-
-            const { rows } = await consultar(
-                'SELECT ultimo_dia FROM tarea_diaria WHERE nombre = $1', [TAREA]
-            );
-            const ultimo = rows[0]?.ultimo_dia;
-            if (ultimo && fechaCorta(ultimo) >= fechaCorta(hoy)) {
-                return { estado: 'ya corrio hoy' };
-            }
-        }
-
+    return correrUnaVezPorDia(TAREA, { hora: HORA, diaSemana: DIA, forzar, activa: ACTIVOS }, async () => {
         const acciones = await accionesPendientes();
 
-        // Sin nada que avisar igual se marca el dia: no tiene sentido reintentar
-        // cada diez minutos hasta la medianoche.
+        // Sin nada que avisar igual cuenta como corrida: no tiene sentido
+        // reintentar cada diez minutos.
         if (!acciones.length) {
-            if (!soloCalidad) await marcarCorrida(0, 'sin acciones por vencer');
-
             // Un cero puede ser "no hay nada por vencer" o "la tabla esta
             // vacia", y no son lo mismo: del silencio del segundo caso no hay
             // que fiarse. El proximo plazo dice cuando volveria a haber algo.
@@ -202,7 +163,7 @@ export async function revisarAvisosCapa({ forzar = false, soloCalidad = false } 
                         min(due_date) FILTER (WHERE estado <> 'Cerrado')            AS proximo_plazo
                  FROM ncd_capa`
             );
-            return { estado: 'ok', acciones: 0, correos: 0, conteo: rows[0] };
+            return { acciones: 0, correos: 0, conteo: rows[0], detalle: '0 accion(es); sin acciones por vencer' };
         }
 
         const porPersona = new Map();
@@ -219,7 +180,7 @@ export async function revisarAvisosCapa({ forzar = false, soloCalidad = false } 
         // escribe a nadie mas que a Calidad. Es la unica forma de ver como queda
         // el mensaje sin mandarselo a los responsables de verdad.
         for (const [mail, suyas] of (soloCalidad ? [] : porPersona)) {
-            const titulo = `Tenes ${suyas.length} accion(es) CAPA por vencer`;
+            const titulo = `Resumen ${CADA}: tenés ${suyas.length} acción(es) CAPA vencidas o por vencer`;
             try {
                 await enviar({
                     para: mail,
@@ -240,7 +201,7 @@ export async function revisarAvisosCapa({ forzar = false, soloCalidad = false } 
         // obligatorio, y conviene que se vean en vez de desaparecer.
         if (CALIDAD.length) {
             const titulo = (soloCalidad ? '[PRUEBA] ' : '') +
-                `Resumen CAPA: ${acciones.length} accion(es) por vencer`;
+                `Resumen ${CADA} CAPA: ${acciones.length} acción(es) vencidas o por vencer`;
             const nota = sinDestinatario.length
                 ? `\nATENCION: ${sinDestinatario.length} accion(es) sin email de responsable. ` +
                   `Nadie recibio aviso por ellas: ${sinDestinatario.map((a) => a.code).join(', ')}\n`
@@ -259,38 +220,23 @@ export async function revisarAvisosCapa({ forzar = false, soloCalidad = false } 
             }
         }
 
-        // Una previsualizacion no marca el dia como corrido: si lo hiciera,
-        // probar a la mañana cancelaria el aviso real de ese mismo dia.
-        if (!soloCalidad) await marcarCorrida(acciones.length, `${correos} correo(s)`);
-
         console.log(`[avisos] ${acciones.length} accion(es), ${correos} correo(s)` +
             (soloCalidad ? ' (previsualizacion)' : ''));
         return {
-            estado: 'ok',
             modo: soloCalidad ? 'previsualizacion (solo a Calidad)' : 'envio real',
             acciones: acciones.length,
             correos,
             personasQueRecibirian: soloCalidad ? [...porPersona.keys()] : undefined,
             sinDestinatario: sinDestinatario.map((a) => a.code),
+            detalle: `${acciones.length} accion(es); ${correos} correo(s)`,
         };
-    } finally {
-        await consultar('SELECT pg_advisory_unlock(hashtext($1))', [TAREA]).catch(() => {});
-    }
-}
-
-async function marcarCorrida(cantidad, detalle) {
-    await consultar(
-        `INSERT INTO tarea_diaria (nombre, ultimo_dia, ultima_corrida, detalle)
-         VALUES ($1, (now() AT TIME ZONE $2)::date, now(), $3)
-         ON CONFLICT (nombre) DO UPDATE
-            SET ultimo_dia = EXCLUDED.ultimo_dia,
-                ultima_corrida = EXCLUDED.ultima_corrida,
-                detalle = EXCLUDED.detalle`,
-        [TAREA, ZONA, `${cantidad} accion(es); ${detalle}`]
-    );
+    });
 }
 
 /** Configuracion vigente, para el endpoint de diagnostico. */
 export function configAvisos() {
-    return { activos: ACTIVOS, zona: ZONA, hora: HORA, diasPrevios: DIAS_PREVIOS, copiaCalidad: CALIDAD };
+    return {
+        activos: ACTIVOS, zona: ZONA, hora: HORA, diasPrevios: DIAS_PREVIOS, copiaCalidad: CALIDAD,
+        frecuencia: DIA ? 'semanal, dia ' + DIA + ' (lunes=1)' : 'diaria',
+    };
 }

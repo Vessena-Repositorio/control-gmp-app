@@ -7,8 +7,9 @@
  *
  * Mismo criterio que los avisos de CAPA:
  *
- *  - Un resumen por persona y por dia, no un correo por tarea. Si cada tarea
- *    manda el suyo, en una semana nadie los abre.
+ *  - Un resumen por persona y por semana (los lunes, AVISOS_CONTROL_CAMBIOS_DIA),
+ *    no un correo por tarea. Hasta el 17/09/2026 salia todos los dias y era
+ *    demasiado.
  *  - La copia a supervision (notificacion_supervisores, 'tareas-vencidas') trae
  *    el panorama completo, incluidas las tareas sin mail: esas no le llegan a
  *    nadie mas, y conviene que se vean en vez de desaparecer.
@@ -18,7 +19,7 @@
 import { consultar } from '../db.js';
 import { hayCorreo, enviar } from './correo.js';
 import { supervisoresDe } from './destinatarios.js';
-import { correrUnaVezPorDia, comoDia } from './tareas.js';
+import { correrUnaVezPorDia, comoDia, diaDeEntorno } from './tareas.js';
 
 const RECURSO = 'control-cambios';
 const NOTIFICACION = 'tareas-vencidas';
@@ -26,6 +27,9 @@ const TAREA = 'avisos_control_cambios';
 
 const HORA = Number(process.env.AVISOS_CONTROL_CAMBIOS_HORA ?? 8);
 const DIAS_PREVIOS = Number(process.env.AVISOS_CONTROL_CAMBIOS_DIAS_PREVIOS ?? 7);
+// Semanal, los lunes. "diario" vuelve al envio de todos los dias.
+const DIA = diaDeEntorno('AVISOS_CONTROL_CAMBIOS_DIA', 1);
+const CADA = DIA ? 'semanal' : 'diario';
 const ACTIVOS = ['1', 'true', 'si'].includes(
     String(process.env.AVISOS_CONTROL_CAMBIOS_ACTIVOS || '').toLowerCase()
 );
@@ -161,7 +165,7 @@ export function comoTexto(tareas, titulo, conResponsable) {
 export async function revisarAvisosControlCambios({ forzar = false, soloPrevisualizar = false } = {}) {
     if (!hayCorreo) return { estado: 'sin correo configurado' };
 
-    return correrUnaVezPorDia(TAREA, { hora: HORA, activa: ACTIVOS, forzar }, async (reloj) => {
+    return correrUnaVezPorDia(TAREA, { hora: HORA, diaSemana: DIA, activa: ACTIVOS, forzar }, async (reloj) => {
         const hoy = comoDia(reloj.hoy);
         const tareas = await tareasPendientes(hoy);
         if (!tareas.length) return { tareas: 0, correos: 0, detalle: 'sin tareas por vencer' };
@@ -176,7 +180,7 @@ export async function revisarAvisosControlCambios({ forzar = false, soloPrevisua
 
         const mensajes = [];
         for (const [mail, suyas] of porPersona) {
-            const titulo = `Tenés ${suyas.length} tarea(s) de Control de Cambios por vencer`;
+            const titulo = `Resumen ${CADA}: tenés ${suyas.length} tarea(s) de Control de Cambios vencidas o por vencer`;
             mensajes.push({
                 para: mail,
                 asunto: PREFIJO + titulo,
@@ -188,7 +192,7 @@ export async function revisarAvisosControlCambios({ forzar = false, soloPrevisua
 
         const supervision = await supervisoresDe(RECURSO, NOTIFICACION);
         if (supervision.length) {
-            const titulo = `Resumen: ${tareas.length} tarea(s) de Control de Cambios por vencer`;
+            const titulo = `Resumen ${CADA}: ${tareas.length} tarea(s) de Control de Cambios vencidas o por vencer`;
             const nota = sinMail.length
                 ? `ATENCIÓN: ${sinMail.length} tarea(s) sin mail de responsable, nadie más recibió aviso por ellas: ` +
                   sinMail.map((t) => `${t.numero} (${t.tarea})`).join('; ')
@@ -238,5 +242,8 @@ export async function revisarAvisosControlCambios({ forzar = false, soloPrevisua
 
 /** Configuracion vigente, para GET /api/correo/avisos. */
 export function configControlCambios() {
-    return { activos: ACTIVOS, hora: HORA, diasPrevios: DIAS_PREVIOS, base: BASE };
+    return {
+        activos: ACTIVOS, hora: HORA, diasPrevios: DIAS_PREVIOS, base: BASE,
+        frecuencia: DIA ? 'semanal, dia ' + DIA + ' (lunes=1)' : 'diaria',
+    };
 }
