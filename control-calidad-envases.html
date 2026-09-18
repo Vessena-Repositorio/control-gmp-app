@@ -531,6 +531,8 @@
 
         // =====================================================
         const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby0Idz2-18NsukOhRqqrQrgHCpO7f4gX67kb-5gH0xA1DLxw7t39Yr37_PakYth5srj/exec';
+        // Enlace de los correos de aprobacion: ?lcc=<id> abre ese control LCC.
+        const LCC_DEL_LINK = (() => { try { return new URLSearchParams(location.search).get('lcc') || ''; } catch { return ''; } })();
         // =====================================================
 
         // Hasta "Cerrar planilla" la app sigue guardando en Google; después, en el
@@ -623,12 +625,12 @@
         //      undefined (reading 'digest')".
 
         function App() {
-            const [activeTab, setActiveTab] = useState('soplado');
+            const [activeTab, setActiveTab] = useState(LCC_DEL_LINK ? 'historico' : 'soplado');
 
             // === MODO DE PRODUCTO (envases o tapas) ===
             const [modoProducto, setModoProducto] = useState(() => {
                 try {
-                    return localStorage.getItem('vessena_modo_producto') || 'envases';
+                    return LCC_DEL_LINK ? 'envases' : (localStorage.getItem('vessena_modo_producto') || 'envases');
                 } catch { return 'envases'; }
             });
             const cambiarModo = (nuevoModo) => {
@@ -1008,6 +1010,17 @@
             };
 
             useEffect(() => { cargarDatos(); cargarAprobaciones(); }, [modoProducto]);
+
+            // Llegó desde el enlace del correo: se abre ese control y se lleva a la vista.
+            const linkAbierto = React.useRef(false);
+            useEffect(() => {
+                if (!LCC_DEL_LINK || linkAbierto.current || !controlesLCC.length) return;
+                const el = document.getElementById('lcc-' + LCC_DEL_LINK);
+                if (!el) return;
+                linkAbierto.current = true;
+                el.open = true;
+                setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+            }, [controlesLCC, activeTab]);
 
             // Auto-sincronización cada 5 minutos — SILENCIOSA
             // - No muestra spinner ni desmonta el formulario
@@ -3678,6 +3691,7 @@
 
                                                 return (
                                                     <details key={control.id}
+                                                        id={`lcc-${control.id}`}
                                                         className="control-card"
                                                         style={{marginBottom: '8px', padding: 0, border: `1px solid ${bordeColor}`, borderLeftWidth: '4px', borderRadius: '6px', background: 'white'}}>
                                                         <summary style={{

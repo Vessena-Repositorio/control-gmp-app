@@ -114,10 +114,11 @@ function cuerpo(pendientes, aprobados) {
             return `<tr>` +
                 `<td style="${celda}"><b>${esc(f.tipo)}</b></td>` +
                 `<td style="${celda}">${esc(f.envase || '—')}</td>` +
-                `<td style="${celda}">${esc(f.orden || (f.origen === 'lcc' ? 'LCC' : '—'))}</td>` +
                 `<td style="${celda}">${esc(comoDia(f.fecha))}</td>` +
                 `<td style="${celda}">${esc(f.analista || '—')}</td>` +
                 `<td style="${celda};color:${color};font-weight:800">${dias}</td>` +
+                `<td style="${celda};text-align:center"><a href="${BASE}/control-calidad-envases.html?lcc=${encodeURIComponent(String(f.clave_natural).replace(/^lcc:/, ''))}" ` +
+                `style="color:#0E6B67;font-weight:700;text-decoration:none">Revisar y aprobar →</a></td>` +
             `</tr>`;
         }).join('');
         const p = pendientes.length === 1 ? '' : 's';
@@ -127,8 +128,8 @@ function cuerpo(pendientes, aprobados) {
             `<p style="margin:0 0 8px 0;font-size:13px">Terminado${p} por las analistas, sin aprobar todavía:</p>` +
             `<table style="width:100%;border-collapse:collapse;font-size:12px">` +
             `<thead style="background:${NAV};color:#fff"><tr>` +
-              th('Tipo', 'left') + th('Envase', 'left') + th('Orden', 'left') +
-              th('Fecha', 'left') + th('Analista', 'left') + th('Días esperando', 'center') +
+              th('Tipo', 'left') + th('Envase', 'left') +
+              th('Fecha', 'left') + th('Analista', 'left') + th('Días esperando', 'center') + th('', 'center') +
             `</tr></thead><tbody>${filas}</tbody></table>` +
             `<p style="font-size:11px;color:#666;margin:6px 0 0">Naranja: más de una semana · Rojo: más de dos.</p>`
         );

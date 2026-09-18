@@ -125,10 +125,10 @@ async function avisarLccCompleto(d) {
         <div style="background:#f7fafc;padding:20px;border:1px solid #e2e8f0;border-top:none">
           <p>Se registró un control LCC que requiere aprobación:</p>
           <table style="width:100%;border-collapse:collapse;margin:16px 0">${fila('Envase', d.envase)}${fila('Tipo', d.tipo)}${fila('Fecha', d.fecha)}${fila('Analista', d.analista)}</table>
-          <div style="text-align:center;margin:24px 0"><a href="${BASE}/control-calidad-envases.html" style="display:inline-block;background:#22543d;color:#fff;padding:14px 32px;border-radius:6px;text-decoration:none;font-weight:bold">Abrir Control de Calidad y aprobar</a></div>
+          <div style="text-align:center;margin:24px 0"><a href="${BASE}/control-calidad-envases.html?lcc=${encodeURIComponent(d.id)}" style="display:inline-block;background:#22543d;color:#fff;padding:14px 32px;border-radius:6px;text-decoration:none;font-weight:bold">Revisar, aprobar y firmar</a></div>
         </div></div>`;
     try {
-        await enviar({ para, asunto: `[Vessena · LCC] Nuevo control pendiente de aprobación · ${d.envase || ''}`, html, texto: `Control LCC ${d.tipo} de ${d.envase} (${d.fecha}) pendiente de aprobación: ${BASE}/control-calidad-envases.html` });
+        await enviar({ para, asunto: `[Vessena · LCC] Nuevo control pendiente de aprobación · ${d.envase || ''}`, html, texto: `Control LCC ${d.tipo} de ${d.envase} (${d.fecha}) pendiente de aprobación: ${BASE}/control-calidad-envases.html?lcc=${d.id}` });
     } catch (err) {
         console.error('[envases] no se pudo avisar el LCC completo:', err.message);
     }
