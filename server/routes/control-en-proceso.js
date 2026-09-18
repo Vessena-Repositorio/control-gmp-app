@@ -216,6 +216,10 @@ rutasControlEnProceso.post('/controles', cargar, async (req, res, next) => {
     if (faltan.length) {
         return res.status(400).json({ ok: false, error: `Falta ${faltan.join(', ')}` });
     }
+    // La linea Limpiadores (Fabuloso) tiene su propia app (Claudia, 18/09/2026).
+    if (['limpiadores', 'fabuloso'].includes(texto(d.maquina).toLowerCase())) {
+        return res.status(400).json({ ok: false, error: 'La línea Fabuloso / Limpiadores se controla en la app Control Fabuloso' });
+    }
     const pesos = Array.isArray(d.pesos) ? d.pesos : [];
     if (pesos.some((p) => texto(p) !== '' && (numero(p) === null || numero(p) < 0 || numero(p) > 100000))) {
         return res.status(400).json({ ok: false, error: 'Hay un peso que no es un número válido' });
@@ -240,9 +244,8 @@ rutasControlEnProceso.post('/controles', cargar, async (req, res, next) => {
             if (previo.rows.length) return { record: previo.rows[0].raw, repetido: true };
 
             // Cada orden tiene que tener al menos un pH, y se exige en su primer
-            // control (Claudia, 18/09/2026). Limpiadores no mide pH: la pantalla
-            // ni muestra el campo.
-            if (texto(d.maquina) !== 'Limpiadores' && numero(d.ph) === null) {
+            // control (Claudia, 18/09/2026).
+            if (numero(d.ph) === null) {
                 const { rows: antes } = await c.query(
                     'SELECT 1 FROM proceso_controles WHERE orden = $1 AND duplicado_de IS NULL LIMIT 1',
                     [texto(d.orden, 60)]
