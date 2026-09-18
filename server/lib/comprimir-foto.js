@@ -44,3 +44,16 @@ export async function comprimirFoto(bytes, tipo) {
 }
 
 export const hayCompresion = () => Boolean(sharp);
+
+/**
+ * La foto en JPEG para ponerla dentro de un correo: Outlook no muestra WebP.
+ * Devuelve { bytes, tipo }; sin sharp, la original.
+ */
+export async function paraCorreo(bytes, tipo) {
+    if (!sharp || tipo === 'image/jpeg') return { bytes, tipo };
+    try {
+        return { bytes: await sharp(bytes).jpeg({ quality: 70 }).toBuffer(), tipo: 'image/jpeg' };
+    } catch {
+        return { bytes, tipo };
+    }
+}

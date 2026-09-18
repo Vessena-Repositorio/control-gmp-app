@@ -25,6 +25,7 @@ import { auditar } from '../lib/sesiones.js';
 import { firmaDe } from '../lib/firmas.js';
 import { ZONA } from '../lib/tareas.js';
 import { comprimirFoto } from '../lib/comprimir-foto.js';
+import { frenoDe, registrarControl, avisarSupervision, rotuloDe, montarRutasRotulo } from '../lib/rotulos.js';
 
 export const rutasFabulosoCaptura = Router();
 
@@ -281,6 +282,9 @@ rutasFabulosoCaptura.post('/muestreos', cargar, async (req, res, next) => {
                 'SELECT 1 FROM fab_ordenes WHERE orden_envasado = $1', [orden]
             );
             if (cerrada[0]) throw fallo(409, 'Esta orden ya fue aprobada y cerrada. No se pueden agregar más controles.');
+            // Sin el OK de rotulo, desde el mediodia la orden no acepta mas controles
+            const freno = await frenoDe(c, 'fabuloso', orden);
+            if (freno) throw fallo(409, freno);
 
             const { rows: catalogo } = await c.query('SELECT codigo, descripcion, clasificacion FROM fab_defectos');
             const porCodigo = new Map(catalogo.map((x) => [x.codigo, x]));
@@ -330,8 +334,16 @@ rutasFabulosoCaptura.post('/muestreos', cargar, async (req, res, next) => {
             if (!id) throw fallo(503, 'No se pudo generar el número de control. Probá de nuevo.');
 
             await registrar(c, req, 'muestreo_create', 'muestreo', id, `QR=${qr} DC=${dc} DM=${dm} DL=${dl} N=${n}`);
-            return { id, QR: qr, rango, DC: dc, DM: dm, DL: dl, estado };
+            // El primer control de la orden pide la segunda mirada de supervision
+            const verificacion = await registrarControl(c, 'fabuloso', {
+                orden, fotoCaja: fotoRotulo, fotoEnvase: fotoLote, lote,
+                producto: [texto(d.linea, 60) || 'Fabuloso', texto(d.codigo_pt, 60)].filter(Boolean).join(' · '),
+                analista: req.usuario.nombre || req.usuario.usuario, analistaId: req.usuario.id,
+            });
+            return { id, QR: qr, rango, DC: dc, DM: dm, DL: dl, estado, verificacion };
         });
+        if (r.verificacion) avisarSupervision(r.verificacion, 'nueva').catch(() => {});
+        delete r.verificacion;
         res.json({ ok: true, ...r });
     } catch (err) {
         responder(err, res, next);
@@ -453,6 +465,7 @@ rutasFabulosoCaptura.get('/ordenes/:orden', leer, async (req, res, next) => {
             orden,
             cerrada: !!cierre,
             firmas: await firmasDeOrden(rows, cierre),
+            rotulo: await rotuloDe('fabuloso', orden),
             rows: rows.map((f) => filaAOrden(f, !!cierre)),
         });
     } catch (err) {
@@ -475,6 +488,10 @@ rutasFabulosoCaptura.post('/ordenes/:orden/aprobar', aprobar, async (req, res, n
 
             const { rows: ya } = await c.query('SELECT 1 FROM fab_ordenes WHERE orden_envasado = $1', [orden]);
             if (ya[0]) throw fallo(409, 'La orden ya fue aprobada y cerrada previamente');
+            const rotulo = await rotuloDe('fabuloso', orden, c);
+            if (rotulo && rotulo.estado !== 'ok') {
+                throw fallo(409, 'Falta el OK de rótulo de esta orden: revisalo en Rótulos antes de aprobarla');
+            }
 
             const faltan = rows.filter((m) => !m.foto_rotulo || !m.foto_lote);
             if (faltan.length) {
@@ -761,3 +778,6 @@ rutasFabulosoCaptura.post('/importar', administrar, async (req, res, next) => {
         responder(err, res, next);
     }
 });
+
+/* Verificacion de rotulo por supervision (lib/rotulos.js) */
+montarRutasRotulo(rutasFabulosoCaptura, 'fabuloso', { leer, cargar, aprobar });

@@ -29,6 +29,7 @@ import { sincronizarProceso } from '../sync/sync-proceso.js';
 import { contarPendientes, estadoCopia, iniciarCopia } from '../lib/copia-fotos-drive.js';
 import { firmaDe } from '../lib/firmas.js';
 import { comprimirFoto } from '../lib/comprimir-foto.js';
+import { frenoDe, registrarControl, avisarSupervision, rotuloDe, montarRutasRotulo } from '../lib/rotulos.js';
 
 export const rutasControlEnProceso = Router();
 
@@ -243,6 +244,11 @@ rutasControlEnProceso.post('/controles', cargar, async (req, res, next) => {
             const previo = await c.query('SELECT raw FROM proceso_controles WHERE id_envio = $1', [idEnvio]);
             if (previo.rows.length) return { record: previo.rows[0].raw, repetido: true };
 
+            // Sin el OK de rotulo, desde el mediodia la orden no acepta mas
+            // controles (lib/rotulos.js).
+            const freno = await frenoDe(c, 'proceso', texto(d.orden, 60));
+            if (freno) throw fallo(409, freno);
+
             // Cada orden tiene que tener al menos un pH, y se exige en su primer
             // control (Claudia, 18/09/2026).
             if (numero(d.ph) === null) {
@@ -312,8 +318,17 @@ rutasControlEnProceso.post('/controles', cargar, async (req, res, next) => {
             await registrar(c, req, 'control_nuevo', 'control', controlId,
                 `${record.maquina} · ${record.presentacion} · lote ${record.lote} · #${record.controlNum}` +
                 (record.hasDev ? ' · con desvío' : ''));
-            return { record, repetido: false };
+            // El primer control de la orden pide la segunda mirada de supervision
+            const verificacion = await registrarControl(c, 'proceso', {
+                orden: record.orden, fotoCaja: record.fotos[0], fotoEnvase: record.fotos[1],
+                lote: record.lote, vence: record.vence,
+                producto: [record.maquina, record.presentacion].filter(Boolean).join(' · '),
+                analista, analistaId: req.usuario.id,
+            });
+            return { record, repetido: false, verificacion };
         });
+        if (resultado.verificacion) avisarSupervision(resultado.verificacion, 'nueva').catch(() => {});
+        delete resultado.verificacion;
         res.json({ ok: true, ...resultado });
     } catch (err) {
         responder(err, res, next);
@@ -629,6 +644,7 @@ async function armarOrden(orden) {
         notas: cierre?.notas || '',
         controles: rows.map((f) => f.raw),
         firmas: await firmasDeOrden(rows, cierre),
+        rotulo: await rotuloDe('proceso', orden),
     };
 }
 
@@ -680,6 +696,10 @@ rutasControlEnProceso.post('/ordenes/:orden/aprobar', aprobar, async (req, res, 
             if (!hay[0].n) throw fallo(404, 'No hay controles con esa orden');
             const { rows: ya } = await c.query('SELECT aprobada_por FROM proceso_ordenes WHERE orden = $1', [orden]);
             if (ya.length) throw fallo(409, `La orden ya fue aprobada por ${ya[0].aprobada_por}`);
+            const rotulo = await rotuloDe('proceso', orden, c);
+            if (rotulo && rotulo.estado !== 'ok') {
+                throw fallo(409, 'Falta el OK de rótulo de esta orden: revisalo en la pestaña Rótulos antes de aprobarla');
+            }
             await c.query(
                 `INSERT INTO proceso_ordenes (orden, aprobada_por, aprobada_por_id, notas)
                  VALUES ($1, $2, $3, $4)`,
@@ -694,3 +714,6 @@ rutasControlEnProceso.post('/ordenes/:orden/aprobar', aprobar, async (req, res, 
         responder(err, res, next);
     }
 });
+
+/* Verificacion de rotulo por supervision (lib/rotulos.js) */
+montarRutasRotulo(rutasControlEnProceso, 'proceso', { leer, cargar, aprobar });

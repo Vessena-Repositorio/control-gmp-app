@@ -143,6 +143,20 @@ select.fi{background:var(--s2);border:1px solid var(--border);border-radius:6px;
 .ord-btn.pri{background:var(--mint);color:#fff;border-color:var(--mint)}
 .ord-btn.sec{background:#fff;color:var(--text)}
 .ord-btn:hover{filter:brightness(.96)}
+/* Rótulos */
+.rot-fotos{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.rot-foto{display:block;border:1px solid var(--border);border-radius:var(--rs);overflow:hidden;text-decoration:none;color:var(--text2);background:var(--s2)}
+.rot-foto img{width:100%;height:190px;object-fit:cover;display:block}
+.rot-foto span{display:block;padding:6px 8px;font-size:13px;font-weight:600}
+.rot-foto.vacia{padding:30px 8px;text-align:center;color:var(--red)}
+.rot-aviso{margin:8px 0;padding:10px 12px;border-radius:var(--rs);font-size:14px}
+.rot-aviso.pend{background:#fef0c7;color:#93370d}.rot-aviso.corr{background:#fef3f2;color:#b42318}.rot-aviso.freno{background:#fef3f2;color:#b42318;border:2px solid #f04438}
+.rot-form{margin-top:10px;padding:12px;background:var(--s2);border-radius:var(--rs);display:flex;flex-direction:column;gap:6px}
+.rot-form label{font-size:13px;font-weight:600;color:var(--text2)}
+.rot-form textarea,.rot-form input{width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:var(--rs);font-size:15px;font-family:var(--f);background:#fff;color:var(--text)}
+.rot-form .pb{aspect-ratio:4/3;font-size:13px;gap:4px}
+.rot-dos{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.rot-hist{margin-top:10px;font-size:13px;color:var(--text3)}.rot-hist summary{cursor:pointer;font-weight:600}
 </style>
 </head>
 <body>
@@ -290,7 +304,7 @@ const LIMP_DEFECTS=[
 <div class="hdr"><div class="hdr-ico">⚗️</div><div><h1>Control GMP</h1><span id="hdrInfo">Envasado</span></div>
   <div class="hdr-r"><button id="btnFotos" onclick="abrirFotos()" style="display:none;background:none;border:1px solid var(--border);border-radius:5px;padding:3px 7px;color:var(--text2);font-size:12px;cursor:pointer;font-family:var(--f)">🖼️ Fotos de Drive</button><button id="btnImp" onclick="abrirImp()" style="display:none;background:none;border:1px solid var(--amber);border-radius:5px;padding:3px 7px;color:var(--amber);font-size:12px;cursor:pointer;font-family:var(--f)">📥 Cerrar planilla</button><span class="hdr-u" id="hdrU"></span><button onclick="logout()" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 7px;color:var(--text3);font-size:12px;cursor:pointer;font-family:var(--f)">Salir</button></div>
 </div>
-<div class="tabs"><div class="tab on" onclick="showTab(0)">📝 Control</div><div class="tab" onclick="showTab(1)">📊 Dashboard</div><div class="tab" onclick="showTab(2)">📋 Órdenes <span id="ordCount" style="background:var(--red);color:#fff;border-radius:8px;padding:0 5px;font-size:12px"></span></div></div>
+<div class="tabs"><div class="tab on" onclick="showTab(0)">📝 Control</div><div class="tab" onclick="showTab(1)">📊 Dashboard</div><div class="tab" onclick="showTab(2)">📋 Órdenes <span id="ordCount" style="background:var(--red);color:#fff;border-radius:8px;padding:0 5px;font-size:12px"></span></div><div class="tab" onclick="showTab(3)">🏷️ Rótulos <span id="rotCount" style="display:none;background:var(--red);color:#fff;border-radius:8px;padding:0 5px;font-size:12px"></span></div></div>
 <div class="toast" id="toast"></div>
 
 <!-- MODAL -->
@@ -355,6 +369,7 @@ const LIMP_DEFECTS=[
       <div class="fd"><span class="fl">Cód. Granel</span><input class="fi" id="cGranel" placeholder="—"/></div>
       <div class="fd"><span class="fl">Cód. PT</span><input class="fi" id="cCodPT" placeholder="—"/></div>
     </div>
+    <div id="rotAviso" class="rot-aviso" style="display:none"></div>
     <div id="specI" class="ri" style="display:none;background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:8px;margin-bottom:8px"></div>
 
     <!-- STANDARD CONTROLS (hidden for Limpiadores) -->
@@ -486,6 +501,15 @@ const LIMP_DEFECTS=[
   </div>
   <div id="ordList"></div>
 </div></div>
+
+<!-- PAGE 3: RÓTULOS -->
+<div class="page" id="page3"><div class="wrap">
+  <div class="fs"><div class="st">🏷️ Verificación de rótulo — segundo control de supervisión</div>
+    <div style="font-size:14px;color:var(--text2);margin-bottom:10px">El primer control de cada orden manda las fotos de caja y envase a supervisión. Una supervisora da el OK o pide corregir el rótulo. <b>Desde las 12:00, una orden sin OK no acepta más controles.</b></div>
+    <button class="ord-btn sec" style="max-width:220px" onclick="loadRotulos()">🔄 Actualizar</button>
+  </div>
+  <div id="rotList"></div>
+</div></div>
 </div>
 
 <script>
@@ -543,6 +567,9 @@ async function arrancar(){
   await reintentarPendientes();
   loadShift();
   if(PERMISOS.includes('aprobar'))loadOrdenes();
+  // Rótulos: el estado cambia cuando supervisión da el OK; se refresca solo
+  loadRotulos(true);setInterval(()=>loadRotulos(true),120000);
+  if(location.hash==='#rotulos')showTab(3);
 }
 async function logout(){try{await fetch('/api/auth/logout',{method:'POST',credentials:'same-origin'})}catch(e){}location.href='/'}
 function leerLocal(){try{return JSON.parse(localStorage.getItem('gmp_shift')||'null')}catch(e){return null}}
@@ -578,7 +605,7 @@ function endShift(){if(!confirm('¿Limpiar la pantalla? Los controles ya guardad
 function saveLocal(){try{localStorage.setItem('gmp_shift',JSON.stringify({shift,ctrls,maqCache}))}catch(e){toast('⚠️ Este equipo no tiene lugar para guardar los pendientes',true)}}
 
 // TABS
-function showTab(n){document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('on',i===n));document.querySelectorAll('.page').forEach((p,i)=>p.classList.toggle('on',i===n));if(n===1){loadSheet();renderDash()}if(n===2)loadOrdenes()}
+function showTab(n){document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('on',i===n));document.querySelectorAll('.page').forEach((p,i)=>p.classList.toggle('on',i===n));if(n===1){loadSheet();renderDash()}if(n===2)loadOrdenes();if(n===3){pintarRotulos();loadRotulos()}}
 
 // MACHINE CHANGE - autocomplete from cache
 function onMaq(){
@@ -689,6 +716,7 @@ function esPrimerControl(orden){
   return !allR.some(r=>String(r.orden||'').trim()===o)&&!ctrls.some(c=>String(c.orden||'').trim()===o);
 }
 function avisoPH(){
+  avisoRotulo();
   const el=document.getElementById('phAviso');if(!el)return;
   const orden=document.getElementById('cOrden').value.trim();
   const maq=document.getElementById('cMaq').value;
@@ -774,6 +802,7 @@ async function sendCtrl(c){
     toast('✅ Control #'+c.controlNum+' guardado');
   }catch(e){
     c.pendiente=true;
+    if(/supervisión/.test(e.message)){alert(e.message);loadRotulos(true)}
     toast('⚠️ No se guardó: '+e.message+'. Quedó pendiente: tocá 🔄 para reintentar',true);
   }finally{
     c.enviando=false;saveLocal();renderTL();document.getElementById('shiftCount').textContent=ctrls.length;
@@ -1094,6 +1123,7 @@ function htmlRegistro(d,orden,imprimir){
     '<div><b>Vencimiento:</b> '+esc(u.vence||'—')+'</div>'+
     '<div><b>Controles:</b> '+c.length+'</div><div><b>Especificación:</b> '+esc(u.spec||'—')+'</div>'+
     (d.aprobada?'<div><b>Aprobada:</b> '+esc(new Date(d.aprobadaEn).toLocaleString('es-UY'))+'</div>':'<div></div>')+
+    (d.rotulo?'<div><b>Verificación de rótulo:</b> '+(d.rotulo.estado==='ok'?'OK por '+esc(d.rotulo.revisado_por||'')+' · '+esc(new Date(d.rotulo.revisado_en).toLocaleString('es-UY')):d.rotulo.estado==='correccion'?'<b class="rojo">corrección pedida</b>':'<b class="rojo">pendiente</b>')+'</div>':'')+
     '</div>'+
     (d.notas?'<div style="font-size:12px"><b>Notas de la aprobación:</b> '+esc(d.notas)+'</div>':'')+
     '<h2>Controles</h2><table><thead><tr><th>#</th><th>Hora</th><th>Analista</th><th>Lote</th><th>Pesos (g)</th><th>Prom.</th><th>pH</th><th>Controles / defectos</th><th>Desvío</th><th>Fotos</th></tr></thead><tbody>'+
@@ -1169,6 +1199,107 @@ async function imprimirOrden(orden){
   let d;try{d=await api('/ordenes/'+encodeURIComponent(orden)+'/impresion')}catch(e){win.close();toast('⚠️ '+e.message,true);return}
   win.document.open();win.document.write(htmlRegistro(d,orden,true));win.document.close();
   toast('🖨️ Registro de la orden '+orden);
+}
+// RÓTULOS: segunda mirada de supervisión al primer control de cada orden (lib/rotulos.js)
+let ROTULOS=[],ROT_HORA=12,ROT_FOTOS={};
+async function loadRotulos(silencioso){
+  let d;try{d=await api('/rotulos')}catch(e){if(!silencioso)toast('⚠️ '+e.message,true);return}
+  ROTULOS=d.rotulos||[];ROT_HORA=d.horaCorte||12;
+  const sup=PERMISOS.includes('aprobar');
+  const n=ROTULOS.filter(r=>sup?r.estado==='pendiente':r.estado==='correccion').length;
+  const b=document.getElementById('rotCount');if(b){b.textContent=n||'';b.style.display=n?'':'none'}
+  if(document.getElementById('page3').classList.contains('on'))pintarRotulos();
+  avisoRotulo();
+}
+function rotuloDeOrden(orden){const o=String(orden||'').trim();return ROTULOS.find(r=>String(r.orden)===o)||null}
+// Cartel en el formulario de carga según el estado del rótulo de la orden
+function avisoRotulo(){
+  const el=document.getElementById('rotAviso');if(!el)return;
+  const r=rotuloDeOrden(document.getElementById('cOrden').value);
+  if(!r||r.estado==='ok'){el.style.display='none';return}
+  el.style.display='block';
+  if(r.frenada){el.className='rot-aviso freno';el.innerHTML='⛔ <b>Falta el segundo control de supervisión.</b> Desde las '+ROT_HORA+':00 no se pueden cargar más controles de esta orden sin el OK de rótulo. <button class="ord-btn pri" style="margin-top:8px" onclick="solicitarRotulo(\''+esc(r.orden)+'\')">📣 Solicitar aprobación</button>'}
+  else if(r.estado==='correccion'){el.className='rot-aviso corr';el.innerHTML='✏️ <b>Supervisión pidió corregir el rótulo:</b> '+esc(r.comentario)+(r.reproceso?' <b>(requiere reproceso)</b>':'')+'<br><a href="#" onclick="showTab(3);return false">Ir a Rótulos para subir las fotos corregidas</a>'}
+  else{el.className='rot-aviso pend';el.innerHTML='⏳ El rótulo de esta orden espera el OK de supervisión. Después de las '+ROT_HORA+':00 no se van a poder cargar más controles sin ese OK.'}
+}
+function fotoRot(u,t){return u?'<a href="'+esc(u)+'" target="_blank" class="rot-foto"><img src="'+esc(u)+'" alt=""><span>'+t+'</span></a>':'<div class="rot-foto vacia"><span>'+t+': sin foto</span></div>'}
+const ROT_ACC={primer_control:'Primer control',ok:'OK de rótulo',correccion:'Pidió corrección',corregido:'Subió fotos corregidas',solicitud:'Pidió la aprobación'};
+function pintarRotulos(){
+  const el=document.getElementById('rotList');const sup=PERMISOS.includes('aprobar');
+  if(!ROTULOS.length){el.innerHTML='<div class="ord-vacio">No hay rótulos para revisar.</div>';return}
+  el.innerHTML=ROTULOS.map(r=>{
+    const o=esc(r.orden),arg='\''+String(r.orden).replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\'';
+    const estado=r.estado==='ok'?'<span class="ord-estado ok">✅ OK de '+esc(r.revisadoPor)+'</span>'
+      :r.estado==='correccion'?'<span class="ord-estado dev">✏️ Corrección pedida por '+esc(r.revisadoPor)+'</span>'
+      :'<span class="ord-estado pend">⏳ Esperando OK</span>';
+    const freno=r.frenada?'<span class="ord-estado dev">⛔ Orden frenada hasta el OK</span>':'';
+    const corr=r.estado==='correccion'?'<div class="rot-aviso corr" style="display:block;margin-top:8px"><b>Qué corregir:</b> '+esc(r.comentario)+(r.reproceso?'<br><b>⚠️ Requiere reproceso</b>':'')+'</div>':'';
+    let acciones='';
+    if(r.estado!=='ok'&&sup)acciones+='<button class="ord-btn pri" onclick="okRotulo('+arg+')">✅ OK, rótulo correcto</button><button class="ord-btn sec" onclick="formCorreccion('+arg+')">✏️ Pedir corrección</button>';
+    if(r.estado==='correccion'&&PERMISOS.includes('cargar'))acciones+='<button class="ord-btn pri" onclick="formCorregido('+arg+')">📷 Subir rótulo corregido</button>';
+    if(r.estado==='pendiente'&&!sup&&PERMISOS.includes('cargar'))acciones+='<button class="ord-btn sec" onclick="solicitarRotulo('+arg+')">📣 Solicitar aprobación</button>';
+    const hist=(r.eventos||[]).map(e=>'<div>'+esc(new Date(e.ts).toLocaleString('es-UY',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}))+' · '+esc(e.usuario||'')+' · '+esc(ROT_ACC[e.accion]||e.accion)+(e.comentario?': '+esc(e.comentario):'')+'</div>').join('');
+    return '<div class="ord-card '+(r.estado==='ok'?'ok':'pend')+'" id="rot-'+o+'">'+
+      '<div class="ord-cab"><div><div class="ord-num">Orden '+o+'</div><div class="ord-prod">'+esc(r.producto)+'</div></div>'+
+      '<div class="ord-fecha">'+esc(new Date(r.creadoEn).toLocaleString('es-UY',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}))+'</div></div>'+
+      '<div class="ord-det">Lote <b>'+esc(r.lote||'—')+'</b> · Vence <b>'+esc(r.vence||'—')+'</b> · 👤 '+esc(r.analista)+'</div>'+
+      '<div class="ord-tags">'+estado+freno+'</div>'+corr+
+      '<div class="rot-fotos">'+fotoRot(r.fotoCaja,'📦 Caja / sticker')+fotoRot(r.fotoEnvase,'🏷️ Envase: lote y vence')+'</div>'+
+      '<div id="rot-form-'+o+'"></div>'+
+      (acciones?'<div class="ord-botones">'+acciones+'</div>':'')+
+      (hist?'<details class="rot-hist"><summary>Historial</summary>'+hist+'</details>':'')+'</div>';
+  }).join('');
+}
+async function okRotulo(orden){
+  if(!confirm('¿El lote y el vencimiento de la orden '+orden+' están bien?\n\nQueda registrado con tu nombre.'))return;
+  try{await api('/rotulos/'+encodeURIComponent(orden)+'/ok',{method:'POST',body:'{}'});toast('✅ Rótulo de la orden '+orden+' OK')}catch(e){toast('⚠️ '+e.message,true)}
+  loadRotulos();
+}
+function formCorreccion(orden){
+  const f=document.getElementById('rot-form-'+orden);if(!f)return;
+  f.innerHTML='<div class="rot-form"><label>¿Qué hay que corregir?</label><textarea id="rotCom-'+esc(orden)+'" rows="2" placeholder="Ej.: el vencimiento del envase dice 09/2027 y tiene que ser 09/2028"></textarea>'+
+    '<label class="ord-check"><input type="checkbox" id="rotRep-'+esc(orden)+'"> Error crítico: requiere reproceso</label>'+
+    '<div class="ord-botones"><button class="ord-btn sec" onclick="this.closest(\'.rot-form\').remove()">Cancelar</button><button class="ord-btn pri" onclick="enviarCorreccion(\''+esc(orden)+'\')">Enviar pedido de corrección</button></div></div>';
+}
+async function enviarCorreccion(orden){
+  const comentario=(document.getElementById('rotCom-'+orden)||{}).value||'';
+  const reproceso=!!(document.getElementById('rotRep-'+orden)||{}).checked;
+  try{await api('/rotulos/'+encodeURIComponent(orden)+'/correccion',{method:'POST',body:JSON.stringify({comentario,reproceso})});toast('✏️ Corrección pedida: la analista la ve en la app y le llega un mail')}
+  catch(e){toast('⚠️ '+e.message,true);return}
+  loadRotulos();
+}
+let ROT_NUEVAS={};
+function formCorregido(orden){
+  ROT_NUEVAS[orden]=[null,null];
+  const f=document.getElementById('rot-form-'+orden);if(!f)return;
+  const r=rotuloDeOrden(orden)||{};
+  f.innerHTML='<div class="rot-form"><div class="rot-fotos">'+
+    '<div class="pb" id="rotPB0-'+esc(orden)+'" onclick="fotoCorregida(\''+esc(orden)+'\',0)"><span style="font-size:22px">📦</span><span>Caja / sticker</span></div>'+
+    '<div class="pb" id="rotPB1-'+esc(orden)+'" onclick="fotoCorregida(\''+esc(orden)+'\',1)"><span style="font-size:22px">🏷️</span><span>Envase: lote y vence</span></div></div>'+
+    '<div class="rot-dos"><div><label>Lote</label><input id="rotLote-'+esc(orden)+'" value="'+esc(r.lote||'')+'"></div><div><label>Vencimiento</label><input id="rotVence-'+esc(orden)+'" value="'+esc(r.vence||'')+'"></div></div>'+
+    '<label>Nota (opcional)</label><textarea id="rotNota-'+esc(orden)+'" rows="2"></textarea>'+
+    '<div class="ord-botones"><button class="ord-btn sec" onclick="this.closest(\'.rot-form\').remove()">Cancelar</button><button class="ord-btn pri" id="rotEnv-'+esc(orden)+'" onclick="enviarCorregido(\''+esc(orden)+'\')">Enviar a supervisión</button></div></div>';
+}
+function fotoCorregida(orden,i){
+  const inp=document.createElement('input');inp.type='file';inp.accept='image/*';inp.capture='environment';
+  inp.onchange=()=>{const f=inp.files[0];if(!f)return;compP(f,800,.55).then(d=>{ROT_NUEVAS[orden][i]=d;const b=document.getElementById('rotPB'+i+'-'+orden);if(b)b.innerHTML='<img src="'+d+'">'})};
+  inp.click();
+}
+async function enviarCorregido(orden){
+  const fs=ROT_NUEVAS[orden]||[];
+  if(!fs[0]||!fs[1]){toast('⚠️ Sacá las dos fotos: caja y envase',true);return}
+  const b=document.getElementById('rotEnv-'+orden);if(b){b.disabled=true;b.textContent='⏳ Enviando…'}
+  try{
+    const urls=[];
+    for(let i=0;i<2;i++){const r=await api('/fotos',{method:'POST',body:JSON.stringify({dataBase64:fs[i].replace(/^data:image\/\w+;base64,/,''),mime:(fs[i].match(/^data:(image\/\w+);/)||[])[1]||'image/jpeg',nombre:'rotulo_'+orden+'_'+(i?'envase':'caja')})});urls.push(r.url)}
+    await api('/rotulos/'+encodeURIComponent(orden)+'/corregido',{method:'POST',body:JSON.stringify({fotoCaja:urls[0],fotoEnvase:urls[1],lote:(document.getElementById('rotLote-'+orden)||{}).value||'',vence:(document.getElementById('rotVence-'+orden)||{}).value||'',comentario:(document.getElementById('rotNota-'+orden)||{}).value||''})});
+    toast('✅ Fotos corregidas enviadas a supervisión');delete ROT_NUEVAS[orden];
+  }catch(e){toast('⚠️ '+e.message,true);if(b){b.disabled=false;b.textContent='Enviar a supervisión'}return}
+  loadRotulos();
+}
+async function solicitarRotulo(orden){
+  try{await api('/rotulos/'+encodeURIComponent(orden)+'/solicitar',{method:'POST',body:'{}'});toast('📣 Se les avisó a Antonella, Gloria y Claudia')}
+  catch(e){toast('⚠️ '+e.message,true)}
 }
 function toast(m,e){const t=document.getElementById('toast');t.textContent=m;t.className='toast on'+(e?' err':'');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('on'),3000)}
 </script>

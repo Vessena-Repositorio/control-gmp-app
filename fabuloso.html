@@ -188,7 +188,19 @@ table tr:hover td { background: #fafbff; cursor: pointer; }
   #topbar, #drawer, #btnBack, #btnMenu, .photo-btn, button.primary, button.secondary { display: none !important; }
 }
 
-  </style>
+  /* Rótulos */
+.rot-card.pend { border-left: 5px solid var(--warn); } .rot-card.ok { border-left: 5px solid var(--ok); }
+.rot-fotos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.rot-foto { display: block; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; text-decoration: none; color: var(--muted); background: #f2f4f7; }
+.rot-foto img { width: 100%; height: 190px; object-fit: cover; display: block; }
+.rot-foto span { display: block; padding: 6px 8px; font-size: 13px; font-weight: 600; }
+.rot-foto.vacia { padding: 30px 8px; text-align: center; color: var(--danger); }
+.rot-corr { margin-top: 8px; padding: 10px 12px; border-radius: 8px; background: #fef3f2; color: #b42318; font-size: 14px; }
+.rot-form { margin-top: 10px; padding: 12px; background: #f2f4f7; border-radius: 8px; display: flex; flex-direction: column; gap: 6px; }
+.rot-form textarea, .rot-form input[type=text], .rot-form input:not([type]) { width: 100%; }
+.rot-subir { display: flex; align-items: center; justify-content: center; min-height: 120px; border: 2px dashed var(--border); border-radius: 8px; cursor: pointer; background: #fff; font-weight: 600; text-align: center; padding: 6px; }
+#rotBadge { margin-left: 4px; }
+</style>
 </head>
 <body>
   <header id="topbar" class="hidden">
@@ -207,6 +219,7 @@ table tr:hover td { background: #fafbff; cursor: pointer; }
     <button data-view="home">🏠 Inicio</button>
     <button data-view="new">➕ Nuevo muestreo</button>
     <button data-view="orders_today">🕒 Órdenes de hoy</button>
+    <button data-view="rotulos">🏷️ Rótulos <span id="rotBadge" class="chip danger hidden"></span></button>
     <button data-view="list">📋 Muestreos</button>
     <button data-view="admin_import" data-min-role="Admin">📥 Importar historial</button>
     <button data-view="admin_defects" data-min-role="QA">🏷️ Catálogo defectos</button>
@@ -324,6 +337,11 @@ window.APP_CONFIG = {
     uploadPhoto: (p) => ['POST', '/fotos', { filename: p.filename, mime: p.mime, dataBase64: p.dataBase64, muestreo_ref: p.muestreo_ref }],
     getAuditLog: () => ['GET', '/actividad'],
     importar: (p) => ['POST', '/importar', p.datos],
+    listRotulos: () => ['GET', '/rotulos'],
+    rotuloOk: (p) => ['POST', '/rotulos/' + encodeURIComponent(p.orden) + '/ok', {}],
+    rotuloCorreccion: (p) => ['POST', '/rotulos/' + encodeURIComponent(p.orden) + '/correccion', { comentario: p.comentario, reproceso: p.reproceso }],
+    rotuloCorregido: (p) => ['POST', '/rotulos/' + encodeURIComponent(p.orden) + '/corregido', { fotoCaja: p.fotoCaja, fotoEnvase: p.fotoEnvase, lote: p.lote, comentario: p.comentario }],
+    rotuloSolicitar: (p) => ['POST', '/rotulos/' + encodeURIComponent(p.orden) + '/solicitar', {}],
   };
 
   async function api(action, payload={}) {
@@ -427,6 +445,7 @@ window.APP_CONFIG = {
       case 'home': renderHome(); break;
       case 'new': renderNew(p); break;
       case 'orders_today': renderOrdersToday(); break;
+      case 'rotulos': renderRotulos(); break;
       case 'order_detail': renderOrderDetail(p.orden); break;
       case 'list': renderList(); break;
       case 'detail': renderDetail(p.id); break;
@@ -464,7 +483,8 @@ window.APP_CONFIG = {
       ]);
       state.session = { user: yo.user };
       if (cat) state.catalog = cat.defectos;
-      nav('home');
+      nav(location.hash === '#rotulos' ? 'rotulos' : 'home');
+      cargarRotulos(); setInterval(cargarRotulos, 120000);
     } catch (e) {
       renderSinConexion(e.message);
     }
@@ -513,6 +533,129 @@ window.APP_CONFIG = {
     // Se cierra la sesión del portal: si no, seguiría viva en otra pestaña.
     try { loading(true); await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }); } catch(e) {}
     location.href = '/';
+  }
+
+  // ---------- RÓTULOS (segundo control de supervisión, lib/rotulos.js) ----------
+  // El primer control de cada orden manda las fotos de caja y envase a
+  // supervisión. Una supervisora da el OK o pide corregir el rótulo; desde las
+  // 12:00, una orden sin OK no acepta más controles.
+  const ROT_ACCIONES = { primer_control:'Primer control', ok:'OK de rótulo', correccion:'Pidió corrección', corregido:'Subió fotos corregidas', solicitud:'Pidió la aprobación' };
+  state.rotulos = [];
+  async function cargarRotulos() {
+    try {
+      const r = await api('listRotulos');
+      state.rotulos = r.rotulos || [];
+      state.rotHora = r.horaCorte || 12;
+    } catch (e) { return; }
+    const sup = hasRole('Coordinador');
+    const n = state.rotulos.filter(x => sup ? x.estado === 'pendiente' : x.estado === 'correccion').length;
+    const b = document.getElementById('rotBadge');
+    if (b) { b.textContent = n || ''; b.classList.toggle('hidden', !n); }
+  }
+  function fotoRotulo_(u, t) {
+    return u ? `<a href="${esc(u)}" target="_blank" class="rot-foto"><img src="${esc(u)}" alt=""/><span>${t}</span></a>`
+             : `<div class="rot-foto vacia"><span>${t}: sin foto</span></div>`;
+  }
+  async function renderRotulos() {
+    titleEl.textContent = 'Rótulos';
+    app.innerHTML = `<div class="card"><div class="muted small">Cargando…</div></div>`;
+    await cargarRotulos();
+    const sup = hasRole('Coordinador');
+    const lista = state.rotulos;
+    app.innerHTML = `
+      <div class="card">
+        <h2>🏷️ Verificación de rótulo</h2>
+        <div class="muted small">El primer control de cada orden manda las fotos de caja y envase a supervisión. <b>Desde las ${state.rotHora || 12}:00, una orden sin OK no acepta más controles.</b></div>
+      </div>
+      ${lista.length ? lista.map(r => {
+        const estado = r.estado === 'ok' ? `<span class="chip ok">✅ OK de ${esc(r.revisadoPor)}</span>`
+          : r.estado === 'correccion' ? `<span class="chip danger">✏️ Corrección pedida por ${esc(r.revisadoPor)}</span>`
+          : `<span class="chip warn">⏳ Esperando OK</span>`;
+        const freno = r.frenada ? `<span class="chip danger">⛔ Orden frenada hasta el OK</span>` : '';
+        const corr = r.estado === 'correccion' ? `<div class="rot-corr"><b>Qué corregir:</b> ${esc(r.comentario)}${r.reproceso ? '<br/><b>⚠️ Requiere reproceso</b>' : ''}</div>` : '';
+        const hist = (r.eventos || []).map(e => `<div>${esc(fmtDate(e.ts))} · ${esc(e.usuario || '')} · ${esc(ROT_ACCIONES[e.accion] || e.accion)}${e.comentario ? ': ' + esc(e.comentario) : ''}</div>`).join('');
+        let acc = '';
+        if (r.estado !== 'ok' && sup) acc += `<button class="primary" data-rot-ok="${esc(r.orden)}">✅ OK, rótulo correcto</button><button class="secondary" data-rot-corr="${esc(r.orden)}">✏️ Pedir corrección</button>`;
+        if (r.estado === 'correccion') acc += `<button class="primary" data-rot-fix="${esc(r.orden)}">📷 Subir rótulo corregido</button>`;
+        if (r.estado === 'pendiente' && !sup) acc += `<button class="secondary" data-rot-pedir="${esc(r.orden)}">📣 Solicitar aprobación</button>`;
+        return `<div class="card rot-card ${r.estado === 'ok' ? 'ok' : 'pend'}">
+          <div style="display:flex;justify-content:space-between;gap:10px">
+            <div><h3 style="margin:0;color:var(--text)">Orden ${esc(r.orden)}</h3><div class="muted small">${esc(r.producto)}</div></div>
+            <div class="muted small">${esc(fmtDate(r.creadoEn))}</div></div>
+          <div class="small mt8">Lote <b>${esc(r.lote || '—')}</b>${r.vence ? ` · Vence <b>${esc(r.vence)}</b>` : ''} · 👤 ${esc(r.analista)}</div>
+          <div class="row mt8">${estado}${freno}</div>${corr}
+          <div class="rot-fotos">${fotoRotulo_(r.fotoCaja, '📦 Caja / rótulo')}${fotoRotulo_(r.fotoEnvase, '🏷️ Envase: lote')}</div>
+          <div id="rotForm_${esc(r.orden)}"></div>
+          ${acc ? `<div class="row mt12">${acc}</div>` : ''}
+          ${hist ? `<details class="mt8 small muted"><summary>Historial</summary>${hist}</details>` : ''}
+        </div>`;
+      }).join('') : `<div class="card muted">No hay rótulos para revisar.</div>`}`;
+    app.querySelectorAll('[data-rot-ok]').forEach(b => b.addEventListener('click', () => okRotulo_(b.dataset.rotOk)));
+    app.querySelectorAll('[data-rot-corr]').forEach(b => b.addEventListener('click', () => formCorreccion_(b.dataset.rotCorr)));
+    app.querySelectorAll('[data-rot-fix]').forEach(b => b.addEventListener('click', () => formCorregido_(b.dataset.rotFix)));
+    app.querySelectorAll('[data-rot-pedir]').forEach(b => b.addEventListener('click', () => pedirRotulo_(b.dataset.rotPedir)));
+  }
+  async function okRotulo_(orden) {
+    if (!confirm(`¿El lote y el rótulo de la orden ${orden} están bien?\n\nQueda registrado con tu nombre.`)) return;
+    try { loading(true); await api('rotuloOk', { orden }); toast('✅ Rótulo OK', 'ok'); }
+    catch (e) { toast(e.message, 'err'); } finally { loading(false); }
+    renderRotulos();
+  }
+  function formCorreccion_(orden) {
+    const f = document.getElementById('rotForm_' + orden); if (!f) return;
+    f.innerHTML = `<div class="rot-form"><label>¿Qué hay que corregir?</label>
+      <textarea id="rotCom_${esc(orden)}" rows="2" placeholder="Ej.: el vencimiento del envase no coincide con el de la caja"></textarea>
+      <label><input type="checkbox" id="rotRep_${esc(orden)}"/> Error crítico: requiere reproceso</label>
+      <div class="row"><button class="secondary" id="rotCan_${esc(orden)}">Cancelar</button><button class="primary" id="rotEnv_${esc(orden)}">Enviar pedido de corrección</button></div></div>`;
+    document.getElementById('rotCan_' + orden).addEventListener('click', () => { f.innerHTML = ''; });
+    document.getElementById('rotEnv_' + orden).addEventListener('click', async () => {
+      try {
+        loading(true);
+        await api('rotuloCorreccion', { orden, comentario: document.getElementById('rotCom_' + orden).value, reproceso: document.getElementById('rotRep_' + orden).checked });
+        toast('✏️ Corrección pedida: la analista la ve en la app y le llega un mail', 'ok');
+      } catch (e) { toast(e.message, 'err'); return; } finally { loading(false); }
+      renderRotulos();
+    });
+  }
+  function formCorregido_(orden) {
+    const f = document.getElementById('rotForm_' + orden); if (!f) return;
+    const r = state.rotulos.find(x => x.orden === orden) || {};
+    const nuevas = [null, null];
+    f.innerHTML = `<div class="rot-form">
+      <div class="rot-fotos">
+        <label class="rot-subir" id="rotSub0_${esc(orden)}">📦 Foto de la caja<input type="file" accept="image/*" capture="environment" hidden/></label>
+        <label class="rot-subir" id="rotSub1_${esc(orden)}">🏷️ Foto del envase<input type="file" accept="image/*" capture="environment" hidden/></label>
+      </div>
+      <label>Lote</label><input id="rotLote_${esc(orden)}" value="${esc(r.lote || '')}"/>
+      <label>Nota (opcional)</label><textarea id="rotNota_${esc(orden)}" rows="2"></textarea>
+      <div class="row"><button class="secondary" id="rotCan_${esc(orden)}">Cancelar</button><button class="primary" id="rotEnv_${esc(orden)}">Enviar a supervisión</button></div></div>`;
+    [0, 1].forEach(i => {
+      const lab = document.getElementById(`rotSub${i}_${orden}`);
+      lab.querySelector('input').addEventListener('change', async (ev) => {
+        const file = ev.target.files[0]; if (!file) return;
+        try {
+          loading(true);
+          const c = await compressImage(file, CFG.PHOTO_MAX_DIM, CFG.PHOTO_QUALITY);
+          const up = await api('uploadPhoto', { filename: `rotulo_${orden}_${i ? 'envase' : 'caja'}`, mime: c.mime, dataBase64: c.base64, muestreo_ref: 'rotulo ' + orden });
+          nuevas[i] = up.url;
+          lab.innerHTML = `<img src="${esc(c.dataUrl)}" style="width:100%;border-radius:8px"/>`;
+        } catch (e) { toast(e.message, 'err'); } finally { loading(false); }
+      });
+    });
+    document.getElementById('rotCan_' + orden).addEventListener('click', () => { f.innerHTML = ''; });
+    document.getElementById('rotEnv_' + orden).addEventListener('click', async () => {
+      if (!nuevas[0] || !nuevas[1]) return toast('Sacá las dos fotos: caja y envase', 'err');
+      try {
+        loading(true);
+        await api('rotuloCorregido', { orden, fotoCaja: nuevas[0], fotoEnvase: nuevas[1], lote: document.getElementById('rotLote_' + orden).value, comentario: document.getElementById('rotNota_' + orden).value });
+        toast('✅ Fotos corregidas enviadas a supervisión', 'ok');
+      } catch (e) { toast(e.message, 'err'); return; } finally { loading(false); }
+      renderRotulos();
+    });
+  }
+  async function pedirRotulo_(orden) {
+    try { loading(true); await api('rotuloSolicitar', { orden }); toast('📣 Se les avisó a Antonella, Gloria y Claudia', 'ok'); }
+    catch (e) { toast(e.message, 'err'); } finally { loading(false); }
   }
 
   // ---------- HOME ----------
@@ -1081,9 +1224,13 @@ window.APP_CONFIG = {
         }
       });
       toast(`Guardado. QR=${r.QR} (${r.rango})`, 'ok');
+      cargarRotulos();
       state.editingMuestreo = null;
       nav('detail', { id: r.id });
-    } catch(e) { toast(e.message, 'err'); }
+    } catch(e) {
+      if (/supervisión/.test(e.message)) alert(e.message);
+      toast(e.message, 'err');
+    }
     finally { loading(false); }
   }
 
@@ -1601,6 +1748,7 @@ window.APP_CONFIG = {
           <div><b>Aprobado por:</b> ${esc(last.aprobado_por||'-')}</div>
           <div><b>Fecha aprobación:</b> ${esc(fmtDate(last.aprobado_ts))}</div>
           <div><b>Notas:</b> ${esc(last.notas_aprobador||'-')}</div>` : ''}
+          ${r.rotulo ? `<div><b>Verificación de rótulo:</b> ${r.rotulo.estado === 'ok' ? 'OK por ' + esc(r.rotulo.revisado_por || '') + ' · ' + esc(fmtDate(r.rotulo.revisado_en)) : r.rotulo.estado === 'correccion' ? 'corrección pedida' : 'pendiente'}</div>` : ''}
         </div>
 
         <h2>Resumen de calidad</h2>

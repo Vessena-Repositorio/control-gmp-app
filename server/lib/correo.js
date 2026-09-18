@@ -73,7 +73,7 @@ export async function verificar() {
  * Manda un correo. `para` acepta una direccion o una lista.
  * Devuelve el messageId, que es lo unico util para rastrear un envio despues.
  */
-export async function enviar({ para, asunto, texto, html, responderA }) {
+export async function enviar({ para, asunto, texto, html, responderA, adjuntos }) {
     if (!para || (Array.isArray(para) && !para.length)) {
         throw new Error('falta el destinatario');
     }
@@ -88,6 +88,8 @@ export async function enviar({ para, asunto, texto, html, responderA }) {
         text: texto,
         html,
         replyTo: responderA,
+        // Imagenes dentro del cuerpo (cid:...), como las fotos del rotulo.
+        attachments: Array.isArray(adjuntos) && adjuntos.length ? adjuntos : undefined,
     });
 
     console.log(`[correo] enviado a ${destino}: ${asunto} (${info.messageId})`);
