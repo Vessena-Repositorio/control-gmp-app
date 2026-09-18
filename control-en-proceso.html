@@ -301,6 +301,12 @@ const LIMP_DEFECTS=[
 <div class="md"><div class="mh"><h2 id="mTitle"></h2><button class="mx" onclick="closeM()">✕</button></div><div class="mb" id="mBody"></div>
 <div class="mf"><button class="mb2" onclick="dlCSV()">📥 CSV</button></div></div>
 </div>
+<!-- REVISAR Y FIRMAR UNA ORDEN -->
+<div class="mo" id="revMo" onclick="if(event.target===this)cerrarRevision()">
+<div class="md" style="max-width:1040px"><div class="mh"><h2>👁️ Revisar registro — <span id="revTitulo"></span></h2><button class="mx" onclick="cerrarRevision()">✕</button></div>
+<div class="mb" style="padding:0;background:#fff"><iframe id="revFrame" style="width:100%;height:60vh;border:0;display:block"></iframe></div>
+<div class="mf" id="revPie" style="display:block;padding:14px 16px"></div></div>
+</div>
 <!-- CIERRE DE LA PLANILLA -->
 <div class="mo" id="impMo" onclick="if(event.target===this)cerrarImp()">
 <div class="md"><div class="mh"><h2>📥 Cerrar la planilla de Google</h2><button class="mx" onclick="cerrarImp()">✕</button></div><div class="mb" id="impBody"></div></div>
@@ -1005,10 +1011,13 @@ function pintarOrdenes(){
       :'<span class="ord-estado pend">⏳ Pendiente de aprobar</span>';
     const extra=(o.conDesvio?'<span class="ord-estado dev">⚠️ '+o.conDesvio+' con desvío</span>':'')+(!o.deApp?'<span class="ord-estado vieja">Planilla anterior</span>':'');
     const puedeAprobar=!o.aprobada&&PERMISOS.includes('aprobar');
+    // Pendiente: primero se revisa y se firma. Aprobada: se imprime.
     const botones=(recien?'<div class="ord-recien">✅ Recién aprobada: ya podés imprimir el registro para el dossier.</div>':'')+
       '<div class="ord-botones">'+
-      '<button class="ord-btn '+(o.aprobada?'pri':'sec')+'" onclick="imprimirOrden('+arg(o)+')">🖨️ Imprimir registro</button>'+
-      (puedeAprobar?'<button class="ord-btn pri" onclick="aprobarOrden('+arg(o)+')">✔️ Aprobar y firmar</button>':'')+
+      (puedeAprobar
+        ?'<button class="ord-btn pri" onclick="revisarOrden('+arg(o)+')">👁️ Revisar y firmar</button>'
+        :'<button class="ord-btn '+(o.aprobada?'sec':'pri')+'" onclick="revisarOrden('+arg(o)+')">👁️ Ver registro</button>')+
+      (o.aprobada?'<button class="ord-btn pri" onclick="imprimirOrden('+arg(o)+')">🖨️ Imprimir registro</button>':'')+
       '</div>';
     return '<div class="ord-card '+(o.aprobada?'ok':'pend')+(recien?' recien':'')+'" id="ord-'+esc(o.orden)+'">'+
       '<div class="ord-cab"><div><div class="ord-num">Orden '+esc(o.orden)+'</div>'+
@@ -1019,17 +1028,6 @@ function pintarOrdenes(){
   }).join('');
 }
 function fechaCorta(f){const d=diaDe(String(f||''))||String(f||'').slice(0,10);return d?d.slice(8,10)+'/'+d.slice(5,7)+'/'+d.slice(0,4):''}
-async function aprobarOrden(orden){
-  const notas=prompt('Aprobar la orden '+orden+'.\n\nNotas de la aprobación (opcional):','');
-  if(notas===null)return;
-  if(!confirm('¿Aprobar la orden '+orden+'?\n\nQueda firmada con tu nombre y no se puede deshacer.'))return;
-  try{await api('/ordenes/'+encodeURIComponent(orden)+'/aprobar',{method:'POST',body:JSON.stringify({notas})})}
-  catch(e){toast('⚠️ '+e.message,true);return}
-  RECIEN.add(String(orden));
-  await loadOrdenes();
-  toast('✅ Orden '+orden+' aprobada. Ya podés imprimir el registro.');
-  const card=document.getElementById('ord-'+orden);if(card)card.scrollIntoView({behavior:'smooth',block:'center'});
-}
 function bloqueFirma(f){
   const img=f.imagen?'<img src="'+esc(f.imagen)+'"/>':'<span class="firma-vacia">'+(f.deLaPlanilla?'Cargado en la planilla anterior, sin firma electrónica':'Sin firma registrada')+'</span>';
   const cuando=f.firmadoEn?new Date(f.firmadoEn).toLocaleString('es-UY',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'';
@@ -1038,13 +1036,10 @@ function bloqueFirma(f){
     (f.cargo?'<br>'+esc(f.cargo):'')+(cuando?'<br>'+esc(cuando):'')+
     (f.posterior?'<br><i>Firma registrada después de este control</i>':'')+'</div></div>';
 }
-async function imprimirOrden(orden){
-  // La ventana se abre antes de pedir los datos: si se abre despues de esperar
-  // al servidor, el navegador la toma como emergente y la bloquea.
-  const win=window.open('','_blank');
-  if(!win){toast('El navegador bloqueó la ventana. Habilitá las ventanas emergentes para este sitio.',true);return}
-  win.document.write('<p style="font-family:system-ui;padding:20px">Preparando el registro de la orden '+esc(orden)+'…</p>');
-  let d;try{d=await api('/ordenes/'+encodeURIComponent(orden)+'/impresion')}catch(e){win.close();toast('⚠️ '+e.message,true);return}
+/* El registro REG SOP LCC 200 de una orden, como documento HTML completo. Es el
+   mismo en la revision (dentro de la app) y en la hoja impresa: lo que se firma
+   es exactamente lo que despues se imprime. */
+function htmlRegistro(d,orden,imprimir){
   const c=d.controles||[];
   // Cada dato del encabezado sale del último control que lo tenga cargado: los
   // controles viejos de la planilla no traen granel ni especificación.
@@ -1053,7 +1048,7 @@ async function imprimirOrden(orden){
     const fotos=(x.fotos||x.photoLinks||[]).filter(Boolean);
     const img=fotos.map((f,j)=>String(f).startsWith('/api/')
       ?'<img class="foto" src="'+esc(f)+'"/>'
-      :'<a href="'+esc(f)+'">Foto '+(j+1)+' (Drive)</a>').join(' ');
+      :'<a href="'+esc(f)+'" target="_blank">Foto '+(j+1)+' (Drive)</a>').join(' ');
     const pesos=(x.pesos||[]).map(p=>p===''||p==null?'—':p).join(' · ');
     return '<tr><td>'+(i+1)+'</td><td>'+esc(x.hora||'')+'</td><td>'+esc(x.analista||'')+'</td>'+
       '<td>'+esc(x.lote||'')+'</td><td>'+esc(pesos)+'</td><td><b>'+esc(x.promedio||'—')+'</b></td>'+
@@ -1061,7 +1056,7 @@ async function imprimirOrden(orden){
       '<td>'+(x.hasDev?'<b class="rojo">SÍ</b> '+esc(x.devDesc||'')+' ('+esc(x.devQty||'?')+' u)'+(x.isRep?' · reproceso':''):'No')+'</td>'+
       '<td>'+(img||'—')+'</td></tr>';
   };
-  win.document.open();win.document.write('<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>'+esc(d.registro)+' — orden '+esc(orden)+'</title><style>'+
+  return '<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>'+esc(d.registro)+' — orden '+esc(orden)+'</title><style>'+
     'body{font-family:system-ui,Arial,sans-serif;color:#111;padding:20px;max-width:1000px;margin:0 auto}'+
     'h1{margin:0 0 4px;font-size:19px}h2{margin:16px 0 6px;font-size:14px;border-bottom:1px solid #ccc;padding-bottom:2px}'+
     '.sub{font-size:12px;color:#555}.meta{display:grid;grid-template-columns:repeat(3,1fr);gap:6px 18px;margin:10px 0;font-size:12px}'+
@@ -1072,7 +1067,7 @@ async function imprimirOrden(orden){
     '.firma-box{text-align:center}.firma-slot{border-bottom:1px solid #444;height:70px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:2px}'+
     '.firma-slot img{max-height:65px;max-width:210px;object-fit:contain}.firma-vacia{font-size:10px;color:#999;font-style:italic;align-self:center;padding-bottom:6px}'+
     '.firma-caption{font-size:11px;margin-top:4px}@media print{.noprint{display:none}body{padding:0}}</style></head><body>'+
-    '<div class="noprint" style="text-align:right;margin-bottom:8px"><button onclick="window.print()">🖨️ Imprimir</button> <button onclick="window.close()">Cerrar</button></div>'+
+    (imprimir?'<div class="noprint" style="text-align:right;margin-bottom:8px"><button onclick="window.print()">🖨️ Imprimir</button> <button onclick="window.close()">Cerrar</button></div>':'')+
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px">'+
     '<div><h1>Vessena S.A. — Control en proceso de envasado</h1><div class="sub">'+esc(d.registro)+'</div></div>'+
     '<div class="sello">'+(d.aprobada?'APROBADA':'PENDIENTE')+'</div></div>'+
@@ -1089,10 +1084,73 @@ async function imprimirOrden(orden){
     '<h2>Firmas</h2><div class="firmas">'+(d.firmas||[]).map(bloqueFirma).join('')+
     (d.aprobada?'':'<div class="firma-box"><div class="firma-slot"><span class="firma-vacia">Pendiente de aprobación</span></div><div class="firma-caption"><b>Aprobado por:</b> —</div></div>')+
     '</div>'+
-    '<p style="margin-top:18px;font-size:10px;color:#666">Impreso por '+esc(d.impreso?d.impreso.por:'')+' el '+esc(new Date().toLocaleString('es-UY'))+'. '+
-    'Las firmas son electrónicas: quedan registradas con el usuario, la fecha y la hora en el sistema.</p>'+
-    '</body></html>');
-  win.document.close();
+    (imprimir?'<p style="margin-top:18px;font-size:10px;color:#666">Impreso por '+esc(d.impreso?d.impreso.por:'')+' el '+esc(new Date().toLocaleString('es-UY'))+'. '+
+      'Las firmas son electrónicas: quedan registradas con el usuario, la fecha y la hora en el sistema.</p>':'')+
+    '</body></html>';
+}
+
+// REVISAR Y FIRMAR: se ve el registro completo antes de firmarlo
+// Se escribe el documento directamente: cambiar srcdoc no siempre vuelve a
+// pintar el marco, y quedaba mostrando "Cargando…".
+function escribirFrame(html){
+  const fr=document.getElementById('revFrame');
+  const doc=fr.contentDocument;doc.open();doc.write(html);doc.close();
+  const ajustar=()=>{try{fr.style.height=Math.max(300,doc.documentElement.scrollHeight+20)+'px'}catch(e){}};
+  ajustar();setTimeout(ajustar,300);setTimeout(ajustar,1200);
+}
+let REV_ORDEN=null,REV_DATOS=null;
+async function revisarOrden(orden){
+  REV_ORDEN=String(orden);REV_DATOS=null;
+  document.getElementById('revTitulo').textContent='Orden '+orden;
+  document.getElementById('revPie').innerHTML='<div style="font-size:14px;color:var(--text3)">⏳ Cargando el registro…</div>';
+  escribirFrame('<p style="font-family:system-ui;padding:20px;color:#667085">Cargando…</p>');
+  document.getElementById('revMo').classList.add('open');document.body.style.overflow='hidden';
+  try{REV_DATOS=await api('/ordenes/'+encodeURIComponent(orden))}
+  catch(e){document.getElementById('revPie').innerHTML='<div style="color:var(--red)">⚠️ '+esc(e.message)+'</div>';return}
+  pintarRevision();
+}
+function pintarRevision(){
+  const d=REV_DATOS,orden=REV_ORDEN;
+  escribirFrame(htmlRegistro(d,orden,false));
+  const pie=document.getElementById('revPie');
+  const arg='\''+orden.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\'';
+  if(d.aprobada){
+    pie.innerHTML='<div class="ord-recien" style="margin:0 0 10px">✅ Aprobada por '+esc(d.aprobadaPor)+'. Ya podés imprimir el registro.</div>'+
+      '<div class="ord-botones" style="margin:0"><button class="ord-btn sec" onclick="cerrarRevision()">Cerrar</button>'+
+      '<button class="ord-btn pri" onclick="imprimirOrden('+arg+')">🖨️ Imprimir registro</button></div>';
+  }else if(PERMISOS.includes('aprobar')){
+    pie.innerHTML='<label style="font-size:14px;font-weight:600;color:var(--text2)">Notas de la aprobación (opcional)</label>'+
+      '<textarea id="revNotas" rows="2" style="width:100%;margin:6px 0 10px;padding:10px;border:1px solid var(--border);border-radius:var(--rs);font-size:15px;font-family:var(--f);resize:vertical"></textarea>'+
+      '<div style="font-size:13px;color:var(--text3);margin-bottom:10px">Al firmar, la orden queda aprobada con tu firma electrónica (nombre, fecha y hora) y no se puede deshacer.</div>'+
+      '<div class="ord-botones" style="margin:0"><button class="ord-btn sec" onclick="cerrarRevision()">Cancelar</button>'+
+      '<button class="ord-btn pri" id="revFirmar" onclick="firmarRevision()">✍️ Firmar y aprobar</button></div>';
+  }else{
+    pie.innerHTML='<div class="ord-botones" style="margin:0"><button class="ord-btn sec" onclick="cerrarRevision()">Cerrar</button></div>';
+  }
+}
+async function firmarRevision(){
+  const orden=REV_ORDEN;if(!orden)return;
+  const notas=(document.getElementById('revNotas')||{}).value||'';
+  if(!confirm('¿Firmar y aprobar la orden '+orden+'?\n\nNo se puede deshacer.'))return;
+  const b=document.getElementById('revFirmar');if(b){b.disabled=true;b.textContent='⏳ Firmando…'}
+  try{await api('/ordenes/'+encodeURIComponent(orden)+'/aprobar',{method:'POST',body:JSON.stringify({notas})})}
+  catch(e){toast('⚠️ '+e.message,true);if(b){b.disabled=false;b.textContent='✍️ Firmar y aprobar'}return}
+  RECIEN.add(orden);
+  toast('✅ Orden '+orden+' firmada y aprobada');
+  try{REV_DATOS=await api('/ordenes/'+encodeURIComponent(orden))}catch(e){}
+  pintarRevision();
+  loadOrdenes();
+}
+function cerrarRevision(){document.getElementById('revMo').classList.remove('open');document.body.style.overflow='';REV_ORDEN=null;REV_DATOS=null}
+
+async function imprimirOrden(orden){
+  // La ventana se abre antes de pedir los datos: si se abre despues de esperar
+  // al servidor, el navegador la toma como emergente y la bloquea.
+  const win=window.open('','_blank');
+  if(!win){toast('El navegador bloqueó la ventana. Habilitá las ventanas emergentes para este sitio.',true);return}
+  win.document.write('<p style="font-family:system-ui;padding:20px">Preparando el registro de la orden '+esc(orden)+'…</p>');
+  let d;try{d=await api('/ordenes/'+encodeURIComponent(orden)+'/impresion')}catch(e){win.close();toast('⚠️ '+e.message,true);return}
+  win.document.open();win.document.write(htmlRegistro(d,orden,true));win.document.close();
   toast('🖨️ Registro de la orden '+orden);
 }
 function toast(m,e){const t=document.getElementById('toast');t.textContent=m;t.className='toast on'+(e?' err':'');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('on'),3000)}
