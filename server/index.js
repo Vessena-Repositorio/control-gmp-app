@@ -35,6 +35,7 @@ import { revisarGranelesPendientes, revisarGranelesResumen } from './lib/avisos-
 import { revisarReporteFabuloso } from './lib/avisos-fabuloso.js';
 import { revisarProcesoPendientes } from './lib/avisos-proceso.js';
 import { revisarRotulosDelFinde } from './lib/rotulos.js';
+import { revisarResumenAprobaciones } from './lib/resumen-aprobaciones.js';
 
 const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PUERTO = Number(process.env.PORT) || 3000;
@@ -247,6 +248,7 @@ function arrancar() {
                 ['fabuloso:reporte', revisarReporteFabuloso],
                 ['proceso:pendientes', revisarProcesoPendientes],
                 ['rotulos:fin-de-semana', revisarRotulosDelFinde],
+                ['aprobaciones:resumen-mensual', revisarResumenAprobaciones],
                 ['control-cambios', revisarAvisosControlCambios],
             ];
             const revisarAvisos = () => {

@@ -25,6 +25,7 @@ import { revisarAvisosControlCambios, configControlCambios } from '../lib/avisos
 import { revisarReporteFabuloso, configFabuloso } from '../lib/avisos-fabuloso.js';
 import { revisarProcesoPendientes, configProceso } from '../lib/avisos-proceso.js';
 import { revisarRotulosDelFinde } from '../lib/rotulos.js';
+import { revisarResumenAprobaciones } from '../lib/resumen-aprobaciones.js';
 import { consultar } from '../db.js';
 
 export const rutasCorreo = Router();
@@ -134,3 +135,4 @@ endpointDeAviso('/avisos/control-cambios', revisarAvisosControlCambios);
 endpointDeAviso('/avisos/fabuloso', revisarReporteFabuloso);
 endpointDeAviso('/avisos/control-en-proceso', revisarProcesoPendientes);
 endpointDeAviso('/avisos/rotulos-fin-de-semana', revisarRotulosDelFinde);
+endpointDeAviso('/avisos/resumen-aprobaciones', revisarResumenAprobaciones);
