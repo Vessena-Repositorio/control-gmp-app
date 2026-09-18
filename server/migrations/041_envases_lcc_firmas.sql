@@ -13,8 +13,9 @@
 --     lunes la lista de lo pendiente (pendientes-aprobacion).
 --   * Claudia: los lunes el resumen de lo pendiente de Antonella o Gloria
 --     (resumen-aprobaciones).
---   * Se quita el recordatorio diario de LCC que tocan (recordatorio-lcc): lo
---     atrasado pasa al resumen de los lunes.
+--   * El recordatorio diario de LCC que tocan (recordatorio-lcc) se apaga en el
+--     codigo (avisos-lcc-envases.js); sus filas de destinatarios quedan sin uso.
+--     Aca no se borran: el deploy bloquea migraciones con DELETE.
 
 CREATE TABLE IF NOT EXISTS envases_lcc_firmas (
     control_clave TEXT PRIMARY KEY,
@@ -22,9 +23,6 @@ CREATE TABLE IF NOT EXISTS envases_lcc_firmas (
     firmado_por   TEXT NOT NULL,
     firmado_en    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
-DELETE FROM notificacion_supervisores
- WHERE recurso = 'control-calidad-envases' AND notificacion = 'recordatorio-lcc';
 
 INSERT INTO notificacion_supervisores (recurso, notificacion, usuario_id, nota)
 SELECT 'control-calidad-envases', n.notificacion, u.id, n.nota
