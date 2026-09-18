@@ -13,7 +13,8 @@
  *      reproceso si el error es critico, como un vencimiento). La orden sigue
  *      abierta: la analista ve el pedido en la app, sube las fotos corregidas y
  *      vuelve a supervision.
- *   3. Pasado su plazo (el dia de la orden a las 12, ROTULO_HORA_CORTE) una
+ *   3. Pasado su plazo (las 12, ROTULO_HORA_CORTE, o 2 horas desde el primer
+ *      control si es mas tarde, ROTULO_MARGEN_HORAS) una
  *      orden sin OK no acepta mas controles.
  *
  * Sabados (Claudia, 18/09/2026): la planta trabaja pero supervision no. Ese
@@ -66,13 +67,18 @@ function esc(s) {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /**
- * Plazo del OK: el dia de la orden a las 12; si la orden empezo sabado o
- * domingo, el lunes siguiente a las 12. Usa $3 = zona y $4 = hora de corte.
+ * Plazo del OK: el dia de la orden a las 12 o 2 horas desde su primer control,
+ * lo que sea mas tarde (Claudia, 18/09/2026: una orden que se abre al mediodia
+ * o a la tarde tiene que tener tiempo). Si la orden empezo sabado o domingo, el
+ * lunes siguiente a las 12. Usa $3 = zona, $4 = hora de corte y $5 = margen.
  */
-const VENCIDA = `(now() AT TIME ZONE $3) >= (
+const PLAZO = `GREATEST(
         ((creado_en AT TIME ZONE $3)::date
           + CASE EXTRACT(isodow FROM creado_en AT TIME ZONE $3)::int WHEN 6 THEN 2 WHEN 7 THEN 1 ELSE 0 END)
-        + make_interval(hours => $4::int))`;
+          + make_interval(hours => $4::int),
+        (creado_en AT TIME ZONE $3) + make_interval(hours => $5::int))`;
+const VENCIDA = `(now() AT TIME ZONE $3) >= ${PLAZO}`;
+export const MARGEN_HORAS = Number(process.env.ROTULO_MARGEN_HORAS ?? 2);
 /** Hoy es sabado o domingo: no hay supervision. Usa $3 = zona. */
 const FINDE = 'EXTRACT(isodow FROM now() AT TIME ZONE $3)::int >= 6';
 
@@ -87,16 +93,17 @@ async function esFinDeSemana(q = consultar) {
  */
 export async function frenoDe(c, app, orden) {
     const { rows } = await c.query(
-        `SELECT estado, ${VENCIDA} AS vencida, ${FINDE} AS finde
+        `SELECT estado, ${VENCIDA} AS vencida, ${FINDE} AS finde,
+                to_char(${PLAZO}, 'DD/MM HH24:MI') AS plazo
          FROM rotulo_verificaciones WHERE app = $1 AND orden = $2`,
-        [app, orden, ZONA, HORA_CORTE]
+        [app, orden, ZONA, HORA_CORTE, MARGEN_HORAS]
     );
     const v = rows[0];
     if (!v || v.estado === 'ok') return null;
     if (!v.vencida || v.finde) return null;
     return `Falta el segundo control de supervisión (OK de rótulo) de la orden ${orden}. ` +
-        `Desde las ${HORA_CORTE}:00 no se pueden cargar más controles de una orden sin ese OK: ` +
-        'pedí la aprobación desde la pestaña Rótulos.';
+        `El plazo para ese OK venció (${v.plazo}): sin él no se pueden cargar más controles. ` +
+        'Pedí la aprobación desde la pestaña Rótulos.';
 }
 
 /**
@@ -182,7 +189,7 @@ function cuerpo(v, { titulo, intro, color, conFotos, adjuntos, enlaces }) {
           ${v.comentario && v.estado === 'correccion' ? `<p style="background:#fef3f2;color:#b42318;padding:8px 10px;border-radius:6px;font-size:14px"><b>Corrección pedida:</b> ${esc(v.comentario)}${v.reproceso ? '<br><b>Requiere reproceso.</b>' : ''}</p>` : ''}
           ${conFotos ? `<table><tr>${foto('caja', '📦 Caja / sticker')}${foto('envase', '🏷️ Envase: lote y vencimiento')}</tr></table>` : ''}
           <p style="margin:14px 0 0"><a href="${BASE}${conf.pagina}" style="background:#0b5cff;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px;font-weight:600;display:inline-block">Abrir ${esc(conf.nombre)} → Rótulos</a></p>
-          <p style="font-size:12px;color:#667085;margin:12px 0 0">Desde las ${HORA_CORTE}:00, una orden sin el OK de rótulo no acepta más controles.</p>
+          <p style="font-size:12px;color:#667085;margin:12px 0 0">Plazo para el OK: hasta las ${HORA_CORTE}:00, o ${MARGEN_HORAS} horas desde el primer control si la orden arrancó más tarde. Pasado el plazo, sin OK no acepta más controles.</p>
         </div></div>`;
 }
 
@@ -207,7 +214,7 @@ export async function avisarSupervision(id, motivo) {
     const titulos = {
         nueva: [`Orden ${v.orden}: revisar rótulo`, 'Se cargó el primer control de esta orden. Revisá que el <b>lote</b> y el <b>vencimiento</b> de las fotos sean correctos y dá el OK en la app.', '#0b5cff'],
         corregida: [`Orden ${v.orden}: rótulo corregido`, 'La analista subió las fotos corregidas. Revisalas y dá el OK en la app.', '#0b5cff'],
-        recordatorio: [`Orden ${v.orden}: piden el OK de rótulo`, 'La analista pide la aprobación del rótulo: sin el OK, desde el mediodía no puede cargar más controles de esta orden.', '#b54708'],
+        recordatorio: [`Orden ${v.orden}: piden el OK de rótulo`, 'La analista pide la aprobación del rótulo: sin el OK, pasado el plazo no puede cargar más controles de esta orden.', '#b54708'],
     };
     const [titulo, intro, color] = titulos[motivo] || titulos.nueva;
     await mandar(
@@ -338,12 +345,13 @@ export async function listar(app, dias = 7) {
                                                    'comentario', e.comentario, 'reproceso', e.reproceso)
                                  ORDER BY e.ts)
                  FROM rotulo_eventos e WHERE e.verificacion_id = v.id) AS eventos,
-                ${VENCIDA.replace(/creado_en/g, 'v.creado_en')} AND NOT ${FINDE} AS vencida
+                ${VENCIDA.replace(/creado_en/g, 'v.creado_en')} AND NOT ${FINDE} AS vencida,
+                to_char(${PLAZO.replace(/creado_en/g, 'v.creado_en')}, 'DD/MM HH24:MI') AS plazo
          FROM rotulo_verificaciones v
          WHERE v.app = $1
            AND (v.estado <> 'ok' OR v.actualizado_en >= now() - ($2 || ' days')::interval)
          ORDER BY (v.estado = 'ok'), v.creado_en DESC`,
-        [app, String(dias), ZONA, HORA_CORTE]
+        [app, String(dias), ZONA, HORA_CORTE, MARGEN_HORAS]
     );
     return rows.map((v) => ({
         orden: v.orden, estado: v.estado,
@@ -351,6 +359,7 @@ export async function listar(app, dias = 7) {
         lote: v.lote || '', vence: v.vence || '', producto: v.producto || '', analista: v.analista || '',
         creadoEn: v.creado_en, revisadoPor: v.revisado_por || '', revisadoEn: v.revisado_en,
         comentario: v.comentario || '', reproceso: v.reproceso,
+        plazo: v.plazo || '',
         frenada: v.estado !== 'ok' && Boolean(v.vencida),
         eventos: v.eventos || [],
     }));
@@ -368,7 +377,7 @@ export function montarRutasRotulo(router, app, { leer, cargar: cargarP, aprobar 
 
     router.get('/rotulos', leer, async (_req, res, next) => {
         try {
-            res.json({ ok: true, horaCorte: HORA_CORTE, rotulos: await listar(app) });
+            res.json({ ok: true, horaCorte: HORA_CORTE, margenHoras: MARGEN_HORAS, rotulos: await listar(app) });
         } catch (err) { next(err); }
     });
     router.post('/rotulos/:orden/ok', aprobar, async (req, res, next) => {

@@ -546,6 +546,7 @@ window.APP_CONFIG = {
       const r = await api('listRotulos');
       state.rotulos = r.rotulos || [];
       state.rotHora = r.horaCorte || 12;
+      state.rotMargen = r.margenHoras || 2;
     } catch (e) { return; }
     const sup = hasRole('Coordinador');
     const n = state.rotulos.filter(x => sup ? x.estado === 'pendiente' : x.estado === 'correccion').length;
@@ -565,7 +566,7 @@ window.APP_CONFIG = {
     app.innerHTML = `
       <div class="card">
         <h2>🏷️ Verificación de rótulo</h2>
-        <div class="muted small">El primer control de cada orden manda las fotos de caja y envase a supervisión. <b>Desde las ${state.rotHora || 12}:00, una orden sin OK no acepta más controles.</b> Los sábados no se frena nada: lo del sábado se revisa el lunes, con plazo hasta las 12.</div>
+        <div class="muted small">El primer control de cada orden manda las fotos de caja y envase a supervisión. <b>Plazo para el OK: hasta las ${state.rotHora || 12}:00, o ${state.rotMargen || 2} horas desde el primer control si la orden arrancó más tarde.</b> Pasado el plazo, sin OK no acepta más controles. Los sábados no se frena nada: lo del sábado se revisa el lunes, con plazo hasta las 12.</div>
       </div>
       ${lista.length ? lista.map(r => {
         const estado = r.estado === 'ok' ? `<span class="chip ok">✅ OK de ${esc(r.revisadoPor)}</span>`
@@ -582,7 +583,7 @@ window.APP_CONFIG = {
           <div style="display:flex;justify-content:space-between;gap:10px">
             <div><h3 style="margin:0;color:var(--text)">Orden ${esc(r.orden)}</h3><div class="muted small">${esc(r.producto)}</div></div>
             <div class="muted small">${esc(fmtDate(r.creadoEn))}</div></div>
-          <div class="small mt8">Lote <b>${esc(r.lote || '—')}</b>${r.vence ? ` · Vence <b>${esc(r.vence)}</b>` : ''} · 👤 ${esc(r.analista)}</div>
+          <div class="small mt8">Lote <b>${esc(r.lote || '—')}</b>${r.vence ? ` · Vence <b>${esc(r.vence)}</b>` : ''} · 👤 ${esc(r.analista)}${r.estado !== 'ok' && r.plazo ? ` · ⏰ Plazo <b>${esc(r.plazo)}</b>` : ''}</div>
           <div class="row mt8">${estado}${freno}</div>${corr}
           <div class="rot-fotos">${fotoRotulo_(r.fotoCaja, '📦 Caja / rótulo')}${fotoRotulo_(r.fotoEnvase, '🏷️ Envase: lote')}</div>
           <div id="rotForm_${esc(r.orden)}"></div>

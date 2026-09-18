@@ -505,7 +505,7 @@ const LIMP_DEFECTS=[
 <!-- PAGE 3: RÓTULOS -->
 <div class="page" id="page3"><div class="wrap">
   <div class="fs"><div class="st">🏷️ Verificación de rótulo — segundo control de supervisión</div>
-    <div style="font-size:14px;color:var(--text2);margin-bottom:10px">El primer control de cada orden manda las fotos de caja y envase a supervisión. Una supervisora da el OK o pide corregir el rótulo. <b>Desde las 12:00, una orden sin OK no acepta más controles.</b> Los sábados no se frena nada: lo del sábado se revisa el lunes, con plazo hasta las 12.</div>
+    <div style="font-size:14px;color:var(--text2);margin-bottom:10px">El primer control de cada orden manda las fotos de caja y envase a supervisión. Una supervisora da el OK o pide corregir el rótulo. <b>Plazo para el OK: hasta las 12:00, o 2 horas desde el primer control si la orden arrancó más tarde.</b> Pasado el plazo, sin OK no acepta más controles. Los sábados no se frena nada: lo del sábado se revisa el lunes, con plazo hasta las 12.</div>
     <button class="ord-btn sec" style="max-width:220px" onclick="loadRotulos()">🔄 Actualizar</button>
   </div>
   <div id="rotList"></div>
@@ -1218,9 +1218,9 @@ function avisoRotulo(){
   const r=rotuloDeOrden(document.getElementById('cOrden').value);
   if(!r||r.estado==='ok'){el.style.display='none';return}
   el.style.display='block';
-  if(r.frenada){el.className='rot-aviso freno';el.innerHTML='⛔ <b>Falta el segundo control de supervisión.</b> Desde las '+ROT_HORA+':00 no se pueden cargar más controles de esta orden sin el OK de rótulo. <button class="ord-btn pri" style="margin-top:8px" onclick="solicitarRotulo(\''+esc(r.orden)+'\')">📣 Solicitar aprobación</button>'}
+  if(r.frenada){el.className='rot-aviso freno';el.innerHTML='⛔ <b>Falta el segundo control de supervisión.</b> Venció el plazo para el OK de rótulo ('+esc(r.plazo)+'): sin ese OK no se pueden cargar más controles de esta orden. <button class="ord-btn pri" style="margin-top:8px" onclick="solicitarRotulo(\''+esc(r.orden)+'\')">📣 Solicitar aprobación</button>'}
   else if(r.estado==='correccion'){el.className='rot-aviso corr';el.innerHTML='✏️ <b>Supervisión pidió corregir el rótulo:</b> '+esc(r.comentario)+(r.reproceso?' <b>(requiere reproceso)</b>':'')+'<br><a href="#" onclick="showTab(3);return false">Ir a Rótulos para subir las fotos corregidas</a>'}
-  else{el.className='rot-aviso pend';el.innerHTML='⏳ El rótulo de esta orden espera el OK de supervisión. Después de las '+ROT_HORA+':00 no se van a poder cargar más controles sin ese OK (si la orden es del sábado, el lunes a las '+ROT_HORA+').'}
+  else{el.className='rot-aviso pend';el.innerHTML='⏳ El rótulo de esta orden espera el OK de supervisión. Plazo para el OK: <b>'+esc(r.plazo)+'</b>. Pasado ese horario no se van a poder cargar más controles sin el OK.'}
 }
 function fotoRot(u,t){return u?'<a href="'+esc(u)+'" target="_blank" class="rot-foto"><img src="'+esc(u)+'" alt=""><span>'+t+'</span></a>':'<div class="rot-foto vacia"><span>'+t+': sin foto</span></div>'}
 const ROT_ACC={primer_control:'Primer control',ok:'OK de rótulo',correccion:'Pidió corrección',corregido:'Subió fotos corregidas',solicitud:'Pidió la aprobación'};
@@ -1242,7 +1242,7 @@ function pintarRotulos(){
     return '<div class="ord-card '+(r.estado==='ok'?'ok':'pend')+'" id="rot-'+o+'">'+
       '<div class="ord-cab"><div><div class="ord-num">Orden '+o+'</div><div class="ord-prod">'+esc(r.producto)+'</div></div>'+
       '<div class="ord-fecha">'+esc(new Date(r.creadoEn).toLocaleString('es-UY',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}))+'</div></div>'+
-      '<div class="ord-det">Lote <b>'+esc(r.lote||'—')+'</b> · Vence <b>'+esc(r.vence||'—')+'</b> · 👤 '+esc(r.analista)+'</div>'+
+      '<div class="ord-det">Lote <b>'+esc(r.lote||'—')+'</b> · Vence <b>'+esc(r.vence||'—')+'</b> · 👤 '+esc(r.analista)+(r.estado!=='ok'&&r.plazo?' · ⏰ Plazo <b>'+esc(r.plazo)+'</b>':'')+'</div>'+
       '<div class="ord-tags">'+estado+freno+'</div>'+corr+
       '<div class="rot-fotos">'+fotoRot(r.fotoCaja,'📦 Caja / sticker')+fotoRot(r.fotoEnvase,'🏷️ Envase: lote y vence')+'</div>'+
       '<div id="rot-form-'+o+'"></div>'+
