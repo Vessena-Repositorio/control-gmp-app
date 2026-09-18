@@ -353,7 +353,7 @@ const LIMP_DEFECTS=[
       <div class="fd"><span class="fl">Máquina</span><select class="fi" id="cMaq" onchange="onMaq()"><option value="">Seleccionar...</option></select></div>
       <div class="fd"><span class="fl">Presentación</span><select class="fi" id="cPres" onchange="onPres()"><option value="">—</option></select></div>
       <div class="fd"><span class="fl">N° Lote</span><input class="fi" id="cLote" placeholder="—"/></div>
-      <div class="fd"><span class="fl">N° Orden</span><input class="fi" id="cOrden" placeholder="—"/></div>
+      <div class="fd"><span class="fl">N° Orden</span><input class="fi" id="cOrden" placeholder="—" oninput="avisoPH()"/></div>
       <div class="fd"><span class="fl">F. Vencimiento</span><input class="fi" id="cVence" placeholder="—"/></div>
       <div class="fd"><span class="fl">Cód. Granel</span><input class="fi" id="cGranel" placeholder="—"/></div>
       <div class="fd"><span class="fl">Cód. PT</span><input class="fi" id="cCodPT" placeholder="—"/></div>
@@ -363,7 +363,7 @@ const LIMP_DEFECTS=[
     <!-- STANDARD CONTROLS (hidden for Limpiadores) -->
     <div id="stdControls">
     <!-- pH -->
-    <div class="fs"><div class="st">pH (opcional)</div>
+    <div class="fs"><div class="st">pH <span id="phAviso" style="text-transform:none;letter-spacing:0;font-weight:600">(obligatorio en el primer control de cada orden)</span></div>
       <div class="fg"><div class="fd"><span class="fl">Valor pH</span><input class="fi" id="cPH" placeholder="—" inputmode="decimal"/></div></div>
     </div>
 
@@ -614,6 +614,7 @@ function onMaq(){
   if(maqCache[m]){const c=maqCache[m];['cLote','cOrden','cVence','cGranel','cCodPT'].forEach(id=>{if(c[id])document.getElementById(id).value=c[id]});
     if(c.pres&&!isLimp){ps.value=c.pres;onPres()}
     toast('📋 Datos autocompletados de '+m)}
+  avisoPH()
 }
 function onPres(){
   const m=document.getElementById('cMaq').value,p=document.getElementById('cPres').value;
@@ -668,7 +669,7 @@ function calcW(){
 // FORM
 function showForm(){document.getElementById('newBtn').style.display='none';document.getElementById('cForm').style.display='block';document.getElementById('cNum').textContent=ctrls.length+1;
 const now=new Date();document.getElementById('cHora').value=now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
-resetForm();document.getElementById('cForm').scrollIntoView({behavior:'smooth'})}
+resetForm();avisoPH();document.getElementById('cForm').scrollIntoView({behavior:'smooth'})}
 function cancelForm(){document.getElementById('cForm').style.display='none';document.getElementById('newBtn').style.display='block'}
 function resetForm(){['cP1','cP2','cP3','cP4','cP5','cPH','cDevD','cDevQ','cObs','cLote','cOrden','cVence','cGranel','cCodPT'].forEach(id=>{const e=document.getElementById(id);if(e){e.value='';e.className='fi'}});
 document.getElementById('cProm').textContent='—';document.getElementById('cProm').style.color='var(--text)';
@@ -684,6 +685,21 @@ document.getElementById('limpControls').style.display='none';
 const dl=document.getElementById('limpDefList');if(dl)dl.innerHTML='';
 ['cLimpUds','cLimpMotivo','cLimpAccion'].forEach(id=>{const e=document.getElementById(id);if(e)e.value=''})}
 
+// Primer control de una orden: ninguno guardado (de cualquier día) ni pendiente en este equipo.
+// El servidor lo vuelve a verificar: acá solo se avisa antes de mandar.
+function esPrimerControl(orden){
+  const o=String(orden||'').trim();if(!o)return false;
+  return !allR.some(r=>String(r.orden||'').trim()===o)&&!ctrls.some(c=>String(c.orden||'').trim()===o);
+}
+function avisoPH(){
+  const el=document.getElementById('phAviso');if(!el)return;
+  const orden=document.getElementById('cOrden').value.trim();
+  const maq=document.getElementById('cMaq').value;
+  if(maq==='Limpiadores'){el.textContent='';return}
+  if(orden&&esPrimerControl(orden)){el.textContent='· obligatorio: es el primer control de esta orden';el.style.color='var(--red)'}
+  else if(orden){el.textContent='(opcional: la orden ya tiene controles)';el.style.color=''}
+  else{el.textContent='(obligatorio en el primer control de cada orden)';el.style.color=''}
+}
 function saveCtrl(){
   const maq=document.getElementById('cMaq').value;if(!maq){toast('⚠️ Elegí máquina',true);return}
   const pres=document.getElementById('cPres').value;if(!pres){toast('⚠️ Elegí presentación',true);return}
@@ -693,6 +709,10 @@ function saveCtrl(){
   const granel=document.getElementById('cGranel').value.trim();if(!granel){toast('⚠️ Ingresá Cód. Granel',true);return}
   const codPT=document.getElementById('cCodPT').value.trim();if(!codPT){toast('⚠️ Ingresá Cód. PT',true);return}
   // Como en Fabuloso: sin la foto del sticker y la de lote/vencimiento no se guarda
+  // Cada orden lleva al menos un pH, en su primer control (Limpiadores no mide pH)
+  if(maq!=='Limpiadores'&&!String(document.getElementById('cPH').value||'').trim()&&esPrimerControl(orden)){
+    toast('⚠️ Es el primer control de la orden '+orden+': tiene que llevar pH',true);
+    const ph=document.getElementById('cPH');ph.scrollIntoView({behavior:'smooth',block:'center'});ph.focus();return}
   if(!fotos[0]||!fotos[1]){toast('⚠️ Faltan las fotos obligatorias: sticker y lote/vencimiento',true);document.getElementById('pB0').scrollIntoView({behavior:'smooth',block:'center'});return}
   const isLimp=maq==='Limpiadores';
   const pesos=isLimp?['','','','','']:[1,2,3,4,5].map(i=>document.getElementById('cP'+i).value);

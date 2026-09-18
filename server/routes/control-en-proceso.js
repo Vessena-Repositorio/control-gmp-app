@@ -239,6 +239,19 @@ rutasControlEnProceso.post('/controles', cargar, async (req, res, next) => {
             const previo = await c.query('SELECT raw FROM proceso_controles WHERE id_envio = $1', [idEnvio]);
             if (previo.rows.length) return { record: previo.rows[0].raw, repetido: true };
 
+            // Cada orden tiene que tener al menos un pH, y se exige en su primer
+            // control (Claudia, 18/09/2026). Limpiadores no mide pH: la pantalla
+            // ni muestra el campo.
+            if (texto(d.maquina) !== 'Limpiadores' && numero(d.ph) === null) {
+                const { rows: antes } = await c.query(
+                    'SELECT 1 FROM proceso_controles WHERE orden = $1 AND duplicado_de IS NULL LIMIT 1',
+                    [texto(d.orden, 60)]
+                );
+                if (!antes.length) {
+                    throw fallo(400, `Es el primer control de la orden ${texto(d.orden, 60)}: tiene que llevar pH`);
+                }
+            }
+
             const pedidas = idsFoto.filter((x) => x !== null);
             if (pedidas.length) {
                 const { rows } = await c.query('SELECT id FROM proceso_fotos WHERE id = ANY($1)', [pedidas]);
