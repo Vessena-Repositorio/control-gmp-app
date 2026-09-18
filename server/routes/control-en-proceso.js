@@ -27,6 +27,7 @@ import { PERMISOS_POR_ROL } from '../lib/permisos.js';
 import { ZONA } from '../lib/tareas.js';
 import { sincronizarProceso } from '../sync/sync-proceso.js';
 import { contarPendientes, estadoCopia, iniciarCopia } from '../lib/copia-fotos-drive.js';
+import { firmaDe } from '../lib/firmas.js';
 import { comprimirFoto } from '../lib/comprimir-foto.js';
 
 export const rutasControlEnProceso = Router();
@@ -34,6 +35,7 @@ export const rutasControlEnProceso = Router();
 const RECURSO = 'control-en-proceso';
 const leer = exigirPermiso(RECURSO, 'ver');
 const cargar = exigirPermiso(RECURSO, 'cargar');
+const aprobar = exigirPermiso(RECURSO, 'aprobar');
 const administrar = exigirPermiso(RECURSO, 'administrar');
 
 const TIPOS_FOTO = new Set(['image/jpeg', 'image/png', 'image/webp']);
@@ -489,5 +491,186 @@ rutasControlEnProceso.post('/fotos-drive/copiar', administrar, async (req, res, 
         res.json({ ok: true, trabajo });
     } catch (err) {
         next(err);
+    }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Ordenes de envasado: aprobacion e impresion (REG SOP LCC 200)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const CODIGO_REGISTRO = 'REG SOP LCC 200';
+
+/**
+ * Las firmas de una orden: la de cada analista que cargo un control y la de
+ * quien aprobo. Cada una es la que estaba vigente en ese momento (lib/firmas).
+ *
+ * Los controles que vienen de la planilla no tienen firma: la app vieja no
+ * pedia ninguna. Se listan igual, con `sinFirma`, para que la hoja lo diga en
+ * vez de dejar el renglon vacio como si faltara firmar.
+ */
+async function firmasDeOrden(filas, cierre) {
+    const firmas = [];
+    const vistos = new Set();
+    for (const f of filas) {
+        const nombre = f.analista || '';
+        if (!nombre || vistos.has(nombre)) continue;
+        vistos.add(nombre);
+        const firma = f.registrado_por_id
+            ? await firmaDe(f.registrado_por_id, f.registrado_en, nombre)
+            : null;
+        firmas.push({
+            rol: 'Analista',
+            nombre,
+            firmadoEn: f.registrado_en || null,
+            sinFirma: !firma,
+            deLaPlanilla: f.origen !== 'app',
+            ...(firma || {}),
+        });
+    }
+    if (cierre) {
+        const firma = await firmaDe(cierre.aprobada_por_id, cierre.aprobada_en, cierre.aprobada_por);
+        firmas.push({
+            rol: 'Aprobado por',
+            nombre: cierre.aprobada_por,
+            firmadoEn: cierre.aprobada_en,
+            sinFirma: !firma,
+            ...(firma || {}),
+        });
+    }
+    return firmas;
+}
+
+/**
+ * GET /api/control-en-proceso/ordenes?dias=30
+ * Una fila por orden de envasado, con si esta aprobada. Es la pantalla desde
+ * donde se aprueba y se imprime.
+ */
+rutasControlEnProceso.get('/ordenes', leer, async (req, res, next) => {
+    const dias = Math.min(Math.max(Number(req.query.dias) || 30, 1), 365);
+    try {
+        const { rows } = await consultar(
+            `SELECT c.orden,
+                    count(*)::int                                   AS controles,
+                    count(*) FILTER (WHERE c.has_dev)::int          AS con_desvio,
+                    min(c.fecha)                                    AS desde,
+                    max(c.fecha)                                    AS hasta,
+                    max(c.lote)                                     AS lote,
+                    max(c.maquina)                                  AS maquina,
+                    max(c.presentacion)                             AS presentacion,
+                    string_agg(DISTINCT c.analista, ', ')           AS analistas,
+                    o.aprobada_por, o.aprobada_en, o.notas
+             FROM proceso_controles c
+             LEFT JOIN proceso_ordenes o ON o.orden = c.orden
+             WHERE c.duplicado_de IS NULL
+               AND c.orden IS NOT NULL AND c.orden <> ''
+               AND c.fecha >= (now() AT TIME ZONE $1)::date - $2::int
+             GROUP BY c.orden, o.aprobada_por, o.aprobada_en, o.notas
+             ORDER BY max(c.fecha) DESC, max(c.id) DESC`,
+            [ZONA, dias]
+        );
+        res.json({
+            ok: true,
+            registro: CODIGO_REGISTRO,
+            ordenes: rows.map((o) => ({
+                orden: o.orden,
+                controles: o.controles,
+                conDesvio: o.con_desvio,
+                desde: o.desde, hasta: o.hasta,
+                lote: o.lote || '', maquina: o.maquina || '', presentacion: o.presentacion || '',
+                analistas: o.analistas || '',
+                aprobada: Boolean(o.aprobada_por),
+                aprobadaPor: o.aprobada_por || '', aprobadaEn: o.aprobada_en || null,
+                notas: o.notas || '',
+            })),
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/** Los controles de una orden y su aprobacion, con las firmas para la hoja. */
+async function armarOrden(orden) {
+    const { rows } = await consultar(
+        `SELECT id, raw, analista, registrado_por_id, registrado_en, origen
+         FROM proceso_controles
+         WHERE orden = $1 AND duplicado_de IS NULL
+         ORDER BY fecha, control_num, id`,
+        [orden]
+    );
+    if (!rows.length) throw fallo(404, 'No hay controles con esa orden');
+    const { rows: cierres } = await consultar('SELECT * FROM proceso_ordenes WHERE orden = $1', [orden]);
+    const cierre = cierres[0] || null;
+    return {
+        orden,
+        registro: CODIGO_REGISTRO,
+        aprobada: Boolean(cierre),
+        aprobadaPor: cierre?.aprobada_por || '',
+        aprobadaEn: cierre?.aprobada_en || null,
+        notas: cierre?.notas || '',
+        controles: rows.map((f) => f.raw),
+        firmas: await firmasDeOrden(rows, cierre),
+    };
+}
+
+/** GET /api/control-en-proceso/ordenes/:orden */
+rutasControlEnProceso.get('/ordenes/:orden', leer, async (req, res, next) => {
+    try {
+        res.json({ ok: true, ...(await armarOrden(texto(req.params.orden, 60))) });
+    } catch (err) {
+        responder(err, res, next);
+    }
+});
+
+/**
+ * GET /api/control-en-proceso/ordenes/:orden/impresion
+ * Lo mismo, pero deja constancia: una copia en papel de un registro tiene que
+ * poder rastrearse (igual que en graneles).
+ */
+rutasControlEnProceso.get('/ordenes/:orden/impresion', leer, async (req, res, next) => {
+    try {
+        const orden = texto(req.params.orden, 60);
+        const datos = await armarOrden(orden);
+        await enTransaccion((c) => registrar(c, req, 'imprimir', 'orden', orden,
+            `${datos.controles.length} control(es) · ${datos.aprobada ? 'aprobada' : 'pendiente'}`));
+        res.json({
+            ok: true,
+            ...datos,
+            impreso: { por: req.usuario.nombre || req.usuario.usuario, en: new Date().toISOString() },
+        });
+    } catch (err) {
+        responder(err, res, next);
+    }
+});
+
+/**
+ * POST /api/control-en-proceso/ordenes/:orden/aprobar  { notas }
+ * Aprueban las administradoras (Antonella, Gloria y Claudia). Una orden
+ * aprobada no se vuelve a aprobar: si hay que corregir algo, queda el rastro.
+ */
+rutasControlEnProceso.post('/ordenes/:orden/aprobar', aprobar, async (req, res, next) => {
+    const orden = texto(req.params.orden, 60);
+    const notas = texto(req.body?.notas, 1000);
+    try {
+        const resultado = await enTransaccion(async (c) => {
+            await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['proceso-orden:' + orden]);
+            const { rows: hay } = await c.query(
+                'SELECT count(*)::int AS n FROM proceso_controles WHERE orden = $1 AND duplicado_de IS NULL',
+                [orden]
+            );
+            if (!hay[0].n) throw fallo(404, 'No hay controles con esa orden');
+            const { rows: ya } = await c.query('SELECT aprobada_por FROM proceso_ordenes WHERE orden = $1', [orden]);
+            if (ya.length) throw fallo(409, `La orden ya fue aprobada por ${ya[0].aprobada_por}`);
+            await c.query(
+                `INSERT INTO proceso_ordenes (orden, aprobada_por, aprobada_por_id, notas)
+                 VALUES ($1, $2, $3, $4)`,
+                [orden, req.usuario.nombre || req.usuario.usuario, req.usuario.id, notas || null]
+            );
+            await registrar(c, req, 'orden_aprobada', 'orden', orden,
+                `${hay[0].n} control(es)${notas ? ' · ' + notas : ''}`);
+            return { controles: hay[0].n };
+        });
+        res.json({ ok: true, orden, ...resultado });
+    } catch (err) {
+        responder(err, res, next);
     }
 });

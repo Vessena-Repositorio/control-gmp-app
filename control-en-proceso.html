@@ -264,7 +264,7 @@ const LIMP_DEFECTS=[
 <div class="hdr"><div class="hdr-ico">⚗️</div><div><h1>Control GMP</h1><span id="hdrInfo">Envasado</span></div>
   <div class="hdr-r"><button id="btnFotos" onclick="abrirFotos()" style="display:none;background:none;border:1px solid var(--border);border-radius:5px;padding:3px 7px;color:var(--text2);font-size:8px;cursor:pointer;font-family:var(--f)">🖼️ Fotos de Drive</button><button id="btnImp" onclick="abrirImp()" style="display:none;background:none;border:1px solid var(--amber);border-radius:5px;padding:3px 7px;color:var(--amber);font-size:8px;cursor:pointer;font-family:var(--f)">📥 Cerrar planilla</button><span class="hdr-u" id="hdrU"></span><button onclick="logout()" style="background:none;border:1px solid var(--border);border-radius:5px;padding:3px 7px;color:var(--text3);font-size:8px;cursor:pointer;font-family:var(--f)">Salir</button></div>
 </div>
-<div class="tabs"><div class="tab on" onclick="showTab(0)">📝 Control</div><div class="tab" onclick="showTab(1)">📊 Dashboard</div></div>
+<div class="tabs"><div class="tab on" onclick="showTab(0)">📝 Control</div><div class="tab" onclick="showTab(1)">📊 Dashboard</div><div class="tab" onclick="showTab(2)">📋 Órdenes <span id="ordCount" style="background:var(--red);color:#fff;border-radius:8px;padding:0 5px;font-size:8px"></span></div></div>
 <div class="toast" id="toast"></div>
 
 <!-- MODAL -->
@@ -434,6 +434,19 @@ const LIMP_DEFECTS=[
   <div class="fs"><div class="st">Por Analista</div><div id="anaB"></div></div>
   <div class="fs"><div class="st">Registros</div><div id="dList"></div></div>
 </div></div>
+
+<!-- PAGE 2: ORDENES DE ENVASADO -->
+<div class="page" id="page2"><div class="wrap">
+  <div class="fs"><div class="st">📋 Órdenes de envasado — registro REG SOP LCC 200</div>
+    <div style="font-size:9px;color:var(--text3);margin-bottom:8px">Cada orden se aprueba una vez, con la firma del supervisor, y se imprime para el dossier. El analista firma con lo que cargó.</div>
+    <div class="fr">
+      <select id="ordPer" onchange="loadOrdenes()"><option value="7">Semana</option><option value="30" selected>Mes</option><option value="90">3 meses</option><option value="365">Año</option></select>
+      <label style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--text2)"><input type="checkbox" id="ordPend" checked onchange="loadOrdenes()"> Solo pendientes</label>
+      <button class="btn b2" style="padding:5px 10px;font-size:9px" onclick="loadOrdenes()">🔄</button>
+    </div>
+  </div>
+  <div id="ordList"></div>
+</div></div>
 </div>
 
 <script>
@@ -525,7 +538,7 @@ function endShift(){if(!confirm('¿Limpiar la pantalla? Los controles ya guardad
 function saveLocal(){try{localStorage.setItem('gmp_shift',JSON.stringify({shift,ctrls,maqCache}))}catch(e){toast('⚠️ Este equipo no tiene lugar para guardar los pendientes',true)}}
 
 // TABS
-function showTab(n){document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('on',i===n));document.querySelectorAll('.page').forEach((p,i)=>p.classList.toggle('on',i===n));if(n===1){loadSheet();renderDash()}}
+function showTab(n){document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('on',i===n));document.querySelectorAll('.page').forEach((p,i)=>p.classList.toggle('on',i===n));if(n===1){loadSheet();renderDash()}if(n===2)loadOrdenes()}
 
 // MACHINE CHANGE - autocomplete from cache
 function onMaq(){
@@ -919,6 +932,98 @@ const sp=(SPECS[mq]||[]).find(s=>s.pres===pr);const ok=sp?me>=sp.min&&me<=sp.max
 const tr=document.createElement('tr');tr.innerHTML=`<td>${mq}</td><td>${pr}</td><td>${n}</td><td><b>${me.toFixed(1)}</b></td><td class="${sd>10?'twn':''}">${sd.toFixed(2)}</td><td>${mn}</td><td>${mx}</td><td>${sp?sp.min+'-'+sp.max:'—'}</td><td class="${ok?'tok':'tbd'}">${ok?'✅':'❌'}</td>`;tb.appendChild(tr)})}
 
 function dlCSV(){if(!allR.length)return;const hd=['Fecha','Analista','Orden','Lote','Vence','Máquina','Pres.','Granel','PT','Ctrl#','Hora','P1','P2','P3','P4','P5','Prom','pH','Controles','Desvío','Desc','Uds','Reproc','Obs'];const rows=allR.map(r=>[r.fecha,r.analista,r.orden,r.lote,r.vence,r.maquina,r.presentacion,r.granel,r.codPT,r.controlNum,r.hora,...(r.pesos||['','','','','']),r.promedio,r.ph,(r.checks||[]).join('; '),r.hasDev?'SÍ':'NO',r.devDesc,r.devQty,r.isRep?'SÍ':'NO',r.obs].map(v=>'"'+(v||'').toString().replace(/"/g,'""')+'"'));const csv='\uFEFF'+[hd.join(','),...rows.map(r=>r.join(','))].join('\n');const b=new Blob([csv],{type:'text/csv;charset=utf-8'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download='gmp_'+new Date().toISOString().slice(0,10)+'.csv';a.click();URL.revokeObjectURL(u);toast('📥')}
+// ÓRDENES DE ENVASADO: aprobar (firma del supervisor) e imprimir el REG SOP LCC 200
+let ORDENES=[];
+async function loadOrdenes(){
+  const el=document.getElementById('ordList');
+  el.innerHTML='<div style="font-size:9px;color:var(--text3);padding:10px">⏳ Cargando…</div>';
+  let d;try{d=await api('/ordenes?dias='+(document.getElementById('ordPer').value||30))}catch(e){el.innerHTML='<div style="font-size:9px;color:var(--red);padding:10px">⚠️ '+esc(e.message)+'</div>';return}
+  ORDENES=d.ordenes||[];
+  const soloP=document.getElementById('ordPend').checked;
+  const lista=soloP?ORDENES.filter(o=>!o.aprobada):ORDENES;
+  document.getElementById('ordCount').textContent=ORDENES.filter(o=>!o.aprobada).length;
+  if(!lista.length){el.innerHTML='<div style="font-size:9px;color:var(--text3);padding:10px;border:1px dashed var(--border);border-radius:var(--r)">No hay órdenes '+(soloP?'pendientes':'')+' en este período.</div>';return}
+  el.innerHTML=lista.map(o=>{
+    const est=o.aprobada
+      ?'<span class="ti-tag">✅ Aprobada por '+esc(o.aprobadaPor)+'</span>'
+      :'<span class="ti-tag red">⏳ Pendiente de aprobar</span>';
+    const dev=o.conDesvio?'<span class="ti-tag red">⚠️ '+o.conDesvio+' con desvío</span>':'';
+    const botones='<button class="btn b2" style="padding:4px 9px;font-size:9px" onclick="imprimirOrden(\''+esc(o.orden).replace(/'/g,"\\'")+'\')">🖨️ Imprimir</button>'+
+      ((!o.aprobada&&PERMISOS.includes('aprobar'))?'<button class="btn b1" style="padding:4px 9px;font-size:9px" onclick="aprobarOrden(\''+esc(o.orden).replace(/'/g,"\\'")+'\')">✔️ Aprobar</button>':'');
+    return '<div class="ti" style="cursor:default"><div class="ti-h"><span class="ti-t">Orden '+esc(o.orden)+'</span><span class="ti-m">'+esc(o.maquina)+' · '+esc(o.presentacion)+'</span></div>'+
+      '<div class="ti-d">Lote: '+esc(o.lote)+' · '+o.controles+' controles · '+esc(fechaCorta(o.hasta))+' · 👤 '+esc(o.analistas)+'</div>'+
+      '<div class="ti-tags">'+est+dev+'</div>'+
+      '<div style="display:flex;gap:5px;margin-top:6px">'+botones+'</div></div>';
+  }).join('');
+}
+function fechaCorta(f){const d=diaDe(String(f||''))||String(f||'').slice(0,10);return d?d.slice(8,10)+'/'+d.slice(5,7)+'/'+d.slice(0,4):''}
+async function aprobarOrden(orden){
+  const notas=prompt('Notas de la aprobación de la orden '+orden+' (opcional):','');
+  if(notas===null)return;
+  if(!confirm('¿Aprobar la orden '+orden+'? Queda firmada con tu nombre y no se puede deshacer.'))return;
+  try{await api('/ordenes/'+encodeURIComponent(orden)+'/aprobar',{method:'POST',body:JSON.stringify({notas})});toast('✅ Orden '+orden+' aprobada')}
+  catch(e){toast('⚠️ '+e.message,true)}
+  loadOrdenes();
+}
+function bloqueFirma(f){
+  const img=f.imagen?'<img src="'+esc(f.imagen)+'"/>':'<span class="firma-vacia">'+(f.deLaPlanilla?'Cargado en la planilla anterior, sin firma electrónica':'Sin firma registrada')+'</span>';
+  const cuando=f.firmadoEn?new Date(f.firmadoEn).toLocaleString('es-UY',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'';
+  return '<div class="firma-box"><div class="firma-slot">'+img+'</div>'+
+    '<div class="firma-caption"><b>'+esc(f.rol)+':</b> '+esc(f.nombre)+
+    (f.cargo?'<br>'+esc(f.cargo):'')+(cuando?'<br>'+esc(cuando):'')+
+    (f.posterior?'<br><i>Firma registrada después de este control</i>':'')+'</div></div>';
+}
+async function imprimirOrden(orden){
+  let d;try{d=await api('/ordenes/'+encodeURIComponent(orden)+'/impresion')}catch(e){toast('⚠️ '+e.message,true);return}
+  const win=window.open('','_blank');
+  if(!win){toast('El navegador bloqueó la ventana. Habilitá las ventanas emergentes.',true);return}
+  const c=d.controles||[];const u=c[c.length-1]||{};
+  const fila=(x,i)=>{
+    const fotos=(x.fotos||x.photoLinks||[]).filter(Boolean);
+    const img=fotos.map((f,j)=>String(f).startsWith('/api/')
+      ?'<img class="foto" src="'+esc(f)+'"/>'
+      :'<a href="'+esc(f)+'">Foto '+(j+1)+' (Drive)</a>').join(' ');
+    const pesos=(x.pesos||[]).map(p=>p===''||p==null?'—':p).join(' · ');
+    return '<tr><td>'+(i+1)+'</td><td>'+esc(x.hora||'')+'</td><td>'+esc(x.analista||'')+'</td>'+
+      '<td>'+esc(x.lote||'')+'</td><td>'+esc(pesos)+'</td><td><b>'+esc(x.promedio||'—')+'</b></td>'+
+      '<td>'+esc(x.ph||'—')+'</td><td>'+esc((x.checks||[]).join(', ')||(x.limpDefects||[]).join(', ')||'—')+'</td>'+
+      '<td>'+(x.hasDev?'<b class="rojo">SÍ</b> '+esc(x.devDesc||'')+' ('+esc(x.devQty||'?')+' u)'+(x.isRep?' · reproceso':''):'No')+'</td>'+
+      '<td>'+(img||'—')+'</td></tr>';
+  };
+  win.document.write('<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>'+esc(d.registro)+' — orden '+esc(orden)+'</title><style>'+
+    'body{font-family:system-ui,Arial,sans-serif;color:#111;padding:20px;max-width:1000px;margin:0 auto}'+
+    'h1{margin:0 0 4px;font-size:19px}h2{margin:16px 0 6px;font-size:14px;border-bottom:1px solid #ccc;padding-bottom:2px}'+
+    '.sub{font-size:12px;color:#555}.meta{display:grid;grid-template-columns:repeat(3,1fr);gap:6px 18px;margin:10px 0;font-size:12px}'+
+    'table{width:100%;border-collapse:collapse;font-size:11px}th,td{border:1px solid #999;padding:4px 6px;text-align:left;vertical-align:top}th{background:#eee}'+
+    '.sello{border:2px solid '+(d.aprobada?'#12b76a':'#f79009')+';color:'+(d.aprobada?'#12b76a':'#f79009')+';padding:6px 12px;font-weight:bold;border-radius:6px;text-transform:uppercase;letter-spacing:1px}'+
+    '.foto{max-width:90px;max-height:90px;object-fit:cover;margin:1px}.rojo{color:#b42318}'+
+    '.firmas{margin-top:22px;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:18px;page-break-inside:avoid}'+
+    '.firma-box{text-align:center}.firma-slot{border-bottom:1px solid #444;height:70px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:2px}'+
+    '.firma-slot img{max-height:65px;max-width:210px;object-fit:contain}.firma-vacia{font-size:10px;color:#999;font-style:italic;align-self:center;padding-bottom:6px}'+
+    '.firma-caption{font-size:11px;margin-top:4px}@media print{.noprint{display:none}body{padding:0}}</style></head><body>'+
+    '<div class="noprint" style="text-align:right;margin-bottom:8px"><button onclick="window.print()">🖨️ Imprimir</button> <button onclick="window.close()">Cerrar</button></div>'+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px">'+
+    '<div><h1>Vessena S.A. — Control en proceso de envasado</h1><div class="sub">'+esc(d.registro)+'</div></div>'+
+    '<div class="sello">'+(d.aprobada?'APROBADA':'PENDIENTE')+'</div></div>'+
+    '<div class="meta"><div><b>Orden de envasado:</b> '+esc(orden)+'</div><div><b>Lote:</b> '+esc(u.lote||'—')+'</div>'+
+    '<div><b>Producto:</b> '+esc(u.maquina||'—')+' · '+esc(u.presentacion||'')+'</div>'+
+    '<div><b>Cód. PT:</b> '+esc(u.codPT||'—')+'</div><div><b>Cód. granel:</b> '+esc(u.granel||'—')+'</div>'+
+    '<div><b>Vencimiento:</b> '+esc(u.vence||'—')+'</div>'+
+    '<div><b>Controles:</b> '+c.length+'</div><div><b>Especificación:</b> '+esc(u.spec||'—')+'</div>'+
+    (d.aprobada?'<div><b>Aprobada:</b> '+esc(new Date(d.aprobadaEn).toLocaleString('es-UY'))+'</div>':'<div></div>')+
+    '</div>'+
+    (d.notas?'<div style="font-size:12px"><b>Notas de la aprobación:</b> '+esc(d.notas)+'</div>':'')+
+    '<h2>Controles</h2><table><thead><tr><th>#</th><th>Hora</th><th>Analista</th><th>Lote</th><th>Pesos (g)</th><th>Prom.</th><th>pH</th><th>Controles / defectos</th><th>Desvío</th><th>Fotos</th></tr></thead><tbody>'+
+    c.map(fila).join('')+'</tbody></table>'+
+    '<h2>Firmas</h2><div class="firmas">'+(d.firmas||[]).map(bloqueFirma).join('')+
+    (d.aprobada?'':'<div class="firma-box"><div class="firma-slot"><span class="firma-vacia">Pendiente de aprobación</span></div><div class="firma-caption"><b>Aprobado por:</b> —</div></div>')+
+    '</div>'+
+    '<p style="margin-top:18px;font-size:10px;color:#666">Impreso por '+esc(d.impreso?d.impreso.por:'')+' el '+esc(new Date().toLocaleString('es-UY'))+'. '+
+    'Las firmas son electrónicas: quedan registradas con el usuario, la fecha y la hora en el sistema.</p>'+
+    '</body></html>');
+  win.document.close();
+  toast('🖨️ Registro de la orden '+orden);
+}
 function toast(m,e){const t=document.getElementById('toast');t.textContent=m;t.className='toast on'+(e?' err':'');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('on'),3000)}
 </script>
 </body>
