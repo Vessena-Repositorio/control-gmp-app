@@ -15,6 +15,7 @@ import { consultar } from '../db.js';
 import { hayCorreo, enviar } from './correo.js';
 import { supervisoresDe } from './destinatarios.js';
 import { correrUnaVezPorDia, relojLocal, comoDia, ZONA } from './tareas.js';
+import { pendientesLcc } from './avisos-lcc-envases.js';
 
 const RECURSO = 'control-calidad-envases';
 const NOTIFICACION = 'pendientes-aprobacion';
@@ -43,13 +44,15 @@ function esc(s) {
 async function pendientes() {
     const { rows } = await consultar(
         `SELECT c.clave_natural, c.tipo, c.fecha, c.analista, c.envase, c.origen,
-                o.numero_orden AS orden,
+                NULL::text AS orden,
                 ((now() AT TIME ZONE $1)::date - c.fecha) AS dias
          FROM controles c
-         LEFT JOIN ordenes o ON o.id = c.orden_id
          LEFT JOIN envases_aprobaciones a ON a.control_clave = c.clave_natural
-         WHERE c.tipo IN ('semanal', 'quincenal')
-           AND c.raw -> 'mediciones' ->> '_estado' = 'completo'
+         -- Solo los LCC se aprueban (validacion, quincenal y semanal): la
+         -- aprobacion se guarda con clave 'lcc:<id>'.
+         WHERE c.origen = 'lcc' AND c.producto = 'envases'
+           -- Los LCC viejos de la planilla no traen _estado: estaban completos.
+           AND COALESCE(c.raw -> 'mediciones' ->> '_estado', 'completo') = 'completo'
            AND c.eliminado_en IS NULL
            -- La aprobacion vive en su tabla, no en el control: el Apps Script
            -- descarta lo que se le escriba en mediciones.
@@ -171,11 +174,37 @@ function cuerpo(pendientes, aprobados) {
 
 
 /**
- * Versión corta, para quien sigue el estado sin trabajar la lista. Sin tabla de
- * pendientes a propósito: si quien solo mira recibe la lista operativa, la
- * empieza a hojear, y el día que sí tiene que actuar ya la mira distinto.
+ * El resumen de los lunes para Claudia: lo que Antonella o Gloria tienen
+ * pendiente de aprobar, y los LCC que ya tendrian que haberse hecho (el
+ * recordatorio diario se apago en la 041 y lo atrasado vive aca).
  */
-function cuerpoResumen(pendientes, aprobados) {
+function cuerpoResumen(pendientes, aprobados, atrasados = []) {
+    const celda = 'padding:6px 8px;border:1px solid #e5e7eb';
+    const lista = pendientes.length
+        ? `<h3 style="margin:18px 0 6px;font-size:14px;color:#b45309">Pendientes de Antonella o Gloria</h3>` +
+          `<table style="width:100%;border-collapse:collapse;font-size:12px">` +
+          pendientes.map((f) => `<tr>` +
+            `<td style="${celda}"><b>${esc(f.tipo)}</b></td>` +
+            `<td style="${celda}">${esc(f.envase || '—')}</td>` +
+            `<td style="${celda}">${esc(comoDia(f.fecha))}</td>` +
+            `<td style="${celda}">${esc(f.analista || '—')}</td>` +
+            `<td style="${celda};text-align:right;font-weight:700;color:${Number(f.dias) >= 14 ? '#dc2626' : '#475467'}">${f.dias} d</td>` +
+          `</tr>`).join('') + `</table>`
+        : '';
+    const porHacer = atrasados.length
+        ? `<h3 style="margin:18px 0 6px;font-size:14px;color:#dc2626">LCC que ya corresponde hacer</h3>` +
+          `<table style="width:100%;border-collapse:collapse;font-size:12px">` +
+          atrasados.map((p) => `<tr>` +
+            `<td style="${celda}"><b>${esc(p.tipo)}</b></td>` +
+            `<td style="${celda}">${esc(p.envase)}</td>` +
+            `<td style="${celda}">${p.ultimo ? 'último ' + esc(comoDia(p.ultimo)) : 'sin control previo'}</td>` +
+            `<td style="${celda};text-align:right;font-weight:700;color:#dc2626">${p.ultimo ? (p.atraso > 0 ? `${p.atraso} d atrasado` : 'toca hoy') : '—'}</td>` +
+          `</tr>`).join('') + `</table>`
+        : '';
+    return cuerpoCorto(pendientes, aprobados, lista + porHacer);
+}
+
+function cuerpoCorto(pendientes, aprobados, extra) {
     const masViejo = pendientes.length
         ? pendientes.reduce((a, b) => (Number(a.dias) > Number(b.dias) ? a : b))
         : null;
@@ -209,9 +238,9 @@ function cuerpoResumen(pendientes, aprobados) {
             (masViejo ? dato('Días del más antiguo', masViejo.dias,
                 Number(masViejo.dias) >= 14 ? '#dc2626' : '#475467') : '') +
           `</table>` +
-          quienes + alerta +
+          quienes + alerta + extra +
           `<p style="margin:16px 0 0 0;font-size:11px;color:#666;border-top:1px solid #e5e7eb;padding-top:12px">` +
-            `Resumen de estado. La lista para aprobar le llega a quien aprueba.` +
+            `Resumen de los lunes. Aprueban y firman Antonella o Gloria en la app; aprobado, se imprime.` +
           `</p>` +
         `</div></div></div>`;
 }
@@ -223,49 +252,45 @@ function cuerpoResumen(pendientes, aprobados) {
 export async function revisarPendientesAprobacion({ forzar = false, soloPrevisualizar = false } = {}) {
     if (!hayCorreo) return { estado: 'sin correo configurado' };
 
+    // Con la planilla cerrada (040) la aprobacion es de la app: el aviso queda
+    // prendido sin tener que tocar la variable en Coolify.
+    const { rows: corte } = await consultar('SELECT 1 FROM envases_corte');
+    const activa = ACTIVOS || corte.length > 0;
+
     return correrUnaVezPorDia(
         TAREA,
-        { hora: HORA, diaSemana: 1, forzar, activa: ACTIVOS },
+        { hora: HORA, diaSemana: 1, forzar, activa },
         async () => {
             const reloj = await relojLocal();
             const filas = await pendientes();
             const aprobados = await aprobadosRecientes();
             const conteo = await diagnostico();
+            const atrasados = (await pendientesLcc()).flatMap((g) => g.envases.map((p) => ({ ...p, tipo: g.tipo })));
 
-            // Se manda si hay cualquiera de las dos cosas. Un correo semanal que
-            // solo dice que esta todo bien se deja de leer, y despues no se lee
-            // el que importa.
-            if (!filas.length && !aprobados.length) {
-                return { hoy: comoDia(reloj.hoy), conteo, pendientes: 0, aprobados: 0, correos: 0,
-                         detalle: 'nada pendiente ni aprobado esta semana' };
-            }
-
-            // Dos destinatarios con dos necesidades: quien aprueba recibe la
-            // lista para trabajar; quien sigue el estado, solo los numeros.
-            const paraLista = await supervisoresDe(RECURSO, NOTIFICACION);
-            const resumenTodos = await supervisoresDe(RECURSO, 'resumen-aprobaciones');
-            // Nadie recibe los dos: si alguien esta en las dos listas le llega
-            // el operativo, que es el que incluye lo que hay que hacer.
+            // Antonella: la lista para aprobar, solo si hay algo pendiente.
+            // Claudia: el resumen, si hay algo que contar (pendiente, aprobado o atrasado).
+            const paraLista = filas.length ? await supervisoresDe(RECURSO, NOTIFICACION) : [];
+            const hayResumen = filas.length || aprobados.length || atrasados.length;
+            const resumenTodos = hayResumen ? await supervisoresDe(RECURSO, 'resumen-aprobaciones') : [];
             const paraResumen = resumenTodos.filter((d) => !paraLista.includes(d));
 
-            const asuntoLista = filas.length
-                ? `[Calidad] ${filas.length} análisis pendiente${filas.length === 1 ? '' : 's'} de aprobación`
-                : `[Calidad] ${aprobados.length} análisis aprobado${aprobados.length === 1 ? '' : 's'} esta semana`;
-            const asuntoResumen = `[Calidad] Aprobaciones: ${filas.length} pendiente${filas.length === 1 ? '' : 's'}` +
-                `, ${aprobados.length} aprobado${aprobados.length === 1 ? '' : 's'}`;
+            const asuntoLista = `[Calidad] ${filas.length} control${filas.length === 1 ? '' : 'es'} LCC pendiente${filas.length === 1 ? '' : 's'} de aprobación`;
+            const asuntoResumen = `[Calidad] Envases LCC: ${filas.length} pendiente${filas.length === 1 ? '' : 's'} de aprobar` +
+                (atrasados.length ? `, ${atrasados.length} por hacer` : '');
 
             if (soloPrevisualizar) {
                 return {
-                    modo: 'previsualizacion', hoy: comoDia(reloj.hoy), conteo,
+                    modo: 'previsualizacion', hoy: comoDia(reloj.hoy), conteo, activa,
                     pendientes: filas.length, aprobados: aprobados.length, correos: 0,
                     listaOperativa: {
                         asunto: asuntoLista, para: paraLista,
                         esperando: filas.map((f) =>
                             `${f.tipo} · ${f.envase || '—'} · ${comoDia(f.fecha)} · ${f.analista || '—'} · ${f.dias}d`),
-                        aprobados: aprobados.map((f) =>
-                            `${f.tipo} · ${f.envase || '—'} · aprobó ${f.aprobado_por} el ${comoDia(f.aprobado_en)}`),
                     },
-                    resumenDeEstado: { asunto: asuntoResumen, para: paraResumen },
+                    resumenDeEstado: {
+                        asunto: asuntoResumen, para: paraResumen,
+                        porHacer: atrasados.map((p) => `${p.tipo} · ${p.envase} · último ${p.ultimo || '—'}`),
+                    },
                 };
             }
 
@@ -282,15 +307,16 @@ export async function revisarPendientesAprobacion({ forzar = false, soloPrevisua
             if (paraResumen.length) {
                 try {
                     await enviar({ para: paraResumen, asunto: asuntoResumen,
-                                   html: cuerpoResumen(filas, aprobados), texto: asuntoResumen });
+                                   html: cuerpoResumen(filas, aprobados, atrasados), texto: asuntoResumen });
                     enviados++;
                 } catch (err) {
                     // Que falle el resumen no puede llevarse puesto el operativo.
                     console.error('[avisos:envases] resumen fallo:', err.message);
                 }
             }
-            return { conteo, pendientes: filas.length, aprobados: aprobados.length, correos: enviados,
-                     detalle: `${filas.length} pendiente(s), ${aprobados.length} aprobado(s), ${enviados} correo(s)` };
+            return { conteo, pendientes: filas.length, aprobados: aprobados.length, porHacer: atrasados.length,
+                     correos: enviados,
+                     detalle: `${filas.length} pendiente(s), ${aprobados.length} aprobado(s), ${atrasados.length} por hacer, ${enviados} correo(s)` };
         }
     );
 }

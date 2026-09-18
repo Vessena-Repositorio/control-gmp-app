@@ -25,6 +25,7 @@ import { hayCorreo, enviar } from '../lib/correo.js';
 import { supervisoresDe } from '../lib/destinatarios.js';
 import { descargar, aFecha, aTexto, aEnteroSeguro } from '../lib/origen.js';
 import { guardarControl, sincronizarEnvases } from '../sync/sync-envases.js';
+import { firmaDe } from '../lib/firmas.js';
 
 export const rutasEnvasesCaptura = Router();
 
@@ -41,6 +42,17 @@ function fallo(status, mensaje) {
 }
 
 const quien = (req) => req.usuario.nombre || req.usuario.usuario;
+
+/** Firma de la analista: quien envia el LCC completo (migracion 041). */
+async function firmarAnalista(c, req, id) {
+    await c.query(
+        `INSERT INTO envases_lcc_firmas (control_clave, usuario_id, firmado_por, firmado_en)
+         VALUES ($1, $2, $3, now())
+         ON CONFLICT (control_clave) DO UPDATE SET
+            usuario_id = EXCLUDED.usuario_id, firmado_por = EXCLUDED.firmado_por, firmado_en = now()`,
+        [`lcc:${Number(id)}`, req.usuario.id, quien(req)]
+    );
+}
 
 async function registrar(c, req, accion, producto, entidadId, detalles) {
     await c.query(
@@ -233,7 +245,10 @@ rutasEnvasesCaptura.post('/accion/:accion', cargar, async (req, res, next) => {
                     const r = await guardarControl(c, raw, { origen: 'lcc', ordenId: null, envase: aTexto(d.envase), pos: null, producto });
                     if (!r.control) throw fallo(400, 'El control LCC no trae id o fecha de registro');
                     await registrar(c, req, 'lcc_nuevo', producto, raw.id, `${raw.tipo} ${raw.envase} · ${estado}`);
-                    if (estado === 'completo') avisar = raw;
+                    if (estado === 'completo') {
+                        await firmarAnalista(c, req, raw.id);
+                        avisar = raw;
+                    }
                     return { success: true, message: 'Control guardado', emailEnviado: estado === 'completo' };
                 }
                 case 'updateLCC': {
@@ -257,6 +272,7 @@ rutasEnvasesCaptura.post('/accion/:accion', cargar, async (req, res, next) => {
                     const raw = lccRaw(d, med);
                     await guardarControl(c, raw, { origen: 'lcc', ordenId: null, envase: aTexto(d.envase), pos: null, producto });
                     await registrar(c, req, 'lcc_editado', producto, raw.id, `${estadoPrevio} → ${estado}`);
+                    if (estado === 'completo') await firmarAnalista(c, req, raw.id);
                     if (estado === 'completo' && estadoPrevio !== 'completo') avisar = raw;
                     return { success: true, message: 'Control guardado' };
                 }
@@ -287,6 +303,45 @@ rutasEnvasesCaptura.get('/estado', leer, async (_req, res, next) => {
     try {
         const corte = await planillaCerrada();
         res.json({ ok: true, planillaCerrada: Boolean(corte), cerradaEn: corte?.cerrado_en || null });
+    } catch (err) { next(err); }
+});
+
+/**
+ * GET /api/envases-captura/lcc/:id/impresion
+ * El LCC con las dos firmas -analista y aprobadora-, cada una la vigente en su
+ * momento (lib/firmas). Solo aprobado: se carga y firma, se aprueba y firma, y
+ * recien ahi se imprime. Cada impresion queda en envases_actividad.
+ */
+rutasEnvasesCaptura.get('/lcc/:id/impresion', leer, async (req, res, next) => {
+    const clave = `lcc:${Number(req.params.id)}`;
+    try {
+        const { rows } = await consultar(
+            `SELECT c.raw, c.analista, f.usuario_id AS f_uid, f.firmado_por, f.firmado_en,
+                    a.usuario_id AS a_uid, a.aprobado_por, a.aprobado_en
+             FROM controles c
+             LEFT JOIN envases_lcc_firmas f ON f.control_clave = c.clave_natural
+             LEFT JOIN envases_aprobaciones a ON a.control_clave = c.clave_natural
+             WHERE c.clave_natural = $1 AND c.eliminado_en IS NULL`,
+            [clave]
+        );
+        if (!rows.length) return res.status(404).json({ error: 'Control no encontrado' });
+        const r = rows[0];
+        if (!r.aprobado_por) return res.status(409).json({ error: 'El control todavía no está aprobado' });
+        const firmas = [];
+        const fa = r.f_uid ? await firmaDe(r.f_uid, r.firmado_en, r.firmado_por) : null;
+        firmas.push({
+            rol: 'Analista', nombre: r.firmado_por || r.analista || '—', firmadoEn: r.firmado_en || null,
+            sinFirma: !fa, deLaPlanilla: !r.firmado_por, ...(fa || {}),
+        });
+        const fb = r.a_uid ? await firmaDe(r.a_uid, r.aprobado_en, r.aprobado_por) : null;
+        firmas.push({
+            rol: 'Aprobado por', nombre: r.aprobado_por, firmadoEn: r.aprobado_en, sinFirma: !fb, ...(fb || {}),
+        });
+        await enTransaccion((c) => registrar(c, req, 'lcc_impreso', 'envases', req.params.id, `aprobado por ${r.aprobado_por}`));
+        res.json({
+            ok: true, control: r.raw, firmas,
+            impreso: { por: quien(req), en: new Date().toISOString() },
+        });
     } catch (err) { next(err); }
 });
 

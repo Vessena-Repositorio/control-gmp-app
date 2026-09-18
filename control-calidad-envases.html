@@ -1354,7 +1354,7 @@
                     }
                 }
                 setGuardando(false);
-                const msgEstado = estado === 'borrador' ? 'guardado como borrador' : 'guardado y enviado para aprobación';
+                const msgEstado = estado === 'borrador' ? 'guardado como borrador' : 'guardado, firmado y enviado para aprobación';
                 setMensaje({ tipo: 'success', texto: `✓ Control ${tipoControlLCC} ${msgEstado}` });
                 setEditandoLCCId(null);
                 resetFormularios();
@@ -1374,7 +1374,7 @@
             // es la firma del registro y tiene que ser el usuario real.
             const aprobarControl = async (control) => {
                 if (!puedeAprobar) return;
-                if (!confirm(`¿Aprobar el control ${control.tipo} del ${formatearFecha(control.fecha)}?\n\nVa a quedar registrado con tu nombre y la fecha.`)) return;
+                if (!confirm(`¿Aprobar el control ${control.tipo} del ${formatearFecha(control.fecha)}?\n\nQueda firmado con tu nombre y la fecha, y ya se puede imprimir.`)) return;
 
                 setGuardando(true);
                 try {
@@ -1396,13 +1396,87 @@
                         tipo: 'success',
                         texto: d.yaEstaba
                             ? `Ya estaba aprobado por ${d.aprobado_por}`
-                            : `✓ Control aprobado por ${d.aprobado_por}`
+                            : `✓ Control aprobado y firmado por ${d.aprobado_por}. Ya lo podés imprimir.`
                     });
                 } catch (err) {
                     console.error('Error aprobando:', err);
                     setMensaje({ tipo: 'error', texto: `No se pudo registrar la aprobación: ${err.message}` });
                 } finally {
                     setGuardando(false);
+                }
+            };
+
+            // Registro impreso del LCC: la analista cargó y firmó, Antonella o
+            // Gloria aprobaron y firmaron. Solo aprobado; el servidor lo exige y
+            // deja constancia de cada impresión. La ventana se abre antes del
+            // fetch para que el navegador no la bloquee.
+            const imprimirLCC = async (control) => {
+                const w = window.open('', '_blank');
+                if (!w) { alert('El navegador bloqueó la ventana de impresión. Permití ventanas emergentes para esta página.'); return; }
+                w.document.write('<p style="font-family:Arial;padding:20px">Preparando el registro…</p>');
+                try {
+                    const r = await fetch(`/api/envases-captura/lcc/${encodeURIComponent(control.id)}/impresion`, { credentials: 'same-origin' });
+                    const d = await r.json();
+                    if (!r.ok) throw new Error(d.error || `error ${r.status}`);
+                    const c = d.control || control;
+                    const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (x) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[x]));
+                    const spec = SPECS_ACTIVAS[c.envase];
+                    const reg = c.tipo === 'validacion' ? 'REG-SOP-PR-138-A' : c.tipo === 'quincenal' ? 'REG-SOP-PR-138-C' : 'REG-SOP-PR-138-H';
+                    const tipoTxt = c.tipo === 'validacion' ? 'Validación' : c.tipo === 'quincenal' ? 'Control quincenal' : 'Control semanal';
+                    let oos = 0;
+                    const filas = Object.entries(c.mediciones || {}).map(([key, value]) => {
+                        if (key.startsWith('_')) return '';
+                        if (value === '' || value == null || (Array.isArray(value) && value.every(v => v === ''))) return '';
+                        const nombre = key.replace(/^(validacion_|quincenal_|semanal_)/, '').replace(/_/g, ' ')
+                            .replace(/cav(\d)/, 'Cav $1').replace(/\b\w/g, l => l.toUpperCase());
+                        const base = key.replace(/^(validacion_|quincenal_|semanal_)/, '').replace(/_cav\d$/, '');
+                        const sp = spec?.parametros?.[base];
+                        const mEsp = base.match(/^esp_cav\d+_(.+)_b\d+$/);
+                        const min = mEsp ? getEspesorSpec(c.envase, mEsp[1]) : null;
+                        const vals = Array.isArray(value) ? value.filter(v => v !== '') : [value];
+                        const nums = vals.map(v => parseFloat(v)).filter(v => !isNaN(v));
+                        const fuera = sp ? nums.some(v => v < sp.min || v > sp.max) : (min != null ? nums.some(v => v < min) : false);
+                        if (fuera) oos++;
+                        const especif = sp ? `${sp.min} - ${sp.max} ${sp.unidad || ''}` : (min != null ? `≥ ${min.toFixed(2)} mm` : '');
+                        return `<tr${fuera ? ' class="oos"' : ''}><td>${esc(nombre)}</td><td>${esc(vals.join(', '))}</td><td>${esc(especif)}</td>` +
+                            `<td>${fuera ? '<b>OOS</b>' : (especif ? 'Conforme' : '')}</td></tr>`;
+                    }).join('');
+                    const firma = (f) => {
+                        const img = f.imagen ? `<img src="${esc(f.imagen)}"/>`
+                            : `<span class="vacia">${f.deLaPlanilla ? 'Cargado en la planilla anterior, sin firma electrónica' : 'Sin firma registrada'}</span>`;
+                        const cuando = f.firmadoEn ? new Date(f.firmadoEn).toLocaleString('es-UY', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+                        return `<div class="fbox"><div class="fslot">${img}</div><div class="fcap"><b>${esc(f.rol)}:</b> ${esc(f.nombre)}` +
+                            `${f.cargo ? '<br>' + esc(f.cargo) : ''}${cuando ? '<br>' + esc(cuando) : ''}` +
+                            `${f.posterior ? '<br><i>Firma registrada después de este control</i>' : ''}</div></div>`;
+                    };
+                    const dato = (k, v) => `<div><span>${k}</span><b>${esc(v || '—')}</b></div>`;
+                    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${reg} · ${esc(c.envase)} · ${esc(formatearFecha(c.fecha))}</title><style>
+                        body{font-family:Arial,Helvetica,sans-serif;color:#1a202c;padding:24px;font-size:12px}
+                        .cab{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #028090;padding-bottom:8px}
+                        .cab h1{font-size:18px;margin:0;color:#028090}.cab .reg{font-weight:700;font-size:13px;text-align:right}
+                        .datos{display:grid;grid-template-columns:repeat(3,1fr);gap:6px 18px;margin:14px 0}
+                        .datos span{display:block;font-size:10px;color:#718096;text-transform:uppercase}
+                        table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #cbd5e0;padding:4px 6px;text-align:left}
+                        th{background:#edf2f7;font-size:11px}tr.oos td{background:#fff5f5;color:#c53030}
+                        h2{font-size:14px;margin:18px 0 6px;color:#2d3748}
+                        .firmas{margin-top:22px;display:grid;grid-template-columns:1fr 1fr;gap:28px;page-break-inside:avoid}
+                        .fbox{text-align:center}.fslot{border-bottom:1px solid #444;height:70px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:2px}
+                        .fslot img{max-height:65px;max-width:210px;object-fit:contain}.vacia{font-size:10px;color:#999;font-style:italic;align-self:center;padding-bottom:6px}
+                        .fcap{font-size:11px;margin-top:4px}.pie{margin-top:18px;font-size:10px;color:#718096}
+                        @media print{.noprint{display:none}body{padding:0}}</style></head><body>
+                        <div class="noprint" style="margin-bottom:12px"><button onclick="window.print()" style="padding:8px 18px;font-weight:bold">🖨️ Imprimir</button></div>
+                        <div class="cab"><div><h1>Vessena S.A. · Control LCC de envases</h1><div>SOP-PR-138 · ${tipoTxt}</div></div><div class="reg">${reg}</div></div>
+                        <div class="datos">${dato('Envase', (spec?.nombre ? spec.nombre + ' · ' : '') + c.envase)}${dato('Fecha', formatearFecha(c.fecha) + (c.hora ? ' ' + c.hora : ''))}${dato('Analista', c.analista)}
+                        ${dato('Operador', c.operador)}${dato('Turno', c.turno)}${dato('Resultado', oos ? `${oos} parámetro(s) fuera de especificación` : 'Conforme')}</div>
+                        ${c.observaciones ? `<h2>Observaciones</h2><div>${esc(c.observaciones)}</div>` : ''}
+                        <h2>Mediciones</h2><table><thead><tr><th>Parámetro</th><th>Valores</th><th>Especificación</th><th>Estado</th></tr></thead><tbody>${filas}</tbody></table>
+                        <h2>Firmas</h2><div class="firmas">${(d.firmas || []).map(firma).join('')}</div>
+                        <div class="pie">Impreso por ${esc(d.impreso?.por)} el ${esc(new Date(d.impreso?.en || Date.now()).toLocaleString('es-UY'))}</div>
+                        </body></html>`;
+                    w.document.open(); w.document.write(html); w.document.close();
+                } catch (err) {
+                    w.close();
+                    alert(`No se pudo preparar el registro: ${err.message}`);
                 }
             };
 
@@ -3131,7 +3205,7 @@
                                                         onClick={() => registrarControlLCC('completo')}
                                                         disabled={guardando}
                                                         style={{background: '#22543d'}}>
-                                                        {guardando ? '⏳ Guardando...' : (editandoLCCId ? '✓ Guardar cambios y notificar aprobación' : '✓ Guardar y solicitar aprobación')}
+                                                        {guardando ? '⏳ Guardando...' : (editandoLCCId ? '✍️ Guardar cambios, firmar y pedir aprobación' : '✍️ Guardar, firmar y pedir aprobación')}
                                                     </button>
                                                     <button className="btn btn-secondary"
                                                         onClick={() => registrarControlLCC('borrador')}
@@ -3657,11 +3731,22 @@
                                                                         onClick={() => aprobarControl(control)}
                                                                         disabled={guardando}
                                                                         style={{fontSize: '13px', padding: '8px 18px'}}>
-                                                                        {guardando ? '⏳ Registrando...' : '✓ Aprobar este control'}
+                                                                        {guardando ? '⏳ Registrando...' : '✍️ Aprobar y firmar'}
                                                                     </button>
                                                                     <div style={{fontSize: '12px', color: '#718096', marginTop: '6px'}}>
-                                                                        Queda registrado con tu nombre y la fecha.
+                                                                        Revisá las mediciones de abajo. Queda firmado con tu nombre y la fecha; después se puede imprimir.
                                                                     </div>
+                                                                </div>
+                                                            )}
+
+                                                            {esAprobado && (
+                                                                <div style={{marginTop: '12px'}}>
+                                                                    <button
+                                                                        className="btn btn-print"
+                                                                        onClick={() => imprimirLCC(control)}
+                                                                        style={{fontSize: '13px', padding: '8px 18px'}}>
+                                                                        🖨️ Imprimir registro
+                                                                    </button>
                                                                 </div>
                                                             )}
 

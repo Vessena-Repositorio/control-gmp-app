@@ -7,8 +7,9 @@
  * y Claudia (notificacion_supervisores 'control-calidad-envases' /
  * 'recordatorio-lcc'). Los borradores no cuentan como control hecho.
  *
- * Corre solo con la planilla cerrada (envases_corte): mientras tanto lo sigue
- * mandando el activador del Apps Script, y serian dos correos.
+ * Apagado desde el 18/09/2026 (migracion 041): Claudia pidio que los correos
+ * de LCC sean solo la aprobacion (Antonella) y el resumen de los lunes; lo
+ * atrasado va en ese resumen (avisos-envases.js usa pendientesLcc).
  */
 import { consultar } from '../db.js';
 import { hayCorreo, enviar } from './correo.js';
@@ -50,7 +51,7 @@ export async function pendientesLcc() {
 
 export async function revisarRecordatoriosLcc({ forzar = false, soloPrevisualizar = false } = {}) {
     if (!hayCorreo) return { estado: 'sin correo configurado' };
-    return correrUnaVezPorDia('recordatorios_lcc_envases', { hora: 8, forzar, activa: true }, async (reloj) => {
+    return correrUnaVezPorDia('recordatorios_lcc_envases', { hora: 8, forzar, activa: false }, async (reloj) => {
         const { rows: corte } = await consultar('SELECT 1 FROM envases_corte');
         if (!corte.length && !forzar) return { correos: 0, detalle: 'planilla abierta: lo manda el Apps Script' };
         const para = await supervisoresDe('control-calidad-envases', 'recordatorio-lcc');
