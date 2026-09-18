@@ -1,8 +1,8 @@
 /**
  * Aviso de ordenes de envasado sin aprobar (control en proceso).
  *
- * Pedido de Claudia (17/09/2026), junto con la impresion y las firmas: todos
- * los dias a las 8, a quienes aprueban -Antonella, Gloria y Claudia- las
+ * Pedido de Claudia (17/09/2026), junto con la impresion y las firmas: de lunes
+ * a viernes a las 8, a quienes aprueban -Antonella, Gloria y Claudia- las
  * ordenes de dias anteriores que siguen sin aprobar. Las del dia no cuentan: la
  * linea puede seguir envasando y avisarlas seria ruido.
  *
@@ -110,6 +110,11 @@ export async function revisarProcesoPendientes({ forzar = false, soloPrevisualiz
         TAREA,
         { hora: HORA, forzar, activa: ACTIVOS },
         async (reloj) => {
+            // De lunes a viernes (Claudia, 18/09/2026): el fin de semana no se
+            // aprueba, y lo pendiente del viernes vuelve a salir el lunes.
+            if (!forzar && reloj.dia_semana >= 6) {
+                return { correos: 0, detalle: 'fin de semana' };
+            }
             const filas = await ordenesPendientes();
             if (!filas.length) return { ordenes: 0, correos: 0, detalle: 'sin órdenes pendientes' };
 
@@ -134,5 +139,5 @@ export async function revisarProcesoPendientes({ forzar = false, soloPrevisualiz
 }
 
 export function configProceso() {
-    return { activos: ACTIVOS, hora: HORA, frecuencia: 'todos los días', base: BASE };
+    return { activos: ACTIVOS, hora: HORA, frecuencia: 'lunes a viernes', base: BASE };
 }
