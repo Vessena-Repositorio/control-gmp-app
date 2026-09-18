@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { consultar } from '../db.js';
 import { sincronizarSao001 } from '../sync/sync-sao001.js';
 import { exigirTokenSync } from '../lib/auth.js';
+import { parsearCsv } from '../lib/csv.js';
+import { csvDeRegistros } from './sao001-carga.js';
 
 export const rutasSao001 = Router();
 
@@ -24,7 +26,12 @@ rutasSao001.get('/', async (_req, res, next) => {
             );
         }
 
-        res.type('text/csv; charset=utf-8').send(rows[0].csv);
+        // Desde la migracion 039 los resultados se cargan en la app: se suman al
+        // CSV de la planilla con el mismo encabezado, y el dashboard no cambia.
+        const csv = rows[0].csv.replace(/\s+$/, '');
+        const encabezado = parsearCsv(csv.split(/\r?\n/, 1)[0])[0].map((h) => String(h).trim());
+        const nuevas = await csvDeRegistros(encabezado);
+        res.type('text/csv; charset=utf-8').send(nuevas ? `${csv}\n${nuevas}\n` : `${csv}\n`);
     } catch (err) {
         next(err);
     }

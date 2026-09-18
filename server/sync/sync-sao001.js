@@ -36,6 +36,20 @@ export async function sincronizarSao001() {
     const t0 = Date.now();
 
     try {
+        // Con la planilla cerrada (039) los resultados se cargan en la app: no se
+        // baja nada y se registra lo que hay, para que /estado la vea sana.
+        const { rows: corte } = await consultar('SELECT 1 FROM sao001_corte');
+        if (corte.length) {
+            const { rows: n } = await consultar(
+                `SELECT (SELECT count(*)::int FROM sao001_muestras) + (SELECT count(*)::int FROM sao001_registros WHERE NOT anulado) AS muestras`
+            );
+            await consultar(
+                `UPDATE sync_log SET fin_en = now(), estado = 'ok', controles = $2, mediciones = 0 WHERE id = $1`,
+                [logId, n[0].muestras]
+            );
+            return { muestras: n[0].muestras, planillaCerrada: true };
+        }
+
         const url = process.env.ORIGEN_SAO001;
         if (!url) throw new Error('Falta ORIGEN_SAO001 en las variables de entorno.');
 

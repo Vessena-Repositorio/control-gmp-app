@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SAO-001 · Carga de resultados</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💧</text></svg>">
+<style>
+:root{--bg:#f5f7fb;--card:#fff;--s2:#f2f4f7;--border:#e4e7ec;--text:#1a2233;--text2:#475467;--text3:#667085;--pri:#0891b2;--pri-d:#0e7490;--pri-g:rgba(8,145,178,.08);--ok:#12b76a;--warn:#b54708;--warn-g:#fef0c7;--crit:#b42318;--crit-g:#fef3f2;--r:12px;--rs:8px;--f:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;--m:ui-monospace,Consolas,monospace}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:var(--f);font-size:15px}
+.hdr{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--border);padding:10px 16px;display:flex;align-items:center;gap:10px}
+.hdr .ico{width:36px;height:36px;border-radius:10px;background:linear-gradient(140deg,#06b6d4,var(--pri-d));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800}
+.hdr h1{font-size:17px;margin:0}.hdr small{color:var(--text3);font-size:13px}
+.hdr .der{margin-left:auto;display:flex;gap:8px;align-items:center;font-size:14px;color:var(--text2)}
+.hdr a,.hdr button{font-size:13px;border:1px solid var(--border);background:#fff;border-radius:6px;padding:5px 9px;color:var(--text2);text-decoration:none;cursor:pointer}
+.tabs{display:flex;background:#fff;border-bottom:1px solid var(--border);position:sticky;top:57px;z-index:19;overflow-x:auto}
+.tab{flex:1;min-width:120px;padding:12px;text-align:center;font-weight:600;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+.tab.on{color:var(--pri);border-bottom-color:var(--pri);background:var(--pri-g)}
+.badge{background:var(--crit);color:#fff;border-radius:9px;padding:0 6px;font-size:12px;margin-left:4px}
+.wrap{max-width:980px;margin:0 auto;padding:14px 14px 80px}
+.page{display:none}.page.on{display:block}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;margin-bottom:12px;box-shadow:0 2px 10px rgba(16,24,40,.04)}
+.fila{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.muted{color:var(--text3);font-size:13px}
+.aviso{padding:10px 12px;border-radius:var(--rs);font-size:14px;margin-bottom:12px}
+.aviso.warn{background:var(--warn-g);color:#93370d}.aviso.crit{background:var(--crit-g);color:var(--crit)}.aviso.info{background:var(--pri-g);color:var(--pri-d)}
+input,select,textarea{font-family:var(--f);font-size:15px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--rs);background:#fff;color:var(--text)}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--pri);box-shadow:0 0 0 3px var(--pri-g)}
+button.b{padding:10px 16px;border-radius:var(--rs);font-size:15px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:#fff;color:var(--text)}
+button.b.pri{background:var(--pri);border-color:var(--pri);color:#fff}button.b:disabled{opacity:.6;cursor:default}
+.pto{border-left:5px solid var(--border)}
+.pto.guardado{border-left-color:var(--ok)}.pto.oos{border-left-color:var(--crit)}
+.pto-cab{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:10px}
+.pto-cod{font-size:19px;font-weight:700}.pto-desc{font-size:13px;color:var(--text2)}
+.chip{display:inline-block;padding:2px 9px;border-radius:50px;font-size:12px;font-weight:600;margin:2px 4px 2px 0}
+.chip.ok{background:#ecfdf3;color:#027a48}.chip.warn{background:var(--warn-g);color:var(--warn)}.chip.crit{background:var(--crit-g);color:var(--crit)}.chip.info{background:var(--s2);color:var(--text2)}
+.params{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.par label{display:block;font-size:13px;font-weight:600;color:var(--text2);margin-bottom:3px}
+.par input{width:100%;font-family:var(--m);font-size:16px}
+.par .spec{font-size:12px;color:var(--text3);margin-top:2px}
+.par .ev{font-size:12px;font-weight:600;margin-top:3px;min-height:15px}
+.par.ok input{border-color:var(--ok)}.par.warn input{border-color:#f79009}.par.crit input{border-color:var(--crit);background:var(--crit-g)}.par.imp input{border-color:var(--crit);background:#fee4e2}
+.par textarea{width:100%;margin-top:4px;font-size:14px}
+.tabla{width:100%;border-collapse:collapse;font-size:14px}.tabla th,.tabla td{padding:7px 8px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}
+.tabla th{background:var(--s2);font-size:13px;color:var(--text2)}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#101828;color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;display:none;z-index:50;max-width:90vw}
+.toast.on{display:block}.toast.err{background:var(--crit)}
+@media(max-width:600px){.hdr small{display:none}.params{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<div class="hdr"><div class="ico">H₂O</div><div><h1>SAO-001 · Carga de resultados</h1><small>PPQ-H2O-001 · Sistema de agua ablandada y ozonizada</small></div>
+  <div class="der"><span id="quien"></span><a href="dashboard_sao001.html">📊 Dashboard</a><button onclick="salir()">Salir</button></div></div>
+<div class="tabs">
+  <div class="tab on" onclick="verTab(0)">📋 Planilla del día</div>
+  <div class="tab" onclick="verTab(1)">⏳ Pendientes <span class="badge" id="nPend" style="display:none"></span></div>
+  <div class="tab" onclick="verTab(2)">📚 Registros</div>
+  <div class="tab" id="tabCfg" style="display:none" onclick="verTab(3)">⚙️ Configuración</div>
+</div>
+
+<div class="wrap">
+  <div id="avisoPlanilla"></div>
+
+  <!-- PLANILLA DEL DÍA -->
+  <div class="page on" id="p0">
+    <div class="card"><div class="fila">
+      <label class="muted">Fecha de muestreo</label><input type="date" id="fecha" onchange="cargarDia()">
+      <span id="resumenDia" class="muted"></span>
+    </div></div>
+    <div id="dia"><div class="muted">Cargando…</div></div>
+    <div class="card"><div class="fila">
+      <b>➕ Agregar un punto no previsto</b>
+      <select id="extraPunto"></select>
+      <button class="b" onclick="agregarPunto()">Agregar</button>
+    </div><div class="muted" style="margin-top:6px">Para una muestra fuera del plan (por ejemplo TOC o conductividad en otro punto).</div></div>
+  </div>
+
+  <!-- PENDIENTES -->
+  <div class="page" id="p1"><div id="pend"><div class="muted">Cargando…</div></div></div>
+
+  <!-- REGISTROS -->
+  <div class="page" id="p2">
+    <div class="card"><div class="fila"><label class="muted">Desde</label><input type="date" id="regDesde"><label class="muted">hasta</label><input type="date" id="regHasta"><button class="b" onclick="cargarRegistros()">🔄 Ver</button></div></div>
+    <div id="regs"></div>
+  </div>
+
+  <!-- CONFIGURACIÓN -->
+  <div class="page" id="p3"><div id="cfg"></div></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="/api/sao001-carga/especificaciones.js"></script>
+<script>
+const API='/api/sao001-carga';
+// Clave de la carga -> parámetro del dashboard (TOC no tiene especificación)
+const ETIQUETA={ph:'pH',cond:'Conductividad',cloro:'Cloro Total',ozono:'Ozono libre',micro:'Aerobios Totales',dureza:'Dureza Total',toc:null};
+let S={permisos:[],hoy:'',cfg:null,dia:null,extras:[],planillaCerrada:true};
+
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function toast(m,err){const t=document.getElementById('toast');t.textContent=m;t.className='toast on'+(err?' err':'');clearTimeout(t._t);t._t=setTimeout(()=>t.className='toast',4000)}
+function idEnvio(){const b=new Uint8Array(8);crypto.getRandomValues(b);return Date.now().toString(36)+'-'+Array.from(b,x=>x.toString(16).padStart(2,'0')).join('')}
+function dma(f){return f?String(f).slice(8,10)+'/'+String(f).slice(5,7)+'/'+String(f).slice(0,4):''}
+async function api(ruta,op){
+  const r=await fetch(API+ruta,Object.assign({credentials:'same-origin',headers:{'Content-Type':'application/json'}},op||{}));
+  let d=null;try{d=await r.json()}catch(e){}
+  if(r.status===401){location.href='/?volver='+encodeURIComponent(location.pathname);throw new Error('La sesión venció')}
+  if(!r.ok||(d&&d.ok===false))throw new Error((d&&d.error)||('Error '+r.status));
+  return d;
+}
+async function salir(){try{await fetch('/api/auth/logout',{method:'POST',credentials:'same-origin'})}catch(e){}location.href='/'}
+function verTab(n){document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('on',i===n));document.querySelectorAll('.page').forEach((p,i)=>p.classList.toggle('on',i===n));
+  if(n===1)cargarPendientes();if(n===2)cargarRegistros();if(n===3)pintarConfig()}
+const rango=k=>S.cfg.rangos.find(r=>r.parametro===k);
+const puntoCfg=c=>S.cfg.puntos.find(p=>p.codigo===c);
+
+/* Evalúa un valor igual que el dashboard y el servidor: rango físico y especificación */
+function evaluar(punto,clave,valor){
+  const t=String(valor||'').trim().replace(',','.');if(!t)return{status:'vacio'};
+  const p=SAO_SPEC.parseValor(t);const r=rango(clave);
+  if(p.kind!=='num')return{status:'imp',detail:'no es un número'};
+  if(r&&(p.value<r.fis_min||p.value>r.fis_max))return{status:'imp',detail:'imposible: rango físico '+r.fis_min+' a '+r.fis_max+' '+(r.unidad||'')};
+  const spec=ETIQUETA[clave]?(SAO_SPEC.SPECS[punto]||{})[ETIQUETA[clave]]:null;
+  return SAO_SPEC.evaluar(p,spec);
+}
+function specTexto(punto,clave){const spec=ETIQUETA[clave]?(SAO_SPEC.SPECS[punto]||{})[ETIQUETA[clave]]:null;return spec?SAO_SPEC.formatSpec(spec):'sin especificación'}
+const NIVEL={ok:['ok','✓ Conforme'],lod:['ok','✓ No detectable (LOD)'],info:['info','Informativo'],na:['info','—'],pending:['info',''],warn:['warn','⚠️ Alerta'],accion:['warn','⚠️ Nivel de acción'],crit:['crit','⛔ Fuera de especificación'],imp:['crit','✖ '],vacio:['','']};
+
+/* ── Arranque ── */
+(async function(){
+  try{
+    const s=await api('/sesion');S.permisos=s.permisos;S.hoy=s.hoy;S.planillaCerrada=s.planillaCerrada;
+    document.getElementById('quien').textContent=s.nombre;
+    if(S.permisos.includes('administrar'))document.getElementById('tabCfg').style.display='';
+    S.cfg=await api('/config');
+    const f=document.getElementById('fecha');f.value=S.hoy;f.max=S.hoy;
+    document.getElementById('regHasta').value=S.hoy;
+    avisoPlanilla();
+    await cargarDia();cargarPendientes(true);
+  }catch(e){document.getElementById('dia').innerHTML='<div class="aviso crit">No se pudo abrir: '+esc(e.message)+'</div>'}
+})();
+function avisoPlanilla(){
+  document.getElementById('avisoPlanilla').innerHTML=S.planillaCerrada?'':
+    '<div class="aviso warn">⚠️ <b>La planilla de Google todavía está abierta.</b> No cargues el mismo resultado en los dos lados: el dashboard mostraría las dos filas. '+(S.permisos.includes('administrar')?'Cuando empiecen a cargar acá, cerrala en ⚙️ Configuración.':'')+'</div>';
+}
+
+/* ── Planilla del día ── */
+async function cargarDia(){
+  const fecha=document.getElementById('fecha').value||S.hoy;
+  document.getElementById('dia').innerHTML='<div class="muted">Cargando…</div>';
+  try{S.dia=await api('/dia?fecha='+fecha)}catch(e){toast(e.message,true);return}
+  S.extras=[];pintarDia();
+}
+function pintarDia(){
+  const d=S.dia;const cont=document.getElementById('dia');
+  const guardados=new Map();d.registros.filter(r=>!r.segunda_de).forEach(r=>{if(!guardados.has(r.punto))guardados.set(r.punto,[]);guardados.get(r.punto).push(r)});
+  const lista=d.puntos.concat(S.extras.filter(x=>!d.puntos.some(p=>p.codigo===x.codigo)));
+  const hechos=d.puntos.filter(p=>guardados.has(p.codigo)).length;
+  document.getElementById('resumenDia').innerHTML='Fase '+esc(d.fase)+' · <b>'+hechos+' de '+d.puntos.length+'</b> puntos del plan cargados'+(d.dia===7?' · domingo: no hay muestreo previsto':'');
+  const sel=document.getElementById('extraPunto');
+  sel.innerHTML=S.cfg.puntos.filter(p=>p.activo).map(p=>'<option value="'+esc(p.codigo)+'">'+esc(p.codigo)+' — '+esc(p.descripcion||'')+'</option>').join('');
+  if(!lista.length){cont.innerHTML='<div class="card muted">No hay puntos previstos para este día.</div>';return}
+  cont.innerHTML=lista.map(p=>{
+    const ya=guardados.get(p.codigo);
+    if(ya&&!p.nuevo)return tarjetaGuardada(p,ya);
+    return tarjetaCarga(p);
+  }).join('');
+}
+function tarjetaGuardada(p,regs){
+  return regs.map(r=>{
+    const vals=Object.entries(r.valores||{}).map(([k,v])=>{const e=evaluar(r.punto,k,v);const n=NIVEL[e.status]||['info',''];return'<span class="chip '+n[0]+'">'+esc(rango(k)?.nombre||k)+': '+esc(v)+'</span>'}).join('');
+    const micro=r.micro!=null?(()=>{const e=evaluar(r.punto,'micro',r.micro);const n=NIVEL[e.status]||['info',''];return'<span class="chip '+n[0]+'">Micro: '+esc(r.micro)+'</span>'})():(r.micro_esperado?'<span class="chip warn">🧫 Micro pendiente de resultado</span>':'');
+    const seg=r.segunda_pendiente?'<div class="aviso crit" style="margin:8px 0 0">⛔ Fuera de especificación: falta la <b>segunda muestra</b> ('+r.oos.map(k=>esc(rango(k)?.nombre||k)).join(', ')+'). Cargala en ⏳ Pendientes.</div>':'';
+    return '<div class="card pto guardado'+(r.oos.length?' oos':'')+'"><div class="pto-cab"><div><div class="pto-cod">'+esc(p.codigo)+' ✓</div><div class="pto-desc">'+esc(p.descripcion)+' · '+esc(p.sistema)+'</div></div><div class="muted">Guardado por '+esc(r.registrado_por)+'</div></div>'+vals+micro+seg+
+      (r.observaciones?'<div class="muted" style="margin-top:6px">'+esc(r.observaciones)+'</div>':'')+
+      '<div style="margin-top:8px"><button class="b" onclick="S.extras.push({codigo:\''+p.codigo+'\',descripcion:\''+esc(p.descripcion).replace(/'/g,'')+'\',sistema:\''+esc(p.sistema).replace(/'/g,'')+'\',fq:[],micro:false,nuevo:true});pintarDia()">➕ Otra muestra de este punto</button></div></div>';
+  }).join('');
+}
+function tarjetaCarga(p){
+  const params=p.fq.slice();
+  const extra=p.extraParams||[];extra.forEach(k=>{if(!params.includes(k))params.push(k)});
+  const campos=params.map(k=>campoParam(p.codigo,k)).join('');
+  const otros=S.cfg.rangos.filter(r=>r.parametro!=='micro'&&!params.includes(r.parametro));
+  return '<div class="card pto" id="pto-'+esc(p.codigo)+'"><div class="pto-cab"><div><div class="pto-cod">'+esc(p.codigo)+'</div><div class="pto-desc">'+esc(p.descripcion)+' · '+esc(p.sistema)+'</div></div>'+
+    (p.micro?'<span class="chip '+(p.microAtrasado?'crit':'info')+'">🧫 Toca micro'+(p.microAtrasado?' (atrasado)':'')+'</span>':'')+'</div>'+
+    '<div class="params">'+campos+
+    (p.micro||p.nuevo?'<div class="par" id="par-'+p.codigo+'-micro"><label><input type="checkbox" id="mq-'+p.codigo+'" '+(p.micro?'checked':'')+' style="width:auto"> Se tomó muestra de micro</label>'+
+      '<input id="v-'+p.codigo+'-micro" placeholder="Resultado (si ya está)" inputmode="decimal" oninput="revisarCampo(\''+p.codigo+'\',\'micro\')"><div class="spec">'+esc(specTexto(p.codigo,'micro'))+' · dato en ufc/100 mL</div><div class="ev" id="ev-'+p.codigo+'-micro"></div><div id="com-'+p.codigo+'-micro"></div></div>':'')+
+    '</div>'+
+    (otros.length?'<div class="fila" style="margin-top:8px"><select id="add-'+p.codigo+'">'+otros.map(r=>'<option value="'+r.parametro+'">'+esc(r.nombre)+'</option>').join('')+'</select><button class="b" onclick="agregarParam(\''+p.codigo+'\')">+ parámetro</button></div>':'')+
+    '<div style="margin-top:10px"><input id="obs-'+p.codigo+'" placeholder="Observaciones (opcional)" style="width:100%"></div>'+
+    '<div class="fila" style="margin-top:10px"><button class="b pri" id="g-'+p.codigo+'" onclick="guardarPunto(\''+p.codigo+'\')">💾 Guardar '+esc(p.codigo)+'</button><span class="muted" id="msg-'+p.codigo+'"></span></div></div>';
+}
+function campoParam(punto,k,id){
+  id=id||punto;const r=rango(k)||{nombre:k,unidad:''};
+  return '<div class="par" id="par-'+id+'-'+k+'"><label>'+esc(r.nombre)+(r.unidad?' <span class="muted">('+esc(r.unidad)+')</span>':'')+'</label>'+
+    '<input id="v-'+id+'-'+k+'" inputmode="decimal" placeholder="—" oninput="revisarCampo(\''+punto+'\',\''+k+'\',\''+id+'\')">'+
+    '<div class="spec">Especificación: '+esc(specTexto(punto,k))+'</div><div class="ev" id="ev-'+id+'-'+k+'"></div><div id="com-'+id+'-'+k+'"></div></div>';
+}
+function revisarCampo(punto,k,id){
+  id=id||punto;const inp=document.getElementById('v-'+id+'-'+k);const e=evaluar(punto,k,inp.value);
+  const n=NIVEL[e.status]||['',''];
+  document.getElementById('par-'+id+'-'+k).className='par '+(e.status==='imp'?'imp':n[0]);
+  document.getElementById('ev-'+id+'-'+k).innerHTML=esc(n[1]+(e.status==='imp'||e.status==='crit'||e.status==='warn'||e.status==='accion'?(e.detail?' '+e.detail:''):''));
+  const com=document.getElementById('com-'+id+'-'+k);
+  if(e.status==='crit'){
+    if(!document.getElementById('c-'+id+'-'+k))com.innerHTML='<textarea id="c-'+id+'-'+k+'" rows="2" placeholder="Comentario obligatorio del OOS"></textarea>'+(k!=='micro'?'<div class="muted">Al guardar, queda pendiente una segunda muestra de confirmación.</div>':'');
+  }else com.innerHTML='';
+}
+function agregarParam(punto){
+  const k=document.getElementById('add-'+punto).value;
+  const p=S.dia.puntos.find(x=>x.codigo===punto)||S.extras.find(x=>x.codigo===punto);if(!p)return;
+  // se conserva lo ya escrito
+  const antes=leerTarjeta(punto);
+  p.extraParams=(p.extraParams||[]).concat(k);pintarDia();restaurar(punto,antes);
+}
+function leerTarjeta(punto){const o={};document.querySelectorAll('#pto-'+CSS.escape(punto)+' input, #pto-'+CSS.escape(punto)+' textarea').forEach(i=>{o[i.id]=i.type==='checkbox'?i.checked:i.value});return o}
+function restaurar(punto,o){Object.entries(o).forEach(([id,v])=>{const i=document.getElementById(id);if(!i)return;if(i.type==='checkbox')i.checked=v;else i.value=v});
+  document.querySelectorAll('#pto-'+CSS.escape(punto)+' .par input[id^="v-"]').forEach(i=>{const [,pt,k]=i.id.match(/^v-(.+)-([a-z]+)$/)||[];if(pt)revisarCampo(pt,k)});
+  Object.entries(o).forEach(([id,v])=>{if(id.startsWith('c-')){const i=document.getElementById(id);if(i)i.value=v}})}
+function agregarPunto(){
+  const c=document.getElementById('extraPunto').value;const pc=puntoCfg(c);if(!pc)return;
+  if(S.dia.puntos.some(p=>p.codigo===c)&&!S.dia.registros.some(r=>r.punto===c)){toast(c+' ya está en la planilla del día');return}
+  S.extras.push({codigo:c,descripcion:pc.descripcion||'',sistema:pc.sistema||'',fq:[],micro:false,nuevo:true});pintarDia();
+  const el=document.getElementById('pto-'+c);if(el)el.scrollIntoView({behavior:'smooth',block:'center'});
+}
+async function guardarPunto(punto){
+  const card=document.getElementById('pto-'+punto);const valores={},com={};let error='';
+  card.querySelectorAll('input[id^="v-'+punto+'-"]').forEach(i=>{const k=i.id.slice(('v-'+punto+'-').length);if(k==='micro')return;if(i.value.trim()){valores[k]=i.value.trim();const e=evaluar(punto,k,i.value);if(e.status==='imp')error=(rango(k)?.nombre||k)+': '+e.detail}});
+  const mq=document.getElementById('mq-'+punto);const mv=document.getElementById('v-'+punto+'-micro');
+  const micro=mv&&mv.value.trim()?mv.value.trim():'';
+  if(micro){const e=evaluar(punto,'micro',micro);if(e.status==='imp')error='Micro: '+e.detail}
+  card.querySelectorAll('textarea[id^="c-'+punto+'-"]').forEach(t=>{com[t.id.slice(('c-'+punto+'-').length)]=t.value.trim()});
+  if(error){toast('⚠️ '+error,true);return}
+  if(!Object.keys(valores).length&&!(mq&&mq.checked)&&!micro){toast('⚠️ No hay ningún valor para guardar',true);return}
+  const b=document.getElementById('g-'+punto);b.disabled=true;b.textContent='⏳ Guardando…';
+  try{
+    const r=await api('/registros',{method:'POST',body:JSON.stringify({id_envio:idEnvio(),fecha:S.dia.fecha,punto,valores,micro,micro_esperado:!!(mq&&mq.checked)||!!micro,comentarios_oos:com,observaciones:(document.getElementById('obs-'+punto)||{}).value||''})});
+    toast(r.segundaPendiente?'⛔ '+punto+' guardado con OOS: queda pendiente la segunda muestra':'✅ '+punto+' guardado');
+    S.extras=S.extras.filter(x=>x.codigo!==punto);
+    await cargarDia();cargarPendientes(true);
+  }catch(e){toast('⚠️ '+e.message,true);b.disabled=false;b.textContent='💾 Guardar '+punto}
+}
+
+/* ── Pendientes ── */
+async function cargarPendientes(silencioso){
+  let d;try{d=await api('/pendientes')}catch(e){if(!silencioso)toast(e.message,true);return}
+  const n=d.micro.length+d.segundas.length;const b=document.getElementById('nPend');b.textContent=n;b.style.display=n?'':'none';
+  const cont=document.getElementById('pend');
+  let h='';
+  h+='<div class="card"><h3 style="margin:0 0 6px">⛔ Segundas muestras por OOS ('+d.segundas.length+')</h3><div class="muted" style="margin-bottom:8px">Un resultado fisicoquímico dio fuera de especificación: cargá la segunda muestra de confirmación de ese punto.</div>'+
+    (d.segundas.length?d.segundas.map(r=>'<div class="card" style="margin:8px 0" id="seg-'+r.id+'"><b>'+esc(r.punto)+'</b> · muestreo del '+dma(r.fecha)+'<div style="margin:6px 0">'+r.oos.map(k=>'<span class="chip crit">'+esc(rango(k)?.nombre||k)+': '+esc(r.valores[k])+'</span>').join('')+'</div><div class="params">'+r.oos.map(k=>campoParam(r.punto,k,'s'+r.id)).join('')+'</div>'+
+      '<div class="fila" style="margin-top:8px"><button class="b pri" onclick="guardarSegunda('+r.id+',\''+esc(r.punto)+'\')">💾 Guardar segunda muestra</button></div></div>').join(''):'<div class="muted">No hay.</div>')+'</div>';
+  h+='<div class="card"><h3 style="margin:0 0 6px">🧫 Resultados de micro pendientes ('+d.micro.length+')</h3>'+
+    (d.micro.length?'<table class="tabla"><tr><th>Muestreo</th><th>Punto</th><th>Resultado (ufc/100 mL)</th><th></th></tr>'+d.micro.map(r=>'<tr><td>'+dma(r.fecha)+'</td><td><b>'+esc(r.punto)+'</b><div class="muted">'+esc(specTexto(r.punto,'micro'))+'</div></td><td><div class="par" id="par-m'+r.id+'-micro"><input id="v-m'+r.id+'-micro" inputmode="decimal" oninput="revisarMicro('+r.id+',\''+esc(r.punto)+'\')"><div class="ev" id="ev-m'+r.id+'-micro"></div><div id="com-m'+r.id+'-micro"></div></div></td><td><button class="b pri" onclick="guardarMicro('+r.id+',\''+esc(r.punto)+'\')">Guardar</button></td></tr>').join('')+'</table>':'<div class="muted">No hay.</div>')+'</div>';
+  cont.innerHTML=h;
+}
+function revisarMicro(id,punto){
+  const inp=document.getElementById('v-m'+id+'-micro');const e=evaluar(punto,'micro',inp.value);const n=NIVEL[e.status]||['',''];
+  document.getElementById('par-m'+id+'-micro').className='par '+(e.status==='imp'?'imp':n[0]);
+  document.getElementById('ev-m'+id+'-micro').textContent=n[1]+(e.detail&&e.status!=='ok'?' '+e.detail:'');
+  document.getElementById('com-m'+id+'-micro').innerHTML=e.status==='crit'?'<textarea id="c-m'+id+'-micro" rows="2" placeholder="Comentario obligatorio del OOS"></textarea>':'';
+}
+async function guardarMicro(id,punto){
+  const v=document.getElementById('v-m'+id+'-micro').value.trim();if(!v){toast('⚠️ Falta el resultado',true);return}
+  const e=evaluar(punto,'micro',v);if(e.status==='imp'){toast('⚠️ Micro: '+e.detail,true);return}
+  try{await api('/registros/'+id+'/micro',{method:'POST',body:JSON.stringify({valor:v,comentario:(document.getElementById('c-m'+id+'-micro')||{}).value||''})});toast('✅ Micro de '+punto+' guardado');cargarPendientes()}
+  catch(err){toast('⚠️ '+err.message,true)}
+}
+async function guardarSegunda(id,punto){
+  const card=document.getElementById('seg-'+id);const valores={},com={};
+  card.querySelectorAll('input[id^="v-"]').forEach(i=>{const k=i.id.split('-').pop();if(i.value.trim())valores[k]=i.value.trim()});
+  card.querySelectorAll('textarea[id^="c-"]').forEach(t=>{com[t.id.split('-').pop()]=t.value.trim()});
+  try{await api('/registros',{method:'POST',body:JSON.stringify({id_envio:idEnvio(),fecha:S.hoy,punto,valores,comentarios_oos:com,segunda_de:id,observaciones:'Segunda muestra de confirmación'})});toast('✅ Segunda muestra de '+punto+' guardada');cargarPendientes();if(S.dia)cargarDia()}
+  catch(e){toast('⚠️ '+e.message,true)}
+}
+
+/* ── Registros ── */
+async function cargarRegistros(){
+  const desde=document.getElementById('regDesde').value,hasta=document.getElementById('regHasta').value;
+  let d;try{d=await api('/registros?'+(desde?'desde='+desde+'&':'')+(hasta?'hasta='+hasta:''))}catch(e){toast(e.message,true);return}
+  const cont=document.getElementById('regs');
+  if(!d.registros.length){cont.innerHTML='<div class="card muted">No hay registros en ese período.</div>';return}
+  cont.innerHTML='<div class="card" style="overflow-x:auto"><table class="tabla"><tr><th>Fecha</th><th>Punto</th><th>Resultados</th><th>Cargó</th><th></th></tr>'+d.registros.map(r=>{
+    const chips=Object.entries(r.valores||{}).map(([k,v])=>{const e=evaluar(r.punto,k,v);return'<span class="chip '+((NIVEL[e.status]||['info'])[0])+'">'+esc(rango(k)?.nombre||k)+' '+esc(v)+'</span>'}).join('')+
+      (r.micro!=null?'<span class="chip '+((NIVEL[evaluar(r.punto,'micro',r.micro).status]||['info'])[0])+'">Micro '+esc(r.micro)+'</span>':(r.micro_esperado?'<span class="chip warn">Micro pendiente</span>':''));
+    const est=(r.anulado?'<span class="chip crit">ANULADO: '+esc(r.anulado_motivo)+'</span>':'')+(r.segunda_de?'<span class="chip info">2ª muestra</span>':'')+(r.segunda_pendiente?'<span class="chip crit">Falta 2ª muestra</span>':'')+Object.entries(r.confirmacion||{}).map(([k,v])=>'<span class="chip '+(v==='confirmado'?'crit':'ok')+'">'+esc(rango(k)?.nombre||k)+': OOS '+esc(v)+'</span>').join('');
+    const hist=(r.cambios||[]).map(c=>'<div class="muted">'+esc(new Date(c.ts).toLocaleString('es-UY'))+' · '+esc(c.usuario)+' · '+esc(c.campo)+': '+esc(c.antes)+' → '+esc(c.despues)+' ('+esc(c.motivo)+')</div>').join('');
+    return '<tr style="'+(r.anulado?'opacity:.55':'')+'"><td>'+dma(r.fecha)+'</td><td><b>'+esc(r.punto)+'</b></td><td>'+chips+est+hist+'<div id="corr-'+r.id+'"></div></td><td class="muted">'+esc(r.registrado_por)+'</td><td>'+(r.anulado?'':'<button class="b" onclick="formCorregir('+r.id+')">Corregir</button>'+(S.permisos.includes('administrar')?' <button class="b" onclick="anular('+r.id+')">Anular</button>':''))+'</td></tr>';
+  }).join('')+'</table></div>';
+}
+function formCorregir(id){
+  const opciones=S.cfg.rangos.map(r=>'<option value="'+r.parametro+'">'+esc(r.nombre)+'</option>').join('')+'<option value="observaciones">Observaciones</option>';
+  document.getElementById('corr-'+id).innerHTML='<div class="card" style="margin:8px 0;background:var(--s2)"><div class="fila"><select id="cc-'+id+'">'+opciones+'</select><input id="cv-'+id+'" placeholder="Valor correcto"></div><textarea id="cm-'+id+'" rows="2" style="width:100%;margin-top:6px" placeholder="Motivo de la corrección (obligatorio)"></textarea><div class="fila" style="margin-top:6px"><button class="b pri" onclick="corregir('+id+')">Guardar corrección</button><button class="b" onclick="document.getElementById(\'corr-'+id+'\').innerHTML=\'\'">Cancelar</button></div></div>';
+}
+async function corregir(id){
+  try{await api('/registros/'+id+'/corregir',{method:'POST',body:JSON.stringify({campo:document.getElementById('cc-'+id).value,valor:document.getElementById('cv-'+id).value,motivo:document.getElementById('cm-'+id).value})});toast('✅ Corrección guardada');cargarRegistros();cargarPendientes(true)}
+  catch(e){toast('⚠️ '+e.message,true)}
+}
+async function anular(id){
+  const motivo=prompt('Motivo de la anulación (queda registrado; la muestra no se borra):');if(!motivo)return;
+  try{await api('/registros/'+id+'/anular',{method:'POST',body:JSON.stringify({motivo})});toast('Muestra anulada');cargarRegistros();cargarPendientes(true)}
+  catch(e){toast('⚠️ '+e.message,true)}
+}
+
+/* ── Configuración (administradoras) ── */
+function pintarConfig(){
+  const c=S.cfg;const DIAS=['','lunes','martes','miércoles','jueves','viernes','sábado','domingo'];
+  const plan=c.puntos.map(p=>'<tr style="'+(p.activo?'':'opacity:.5')+'"><td><b>'+esc(p.codigo)+'</b><div class="muted">'+esc(p.descripcion||'')+'</div></td><td>'+(p.fq_frecuencia?esc(p.fq_frecuencia)+(p.fq_dia?' ('+DIAS[p.fq_dia]+')':' (lunes a sábado)')+': '+p.fq_parametros.map(k=>esc(rango(k)?.nombre||k)).join(', '):'—')+'</td><td>'+(p.micro_frecuencia?esc(p.micro_frecuencia)+' ('+DIAS[p.micro_dia]+')':'—')+'</td><td>'+(p.activo?'':'inactivo')+'</td></tr>').join('');
+  document.getElementById('cfg').innerHTML=
+    '<div class="card"><h3 style="margin:0 0 8px">Fase del protocolo</h3><div class="fila"><select id="cfgFase">'+[1,2,3].map(f=>'<option'+(String(f)===c.fase?' selected':'')+'>'+f+'</option>').join('')+'</select><button class="b pri" onclick="guardarFase()">Guardar</button><span class="muted">Se guarda en cada muestra (columna Fases).</span></div></div>'+
+    '<div class="card"><h3 style="margin:0 0 8px">Rango físico (lo que se bloquea por imposible)</h3><table class="tabla"><tr><th>Parámetro</th><th>Unidad</th><th>Mínimo</th><th>Máximo</th><th></th></tr>'+c.rangos.map(r=>'<tr><td>'+esc(r.nombre)+(r.fisicoquimico?'':' <span class="muted">(micro)</span>')+'</td><td>'+esc(r.unidad)+'</td><td><input id="rmin-'+r.parametro+'" value="'+r.fis_min+'" style="width:100px"></td><td><input id="rmax-'+r.parametro+'" value="'+r.fis_max+'" style="width:120px"></td><td><button class="b" onclick="guardarRango(\''+r.parametro+'\')">Guardar</button></td></tr>').join('')+'</table><div class="muted" style="margin-top:6px">Las especificaciones (alerta, acción, OOS) son las del dashboard (PPQ-H2O-001 v2.0 y REG-SOP-LCC-095-A v5.0).</div></div>'+
+    '<div class="card"><h3 style="margin:0 0 8px">Plan de muestreo</h3><table class="tabla"><tr><th>Punto</th><th>Fisicoquímicos</th><th>Micro</th><th></th></tr>'+plan+'</table><div class="muted" style="margin-top:6px">Quincenal y mensual se calculan desde el último micro del punto. Para cambiar el plan, pedilo.</div></div>'+
+    (S.planillaCerrada?'<div class="card aviso info">✅ La planilla de Google está cerrada: los resultados se cargan solo acá.</div>':
+     '<div class="card"><h3 style="margin:0 0 8px">Cerrar la planilla de Google</h3><div class="muted" style="margin-bottom:8px">Se hace una sola vez, el día que empiezan a cargar acá: se toma una última copia de la planilla y desde ahí no se vuelve a leer. Lo que se cargue en la hoja después no entra.</div><button class="b pri" onclick="cerrarPlanilla()">Cerrar planilla de Google</button></div>');
+}
+async function guardarFase(){try{await api('/config/fase',{method:'POST',body:JSON.stringify({fase:document.getElementById('cfgFase').value})});S.cfg=await api('/config');toast('✅ Fase guardada')}catch(e){toast('⚠️ '+e.message,true)}}
+async function guardarRango(k){try{await api('/config/rangos/'+k,{method:'POST',body:JSON.stringify({fis_min:document.getElementById('rmin-'+k).value,fis_max:document.getElementById('rmax-'+k).value})});S.cfg=await api('/config');toast('✅ Rango guardado')}catch(e){toast('⚠️ '+e.message,true)}}
+async function cerrarPlanilla(){
+  if(!confirm('¿Cerrar la planilla de Google?\n\nSe toma una última copia y desde ahí los resultados se cargan solo en la app. No se repite.'))return;
+  try{await api('/cerrar-planilla',{method:'POST',body:'{}'});S.planillaCerrada=true;avisoPlanilla();pintarConfig();toast('✅ Planilla cerrada')}catch(e){toast('⚠️ '+e.message,true)}
+}
+</script>
+</body>
+</html>
