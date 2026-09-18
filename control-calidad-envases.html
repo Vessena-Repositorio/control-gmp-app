@@ -779,6 +779,32 @@
             const [nuevoControlLCC, setNuevoControlLCC] = useState({
                 envase: '', fecha: new Date().toISOString().split('T')[0]
             });
+
+            // Período evaluado (semanal y quincenal). Se sugiere desde el día
+            // siguiente al período del último LCC del mismo envase y tipo -o 7/15
+            // días hacia atrás si no hay- hasta la fecha del control; la analista
+            // lo puede corregir.
+            const llevaPeriodo = (tipo) => tipo === 'semanal' || tipo === 'quincenal';
+            const sumarDiasISO = (iso, n) => {
+                const d = new Date(iso + 'T12:00:00');
+                d.setDate(d.getDate() + n);
+                return d.toISOString().split('T')[0];
+            };
+            const periodoSugerido = (tipo, envase, fecha) => {
+                const hasta = fecha || new Date().toISOString().split('T')[0];
+                const previo = controlesLCC
+                    .filter(c => c.tipo === tipo && c.envase === envase && c.id !== editandoLCCId
+                        && (c.mediciones?._estado || 'completo') === 'completo')
+                    .map(c => String(c.periodoHasta || c.fecha || '').slice(0, 10))
+                    .filter(f => f && f < hasta)
+                    .sort().pop();
+                const desde = previo ? sumarDiasISO(previo, 1) : sumarDiasISO(hasta, tipo === 'quincenal' ? -14 : -6);
+                return { periodoDesde: desde, periodoHasta: hasta };
+            };
+            useEffect(() => {
+                if (editandoLCCId || !llevaPeriodo(tipoControlLCC) || !nuevoControlLCC.envase) return;
+                setNuevoControlLCC(prev => ({ ...prev, ...periodoSugerido(tipoControlLCC, prev.envase, prev.fecha) }));
+            }, [tipoControlLCC, nuevoControlLCC.envase]);
             
             // Estados comunes
             const [hora, setHora] = useState('');
@@ -1311,6 +1337,18 @@
                     setMensaje({ tipo: 'warning', texto: 'Complete todos los campos obligatorios (envase y tipo de control)' });
                     return;
                 }
+                // Semanal y quincenal evalúan un período: sin él no se puede enviar.
+                if (estado === 'completo' && llevaPeriodo(tipoControlLCC)) {
+                    const { periodoDesde: pd, periodoHasta: ph } = nuevoControlLCC;
+                    if (!pd || !ph) {
+                        setMensaje({ tipo: 'warning', texto: 'Indicá el período evaluado: desde y hasta.' });
+                        return;
+                    }
+                    if (pd > ph) {
+                        setMensaje({ tipo: 'warning', texto: 'El período evaluado está al revés: "desde" es posterior a "hasta".' });
+                        return;
+                    }
+                }
 
                 // Verificación anti-duplicado (solo cuando es nuevo, no en edición)
                 if (!editandoLCCId && controlesLCC && controlesLCC.length > 0) {
@@ -1480,7 +1518,7 @@
                         <div class="noprint" style="margin-bottom:12px"><button onclick="window.print()" style="padding:8px 18px;font-weight:bold">🖨️ Imprimir</button></div>
                         <div class="cab"><div><h1>Vessena S.A. · Control LCC de envases</h1><div>SOP-PR-138 · ${tipoTxt}</div></div><div class="reg">${reg}</div></div>
                         <div class="datos">${dato('Envase', (spec?.nombre ? spec.nombre + ' · ' : '') + c.envase)}${dato('Fecha', formatearFecha(c.fecha) + (c.hora ? ' ' + c.hora : ''))}${dato('Analista', c.analista)}
-                        ${dato('Operador', c.operador)}${dato('Turno', c.turno)}${dato('Resultado', oos ? `${oos} parámetro(s) fuera de especificación` : 'Conforme')}</div>
+                        ${dato('Período evaluado', (c.periodoDesde || c.periodoHasta) ? `${formatearFecha(c.periodoDesde)} al ${formatearFecha(c.periodoHasta)}` : '')}${dato('Operador', c.operador)}${dato('Turno', c.turno)}${dato('Resultado', oos ? `${oos} parámetro(s) fuera de especificación` : 'Conforme')}</div>
                         ${c.observaciones ? `<h2>Observaciones</h2><div>${esc(c.observaciones)}</div>` : ''}
                         <h2>Mediciones</h2><table><thead><tr><th>Parámetro</th><th>Valores</th><th>Especificación</th><th>Estado</th></tr></thead><tbody>${filas}</tbody></table>
                         <h2>Firmas</h2><div class="firmas">${(d.firmas || []).map(firma).join('')}</div>
@@ -1499,7 +1537,9 @@
                 setTipoControlLCC(control.tipo);
                 setNuevoControlLCC({
                     envase: control.envase,
-                    fecha: control.fecha
+                    fecha: control.fecha,
+                    periodoDesde: control.periodoDesde || '',
+                    periodoHasta: control.periodoHasta || ''
                 });
                 // Rellenar mediciones (sin los metadatos internos)
                 const medLimpias = { ...(control.mediciones || {}) };
@@ -1597,6 +1637,8 @@
                         'Fecha': c.fecha || '',
                         'Hora': c.hora || '',
                         'Tipo': c.tipo || '',
+                        'Período desde': c.periodoDesde || '',
+                        'Período hasta': c.periodoHasta || '',
                         'Envase (código)': c.envase || '',
                         'Envase (nombre)': spec?.nombre || '',
                         'Analista': c.analista || (c.mediciones?._analista) || '',
@@ -2868,6 +2910,25 @@
                                                         <input type="date" value={nuevoControlLCC.fecha}
                                                             onChange={(e) => setNuevoControlLCC({...nuevoControlLCC, fecha: e.target.value})} />
                                                     </div>
+                                                    {llevaPeriodo(tipoControlLCC) && (
+                                                        <>
+                                                            <div className="form-group">
+                                                                <label>Período evaluado · desde *</label>
+                                                                <input type="date" value={nuevoControlLCC.periodoDesde || ''}
+                                                                    max={nuevoControlLCC.periodoHasta || undefined}
+                                                                    onChange={(e) => setNuevoControlLCC({...nuevoControlLCC, periodoDesde: e.target.value})} />
+                                                            </div>
+                                                            <div className="form-group">
+                                                                <label>Período evaluado · hasta *</label>
+                                                                <input type="date" value={nuevoControlLCC.periodoHasta || ''}
+                                                                    min={nuevoControlLCC.periodoDesde || undefined}
+                                                                    onChange={(e) => setNuevoControlLCC({...nuevoControlLCC, periodoHasta: e.target.value})} />
+                                                                <div className="spec-info" style={{fontSize: '11px'}}>
+                                                                    {tipoControlLCC === 'quincenal' ? 'Quincenal: 15 días' : 'Semanal: 7 días'} · sugerido desde el último control
+                                                                </div>
+                                                            </div>
+                                                        </>
+                                                    )}
                                                     <div className="form-group">
                                                         <label>Analista (vos)</label>
                                                         <input type="text" value={usuarioLogueado.nombre}
@@ -3727,6 +3788,9 @@
                                                                 <div className="orden-detail"><strong>Envase:</strong> {spec?.nombre} ({control.envase})</div>
                                                                 <div className="orden-detail"><strong>Fecha:</strong> {formatearFecha(control.fecha)}</div>
                                                                 <div className="orden-detail"><strong>Hora:</strong> {control.hora}</div>
+                                                                {(control.periodoDesde || control.periodoHasta) && (
+                                                                    <div className="orden-detail"><strong>Período evaluado:</strong> {formatearFecha(control.periodoDesde)} al {formatearFecha(control.periodoHasta)}</div>
+                                                                )}
                                                                 {control.analista && (
                                                                     <div className="orden-detail"><strong>Analista:</strong> {control.analista}</div>
                                                                 )}

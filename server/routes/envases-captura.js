@@ -140,7 +140,20 @@ function lccRaw(d, mediciones) {
         id: Number(d.id), tipo: d.tipo, envase: d.envase, fecha: d.fecha, hora: d.hora,
         operador: d.operador || '', turno: d.turno || '', mediciones,
         observaciones: d.observaciones || '', timestamp: d.timestamp, analista: d.analista || '',
+        // Periodo evaluado (semanal y quincenal), AAAA-MM-DD.
+        periodoDesde: fechaISO(d.periodoDesde), periodoHasta: fechaISO(d.periodoHasta),
     };
+}
+
+const fechaISO = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : '');
+
+/** Semanal y quincenal completos llevan periodo evaluado; el borrador todavia no. */
+function validarPeriodo(d, estado) {
+    if (estado !== 'completo' || !['semanal', 'quincenal'].includes(d.tipo)) return;
+    const desde = fechaISO(d.periodoDesde);
+    const hasta = fechaISO(d.periodoHasta);
+    if (!desde || !hasta) throw fallo(400, 'Falta el período evaluado (desde y hasta)');
+    if (desde > hasta) throw fallo(400, 'El período evaluado está al revés: "desde" es posterior a "hasta"');
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -241,6 +254,7 @@ rutasEnvasesCaptura.post('/accion/:accion', cargar, async (req, res, next) => {
                     const estado = med._estado || 'completo';
                     med._estado = estado;
                     if (estado === 'completo') med._aprobado = 'pendiente';
+                    validarPeriodo(d, estado);
                     const raw = lccRaw(d, med);
                     const r = await guardarControl(c, raw, { origen: 'lcc', ordenId: null, envase: aTexto(d.envase), pos: null, producto });
                     if (!r.control) throw fallo(400, 'El control LCC no trae id o fecha de registro');
@@ -269,6 +283,7 @@ rutasEnvasesCaptura.post('/accion/:accion', cargar, async (req, res, next) => {
                         const anul = await c.query('DELETE FROM envases_aprobaciones WHERE control_clave = $1 RETURNING aprobado_por', [clave]);
                         if (anul.rows.length) await registrar(c, req, 'lcc_aprobacion_anulada', producto, d.id, `aprobado antes por ${anul.rows[0].aprobado_por}`);
                     }
+                    validarPeriodo(d, estado);
                     const raw = lccRaw(d, med);
                     await guardarControl(c, raw, { origen: 'lcc', ordenId: null, envase: aTexto(d.envase), pos: null, producto });
                     await registrar(c, req, 'lcc_editado', producto, raw.id, `${estadoPrevio} → ${estado}`);
