@@ -11,7 +11,7 @@ import { esEjecucionDirecta } from '../lib/entrypoint.js';
 import { descargar, aFecha, aTexto, aEnteroSeguro } from '../lib/origen.js';
 
 /** Inserta o actualiza un control y reescribe sus mediciones. */
-async function guardarControl(cliente, ctrl, { origen, ordenId, envase, pos, producto }) {
+export async function guardarControl(cliente, ctrl, { origen, ordenId, envase, pos, producto }) {
     const ts = aFecha(ctrl.timestamp);
     if (!ts) return { control: 0, mediciones: 0 }; // sin timestamp no hay clave natural
 
@@ -99,6 +99,23 @@ export async function sincronizarEnvases() {
     const t0 = Date.now();
 
     try {
+        // Con la planilla cerrada (040) la app escribe en estas mismas tablas:
+        // bajar la hoja pisaria lo cargado. Se registra lo que hay y listo.
+        const { rows: corte } = await consultar('SELECT 1 FROM envases_corte');
+        if (corte.length) {
+            const { rows: n } = await consultar(
+                `SELECT (SELECT count(*)::int FROM ordenes WHERE eliminado_en IS NULL) AS ordenes,
+                        (SELECT count(*)::int FROM controles WHERE eliminado_en IS NULL AND origen = 'orden') AS controles,
+                        (SELECT count(*)::int FROM controles WHERE eliminado_en IS NULL AND origen = 'lcc') AS lcc`
+            );
+            await consultar(
+                `UPDATE sync_log SET fin_en = now(), estado = 'ok', ordenes = $2, controles = $3, lcc = $4, mediciones = 0
+                 WHERE id = $1`,
+                [logId, n[0].ordenes, n[0].controles, n[0].lcc]
+            );
+            return { ...n[0], planillaCerrada: true };
+        }
+
         const url = process.env.ORIGEN_ENVASES;
         if (!url) throw new Error('Falta ORIGEN_ENVASES en las variables de entorno.');
 

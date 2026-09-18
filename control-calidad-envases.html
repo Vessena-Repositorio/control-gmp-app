@@ -533,8 +533,58 @@
         const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby0Idz2-18NsukOhRqqrQrgHCpO7f4gX67kb-5gH0xA1DLxw7t39Yr37_PakYth5srj/exec';
         // =====================================================
 
-        // Helper para llamadas a la API de Google Sheets
+        // Hasta "Cerrar planilla" la app sigue guardando en Google; después, en el
+        // servidor (migración 040). La pantalla no cambia: las mismas acciones
+        // reciben las mismas respuestas.
+        let MODO_SERVIDOR = false;
+        const estadoPlanilla = fetch('/api/envases-captura/estado', { credentials: 'same-origin' })
+            .then(r => r.ok ? r.json() : null)
+            .then(d => { MODO_SERVIDOR = !!(d && d.planillaCerrada); return MODO_SERVIDOR; })
+            .catch(() => false);
+
+        async function apiServidor(action, data, params) {
+            if (action === 'getAll' || action === 'getAllTapas') {
+                const r = await fetch('/api/envases?action=' + action, { credentials: 'same-origin' });
+                if (!r.ok) throw new Error('No se pudieron leer los datos (' + r.status + ')');
+                return r.json();
+            }
+            const q = new URLSearchParams(params || {}).toString();
+            const r = await fetch('/api/envases-captura/accion/' + action + (q ? '?' + q : ''), {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data || {}),
+            });
+            let d = null;
+            try { d = await r.json(); } catch {}
+            if (r.status === 401) { location.href = '/?volver=' + encodeURIComponent(location.pathname); throw new Error('sesión vencida'); }
+            if (!r.ok || (d && d.error)) {
+                // Antes un error del Apps Script pasaba en silencio: el control
+                // quedaba en pantalla pero no en la planilla.
+                const msg = (d && d.error) || ('Error ' + r.status);
+                alert('⚠️ No se guardó en el servidor: ' + msg + '\n\nRevisá la conexión y volvé a intentar.');
+                throw new Error(msg);
+            }
+            return d;
+        }
+
+        async function cerrarPlanillaGoogle() {
+            if (!confirm('¿Cerrar la planilla de Google?\n\nSe toma una última copia de envases y tapas, y desde ahí la app guarda solo en el servidor. No se repite.')) return;
+            try {
+                const r = await fetch('/api/envases-captura/cerrar-planilla', { method: 'POST', credentials: 'same-origin' });
+                const d = await r.json().catch(() => ({}));
+                if (!r.ok) throw new Error(d.error || ('Error ' + r.status));
+                const m = d.marcadasEliminadas || {};
+                alert('✅ Planilla cerrada. Órdenes: ' + d.ordenes + ' · controles: ' + d.controles +
+                    ((m.ordenes || m.controles) ? '\nMarcados como eliminados (ya no estaban en la hoja): ' + m.ordenes + ' órdenes, ' + m.controles + ' controles' : '') +
+                    '\n\nFalta archivar el Apps Script y borrar su activador de recordatorios.');
+                location.reload();
+            } catch (e) { alert('⚠️ ' + e.message); }
+        }
+
+        // Helper para llamadas a la API (Google Sheets o, con la planilla cerrada, el servidor)
         async function apiCall(action, data = null, params = {}) {
+            await estadoPlanilla;
+            if (MODO_SERVIDOR) return apiServidor(action, data, params);
             const url = new URL(GOOGLE_SCRIPT_URL);
             url.searchParams.set('action', action);
             Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
@@ -1619,10 +1669,17 @@
                             )}
                             <div style={{fontSize: '12px'}}>
                                 {configurado 
-                                    ? <span style={{color: '#38a169'}}>● Google Sheets conectado</span>
+                                    ? <span style={{color: '#38a169'}}>{MODO_SERVIDOR ? '● Servidor conectado' : '● Google Sheets conectado'}</span>
                                     : <span style={{color: '#e53e3e'}}>● Solo local</span>
                                 }
                             </div>
+                            {!MODO_SERVIDOR && (usuarioLogueado.permisos || []).includes('administrar') && (
+                                <button className="btn btn-secondary" onClick={cerrarPlanillaGoogle}
+                                    style={{fontSize: '12px', padding: '6px 10px'}}
+                                    title="Una sola vez: la app pasa a guardar en el servidor">
+                                    Cerrar planilla de Google
+                                </button>
+                            )}
                             <div style={{
                                 display: 'flex', alignItems: 'center', gap: '10px',
                                 padding: '6px 14px', borderRadius: '20px', background: '#EDF2F7',

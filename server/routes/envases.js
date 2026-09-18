@@ -38,14 +38,14 @@ rutasEnvases.get('/', async (req, res, next) => {
         const [ordenesRes, controlesRes] = await Promise.all([
             consultar(
                 `SELECT id, raw FROM ordenes
-                 WHERE producto = $1
+                 WHERE producto = $1 AND eliminado_en IS NULL
                  ORDER BY pos NULLS LAST, creado_en NULLS LAST, id`,
                 [producto]
             ),
             consultar(
                 `SELECT orden_id, origen, raw
                  FROM controles
-                 WHERE producto = $1
+                 WHERE producto = $1 AND eliminado_en IS NULL
                  ORDER BY origen, orden_id NULLS LAST, pos NULLS LAST, ts`,
                 [producto]
             ),

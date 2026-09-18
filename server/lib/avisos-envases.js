@@ -50,6 +50,7 @@ async function pendientes() {
          LEFT JOIN envases_aprobaciones a ON a.control_clave = c.clave_natural
          WHERE c.tipo IN ('semanal', 'quincenal')
            AND c.raw -> 'mediciones' ->> '_estado' = 'completo'
+           AND c.eliminado_en IS NULL
            -- La aprobacion vive en su tabla, no en el control: el Apps Script
            -- descarta lo que se le escriba en mediciones.
            AND a.control_clave IS NULL

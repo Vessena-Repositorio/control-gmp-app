@@ -37,6 +37,8 @@ import { revisarReporteFabuloso } from './lib/avisos-fabuloso.js';
 import { revisarProcesoPendientes } from './lib/avisos-proceso.js';
 import { revisarRotulosDelFinde } from './lib/rotulos.js';
 import { revisarResumenAprobaciones } from './lib/resumen-aprobaciones.js';
+import { revisarRecordatoriosLcc } from './lib/avisos-lcc-envases.js';
+import { rutasEnvasesCaptura } from './routes/envases-captura.js';
 
 const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PUERTO = Number(process.env.PORT) || 3000;
@@ -138,6 +140,7 @@ app.use('/api/graneles', rutasGraneles);
 app.use('/api/fabuloso-captura', rutasFabulosoCaptura);
 app.use('/api/control-en-proceso', rutasControlEnProceso);
 app.use('/api/sao001-carga', rutasSao001Carga);
+app.use('/api/envases-captura', rutasEnvasesCaptura);
 app.use('/api/correo', rutasCorreo);
 app.use('/api/estabilidad', rutasEstabilidad);
 app.use('/api/capacitaciones', rutasCapacitaciones);
@@ -251,6 +254,7 @@ function arrancar() {
                 ['proceso:pendientes', revisarProcesoPendientes],
                 ['rotulos:fin-de-semana', revisarRotulosDelFinde],
                 ['aprobaciones:resumen-mensual', revisarResumenAprobaciones],
+                ['envases:recordatorio-lcc', revisarRecordatoriosLcc],
                 ['control-cambios', revisarAvisosControlCambios],
             ];
             const revisarAvisos = () => {
