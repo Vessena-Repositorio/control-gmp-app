@@ -977,7 +977,10 @@ async function imprimirOrden(orden){
   let d;try{d=await api('/ordenes/'+encodeURIComponent(orden)+'/impresion')}catch(e){toast('⚠️ '+e.message,true);return}
   const win=window.open('','_blank');
   if(!win){toast('El navegador bloqueó la ventana. Habilitá las ventanas emergentes.',true);return}
-  const c=d.controles||[];const u=c[c.length-1]||{};
+  const c=d.controles||[];
+  // Cada dato del encabezado sale del último control que lo tenga cargado: los
+  // controles viejos de la planilla no traen granel ni especificación.
+  const u={};c.forEach(x=>{Object.keys(x||{}).forEach(k=>{if(x[k]!==''&&x[k]!=null)u[k]=x[k]})});
   const fila=(x,i)=>{
     const fotos=(x.fotos||x.photoLinks||[]).filter(Boolean);
     const img=fotos.map((f,j)=>String(f).startsWith('/api/')
