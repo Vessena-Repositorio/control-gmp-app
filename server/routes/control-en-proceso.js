@@ -558,6 +558,7 @@ rutasControlEnProceso.get('/ordenes', leer, async (req, res, next) => {
                     max(c.maquina)                                  AS maquina,
                     max(c.presentacion)                             AS presentacion,
                     string_agg(DISTINCT c.analista, ', ')           AS analistas,
+                    bool_or(c.origen = 'app')                  AS de_app,
                     o.aprobada_por, o.aprobada_en, o.notas
              FROM proceso_controles c
              LEFT JOIN proceso_ordenes o ON o.orden = c.orden
@@ -578,6 +579,9 @@ rutasControlEnProceso.get('/ordenes', leer, async (req, res, next) => {
                 desde: o.desde, hasta: o.hasta,
                 lote: o.lote || '', maquina: o.maquina || '', presentacion: o.presentacion || '',
                 analistas: o.analistas || '',
+                // Las ordenes de la planilla vieja nunca tuvieron aprobacion: la pantalla
+                // las muestra aparte para que no se confundan con lo pendiente de verdad.
+                deApp: Boolean(o.de_app),
                 aprobada: Boolean(o.aprobada_por),
                 aprobadaPor: o.aprobada_por || '', aprobadaEn: o.aprobada_en || null,
                 notas: o.notas || '',
