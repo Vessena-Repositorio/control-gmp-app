@@ -565,7 +565,7 @@ window.APP_CONFIG = {
     app.innerHTML = `
       <div class="card">
         <h2>🏷️ Verificación de rótulo</h2>
-        <div class="muted small">El primer control de cada orden manda las fotos de caja y envase a supervisión. <b>Desde las ${state.rotHora || 12}:00, una orden sin OK no acepta más controles.</b></div>
+        <div class="muted small">El primer control de cada orden manda las fotos de caja y envase a supervisión. <b>Desde las ${state.rotHora || 12}:00, una orden sin OK no acepta más controles.</b> Los sábados no se frena nada: lo del sábado se revisa el lunes, con plazo hasta las 12.</div>
       </div>
       ${lista.length ? lista.map(r => {
         const estado = r.estado === 'ok' ? `<span class="chip ok">✅ OK de ${esc(r.revisadoPor)}</span>`

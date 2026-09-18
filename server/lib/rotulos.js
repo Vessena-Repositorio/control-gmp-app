@@ -13,8 +13,13 @@
  *      reproceso si el error es critico, como un vencimiento). La orden sigue
  *      abierta: la analista ve el pedido en la app, sube las fotos corregidas y
  *      vuelve a supervision.
- *   3. Desde las 12:00 (ROTULO_HORA_CORTE) una orden sin OK no acepta mas
- *      controles, y tampoco una de un dia anterior que siga sin OK.
+ *   3. Pasado su plazo (el dia de la orden a las 12, ROTULO_HORA_CORTE) una
+ *      orden sin OK no acepta mas controles.
+ *
+ * Sabados (Claudia, 18/09/2026): la planta trabaja pero supervision no. Ese
+ * dia no se frena ninguna orden ni salen correos en el momento; lo del fin de
+ * semana vence el lunes a las 12 y llega el lunes a las 8 en un solo correo
+ * (revisarRotulosDelFinde). El domingo se trata igual.
  *
  * Las ordenes que ya estaban en curso cuando se instalo esto crean su
  * verificacion con el siguiente control que se cargue.
@@ -22,7 +27,7 @@
 import { consultar, enTransaccion } from '../db.js';
 import { hayCorreo, enviar } from './correo.js';
 import { supervisoresDe } from './destinatarios.js';
-import { ZONA } from './tareas.js';
+import { ZONA, correrUnaVezPorDia } from './tareas.js';
 import { paraCorreo } from './comprimir-foto.js';
 
 export const HORA_CORTE = Number(process.env.ROTULO_HORA_CORTE ?? 12);
@@ -61,20 +66,34 @@ function esc(s) {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /**
+ * Plazo del OK: el dia de la orden a las 12; si la orden empezo sabado o
+ * domingo, el lunes siguiente a las 12. Usa $3 = zona y $4 = hora de corte.
+ */
+const VENCIDA = `(now() AT TIME ZONE $3) >= (
+        ((creado_en AT TIME ZONE $3)::date
+          + CASE EXTRACT(isodow FROM creado_en AT TIME ZONE $3)::int WHEN 6 THEN 2 WHEN 7 THEN 1 ELSE 0 END)
+        + make_interval(hours => $4::int))`;
+/** Hoy es sabado o domingo: no hay supervision. Usa $3 = zona. */
+const FINDE = 'EXTRACT(isodow FROM now() AT TIME ZONE $3)::int >= 6';
+
+async function esFinDeSemana(q = consultar) {
+    const { rows } = await q(`SELECT ${FINDE.replace(/\$3/g, '$1')} AS finde`, [ZONA]);
+    return rows[0].finde;
+}
+
+/**
  * Si la orden no puede recibir mas controles, el motivo; si puede, null.
  * Sin verificacion todavia (primer control) no hay freno.
  */
 export async function frenoDe(c, app, orden) {
     const { rows } = await c.query(
-        `SELECT estado,
-                (creado_en AT TIME ZONE $3)::date < (now() AT TIME ZONE $3)::date AS de_antes,
-                EXTRACT(hour FROM now() AT TIME ZONE $3)::int AS hora
+        `SELECT estado, ${VENCIDA} AS vencida, ${FINDE} AS finde
          FROM rotulo_verificaciones WHERE app = $1 AND orden = $2`,
-        [app, orden, ZONA]
+        [app, orden, ZONA, HORA_CORTE]
     );
     const v = rows[0];
     if (!v || v.estado === 'ok') return null;
-    if (v.hora < HORA_CORTE && !v.de_antes) return null;
+    if (!v.vencida || v.finde) return null;
     return `Falta el segundo control de supervisión (OK de rótulo) de la orden ${orden}. ` +
         `Desde las ${HORA_CORTE}:00 no se pueden cargar más controles de una orden sin ese OK: ` +
         'pedí la aprobación desde la pestaña Rótulos.';
@@ -180,6 +199,9 @@ async function mandar(para, asunto, html, texto, adjuntos) {
 export async function avisarSupervision(id, motivo) {
     const v = await cargar(id);
     if (!v) return;
+    // Sabado y domingo no hay quien lo lea: sale el lunes a las 8, junto con lo
+    // demas del fin de semana (revisarRotulosDelFinde).
+    if (await esFinDeSemana()) return;
     const para = await supervisoresDe('rotulos', 'verificacion');
     const { adjuntos, enlaces } = await adjuntosDe(v);
     const titulos = {
@@ -290,6 +312,9 @@ export async function actuar(app, orden, accion, usuario, datos = {}) {
         }
         if (accion === 'solicitud') {
             if (v.estado === 'ok') throw fallo(409, 'El rótulo ya tiene el OK');
+            if (await esFinDeSemana((s, p) => c.query(s, p))) {
+                throw fallo(409, 'El fin de semana no hay supervisión: la orden no está frenada y se revisa el lunes');
+            }
             if (v.ultimo_pedido && Date.now() - new Date(v.ultimo_pedido).getTime() < ESPERA_RECORDATORIO_MIN * 60000) {
                 throw fallo(429, `Ya se pidió hace menos de ${ESPERA_RECORDATORIO_MIN} minutos`);
             }
@@ -313,8 +338,7 @@ export async function listar(app, dias = 7) {
                                                    'comentario', e.comentario, 'reproceso', e.reproceso)
                                  ORDER BY e.ts)
                  FROM rotulo_eventos e WHERE e.verificacion_id = v.id) AS eventos,
-                EXTRACT(hour FROM now() AT TIME ZONE $3)::int >= $4
-                  OR (v.creado_en AT TIME ZONE $3)::date < (now() AT TIME ZONE $3)::date AS vencida
+                ${VENCIDA.replace(/creado_en/g, 'v.creado_en')} AND NOT ${FINDE} AS vencida
          FROM rotulo_verificaciones v
          WHERE v.app = $1
            AND (v.estado <> 'ok' OR v.actualizado_en >= now() - ($2 || ' days')::interval)
@@ -362,5 +386,55 @@ export function montarRutasRotulo(router, app, { leer, cargar: cargarP, aprobar 
     router.post('/rotulos/:orden/solicitar', cargarP, async (req, res, next) => {
         try { res.json({ ok: true, rotulo: await actuar(app, orden(req), 'solicitud', req.usuario) }); }
         catch (err) { responder(err, res, next); }
+    });
+}
+
+/**
+ * Lunes a las 8: las ordenes del fin de semana que esperan el OK, con sus
+ * fotos, en un solo correo. Tienen plazo hasta las 12 de ese lunes.
+ */
+export async function revisarRotulosDelFinde({ forzar = false, soloPrevisualizar = false } = {}) {
+    if (!hayCorreo) return { estado: 'sin correo configurado' };
+    return correrUnaVezPorDia('rotulos_fin_de_semana', { hora: 8, diaSemana: 1, forzar, activa: true }, async () => {
+        const { rows } = await consultar(
+            `SELECT * FROM rotulo_verificaciones
+             WHERE estado <> 'ok'
+               AND EXTRACT(isodow FROM actualizado_en AT TIME ZONE $1)::int >= 6
+               AND actualizado_en >= now() - interval '4 days'
+             ORDER BY app, creado_en`,
+            [ZONA]
+        );
+        if (!rows.length) return { ordenes: 0, correos: 0, detalle: 'nada del fin de semana' };
+        const para = await supervisoresDe('rotulos', 'verificacion');
+        const asunto = `[Calidad] Rótulos del fin de semana: ${rows.length} orden(es) para revisar antes de las ${HORA_CORTE}`;
+        if (soloPrevisualizar) {
+            return { modo: 'previsualizacion', asunto, para, correos: 0, ordenes: rows.map((v) => `${APPS[v.app].nombre} ${v.orden}`) };
+        }
+        const adjuntos = [];
+        const bloques = [];
+        for (const [i, v] of rows.entries()) {
+            const propios = await adjuntosDe(v);
+            const cids = {};
+            for (const a of propios.adjuntos) {
+                const cid = `${a.cid}_${i}`;
+                adjuntos.push({ ...a, cid, filename: `${v.orden}_${a.filename}` });
+                cids[a.cid] = cid;
+            }
+            const foto = (k, t) => (cids[k]
+                ? `<td style="padding:4px;vertical-align:top;text-align:center"><div style="font-size:12px;color:#475467">${t}</div><img src="cid:${cids[k]}" style="max-width:240px;max-height:240px;border:1px solid #d0d5dd;border-radius:6px"></td>`
+                : `<td style="padding:4px;color:#b42318;font-size:12px">${t}: ${propios.enlaces[k] ? `<a href="${esc(propios.enlaces[k])}">ver en Drive</a>` : 'sin foto'}</td>`);
+            bloques.push(`<div style="border:1px solid #e4e7ec;border-radius:10px;padding:12px;margin:10px 0">
+                <div style="font-size:16px;font-weight:700">${esc(APPS[v.app].nombre)} · Orden ${esc(v.orden)}</div>
+                <div style="font-size:13px;color:#475467;margin:4px 0 8px">Lote <b>${esc(v.lote || '—')}</b>${v.vence ? ` · Vence <b>${esc(v.vence)}</b>` : ''} · ${esc(v.producto || '')} · ${esc(v.analista || '')}${v.estado === 'correccion' ? ' · <b style="color:#b42318">corrección pedida</b>' : ''}</div>
+                <table><tr>${foto('caja', '📦 Caja')}${foto('envase', '🏷️ Envase')}</tr></table>
+                <a href="${BASE}${APPS[v.app].pagina}">Abrir ${esc(APPS[v.app].nombre)} → Rótulos</a></div>`);
+        }
+        const html = `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#101828;max-width:700px">
+            <h2 style="margin:0 0 6px">Rótulos del fin de semana</h2>
+            <p style="font-size:14px;margin:0 0 6px">Órdenes cargadas el sábado o el domingo que esperan el OK de rótulo. <b>Tienen plazo hasta hoy a las ${HORA_CORTE}:00</b>: después, sin OK no aceptan más controles.</p>
+            ${bloques.join('')}</div>`;
+        const texto = `${asunto}\n${rows.map((v) => `- ${APPS[v.app].nombre} orden ${v.orden} (lote ${v.lote || '—'})`).join('\n')}\n`;
+        await mandar(para, asunto, html, texto, adjuntos);
+        return { ordenes: rows.length, correos: 1, detalle: `${rows.length} orden(es) del fin de semana` };
     });
 }
