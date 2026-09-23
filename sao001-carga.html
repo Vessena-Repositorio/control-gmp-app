@@ -203,7 +203,7 @@ function revisarCampo(punto,k,id){
   document.getElementById('ev-'+id+'-'+k).innerHTML=esc(n[1]+(e.status==='imp'||e.status==='crit'||e.status==='warn'||e.status==='accion'?(e.detail?' '+e.detail:''):''));
   const com=document.getElementById('com-'+id+'-'+k);
   if(e.status==='crit'){
-    if(!document.getElementById('c-'+id+'-'+k))com.innerHTML='<textarea id="c-'+id+'-'+k+'" rows="2" placeholder="Comentario obligatorio del OOS"></textarea>'+(k!=='micro'?'<div class="muted">Al guardar, queda pendiente una segunda muestra de confirmación.</div>':'');
+    if(!document.getElementById('c-'+id+'-'+k))com.innerHTML='<textarea id="c-'+id+'-'+k+'" rows="2" placeholder="Comentario obligatorio del OOS"></textarea>'+'<div class="muted">'+(k!=='micro'?'Al guardar, queda pendiente una segunda muestra de confirmación.':'Al guardar, se piden 3 muestreos inmediatos de ese punto.')+'</div>';
   }else com.innerHTML='';
 }
 function agregarParam(punto){
@@ -235,7 +235,9 @@ async function guardarPunto(punto){
   const b=document.getElementById('g-'+punto);b.disabled=true;b.textContent='⏳ Guardando…';
   try{
     const r=await api('/registros',{method:'POST',body:JSON.stringify({id_envio:idEnvio(),fecha:S.dia.fecha,punto,valores,micro,micro_esperado:!!(mq&&mq.checked)||!!micro,comentarios_oos:com,observaciones:(document.getElementById('obs-'+punto)||{}).value||''})});
-    toast(r.segundaPendiente?'⛔ '+punto+' guardado con OOS: queda pendiente la segunda muestra':'✅ '+punto+' guardado');
+    toast(r.pedido&&r.pedido.limpieza?'🧼 '+punto+' volvió a dar alto en micro: se pidió la limpieza del punto'
+      :r.pedido?'🚨 '+punto+': micro fuera de especificación, quedan 3 muestreos inmediatos en Pendientes'
+      :r.segundaPendiente?'⛔ '+punto+' guardado con OOS: queda pendiente la segunda muestra':'✅ '+punto+' guardado');
     S.extras=S.extras.filter(x=>x.codigo!==punto);
     await cargarDia();cargarPendientes(true);
   }catch(e){toast('⚠️ '+e.message,true);b.disabled=false;b.textContent='💾 Guardar '+punto}
@@ -244,9 +246,25 @@ async function guardarPunto(punto){
 /* ── Pendientes ── */
 async function cargarPendientes(silencioso){
   let d;try{d=await api('/pendientes')}catch(e){if(!silencioso)toast(e.message,true);return}
-  const n=d.micro.length+d.segundas.length;const b=document.getElementById('nPend');b.textContent=n;b.style.display=n?'':'none';
+  const seguimientos=d.seguimientos||[],limpiezas=d.limpiezas||[];
+  const n=d.micro.length+d.segundas.length+seguimientos.length+limpiezas.length;const b=document.getElementById('nPend');b.textContent=n;b.style.display=n?'':'none';
   const cont=document.getElementById('pend');
   let h='';
+  // Limpieza: el punto volvió a dar alto en el seguimiento. Va primero porque
+  // frena los muestreos: sin limpiar, volver a muestrear no dice nada nuevo.
+  if(limpiezas.length)h+='<div class="card"><h3 style="margin:0 0 6px">🧼 Limpieza inmediata del punto ('+limpiezas.length+')</h3>'+
+    '<div class="muted" style="margin-bottom:8px">El punto volvió a superar el máximo de micro en el seguimiento. Hay que limpiarlo ahora; registrada la limpieza se piden 3 muestreos nuevos.</div>'+
+    limpiezas.map(l=>'<div class="card" style="margin:8px 0" id="lim-'+l.id+'"><b>'+esc(l.punto)+'</b> · volvió a dar <span class="chip crit">'+esc(l.origen_micro||'—')+' ufc/100 mL</span> en el muestreo del '+dma(l.origen_fecha)+
+      '<div style="margin:6px 0"><textarea id="det-'+l.id+'" rows="2" placeholder="Qué limpieza/sanitización se hizo" style="width:100%"></textarea></div>'+
+      '<button class="b pri" onclick="registrarLimpieza('+l.id+',\''+esc(l.punto)+'\')">✅ Registrar limpieza hecha</button></div>').join('')+'</div>';
+  // Los 3 muestreos inmediatos por micro alto.
+  if(seguimientos.length)h+='<div class="card"><h3 style="margin:0 0 6px">🚨 Muestreos inmediatos por micro ('+seguimientos.length+')</h3>'+
+    '<div class="muted" style="margin-bottom:8px">Un punto superó el máximo de micro: se muestrea 3 veces seguidas para ver cómo está. Cargá cada muestreo apenas se toma; el resultado se completa después en "Resultados de micro pendientes".</div>'+
+    seguimientos.map(s=>'<div class="card" style="margin:8px 0" id="sg-'+s.id+'"><b>'+esc(s.punto)+'</b> · muestreo '+s.n+' de 3'+
+      (s.motivo==='limpieza'?' <span class="chip">después de la limpieza</span>':'')+
+      '<div class="muted">Por el '+esc(s.origen_micro||'')+' ufc/100 mL del '+dma(s.origen_fecha)+' · '+esc(specTexto(s.punto,'micro'))+'</div>'+
+      '<div class="par" id="par-sg'+s.id+'-micro" style="margin-top:6px"><input id="v-sg'+s.id+'-micro" inputmode="decimal" placeholder="Resultado (si ya está)" oninput="revisarSeguimiento('+s.id+',\''+esc(s.punto)+'\')"><div class="ev" id="ev-sg'+s.id+'-micro"></div><div id="com-sg'+s.id+'-micro"></div></div>'+
+      '<button class="b pri" style="margin-top:8px" onclick="guardarSeguimiento('+s.id+',\''+esc(s.punto)+'\')">💾 Guardar muestreo</button></div>').join('')+'</div>';
   h+='<div class="card"><h3 style="margin:0 0 6px">⛔ Segundas muestras por OOS ('+d.segundas.length+')</h3><div class="muted" style="margin-bottom:8px">Un resultado fisicoquímico dio fuera de especificación: cargá la segunda muestra de confirmación de ese punto.</div>'+
     (d.segundas.length?d.segundas.map(r=>'<div class="card" style="margin:8px 0" id="seg-'+r.id+'"><b>'+esc(r.punto)+'</b> · muestreo del '+dma(r.fecha)+'<div style="margin:6px 0">'+r.oos.map(k=>'<span class="chip crit">'+esc(rango(k)?.nombre||k)+': '+esc(r.valores[k])+'</span>').join('')+'</div><div class="params">'+r.oos.map(k=>campoParam(r.punto,k,'s'+r.id)).join('')+'</div>'+
       '<div class="fila" style="margin-top:8px"><button class="b pri" onclick="guardarSegunda('+r.id+',\''+esc(r.punto)+'\')">💾 Guardar segunda muestra</button></div></div>').join(''):'<div class="muted">No hay.</div>')+'</div>';
@@ -263,8 +281,35 @@ function revisarMicro(id,punto){
 async function guardarMicro(id,punto){
   const v=document.getElementById('v-m'+id+'-micro').value.trim();if(!v){toast('⚠️ Falta el resultado',true);return}
   const e=evaluar(punto,'micro',v);if(e.status==='imp'){toast('⚠️ Micro: '+e.detail,true);return}
-  try{await api('/registros/'+id+'/micro',{method:'POST',body:JSON.stringify({valor:v,comentario:(document.getElementById('c-m'+id+'-micro')||{}).value||''})});toast('✅ Micro de '+punto+' guardado');cargarPendientes()}
+  try{const r=await api('/registros/'+id+'/micro',{method:'POST',body:JSON.stringify({valor:v,comentario:(document.getElementById('c-m'+id+'-micro')||{}).value||''})});
+    toast(r.pedido&&r.pedido.limpieza?'🧼 '+punto+' volvió a dar alto: se pidió la limpieza del punto'
+      :r.pedido?'🚨 '+punto+' fuera de especificación: quedan 3 muestreos inmediatos en Pendientes'
+      :'✅ Micro de '+punto+' guardado');
+    cargarPendientes()}
   catch(err){toast('⚠️ '+err.message,true)}
+}
+function revisarSeguimiento(id,punto){
+  const inp=document.getElementById('v-sg'+id+'-micro');const e=evaluar(punto,'micro',inp.value);const n=NIVEL[e.status]||['',''];
+  document.getElementById('par-sg'+id+'-micro').className='par '+(e.status==='imp'?'imp':n[0]);
+  document.getElementById('ev-sg'+id+'-micro').textContent=n[1]+(e.detail&&e.status!=='ok'?' '+e.detail:'');
+  document.getElementById('com-sg'+id+'-micro').innerHTML=e.status==='crit'?'<textarea id="c-sg'+id+'-micro" rows="2" placeholder="Comentario obligatorio del OOS"></textarea>':'';
+}
+async function guardarSeguimiento(id,punto){
+  const v=(document.getElementById('v-sg'+id+'-micro')||{}).value||'';
+  if(v.trim()){const e=evaluar(punto,'micro',v);if(e.status==='imp'){toast('⚠️ Micro: '+e.detail,true);return}}
+  const com=(document.getElementById('c-sg'+id+'-micro')||{}).value||'';
+  try{
+    const r=await api('/registros',{method:'POST',body:JSON.stringify({id_envio:idEnvio(),fecha:S.hoy,punto,valores:{},micro:v.trim(),micro_esperado:true,comentarios_oos:{micro:com},seguimiento_id:id,observaciones:'Muestreo inmediato por micro fuera de especificación'})});
+    toast(r.pedido&&r.pedido.limpieza?'🧼 '+punto+' volvió a dar alto: se pidió la limpieza del punto':'✅ Muestreo inmediato de '+punto+' guardado');
+    cargarPendientes();if(S.dia)cargarDia();
+  }catch(e){toast('⚠️ '+e.message,true)}
+}
+async function registrarLimpieza(id,punto){
+  const det=(document.getElementById('det-'+id)||{}).value||'';
+  if(det.trim().length<10){toast('⚠️ Contá qué limpieza se hizo',true);return}
+  try{await api('/limpiezas/'+id+'/hecha',{method:'POST',body:JSON.stringify({detalle:det.trim()})});
+    toast('✅ Limpieza de '+punto+' registrada: quedan 3 muestreos para verificar');cargarPendientes()}
+  catch(e){toast('⚠️ '+e.message,true)}
 }
 async function guardarSegunda(id,punto){
   const card=document.getElementById('seg-'+id);const valores={},com={};

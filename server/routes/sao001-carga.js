@@ -131,6 +131,41 @@ function revisarValor(punto, clave, valor, rango) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   Micro fuera de especificacion: 3 muestreos inmediatos (migracion 044)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const MUESTREOS_SEGUIMIENTO = 3;
+
+/** Pide los 3 muestreos inmediatos de un punto, a partir del registro que dio alto. */
+async function pedirSeguimiento(c, registro, motivo) {
+    for (let n = 1; n <= MUESTREOS_SEGUIMIENTO; n++) {
+        await c.query(
+            `INSERT INTO sao001_seguimientos (punto, origen_id, n, motivo)
+             VALUES ($1, $2, $3, $4) ON CONFLICT (origen_id, n) DO NOTHING`,
+            [registro.punto, registro.id, n, motivo]
+        );
+    }
+    return { seguimientos: MUESTREOS_SEGUIMIENTO };
+}
+
+/**
+ * Un micro por encima del maximo. La primera vez pide los 3 muestreos; si el
+ * que dio alto YA era uno de esos 3, se pide la limpieza del punto y los
+ * muestreos se vuelven a pedir cuando la limpieza quede registrada.
+ */
+async function microFueraDeEspec(c, registro) {
+    if (registro.seguimiento_de) {
+        await c.query(
+            `INSERT INTO sao001_limpiezas (punto, origen_id) VALUES ($1, $2)
+             ON CONFLICT (origen_id) DO NOTHING`,
+            [registro.punto, registro.id]
+        );
+        return { limpieza: true };
+    }
+    return pedirSeguimiento(c, registro, 'micro');
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    Lectura
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -209,16 +244,27 @@ rutasSao001Carga.get('/dia', leer, async (req, res, next) => {
     } catch (err) { next(err); }
 });
 
-/** GET /pendientes — micro sin resultado y segundas muestras por hacer. */
+/** GET /pendientes — micro sin resultado, segundas muestras, muestreos inmediatos y limpiezas. */
 rutasSao001Carga.get('/pendientes', leer, async (_req, res, next) => {
     try {
-        const [{ rows: micro }, { rows: segundas }] = await Promise.all([
+        const [{ rows: micro }, { rows: segundas }, { rows: seguimientos }, { rows: limpiezas }] = await Promise.all([
             consultar(`SELECT id, fecha::text, punto, registrado_por FROM sao001_registros
                        WHERE micro_esperado AND micro IS NULL AND NOT anulado ORDER BY fecha, punto`),
             consultar(`SELECT id, fecha::text, punto, valores, oos, comentarios_oos, registrado_por FROM sao001_registros
                        WHERE segunda_pendiente AND NOT anulado ORDER BY fecha, punto`),
+            consultar(`SELECT s.id, s.punto, s.n, s.motivo, s.creado_en,
+                              r.fecha::text AS origen_fecha, r.micro AS origen_micro
+                       FROM sao001_seguimientos s
+                       JOIN sao001_registros r ON r.id = s.origen_id
+                       WHERE s.registro_id IS NULL AND NOT r.anulado
+                       ORDER BY s.creado_en, s.punto, s.n`),
+            consultar(`SELECT l.id, l.punto, l.solicitada_en,
+                              r.fecha::text AS origen_fecha, r.micro AS origen_micro
+                       FROM sao001_limpiezas l
+                       JOIN sao001_registros r ON r.id = l.origen_id
+                       WHERE l.hecha_en IS NULL ORDER BY l.solicitada_en`),
         ]);
-        res.json({ ok: true, micro, segundas });
+        res.json({ ok: true, micro, segundas, seguimientos, limpiezas });
     } catch (err) { next(err); }
 });
 
@@ -298,6 +344,7 @@ rutasSao001Carga.post('/registros', cargar, async (req, res, next) => {
         if (!Object.keys(valores).length && !microEsperado) throw fallo(400, 'No hay ningún valor para guardar');
 
         const segundaDe = d.segunda_de ? Number(d.segunda_de) : null;
+        const seguimientoId = d.seguimiento_id ? Number(d.seguimiento_id) : null;
         const resultado = await enTransaccion(async (c) => {
             await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['sao001-registro']);
             const prev = await c.query('SELECT * FROM sao001_registros WHERE id_envio = $1', [idEnvio]);
@@ -317,6 +364,19 @@ rutasSao001Carga.post('/registros', cargar, async (req, res, next) => {
                 if (faltan.length) throw fallo(400, `La segunda muestra tiene que traer: ${faltan.map((k) => rangos.get(k)?.nombre || k).join(', ')}`);
             }
 
+            // Muestreo inmediato por micro alto: el punto y la muestra de micro
+            // no se negocian, porque lo que se esta viendo es justamente eso.
+            let seguimiento = null;
+            if (seguimientoId) {
+                const { rows } = await c.query(
+                    'SELECT * FROM sao001_seguimientos WHERE id = $1 FOR UPDATE', [seguimientoId]
+                );
+                seguimiento = rows[0];
+                if (!seguimiento || seguimiento.registro_id) throw fallo(409, 'Ese muestreo inmediato ya está cargado');
+                if (seguimiento.punto !== punto.codigo) throw fallo(400, 'El muestreo inmediato tiene que ser del mismo punto');
+                if (!microEsperado) throw fallo(400, 'El muestreo inmediato es de micro: marcá que se tomó la muestra');
+            }
+
             const { rows } = await c.query(
                 `INSERT INTO sao001_registros
                     (fecha, punto, fase, valores, micro, micro_esperado, micro_cargado_por, micro_cargado_en,
@@ -331,6 +391,23 @@ rutasSao001Carga.post('/registros', cargar, async (req, res, next) => {
                     segundaDe, !segundaDe && oos.length > 0,
                     req.usuario.nombre || req.usuario.usuario, req.usuario.id, idEnvio]
             );
+            let pedido = null;
+            if (seguimiento) {
+                await c.query(
+                    `UPDATE sao001_registros SET seguimiento_de = $2, seguimiento_n = $3 WHERE id = $1`,
+                    [rows[0].id, seguimiento.origen_id, seguimiento.n]
+                );
+                await c.query(
+                    'UPDATE sao001_seguimientos SET registro_id = $2, completado_en = now() WHERE id = $1',
+                    [seguimiento.id, rows[0].id]
+                );
+                rows[0].seguimiento_de = seguimiento.origen_id;
+                rows[0].seguimiento_n = seguimiento.n;
+            }
+            // El micro que ya viene cargado tambien dispara el seguimiento.
+            if (micro !== null && 'micro' in comentarios) {
+                pedido = await microFueraDeEspec(c, rows[0]);
+            }
             if (original) {
                 const conf = { ...original.confirmacion };
                 for (const k of original.oos) conf[k] = oos.includes(k) ? 'confirmado' : 'no confirmado';
@@ -339,7 +416,7 @@ rutasSao001Carga.post('/registros', cargar, async (req, res, next) => {
                     [original.id, JSON.stringify(conf)]
                 );
             }
-            return { registro: rows[0], repetido: false };
+            return { registro: rows[0], repetido: false, pedido };
         });
         res.json({ ok: true, ...resultado, segundaPendiente: resultado.registro.segunda_pendiente });
     } catch (err) { responder(err, res, next); }
@@ -369,9 +446,40 @@ rutasSao001Carga.post('/registros/:id/micro', cargar, async (req, res, next) => 
                  WHERE id = $1 RETURNING *`,
                 [reg.id, v.texto, req.usuario.nombre || req.usuario.usuario, JSON.stringify(comentarios)]
             );
-            return act[0];
+            // Es el caso habitual: el micro llega dias despues. Si supera el
+            // maximo, de aca salen los 3 muestreos inmediatos o la limpieza.
+            const pedido = v.status === 'crit' ? await microFueraDeEspec(c, act[0]) : null;
+            return { registro: act[0], pedido };
         });
-        res.json({ ok: true, registro: r });
+        res.json({ ok: true, ...r });
+    } catch (err) { responder(err, res, next); }
+});
+
+/**
+ * POST /limpiezas/:id/hecha  { detalle }
+ * Registrada la limpieza del punto, se vuelven a pedir 3 muestreos inmediatos
+ * para ver como quedo.
+ */
+rutasSao001Carga.post('/limpiezas/:id/hecha', cargar, async (req, res, next) => {
+    try {
+        const detalle = texto(req.body?.detalle, 1000);
+        if (detalle.length < 10) throw fallo(400, 'Contá qué limpieza se hizo (al menos 10 caracteres)');
+        const r = await enTransaccion(async (c) => {
+            const { rows } = await c.query('SELECT * FROM sao001_limpiezas WHERE id = $1 FOR UPDATE', [req.params.id]);
+            const limpieza = rows[0];
+            if (!limpieza) throw fallo(404, 'No existe esa limpieza');
+            if (limpieza.hecha_en) throw fallo(409, 'Esa limpieza ya está registrada');
+            const { rows: act } = await c.query(
+                `UPDATE sao001_limpiezas SET hecha_en = now(), hecha_por = $2, detalle = $3
+                 WHERE id = $1 RETURNING *`,
+                [limpieza.id, req.usuario.nombre || req.usuario.usuario, detalle]
+            );
+            const pedido = await pedirSeguimiento(
+                c, { id: limpieza.origen_id, punto: limpieza.punto }, 'limpieza'
+            );
+            return { limpieza: act[0], pedido };
+        });
+        res.json({ ok: true, ...r });
     } catch (err) { responder(err, res, next); }
 });
 
