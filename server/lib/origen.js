@@ -7,19 +7,72 @@ import { createHash } from 'node:crypto';
 
 const TIMEOUT_MS = 120_000;
 
-/** GET con timeout que devuelve JSON, o lanza con un mensaje util. */
-export async function descargar(url) {
+// Google corta de a ratos: el mismo Apps Script responde 404 o 500 y, unos
+// segundos despues, 200. Sin reintentos una corrida se pierde entera y la
+// replica queda desactualizada hasta la siguiente (15 minutos), que puede
+// fallar igual. Se reintenta con espera creciente; el ultimo error es el que
+// se informa. 429 y 5xx se tratan igual que 404: son del lado de Google.
+const INTENTOS = 3;
+const ESPERAS_MS = [2_000, 6_000];
+
+const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Errores que suelen pasar solos: cortes de Google, red o timeout. */
+function vaDeNuevo(err) {
+    if (err?.name === 'AbortError') return true;
+    const m = String(err?.message || '');
+    return /HTTP (404|408|425|429|5\d\d)\b/.test(m)
+        || /HTML en vez de/.test(m)
+        || /fetch failed|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang up/i.test(m);
+}
+
+/** Corre `hacer` reintentando los fallos pasajeros del origen. */
+async function conReintentos(hacer, url) {
+    let ultimo;
+    for (let intento = 1; intento <= INTENTOS; intento++) {
+        try {
+            return await hacer();
+        } catch (err) {
+            ultimo = err;
+            if (intento === INTENTOS || !vaDeNuevo(err)) break;
+            const espera = ESPERAS_MS[intento - 1] ?? ESPERAS_MS[ESPERAS_MS.length - 1];
+            console.warn(
+                `[origen] intento ${intento}/${INTENTOS} fallo (${err.message}); ` +
+                `reintento en ${espera / 1000}s — ${String(url).split('?')[0]}`
+            );
+            await dormir(espera);
+        }
+    }
+    throw ultimo;
+}
+
+/** Un GET con timeout. Cada intento estrena su propio reloj. */
+async function pedir(url) {
     const ctrl = new AbortController();
     const reloj = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
     try {
         const r = await fetch(url, { redirect: 'follow', signal: ctrl.signal });
         if (!r.ok) throw new Error(`el origen respondio HTTP ${r.status}`);
-        const datos = await r.json();
-        if (datos && datos.error) throw new Error(`el origen respondio error: ${datos.error}`);
-        return datos;
+        return await r.text();
     } finally {
         clearTimeout(reloj);
     }
+}
+
+/** GET con timeout que devuelve JSON, o lanza con un mensaje util. */
+export async function descargar(url) {
+    return conReintentos(async () => {
+        const cuerpo = await pedir(url);
+        let datos;
+        try {
+            datos = JSON.parse(cuerpo);
+        } catch {
+            // Igual que con el CSV: una pagina de error de Google con HTTP 200.
+            throw new Error('el origen devolvio HTML en vez de JSON (posible error del origen)');
+        }
+        if (datos && datos.error) throw new Error(`el origen respondio error: ${datos.error}`);
+        return datos;
+    }, url);
 }
 
 /**
@@ -46,21 +99,15 @@ function canonico(v) {
 
 /** GET con timeout que devuelve texto plano (los origenes que mandan CSV). */
 export async function descargarTexto(url) {
-    const ctrl = new AbortController();
-    const reloj = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
-    try {
-        const r = await fetch(url, { redirect: 'follow', signal: ctrl.signal });
-        if (!r.ok) throw new Error(`el origen respondio HTTP ${r.status}`);
-        const texto = await r.text();
+    return conReintentos(async () => {
+        const texto = await pedir(url);
 
         // Google devuelve una pagina de error con 200 cuando algo falla.
         if (texto.trim().startsWith('<')) {
             throw new Error('el origen devolvio HTML en vez de CSV (posible error del origen)');
         }
         return texto;
-    } finally {
-        clearTimeout(reloj);
-    }
+    }, url);
 }
 
 /**
