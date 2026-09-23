@@ -587,6 +587,97 @@ rutasSao001Carga.post('/config/rangos/:parametro', administrar, async (req, res,
     } catch (err) { responder(err, res, next); }
 });
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   Micros tomados en la planilla cuyo resultado todavia no llego
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Al cerrar la planilla quedan muestras de micro ya tomadas con el resultado
+ * pendiente: la fila existe en la hoja con la columna MICRO vacia, y el
+ * resultado llega dias despues. Si no se traen, no hay donde cargarlo.
+ *
+ * GET /micros-pendientes-planilla?dias=45 — candidatas de la ultima copia:
+ * filas de puntos que llevan micro, con MICRO vacio, que todavia no estan
+ * cargadas en la app. Se listan para que una administradora marque cuales
+ * corresponden: la hoja no distingue "no se tomo" de "falta el resultado".
+ */
+async function candidatasMicroPlanilla(dias) {
+    const { rows } = await consultar('SELECT csv FROM sao001_snapshot ORDER BY descargado_en DESC LIMIT 1');
+    if (!rows.length) return [];
+    const filas = parsearCsv(rows[0].csv);
+    const enc = filas[0].map((h) => String(h).trim());
+    const iFecha = enc.indexOf('Fecha muestreo/envío de muestra');
+    const iMicro = enc.indexOf('MICRO');
+    if (iFecha < 0 || iMicro < 0) return [];
+
+    const cfg = await config();
+    const conMicro = new Map(cfg.puntos.filter((p) => p.micro_frecuencia).map((p) => [p.codigo, p]));
+    const hoy = await hoyLocal();
+    const { rows: yaEstan } = await consultar(
+        `SELECT fecha::text AS fecha, punto FROM sao001_registros
+         WHERE NOT anulado AND fecha >= $1::date - $2::int`, [hoy, dias]
+    );
+    const cargadas = new Set(yaEstan.map((r) => `${r.fecha}|${r.punto}`));
+
+    const vistas = new Set();
+    const salida = [];
+    for (const f of filas.slice(1)) {
+        const punto = String(f[0] || '').trim();
+        const p = conMicro.get(punto);
+        if (!p) continue;
+        const dma = String(f[iFecha] || '').trim();
+        const m = dma.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if (!m) continue;
+        const fecha = `${m[3]}-${m[2]}-${m[1]}`;
+        if (fecha > hoy || diasEntre(fecha, hoy) > dias) continue;
+        // Con algo escrito -incluido 'n/a', que en la hoja es "no corresponde"-
+        // no hay nada pendiente.
+        if (String(f[iMicro] || '').trim()) continue;
+        const clave = `${fecha}|${punto}`;
+        if (cargadas.has(clave) || vistas.has(clave)) continue;
+        vistas.add(clave);
+        salida.push({ fecha, punto, descripcion: p.descripcion || '', dias: diasEntre(fecha, hoy) });
+    }
+    return salida.sort((a, b) => (a.fecha === b.fecha ? a.punto.localeCompare(b.punto) : a.fecha.localeCompare(b.fecha)));
+}
+
+rutasSao001Carga.get('/micros-pendientes-planilla', administrar, async (req, res, next) => {
+    try {
+        const dias = Math.min(Math.max(Number(req.query.dias) || 45, 1), 120);
+        res.json({ ok: true, candidatas: await candidatasMicroPlanilla(dias) });
+    } catch (err) { responder(err, res, next); }
+});
+
+/** POST /micros-pendientes-planilla  { items: [{fecha, punto}] } */
+rutasSao001Carga.post('/micros-pendientes-planilla', administrar, async (req, res, next) => {
+    try {
+        const items = Array.isArray(req.body?.items) ? req.body.items.slice(0, 200) : [];
+        if (!items.length) throw fallo(400, 'No marcaste ninguna muestra');
+        const cfg = await config();
+        const quien = req.usuario.nombre || req.usuario.usuario;
+        const creadas = await enTransaccion(async (c) => {
+            let n = 0;
+            for (const it of items) {
+                const fecha = texto(it?.fecha, 10);
+                const punto = cfg.puntos.find((p) => p.codigo === texto(it?.punto, 20));
+                if (!FECHA.test(fecha) || !punto) continue;
+                const { rowCount } = await c.query(
+                    `INSERT INTO sao001_registros
+                        (fecha, punto, fase, micro_esperado, observaciones, registrado_por, registrado_por_id, id_envio)
+                     VALUES ($1, $2, $3, true, $4, $5, $6, $7)
+                     ON CONFLICT (id_envio) DO NOTHING`,
+                    [fecha, punto.codigo, cfg.fase,
+                        'Muestra tomada según la planilla de Google; falta el resultado de micro',
+                        quien, req.usuario.id, `planilla-${fecha}-${punto.codigo}`]
+                );
+                n += rowCount;
+            }
+            return n;
+        });
+        res.json({ ok: true, creadas });
+    } catch (err) { responder(err, res, next); }
+});
+
 /**
  * POST /cerrar-planilla — una sola vez: ultima copia de la planilla de Google y
  * desde ahi la replica no la vuelve a bajar. Lo cargado en la hoja despues de

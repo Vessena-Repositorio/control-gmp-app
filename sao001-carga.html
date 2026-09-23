@@ -355,11 +355,32 @@ function pintarConfig(){
     '<div class="card"><h3 style="margin:0 0 8px">Fase del protocolo</h3><div class="fila"><select id="cfgFase">'+[1,2,3].map(f=>'<option'+(String(f)===c.fase?' selected':'')+'>'+f+'</option>').join('')+'</select><button class="b pri" onclick="guardarFase()">Guardar</button><span class="muted">Se guarda en cada muestra (columna Fases).</span></div></div>'+
     '<div class="card"><h3 style="margin:0 0 8px">Rango físico (lo que se bloquea por imposible)</h3><table class="tabla"><tr><th>Parámetro</th><th>Unidad</th><th>Mínimo</th><th>Máximo</th><th></th></tr>'+c.rangos.map(r=>'<tr><td>'+esc(r.nombre)+(r.fisicoquimico?'':' <span class="muted">(micro)</span>')+'</td><td>'+esc(r.unidad)+'</td><td><input id="rmin-'+r.parametro+'" value="'+r.fis_min+'" style="width:100px"></td><td><input id="rmax-'+r.parametro+'" value="'+r.fis_max+'" style="width:120px"></td><td><button class="b" onclick="guardarRango(\''+r.parametro+'\')">Guardar</button></td></tr>').join('')+'</table><div class="muted" style="margin-top:6px">Las especificaciones (alerta, acción, OOS) son las del dashboard (PPQ-H2O-001 v2.0 y REG-SOP-LCC-095-A v5.0).</div></div>'+
     '<div class="card"><h3 style="margin:0 0 8px">Plan de muestreo</h3><table class="tabla"><tr><th>Punto</th><th>Fisicoquímicos</th><th>Micro</th><th></th></tr>'+plan+'</table><div class="muted" style="margin-top:6px">Quincenal y mensual se calculan desde el último micro del punto. Para cambiar el plan, pedilo.</div></div>'+
+    '<div class="card"><h3 style="margin:0 0 8px">Micros tomados en la planilla, sin resultado</h3><div class="muted" style="margin-bottom:8px">Muestras de micro que figuran en la hoja de Google con el resultado pendiente. Traelas para poder cargar el resultado acá cuando llegue.</div>'+
+    '<button class="b" onclick="buscarMicrosPlanilla()">🔎 Buscar en la planilla</button><div id="microsPlanilla"></div></div>'+
     (S.planillaCerrada?'<div class="card aviso info">✅ La planilla de Google está cerrada: los resultados se cargan solo acá.</div>':
      '<div class="card"><h3 style="margin:0 0 8px">Cerrar la planilla de Google</h3><div class="muted" style="margin-bottom:8px">Se hace una sola vez, el día que empiezan a cargar acá: se toma una última copia de la planilla y desde ahí no se vuelve a leer. Lo que se cargue en la hoja después no entra.</div><button class="b pri" onclick="cerrarPlanilla()">Cerrar planilla de Google</button></div>');
 }
 async function guardarFase(){try{await api('/config/fase',{method:'POST',body:JSON.stringify({fase:document.getElementById('cfgFase').value})});S.cfg=await api('/config');toast('✅ Fase guardada')}catch(e){toast('⚠️ '+e.message,true)}}
 async function guardarRango(k){try{await api('/config/rangos/'+k,{method:'POST',body:JSON.stringify({fis_min:document.getElementById('rmin-'+k).value,fis_max:document.getElementById('rmax-'+k).value})});S.cfg=await api('/config');toast('✅ Rango guardado')}catch(e){toast('⚠️ '+e.message,true)}}
+async function buscarMicrosPlanilla(){
+  const cont=document.getElementById('microsPlanilla');cont.innerHTML='<div class="muted" style="margin-top:8px">Buscando…</div>';
+  try{
+    const d=await api('/micros-pendientes-planilla');
+    if(!d.candidatas.length){cont.innerHTML='<div class="muted" style="margin-top:8px">No quedó ninguna muestra de micro sin resultado en la planilla.</div>';return}
+    cont.innerHTML='<div class="muted" style="margin:8px 0">Marcá las que sí se tomaron y están esperando el resultado. La hoja no distingue eso de un día en que no se muestreó.</div>'+
+      '<table class="tabla"><tr><th></th><th>Muestreo</th><th>Punto</th><th>Hace</th></tr>'+
+      d.candidatas.map((c,i)=>'<tr><td><input type="checkbox" id="mp-'+i+'" checked data-f="'+c.fecha+'" data-p="'+esc(c.punto)+'" style="width:auto"></td><td>'+dma(c.fecha)+'</td><td><b>'+esc(c.punto)+'</b><div class="muted">'+esc(c.descripcion)+'</div></td><td>'+c.dias+' día'+(c.dias===1?'':'s')+'</td></tr>').join('')+'</table>'+
+      '<button class="b pri" style="margin-top:8px" onclick="traerMicrosPlanilla()">📥 Traer las marcadas</button>';
+  }catch(e){cont.innerHTML='';toast('⚠️ '+e.message,true)}
+}
+async function traerMicrosPlanilla(){
+  const items=[...document.querySelectorAll('#microsPlanilla input[type=checkbox]:checked')].map(i=>({fecha:i.dataset.f,punto:i.dataset.p}));
+  if(!items.length){toast('⚠️ No marcaste ninguna',true);return}
+  try{const r=await api('/micros-pendientes-planilla',{method:'POST',body:JSON.stringify({items})});
+    toast('✅ '+r.creadas+' muestra(s) traída(s): el resultado se carga en Pendientes');
+    buscarMicrosPlanilla();cargarPendientes(true)}
+  catch(e){toast('⚠️ '+e.message,true)}
+}
 async function cerrarPlanilla(){
   if(!confirm('¿Cerrar la planilla de Google?\n\nSe toma una última copia y desde ahí los resultados se cargan solo en la app. No se repite.'))return;
   try{await api('/cerrar-planilla',{method:'POST',body:'{}'});S.planillaCerrada=true;avisoPlanilla();pintarConfig();toast('✅ Planilla cerrada')}catch(e){toast('⚠️ '+e.message,true)}
