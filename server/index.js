@@ -16,6 +16,7 @@ import { rutasGraneles } from './routes/graneles.js';
 import { rutasFabulosoCaptura } from './routes/fabuloso-captura.js';
 import { rutasControlEnProceso } from './routes/control-en-proceso.js';
 import { rutasSao001Carga } from './routes/sao001-carga.js';
+import { rutasEstandares } from './routes/estandares.js';
 import { hayCompresion } from './lib/comprimir-foto.js';
 import { rutasCorreo } from './routes/correo.js';
 import { rutasEstabilidad } from './routes/estabilidad.js';
@@ -32,6 +33,7 @@ import { revisarAvisosEstabilidad } from './lib/avisos-estabilidad.js';
 import { revisarAvisosControlCambios } from './lib/avisos-control-cambios.js';
 import { revisarRecordatoriosPlan, revisarInduccionesPendientes } from './lib/avisos-capacitaciones.js';
 import { revisarPendientesAprobacion } from './lib/avisos-envases.js';
+import { revisarVencimientosEstandares, revisarResumenEstandares } from './lib/avisos-estandares.js';
 import { revisarGranelesPendientes, revisarGranelesResumen } from './lib/avisos-graneles.js';
 import { revisarReporteFabuloso } from './lib/avisos-fabuloso.js';
 import { revisarProcesoPendientes } from './lib/avisos-proceso.js';
@@ -140,6 +142,7 @@ app.use('/api/graneles', rutasGraneles);
 app.use('/api/fabuloso-captura', rutasFabulosoCaptura);
 app.use('/api/control-en-proceso', rutasControlEnProceso);
 app.use('/api/sao001-carga', rutasSao001Carga);
+app.use('/api/estandares', rutasEstandares);
 app.use('/api/envases-captura', rutasEnvasesCaptura);
 app.use('/api/correo', rutasCorreo);
 app.use('/api/estabilidad', rutasEstabilidad);
@@ -256,6 +259,8 @@ function arrancar() {
                 ['aprobaciones:resumen-mensual', revisarResumenAprobaciones],
                 ['envases:recordatorio-lcc', revisarRecordatoriosLcc],
                 ['control-cambios', revisarAvisosControlCambios],
+                ['estandares:vencimientos', revisarVencimientosEstandares],
+                ['estandares:resumen', revisarResumenEstandares],
             ];
             const revisarAvisos = () => {
                 // Cada una falla por separado: que una se caiga no puede dejar

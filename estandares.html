@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gestión de Estándares · Vessena</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧪</text></svg>">
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--border:#e3e6ec;--text:#1c2331;--t2:#475467;--t3:#6b7382;
+--pri:#1f5fb0;--pri-d:#164a89;--pri-g:rgba(31,95,176,.08);--ok:#1a7f3f;--ok-g:#e8f5ec;
+--warn:#b8730b;--warn-g:#fff4dc;--crit:#b23636;--crit-g:#fbe9e9;--r:10px;
+--f:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:var(--f);font-size:15px}
+.hdr{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--border);padding:10px 16px;display:flex;align-items:center;gap:10px}
+.hdr .ico{width:36px;height:36px;border-radius:10px;background:linear-gradient(140deg,#2f7ad6,var(--pri-d));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800}
+.hdr h1{font-size:17px;margin:0}.hdr small{color:var(--t3);font-size:13px}
+.hdr .der{margin-left:auto;display:flex;gap:8px;align-items:center;font-size:14px;color:var(--t2)}
+.hdr a,.hdr button{font-size:13px;border:1px solid var(--border);background:#fff;border-radius:6px;padding:5px 9px;color:var(--t2);text-decoration:none;cursor:pointer}
+.tabs{display:flex;background:#fff;border-bottom:1px solid var(--border);position:sticky;top:57px;z-index:19;overflow-x:auto}
+.tab{flex:1;min-width:130px;padding:12px;text-align:center;font-weight:600;color:var(--t3);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+.tab.on{color:var(--pri);border-bottom-color:var(--pri);background:var(--pri-g)}
+.wrap{max-width:1100px;margin:0 auto;padding:14px 14px 80px}
+.page{display:none}.page.on{display:block}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:16px 18px;margin-bottom:12px;box-shadow:0 1px 3px rgba(20,30,50,.06)}
+.card h3{margin:0 0 10px;font-size:15px}
+.fila{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.muted{color:var(--t3);font-size:13px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px}
+.kpi{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;cursor:pointer}
+.kpi .lbl{color:var(--t3);font-size:11px;text-transform:uppercase;letter-spacing:.4px}
+.kpi .val{font-size:25px;font-weight:700;margin-top:2px}
+.kpi.ok .val{color:var(--ok)}.kpi.warn .val{color:var(--warn)}.kpi.crit .val{color:var(--crit)}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:8px 9px;border-bottom:1px solid var(--border);vertical-align:top}
+th{background:#f0f2f6;font-size:12px;text-transform:uppercase;letter-spacing:.3px;color:#34405b}
+tr.click{cursor:pointer}tr.click:hover td{background:#eef3fa}
+.chip{display:inline-block;padding:2px 9px;border-radius:50px;font-size:12px;font-weight:600}
+.chip.ok{background:var(--ok-g);color:#155c2b}.chip.warn{background:var(--warn-g);color:#7a4b0e}
+.chip.crit{background:var(--crit-g);color:#7c2323}.chip.mut{background:#eceef2;color:#5f6a80}
+button.b{padding:9px 15px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:#fff;color:var(--text)}
+button.b.pri{background:var(--pri);border-color:var(--pri);color:#fff}
+button.b.ok{background:var(--ok);border-color:var(--ok);color:#fff}
+button.b.crit{background:var(--crit);border-color:var(--crit);color:#fff}
+button.b:disabled{opacity:.6;cursor:default}
+button.b.sm{padding:5px 10px;font-size:12.5px}
+input,select,textarea{font-family:var(--f);font-size:14px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text);width:100%}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--pri);box-shadow:0 0 0 3px var(--pri-g)}
+label.lb{display:block;font-size:12.5px;font-weight:600;color:var(--t2);margin:10px 0 3px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.aviso{padding:10px 12px;border-radius:8px;font-size:13.5px;margin-bottom:10px}
+.aviso.info{background:var(--pri-g);color:var(--pri-d)}.aviso.warn{background:var(--warn-g);color:#7a4b0e}
+.aviso.crit{background:var(--crit-g);color:#7c2323}.aviso.ok{background:var(--ok-g);color:#155c2b}
+dl.det{display:grid;grid-template-columns:200px 1fr;gap:6px 16px;font-size:13.5px;margin:0}
+dl.det dt{color:var(--t3);font-weight:600}dl.det dd{margin:0}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#101828;color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;display:none;z-index:50;max-width:90vw}
+.toast.on{display:block}.toast.err{background:var(--crit)}
+@media(max-width:700px){.grid2,.grid3{grid-template-columns:1fr}dl.det{grid-template-columns:1fr}.hdr small{display:none}}
+</style>
+</head>
+<body>
+<div class="hdr"><div class="ico">🧪</div><div><h1>Gestión de Estándares</h1><small>SOP-LCC-071 v2.0 · Vessena S.A.</small></div>
+  <div class="der"><span id="quien"></span><button onclick="salir()">Salir</button></div></div>
+<div class="tabs">
+  <div class="tab on" onclick="verTab(0)">📊 Panel</div>
+  <div class="tab" onclick="verTab(1)">🧪 Estándares</div>
+  <div class="tab" onclick="verTab(2)">🔢 Lote interno</div>
+  <div class="tab" onclick="verTab(3)">📋 Auditoría</div>
+  <div class="tab" id="tabCfg" style="display:none" onclick="verTab(4)">⚙️ Configuración</div>
+</div>
+<div class="wrap">
+  <div class="page on" id="p0"><div id="panel"><div class="muted">Cargando…</div></div></div>
+  <div class="page" id="p1"><div id="lista"></div><div id="detalle"></div></div>
+  <div class="page" id="p2"><div id="lotes"></div></div>
+  <div class="page" id="p3"><div id="audit"></div></div>
+  <div class="page" id="p4"><div id="cfg"></div></div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const API='/api/estandares';
+const TIPOS={mp:'Materia prima',granel:'Granel / en proceso',pt:'Producto terminado',certificado:'Certificado (CRS)'};
+const ESTADOS={vigente:'Vigente',proximo_a_vencer:'Próximo a vencer',vencido:'Vencido',
+  fuera_de_stock:'Fuera de stock',alterado:'Alterado',obsoleto:'Obsoleto'};
+const CLASE={vigente:'ok',proximo_a_vencer:'warn',vencido:'crit',fuera_de_stock:'mut',alterado:'crit',obsoleto:'mut'};
+let S={permisos:[],hoy:'',nombre:'',estandares:[],filtro:{q:'',tipo:'',estado:''},abierto:null,historialImportado:false};
+
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function toast(m,err){const t=document.getElementById('toast');t.textContent=m;t.className='toast on'+(err?' err':'');clearTimeout(t._t);t._t=setTimeout(()=>t.className='toast',4500)}
+function dma(f){return f?String(f).slice(8,10)+'/'+String(f).slice(5,7)+'/'+String(f).slice(0,4):'—'}
+function dmaHora(v){if(!v)return'—';const d=new Date(v);if(isNaN(d))return String(v);const p=n=>String(n).padStart(2,'0');
+  return p(d.getDate())+'/'+p(d.getMonth()+1)+'/'+d.getFullYear()+' '+p(d.getHours())+':'+p(d.getMinutes())}
+function hoyISO(){return S.hoy||new Date().toISOString().slice(0,10)}
+function puede(p){return S.permisos.includes(p)}
+async function api(ruta,op){
+  const r=await fetch(API+ruta,Object.assign({credentials:'same-origin',headers:{'Content-Type':'application/json'}},op||{}));
+  if(r.status===401){location.href='/index.html';throw new Error('sesión')}
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok||d.ok===false)throw new Error(d.error||('error '+r.status));
+  return d;
+}
+async function salir(){try{await fetch('/api/auth/logout',{method:'POST',credentials:'same-origin'})}catch(e){}location.href='/'}
+function verTab(n){document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('on',i===n));
+  document.querySelectorAll('.page').forEach((p,i)=>p.classList.toggle('on',i===n));
+  if(n===2)cargarLotes();if(n===3)cargarAudit();if(n===4)pintarConfig();window.scrollTo({top:0})}
+
+/* ── Arranque ── */
+(async function(){
+  try{
+    const s=await api('/sesion');
+    S.permisos=s.permisos;S.hoy=s.hoy;S.nombre=s.nombre;S.historialImportado=s.historialImportado;
+    document.getElementById('quien').textContent=s.nombre;
+    if(puede('administrar'))document.getElementById('tabCfg').style.display='';
+    await cargar();
+  }catch(e){document.getElementById('panel').innerHTML='<div class="aviso crit">No se pudo entrar: '+esc(e.message)+'</div>'}
+})();
+
+async function cargar(){
+  const d=await api('/');
+  S.estandares=d.estandares;S.hoy=d.hoy;
+  pintarPanel();pintarLista();
+  if(S.abierto)abrir(S.abierto,true);
+}
+
+/* ── Panel ── */
+function pintarPanel(){
+  const c=k=>S.estandares.filter(e=>e.estado===k).length;
+  const porVencer=S.estandares.filter(e=>e.estado==='proximo_a_vencer'||e.estado==='vencido')
+    .sort((a,b)=>a.vencimiento<b.vencimiento?-1:1).slice(0,15);
+  document.getElementById('panel').innerHTML=
+    '<div class="kpis">'+
+    kpi('Total en stock',S.estandares.length,'',' ')+
+    kpi('Vigentes',c('vigente'),'ok','vigente')+
+    kpi('Próximos a vencer',c('proximo_a_vencer'),'warn','proximo_a_vencer')+
+    kpi('Vencidos',c('vencido'),'crit','vencido')+
+    kpi('Alterados',c('alterado'),'crit','alterado')+
+    '</div>'+
+    '<div class="card"><h3>Vencidos y próximos a vencer</h3>'+
+    (porVencer.length?tabla(porVencer):'<div class="muted">No hay estándares con vencimiento inminente.</div>')+'</div>';
+}
+function kpi(lbl,val,cls,filtro){
+  return '<div class="kpi '+cls+'" onclick="irA(\''+(filtro||'').trim()+'\')"><div class="lbl">'+lbl+'</div><div class="val">'+val+'</div></div>';
+}
+function irA(estado){S.filtro.estado=estado;verTab(1);pintarLista();}
+function tabla(items){
+  return '<table><thead><tr><th>Código</th><th>Nombre</th><th>Tipo</th><th>Lote int.</th><th>Vence</th><th>Estado</th></tr></thead><tbody>'+
+    items.map(e=>'<tr class="click" onclick="abrir('+e.id+')"><td><b>'+esc(e.codigo)+'</b></td><td>'+esc(e.nombre)+'</td>'+
+      '<td>'+esc(TIPOS[e.tipo]||e.tipo)+'</td><td>'+esc(e.lote_interno||'—')+'</td><td>'+dma(e.vencimiento)+'</td>'+
+      '<td><span class="chip '+(CLASE[e.estado]||'mut')+'">'+esc(ESTADOS[e.estado]||e.estado)+'</span></td></tr>').join('')+
+    '</tbody></table>';
+}
+
+/* ── Listado ── */
+function pintarLista(){
+  const f=S.filtro;
+  const items=S.estandares.filter(e=>{
+    if(f.tipo&&e.tipo!==f.tipo)return false;
+    if(f.estado&&e.estado!==f.estado)return false;
+    if(f.q){const h=(e.codigo+' '+e.nombre+' '+(e.proveedor||'')+' '+(e.lote_proveedor||'')+' '+(e.lote_interno||'')).toLowerCase();
+      if(!h.includes(f.q.toLowerCase()))return false}
+    return true;
+  });
+  document.getElementById('lista').innerHTML=
+    '<div class="card"><div class="fila">'+
+    '<div style="flex:2;min-width:180px"><label class="lb">Buscar</label><input id="fq" value="'+esc(f.q)+'" placeholder="Código, nombre, proveedor, lote…"></div>'+
+    '<div style="flex:1;min-width:150px"><label class="lb">Tipo</label><select id="ft"><option value="">Todos</option>'+
+      Object.entries(TIPOS).map(([k,v])=>'<option value="'+k+'"'+(f.tipo===k?' selected':'')+'>'+v+'</option>').join('')+'</select></div>'+
+    '<div style="flex:1;min-width:150px"><label class="lb">Estado</label><select id="fs"><option value="">Todos</option>'+
+      Object.entries(ESTADOS).map(([k,v])=>'<option value="'+k+'"'+(f.estado===k?' selected':'')+'>'+v+'</option>').join('')+'</select></div>'+
+    (puede('cargar')?'<div style="align-self:flex-end"><button class="b pri" onclick="formNuevo()">➕ Nuevo estándar</button></div>':'')+
+    '</div></div>'+
+    '<div class="card"><h3>Listado de stock · REG-SOP-LCC-071-C ('+items.length+')</h3>'+
+    (items.length?tabla(items):'<div class="muted">Sin resultados.</div>')+'</div>';
+  document.getElementById('fq').oninput=e=>{S.filtro.q=e.target.value;pintarLista();document.getElementById('fq').focus()};
+  document.getElementById('ft').onchange=e=>{S.filtro.tipo=e.target.value;pintarLista()};
+  document.getElementById('fs').onchange=e=>{S.filtro.estado=e.target.value;pintarLista()};
+}
+
+/* ── Alta y edición ── */
+function campos(e){
+  e=e||{};
+  return '<div class="grid3">'+
+    inp('codigo','Código *',e.codigo)+sel('tipo','Tipo *',TIPOS,e.tipo||'mp')+inp('ubicacion','Ubicación',e.ubicacion)+'</div>'+
+    inp('nombre','Nombre *',e.nombre)+
+    '<div class="grid3">'+inp('proveedor','Proveedor',e.proveedor)+inp('lote_proveedor','Lote del proveedor',e.lote_proveedor)+
+      inp('cantidad','Cantidad',e.cantidad,'50 g / 450 mL')+'</div>'+
+    '<div class="grid3">'+inp('pureza','Pureza / potencia',e.pureza)+inp('conservacion','Conservación',e.conservacion)+
+      inp('envases','Envases',e.envases||1,'','number')+'</div>'+
+    '<div class="grid3">'+inp('recepcion','Recepción *',e.recepcion||hoyISO(),'','date')+
+      inp('vencimiento','Vencimiento'+(e.id?' *':''),e.vencimiento,'','date')+
+      inp('reanalisis','Reanálisis',e.reanalisis,'','date')+'</div>'+
+    (e.id?'':'<div class="muted">Si dejás el vencimiento vacío se calcula solo: 6 meses para materia prima, granel y producto terminado; 12 meses para certificado.</div>')+
+    '<div class="grid2">'+inp('coa_ref','Referencia del CoA',e.coa_ref)+inp('msds_ref','Referencia de la hoja de seguridad',e.msds_ref)+'</div>'+
+    '<label class="lb">Observaciones</label><textarea id="f-observaciones" rows="2">'+esc(e.observaciones||'')+'</textarea>';
+}
+function inp(id,lbl,val,ph,tipo){return '<div><label class="lb">'+lbl+'</label><input id="f-'+id+'" type="'+(tipo||'text')+'" value="'+esc(val==null?'':val)+'" placeholder="'+esc(ph||'')+'"></div>'}
+function sel(id,lbl,ops,val){return '<div><label class="lb">'+lbl+'</label><select id="f-'+id+'">'+
+  Object.entries(ops).map(([k,v])=>'<option value="'+k+'"'+(val===k?' selected':'')+'>'+v+'</option>').join('')+'</select></div>'}
+function leer(id){const el=document.getElementById('f-'+id);return el?el.value.trim():''}
+
+function formNuevo(){
+  S.abierto=null;
+  document.getElementById('detalle').innerHTML='<div class="card"><h3>Nuevo estándar</h3>'+campos()+
+    '<label class="lb"><input type="checkbox" id="f-lote" checked style="width:auto"> Emitir lote interno Vessena</label>'+
+    '<div class="fila" style="margin-top:12px"><button class="b pri" onclick="guardarNuevo(this)">Crear estándar</button>'+
+    '<button class="b" onclick="cerrarDetalle()">Cancelar</button></div></div>';
+  document.getElementById('detalle').scrollIntoView({behavior:'smooth'});
+}
+function cuerpoForm(){
+  const o={};['codigo','nombre','tipo','proveedor','lote_proveedor','cantidad','pureza','conservacion',
+    'ubicacion','recepcion','vencimiento','reanalisis','envases','coa_ref','msds_ref','observaciones']
+    .forEach(k=>o[k]=leer(k));
+  return o;
+}
+async function guardarNuevo(btn){
+  const d=cuerpoForm();d.emitir_lote=document.getElementById('f-lote').checked;
+  if(!d.codigo||!d.nombre||!d.recepcion){toast('⚠️ Faltan código, nombre o recepción',true);return}
+  btn.disabled=true;btn.textContent='Guardando…';
+  try{
+    const r=await api('/',{method:'POST',body:JSON.stringify(d)});
+    toast('✅ Estándar creado'+(r.lote?' · lote interno '+r.lote:'')+' · vence '+dma(r.vencimiento));
+    await cargar();abrir(r.id);
+  }catch(e){toast('⚠️ '+e.message,true);btn.disabled=false;btn.textContent='Crear estándar'}
+}
+function formEditar(e){
+  document.getElementById('detalle').innerHTML='<div class="card"><h3>Editar '+esc(e.codigo)+'</h3>'+campos(e)+
+    '<label class="lb">Motivo del cambio *</label><textarea id="f-motivo" rows="2" placeholder="Queda en la auditoría"></textarea>'+
+    '<div class="fila" style="margin-top:12px"><button class="b pri" onclick="guardarEdicion('+e.id+',this)">Guardar cambios</button>'+
+    '<button class="b" onclick="abrir('+e.id+')">Cancelar</button></div></div>';
+  document.getElementById('detalle').scrollIntoView({behavior:'smooth'});
+}
+async function guardarEdicion(id,btn){
+  const d=cuerpoForm();d.motivo=leer('motivo');
+  if(d.motivo.length<5){toast('⚠️ Escribí el motivo del cambio',true);return}
+  btn.disabled=true;
+  try{await api('/estandar/'+id,{method:'POST',body:JSON.stringify(d)});toast('✅ Cambios guardados');await cargar();abrir(id)}
+  catch(e){toast('⚠️ '+e.message,true);btn.disabled=false}
+}
+function cerrarDetalle(){S.abierto=null;document.getElementById('detalle').innerHTML=''}
+
+/* ── Detalle ── */
+async function abrir(id,silencioso){
+  S.abierto=id;verTab(1);
+  const cont=document.getElementById('detalle');
+  if(!silencioso)cont.innerHTML='<div class="card"><div class="muted">Cargando…</div></div>';
+  try{
+    const {estandar:e}=await api('/estandar/'+id);
+    const m=puede('cargar'),ap=puede('aprobar');
+    const cert=e.certificado;
+    const adj=k=>e.adjuntos.find(a=>a.clase===k);
+    const bloqueAdj=(k,lbl)=>{
+      const a=adj(k);
+      return '<div style="border:1px solid var(--border);border-radius:8px;padding:12px">'+
+        '<b>'+lbl+'</b> '+(a?'<span class="chip ok">Adjunto</span>':'<span class="chip mut">Sin archivo</span>')+
+        (a?'<div style="margin:6px 0"><a href="'+API+'/adjuntos/'+a.id+'" target="_blank" rel="noopener">📎 '+esc(a.nombre)+'</a> <span class="muted">('+Math.round(a.tamano/1024)+' KB)</span></div>':'')+
+        (m?'<div class="fila" style="margin-top:6px"><input type="file" id="file-'+k+'" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp" style="font-size:12px">'+
+          '<button class="b sm pri" onclick="subirAdj('+e.id+',\''+k+'\')">'+(a?'Reemplazar':'Subir')+'</button>'+
+          (a?'<button class="b sm crit" onclick="quitarAdj('+a.id+')">Quitar</button>':'')+'</div>':'')+
+        '</div>';
+    };
+    cont.innerHTML='<div class="card">'+
+      '<div class="fila" style="justify-content:space-between"><h3 style="margin:0">'+esc(e.codigo)+' · '+esc(e.nombre)+'</h3>'+
+      '<span class="chip '+(CLASE[e.estado]||'mut')+'">'+esc(ESTADOS[e.estado]||e.estado)+'</span></div>'+
+      '<div class="fila" style="margin:10px 0">'+
+        (m&&e.estado!=='obsoleto'&&e.estado!=='alterado'?'<button class="b sm" onclick=\'formEditar('+JSON.stringify(e).replace(/'/g,"&#39;")+')\'>✏️ Editar</button>':'')+
+        '<button class="b sm" onclick="imprimir('+e.id+',\'rotulo\')">🏷️ Rótulo REG-D</button>'+
+        (cert?'<button class="b sm" onclick="imprimir('+e.id+',\'certificado\')">🖨️ Certificado REG-B</button>':'')+
+        '<button class="b sm" onclick="cerrarDetalle()">Cerrar</button></div>'+
+      '<dl class="det">'+
+        det('Tipo',TIPOS[e.tipo]||e.tipo)+det('Proveedor',e.proveedor)+det('Lote del proveedor',e.lote_proveedor)+
+        det('Lote interno Vessena',e.lote_interno?'<b>'+esc(e.lote_interno)+'</b>':'—',true)+
+        det('Cantidad',e.cantidad)+det('Pureza / potencia',e.pureza)+det('Conservación',e.conservacion)+
+        det('Ubicación',e.ubicacion)+det('Envases',e.envases)+
+        det('Recepción',dma(e.recepcion))+det('Vencimiento','<b>'+dma(e.vencimiento)+'</b>',true)+
+        det('Reanálisis',dma(e.reanalisis))+det('Observaciones',e.observaciones)+
+        det('Alta',esc(e.creado_por||'—')+' · '+dmaHora(e.creado_en)+(e.origen!=='app'?' <span class="chip mut">de la planilla</span>':''),true)+
+      '</dl></div>'+
+      '<div class="card"><h3>Adjuntos</h3><div class="grid2">'+bloqueAdj('coa','CoA · Certificado de análisis')+bloqueAdj('msds','MSDS · Hoja de seguridad')+'</div></div>'+
+      bloqueRegistro(e,m)+bloqueCertificado(e,cert,m,ap)+(m?bloqueAcciones(e):'');
+    if(!silencioso)cont.scrollIntoView({behavior:'smooth'});
+  }catch(err){cont.innerHTML='<div class="aviso crit">'+esc(err.message)+'</div>'}
+}
+function det(k,v,html){return '<dt>'+k+'</dt><dd>'+(html?v:esc(v==null||v===''?'—':v))+'</dd>'}
+
+function bloqueRegistro(e,m){
+  const ins=e.inspecciones||[];
+  return '<div class="card"><h3>Registro e inspecciones · REG-A</h3>'+
+    (m?'<div class="grid2"><div><label class="lb">Conservación</label><input id="r-cons" value="'+esc(e.conservacion||'')+'"></div>'+
+      '<div><label class="lb">Notas</label><input id="r-notas" value="'+esc(e.notas||'')+'"></div></div>'+
+      '<label class="lb">Motivo del cambio</label><input id="r-motivo" placeholder="Queda en la auditoría">'+
+      '<div style="margin-top:8px"><button class="b sm" onclick="guardarRegistro('+e.id+')">Guardar registro</button></div>'+
+      '<hr style="border:none;border-top:1px solid var(--border);margin:14px 0">'+
+      '<div class="grid3"><div><label class="lb">Fecha</label><input type="date" id="i-fecha" value="'+hoyISO()+'"></div>'+
+      '<div><label class="lb">Resultado</label><select id="i-ok"><option value="1">Conforme</option><option value="0">No conforme</option></select></div>'+
+      '<div><label class="lb">Observación</label><input id="i-obs"></div></div>'+
+      '<div style="margin-top:8px"><button class="b sm pri" onclick="guardarInspeccion('+e.id+')">Registrar inspección</button></div>':'')+
+    '<table style="margin-top:12px"><thead><tr><th>Fecha</th><th>Resultado</th><th>Observación</th><th>Analista</th></tr></thead><tbody>'+
+    (ins.length?ins.map(i=>'<tr><td>'+dma(i.fecha)+'</td><td><span class="chip '+(i.conforme?'ok':'crit')+'">'+(i.conforme?'Conforme':'No conforme')+'</span></td>'+
+      '<td>'+esc(i.observacion||'—')+'</td><td>'+esc(i.analista||'—')+'</td></tr>').join(''):'<tr><td colspan="4" class="muted">Sin inspecciones.</td></tr>')+
+    '</tbody></table></div>';
+}
+async function guardarRegistro(id){
+  try{await api('/estandar/'+id+'/registro',{method:'POST',body:JSON.stringify({
+    conservacion:document.getElementById('r-cons').value,notas:document.getElementById('r-notas').value,
+    motivo:document.getElementById('r-motivo').value})});toast('✅ Registro guardado');await cargar()}
+  catch(e){toast('⚠️ '+e.message,true)}
+}
+async function guardarInspeccion(id){
+  try{await api('/estandar/'+id+'/inspecciones',{method:'POST',body:JSON.stringify({
+    fecha:document.getElementById('i-fecha').value,conforme:document.getElementById('i-ok').value==='1',
+    observacion:document.getElementById('i-obs').value})});toast('✅ Inspección registrada');abrir(id)}
+  catch(e){toast('⚠️ '+e.message,true)}
+}
+
+function bloqueCertificado(e,c,m,ap){
+  if(!c){
+    return '<div class="card"><h3>Certificado · REG-B</h3>'+
+      (m?'<div class="muted" style="margin-bottom:10px">Todavía no tiene certificado. Al emitirlo queda firmado por vos como analista; después lo firma Antonella, Gloria o Claudia como coordinadora.</div>'+
+        '<div class="grid3">'+inp('c-analisis','Fecha de análisis *',hoyISO(),'','date')+inp('c-tecnica','Técnica analítica','','HPLC, UV-Vis…')+
+        inp('c-vencimiento','Vencimiento *',e.vencimiento,'','date')+'</div>'+
+        '<div class="grid3">'+inp('c-ref_sustancia','Sustancia de referencia','')+inp('c-ref_codigo','Código de la referencia','')+inp('c-ref_pureza','Pureza de la referencia','')+'</div>'+
+        '<div class="grid2">'+inp('c-ref_vencimiento','Vence la referencia','','','date')+inp('c-reanalisis','Reanálisis','','','date')+'</div>'+
+        '<label class="lb">Ensayos</label><table id="c-ensayos"><thead><tr><th>Aspecto</th><th>Especificación</th><th>Resultado</th><th></th></tr></thead><tbody>'+
+        [0,1,2].map(filaEnsayo).join('')+'</tbody></table>'+
+        '<div class="fila" style="margin-top:8px"><button class="b sm" onclick="agregarEnsayo()">+ Fila</button>'+
+        '<button class="b pri sm" onclick="emitirCertificado('+e.id+',this)">Emitir y firmar</button></div>':'<div class="muted">Sin certificado.</div>')+
+      '</div>';
+  }
+  const ens=Array.isArray(c.ensayos)?c.ensayos:[];
+  return '<div class="card"><h3>Certificado · REG-B</h3>'+
+    '<dl class="det">'+det('Fecha de análisis',dma(c.analisis))+det('Técnica',c.tecnica)+
+      det('Sustancia de referencia',c.ref_sustancia)+det('Código de la referencia',c.ref_codigo)+
+      det('Pureza de la referencia',c.ref_pureza)+det('Vence la referencia',dma(c.ref_vencimiento))+
+      det('Reanálisis',dma(c.reanalisis))+det('Vencimiento',dma(c.vencimiento))+'</dl>'+
+    '<table style="margin-top:10px"><thead><tr><th>Aspecto</th><th>Especificación</th><th>Resultado</th></tr></thead><tbody>'+
+    (ens.length?ens.map(t=>'<tr><td>'+esc(t.aspecto)+'</td><td>'+esc(t.especificacion)+'</td><td>'+esc(t.resultado)+'</td></tr>').join(''):'<tr><td colspan="3" class="muted">Sin ensayos.</td></tr>')+
+    '</tbody></table>'+
+    '<dl class="det" style="margin-top:12px">'+
+      det('Firma de la analista',esc(c.analista||'—')+' · '+dmaHora(c.firmado_analista_en),true)+
+      det('Firma de la coordinadora',c.coordinador?esc(c.coordinador)+' · '+dmaHora(c.firmado_coord_en):'<span class="chip warn">Pendiente</span>',true)+'</dl>'+
+    (!c.coordinador&&ap?'<div style="margin-top:10px"><label class="lb">Nota (opcional)</label><input id="c-nota" placeholder="Validado contra el CoA…">'+
+      '<div style="margin-top:8px"><button class="b ok" onclick="firmarCertificado('+e.id+',this)">✍️ Firmar como coordinadora</button></div></div>':'')+
+    '</div>';
+}
+function filaEnsayo(){return '<tr><td><input class="e-asp"></td><td><input class="e-spec"></td><td><input class="e-res"></td>'+
+  '<td><button class="b sm" onclick="this.closest(\'tr\').remove()">×</button></td></tr>'}
+function agregarEnsayo(){const tb=document.querySelector('#c-ensayos tbody');tb.insertAdjacentHTML('beforeend',filaEnsayo())}
+async function emitirCertificado(id,btn){
+  const ensayos=[...document.querySelectorAll('#c-ensayos tbody tr')].map(tr=>({
+    aspecto:tr.querySelector('.e-asp').value.trim(),
+    especificacion:tr.querySelector('.e-spec').value.trim(),
+    resultado:tr.querySelector('.e-res').value.trim()})).filter(t=>t.aspecto);
+  const d={analisis:leer('c-analisis'),tecnica:leer('c-tecnica'),vencimiento:leer('c-vencimiento'),
+    ref_sustancia:leer('c-ref_sustancia'),ref_codigo:leer('c-ref_codigo'),ref_pureza:leer('c-ref_pureza'),
+    ref_vencimiento:leer('c-ref_vencimiento'),reanalisis:leer('c-reanalisis'),ensayos};
+  btn.disabled=true;
+  try{await api('/estandar/'+id+'/certificado',{method:'POST',body:JSON.stringify(d)});toast('✅ Certificado emitido y firmado');abrir(id)}
+  catch(e){toast('⚠️ '+e.message,true);btn.disabled=false}
+}
+async function firmarCertificado(id,btn){
+  btn.disabled=true;
+  try{await api('/estandar/'+id+'/certificado/firmar',{method:'POST',body:JSON.stringify({nota:(document.getElementById('c-nota')||{}).value||''})});
+    toast('✅ Certificado firmado');abrir(id)}
+  catch(e){toast('⚠️ '+e.message,true);btn.disabled=false}
+}
+
+function bloqueAcciones(e){
+  if(e.estado==='alterado'||e.estado==='obsoleto'||e.estado==='fuera_de_stock'){
+    return '<div class="card"><div class="aviso info">Este estándar está <b>'+esc(ESTADOS[e.estado])+'</b>. Para reponerlo hay que dar de alta uno nuevo. Si hay que disponer del material, seguir SOP-GEN-092.</div></div>';
+  }
+  const vencido=e.estado==='vencido';
+  return '<div class="card"><h3>Acciones</h3>'+
+    (vencido?'<div class="aviso warn">Está vencido. Si tiene reanálisis y el retest dio conforme, extendé las fechas acá abajo. Si no se puede reanalizar, marcalo obsoleto y prepará uno nuevo.</div>':'')+
+    '<div class="grid3">'+
+    '<div><div class="muted"><b>🔁 Reanalizar</b> — retest conforme, extiende fechas.</div>'+
+      '<label class="lb">Nueva fecha de reanálisis *</label><input type="date" id="a-rean">'+
+      '<label class="lb">Nuevo vencimiento</label><input type="date" id="a-venc">'+
+      '<label class="lb">Resultado del retest *</label><textarea id="a-res" rows="2"></textarea>'+
+      '<div style="margin-top:8px"><button class="b ok sm" onclick="reanalizar('+e.id+')">Registrar reanálisis</button></div></div>'+
+    '<div><div class="muted"><b>⚠️ Alterado</b> — contaminación o cambio del material (SOP 5.2.3).</div>'+
+      '<label class="lb">Motivo *</label><textarea id="a-mot-alterado" rows="2"></textarea>'+
+      '<div style="margin-top:8px"><button class="b crit sm" onclick="marcar('+e.id+',\'alterado\')">Marcar alterado</button></div></div>'+
+    (vencido?
+    '<div><div class="muted"><b>🗄️ Obsoleto</b> — venció y no se reanaliza.</div>'+
+      '<label class="lb">Motivo *</label><textarea id="a-mot-obsoleto" rows="2"></textarea>'+
+      '<div style="margin-top:8px"><button class="b crit sm" onclick="marcar('+e.id+',\'obsoleto\')">Marcar obsoleto</button></div></div>':
+    '<div><div class="muted"><b>📦 Fuera de stock</b> — se agotó el material.</div>'+
+      '<label class="lb">Motivo *</label><textarea id="a-mot-fuera_de_stock" rows="2"></textarea>'+
+      '<div style="margin-top:8px"><button class="b sm" onclick="marcar('+e.id+',\'fuera_de_stock\')">Marcar fuera de stock</button></div></div>')+
+    '</div></div>';
+}
+async function marcar(id,estado){
+  const motivo=(document.getElementById('a-mot-'+estado)||{}).value||'';
+  try{await api('/estandar/'+id+'/estado',{method:'POST',body:JSON.stringify({estado,motivo})});
+    toast('✅ Estándar marcado '+ESTADOS[estado].toLowerCase());await cargar();abrir(id)}
+  catch(e){toast('⚠️ '+e.message,true)}
+}
+async function reanalizar(id){
+  try{await api('/estandar/'+id+'/reanalisis',{method:'POST',body:JSON.stringify({
+    reanalisis:document.getElementById('a-rean').value,vencimiento:document.getElementById('a-venc').value,
+    resultado:document.getElementById('a-res').value})});toast('✅ Reanálisis registrado');await cargar();abrir(id)}
+  catch(e){toast('⚠️ '+e.message,true)}
+}
+
+/* ── Adjuntos ── */
+function leerArchivo(f){return new Promise((ok,mal)=>{const r=new FileReader();
+  r.onload=()=>{const s=String(r.result||'');const i=s.indexOf(',');ok(i>=0?s.slice(i+1):s)};
+  r.onerror=()=>mal(new Error('No se pudo leer el archivo'));r.readAsDataURL(f)})}
+async function subirAdj(id,clase){
+  const inp=document.getElementById('file-'+clase);
+  const f=inp&&inp.files&&inp.files[0];
+  if(!f){toast('⚠️ Elegí un archivo',true);return}
+  if(f.size>20*1024*1024){toast('⚠️ El archivo supera los 20 MB',true);return}
+  toast('Subiendo…');
+  try{
+    await api('/estandar/'+id+'/adjuntos',{method:'POST',body:JSON.stringify({
+      clase,nombre:f.name,tipo:f.type||'application/pdf',dataBase64:await leerArchivo(f)})});
+    toast('✅ Archivo adjuntado');abrir(id);
+  }catch(e){toast('⚠️ '+e.message,true)}
+}
+async function quitarAdj(adjId){
+  const motivo=prompt('Motivo para quitar el archivo (queda en la auditoría):');
+  if(!motivo)return;
+  try{await api('/adjuntos/'+adjId+'/quitar',{method:'POST',body:JSON.stringify({motivo})});toast('Archivo quitado');abrir(S.abierto)}
+  catch(e){toast('⚠️ '+e.message,true)}
+}
+
+/* ── Impresión ── */
+async function imprimir(id,que){
+  const w=window.open('','_blank');
+  if(!w){alert('El navegador bloqueó la ventana de impresión. Permití ventanas emergentes.');return}
+  w.document.write('<p style="font-family:Arial;padding:20px">Preparando…</p>');
+  try{
+    const d=await api('/estandar/'+id+'/impresion?que='+que);
+    const e=d.estandar;
+    const firma=f=>{
+      const img=f.imagen?'<img src="'+esc(f.imagen)+'" style="max-height:60px;max-width:200px">':
+        '<span class="vac">'+(f.deLaPlanilla?'Cargado en la planilla anterior, sin firma electrónica':'Sin firma registrada')+'</span>';
+      return '<div class="fb"><div class="fs">'+img+'</div><div class="fc"><b>'+esc(f.rol)+':</b> '+esc(f.nombre)+
+        (f.cargo?'<br>'+esc(f.cargo):'')+(f.firmadoEn?'<br>'+dmaHora(f.firmadoEn):'')+
+        (f.posterior?'<br><i>Firma registrada después</i>':'')+'</div></div>';
+    };
+    const estilo='<style>body{font-family:Arial,Helvetica,sans-serif;color:#1c2331;padding:22px;font-size:12px}'+
+      '.cab{display:flex;justify-content:space-between;border-bottom:2px solid #1f5fb0;padding-bottom:8px;align-items:flex-end}'+
+      '.cab h1{font-size:17px;margin:0;color:#1f5fb0}.reg{font-weight:700;font-size:13px}'+
+      'table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border:1px solid #cbd5e0;padding:5px 7px;text-align:left}'+
+      'th{background:#eef2f7;font-size:11px}h2{font-size:13px;margin:16px 0 6px}'+
+      'dl{display:grid;grid-template-columns:170px 1fr 170px 1fr;gap:4px 10px;margin:12px 0;font-size:12px}'+
+      'dt{color:#6b7382}dd{margin:0;font-weight:600}'+
+      '.firmas{margin-top:22px;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:18px;page-break-inside:avoid}'+
+      '.fb{text-align:center}.fs{border-bottom:1px solid #444;height:64px;display:flex;align-items:flex-end;justify-content:center}'+
+      '.fc{font-size:10.5px;margin-top:4px}.vac{font-size:10px;color:#999;font-style:italic;align-self:center;padding-bottom:6px}'+
+      '.rot{border:2px solid #000;padding:10px 12px;width:330px;margin:0 auto 14px;font-family:"Courier New",monospace;font-size:11.5px;page-break-after:always}'+
+      '.rot h4{margin:0 0 6px;text-align:center;font-size:12px;letter-spacing:1px}'+
+      '.rot dl{display:grid;grid-template-columns:auto 1fr;gap:2px 8px;margin:0;font-size:11px}'+
+      '.rot dt{font-weight:bold;color:#000}.rot dd{font-weight:400}'+
+      '@media print{.noprint{display:none}body{padding:0}}</style>';
+    const dato=(k,v)=>'<dt>'+k+'</dt><dd>'+esc(v||'—')+'</dd>';
+    let cuerpo;
+    if(que==='rotulo'){
+      const n=Number(e.envases)||1;let rot='';
+      for(let i=1;i<=n;i++){
+        rot+='<div class="rot"><h4>VESSENA · ESTÁNDAR DE REFERENCIA</h4><dl>'+
+          '<dt>Nombre:</dt><dd>'+esc(e.nombre)+'</dd><dt>Código:</dt><dd>'+esc(e.codigo)+'</dd>'+
+          '<dt>Lote interno:</dt><dd>'+esc(e.lote_interno||'—')+'</dd><dt>Lote proveedor:</dt><dd>'+esc(e.lote_proveedor||'—')+'</dd>'+
+          '<dt>Pureza:</dt><dd>'+esc(e.pureza||'—')+'</dd><dt>Vencimiento:</dt><dd><b>'+dma(e.vencimiento)+'</b></dd>'+
+          '<dt>Reanálisis:</dt><dd>'+dma(e.reanalisis)+'</dd><dt>Conservación:</dt><dd>'+esc(e.conservacion||'Ambiente, oscuro')+'</dd>'+
+          '<dt>Envase:</dt><dd>'+i+' de '+n+'</dd></dl>'+
+          '<div style="margin-top:6px;border-top:1px dashed #333;padding-top:4px;text-align:center">'+
+          (d.firmas[0]&&d.firmas[0].imagen?'<img src="'+esc(d.firmas[0].imagen)+'" style="max-height:42px">':'')+
+          '<br>'+esc(e.creado_por||'')+'<br><span style="font-size:10px">'+dma(e.creado_en&&String(e.creado_en).slice(0,10))+'</span></div></div>';
+      }
+      cuerpo='<div class="cab"><div><h1>Rótulo de estándar de referencia</h1><div>SOP-LCC-071 · '+esc(e.codigo)+'</div></div><div class="reg">REG-SOP-LCC-071-D</div></div>'+rot;
+    }else{
+      const c=e.certificado||{};const ens=Array.isArray(c.ensayos)?c.ensayos:[];
+      cuerpo='<div class="cab"><div><h1>Certificado de sustancia de referencia</h1><div>SOP-LCC-071 · Vessena S.A.</div></div><div class="reg">REG-SOP-LCC-071-B</div></div>'+
+        '<dl>'+dato('Estándar',e.codigo+' — '+e.nombre)+dato('Tipo',TIPOS[e.tipo]||e.tipo)+
+        dato('Lote interno',e.lote_interno)+dato('Lote proveedor',e.lote_proveedor)+
+        dato('Fecha de análisis',dma(c.analisis))+dato('Técnica analítica',c.tecnica)+
+        dato('Sustancia de referencia',c.ref_sustancia)+dato('Código de la referencia',c.ref_codigo)+
+        dato('Pureza de la referencia',c.ref_pureza)+dato('Vence la referencia',dma(c.ref_vencimiento))+
+        dato('Reanálisis',dma(c.reanalisis))+dato('Vencimiento',dma(c.vencimiento))+'</dl>'+
+        '<h2>Ensayos</h2><table><thead><tr><th>Aspecto</th><th>Especificación</th><th>Resultado</th></tr></thead><tbody>'+
+        (ens.length?ens.map(t=>'<tr><td>'+esc(t.aspecto)+'</td><td>'+esc(t.especificacion)+'</td><td>'+esc(t.resultado)+'</td></tr>').join(''):'<tr><td colspan="3">—</td></tr>')+
+        '</tbody></table>';
+    }
+    w.document.open();
+    w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+esc(e.codigo)+'</title>'+estilo+'</head><body>'+
+      '<div class="noprint" style="margin-bottom:12px"><button onclick="window.print()" style="padding:8px 18px;font-weight:bold">🖨️ Imprimir</button></div>'+
+      cuerpo+'<h2>Firmas</h2><div class="firmas">'+d.firmas.map(firma).join('')+'</div>'+
+      '<div style="margin-top:14px;font-size:10px;color:#6b7382">Impreso por '+esc(d.impreso.por)+' el '+dmaHora(d.impreso.en)+'</div>'+
+      '</body></html>');
+    w.document.close();
+  }catch(e){w.close();toast('⚠️ '+e.message,true)}
+}
+
+/* ── Lote interno (REG-E) ── */
+async function cargarLotes(){
+  const cont=document.getElementById('lotes');cont.innerHTML='<div class="card"><div class="muted">Cargando…</div></div>';
+  try{
+    const d=await api('/lotes');
+    cont.innerHTML='<div class="card"><h3>Lote interno Vessena · REG-E</h3>'+
+      '<div class="muted">Próximo número: <b>'+d.proximo+'</b>. Se emite solo al dar de alta un estándar; acá se puede emitir a mano.</div>'+
+      (puede('cargar')?'<div class="grid3" style="margin-top:10px">'+inp('l-material','Material *','')+inp('l-lote','Lote del proveedor','')+inp('l-obs','Observaciones','')+'</div>'+
+        '<div style="margin-top:8px"><button class="b pri sm" onclick="emitirLote()">Emitir lote</button></div>':'')+
+      '</div><div class="card"><table><thead><tr><th>Lote</th><th>Material</th><th>Lote proveedor</th><th>Observaciones</th><th>Emitido por</th><th>Fecha</th></tr></thead><tbody>'+
+      (d.lotes.length?d.lotes.map(l=>'<tr><td><b>'+esc(l.numero)+'</b></td><td>'+esc(l.material)+'</td><td>'+esc(l.lote_proveedor||'—')+'</td>'+
+        '<td>'+esc(l.observaciones||'—')+'</td><td>'+esc(l.emitido_por||'—')+(l.origen!=='app'?' <span class="chip mut">planilla</span>':'')+'</td><td>'+dmaHora(l.emitido_en)+'</td></tr>').join(''):
+        '<tr><td colspan="6" class="muted">Sin lotes.</td></tr>')+'</tbody></table></div>';
+  }catch(e){cont.innerHTML='<div class="aviso crit">'+esc(e.message)+'</div>'}
+}
+async function emitirLote(){
+  try{const r=await api('/lotes',{method:'POST',body:JSON.stringify({material:leer('l-material'),
+    lote_proveedor:leer('l-lote'),observaciones:leer('l-obs')})});
+    toast('✅ Lote '+r.numero+' emitido');cargarLotes()}
+  catch(e){toast('⚠️ '+e.message,true)}
+}
+
+/* ── Auditoría ── */
+async function cargarAudit(){
+  const cont=document.getElementById('audit');cont.innerHTML='<div class="card"><div class="muted">Cargando…</div></div>';
+  try{
+    const d=await api('/actividad?limite=500');
+    cont.innerHTML='<div class="card"><h3>Auditoría · últimos '+d.actividad.length+' movimientos</h3>'+
+      '<table><thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Registro</th><th>Motivo</th></tr></thead><tbody>'+
+      (d.actividad.length?d.actividad.map(a=>'<tr><td>'+dmaHora(a.ts)+'</td><td>'+esc(a.usuario||'—')+'</td>'+
+        '<td><span class="chip mut">'+esc(a.accion)+'</span></td><td>'+esc(a.entidad||'')+' '+esc(a.entidad_id||'')+'</td>'+
+        '<td>'+esc((a.motivo||'').slice(0,120))+'</td></tr>').join(''):'<tr><td colspan="5" class="muted">Sin movimientos.</td></tr>')+
+      '</tbody></table></div>';
+  }catch(e){cont.innerHTML='<div class="aviso crit">'+esc(e.message)+'</div>'}
+}
+
+/* ── Configuración: importar el historial de la planilla ── */
+function pintarConfig(){
+  document.getElementById('cfg').innerHTML=
+    '<div class="card"><h3>Traer el historial de la planilla</h3>'+
+    (S.historialImportado?'<div class="aviso ok">El historial ya se importó. Los avisos por correo salen de acá.</div>':
+     '<div class="muted" style="margin-bottom:10px">Una sola vez: elegí el Excel exportado de la planilla de Gestión de Estándares. Se lee en tu navegador; no se sube el archivo, solo los datos. Primero muestra qué entraría.</div>'+
+     '<input type="file" id="xls" accept=".xlsx,.xls">'+
+     '<div class="fila" style="margin-top:10px"><button class="b" onclick="importar(false)">Ver qué entraría</button>'+
+     '<button class="b pri" onclick="importar(true)">Importar</button></div>'+
+     '<div id="impRes" style="margin-top:10px"></div>')+
+    '</div>'+
+    '<div class="card"><h3>Avisos por correo</h3><div class="muted">Diario a las 8:00 a los 30, 15, 7 y 1 día y al vencer, a Antonella y a la analista de MiniLab. Resumen los lunes a las 8:00 a Claudia. Se encienden solos cuando el historial está importado.</div></div>';
+}
+function cargarLectorExcel(){
+  if(window.XLSX)return Promise.resolve();
+  return new Promise((ok,mal)=>{const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+    s.onload=ok;s.onerror=()=>mal(new Error('No se pudo cargar el lector de Excel'));document.head.appendChild(s)})
+}
+const txt=v=>String(v==null?'':v).trim();
+function diaDe(v){
+  if(v instanceof Date&&!isNaN(v))return v.getFullYear()+'-'+String(v.getMonth()+1).padStart(2,'0')+'-'+String(v.getDate()).padStart(2,'0');
+  const s=txt(v);if(/^\d{4}-\d{2}-\d{2}/.test(s))return s.slice(0,10);
+  const d=new Date(s);return isNaN(d)?'':d.toISOString().slice(0,10);
+}
+function isoDe(v){if(v instanceof Date)return isNaN(v)?null:v.toISOString();const s=txt(v);if(!s)return null;const d=new Date(s);return isNaN(d)?null:d.toISOString()}
+function hoja(wb,n){const sh=wb.Sheets[n];return sh?XLSX.utils.sheet_to_json(sh,{defval:''}):[]}
+async function importar(confirmar){
+  const f=document.getElementById('xls').files[0];
+  if(!f){toast('⚠️ Elegí el archivo',true);return}
+  const res=document.getElementById('impRes');res.innerHTML='<div class="muted">Leyendo…</div>';
+  try{
+    await cargarLectorExcel();
+    const wb=XLSX.read(await f.arrayBuffer(),{cellDates:true});
+    const estandares=hoja(wb,'estandares').filter(r=>txt(r.code)).map(r=>({
+      codigo:txt(r.code),nombre:txt(r.name),tipo:txt(r.type),proveedor:txt(r.supplier),
+      lote_proveedor:txt(r.provider_lot),lote_interno:txt(r.internal_lot),cantidad:txt(r.quantity),
+      pureza:txt(r.purity),conservacion:txt(r.storage_conditions),ubicacion:txt(r.location),
+      recepcion:diaDe(r.reception_date),vencimiento:diaDe(r.expiry_date),reanalisis:diaDe(r.reanalysis_date),
+      fuera_de_stock_en:diaDe(r.out_of_stock_date),envases:Number(r.containers_total)||1,
+      coa_ref:txt(r.coa_reference),msds_ref:txt(r.msds_reference),observaciones:txt(r.observations),
+      estado:txt(r.status),creado_por:txt(r.created_by),creado_en:isoDe(r.created_at)}));
+    const lotes=hoja(wb,'lotes_internos').filter(r=>txt(r.lot_number)).map(r=>({
+      numero:Number(r.lot_number),material:txt(r.material),lote_proveedor:txt(r.provider_lot),
+      observaciones:txt(r.observations),emitido_por:txt(r.issued_by),emitido_en:isoDe(r.issued_at)}));
+    const idACodigo={};hoja(wb,'estandares').forEach(r=>{if(txt(r.id))idACodigo[txt(r.id)]=txt(r.code)});
+    const inspecciones=hoja(wb,'inspecciones').filter(r=>txt(r.standard_id)).map(r=>({
+      codigo:idACodigo[txt(r.standard_id)]||'',fecha:diaDe(r.inspection_date),
+      conforme:txt(r.is_ok).toLowerCase()!=='false',observacion:txt(r.observation),
+      analista:txt(r.analyst),creado_en:isoDe(r.created_at)})).filter(r=>r.codigo);
+    const certificados=hoja(wb,'certificados').filter(r=>txt(r.standard_id)).map(r=>{
+      let ensayos=[];try{ensayos=(JSON.parse(txt(r.tests_json)||'[]')||[]).map(t=>({
+        aspecto:txt(t.aspect),especificacion:txt(t.specification),resultado:txt(t.result)}))}catch(e){}
+      return {codigo:idACodigo[txt(r.standard_id)]||'',analisis:diaDe(r.analysis_date),
+        ref_sustancia:txt(r.reference_substance),ref_codigo:txt(r.reference_code),ref_pureza:txt(r.reference_purity),
+        ref_vencimiento:diaDe(r.reference_expiry),tecnica:txt(r.analytical_technique),
+        reanalisis:diaDe(r.reanalysis_date),vencimiento:diaDe(r.expiry_date),ensayos,
+        analista:txt(r.analyst),firmado_analista_en:isoDe(r.signed_analyst_at),
+        coordinador:txt(r.coordinator),firmado_coord_en:isoDe(r.signed_coord_at)}}).filter(r=>r.codigo);
+    const cuerpo={estandares,lotes,inspecciones,certificados,confirmar};
+    const d=await api('/importar',{method:'POST',body:JSON.stringify(cuerpo)});
+    if(d.preview){
+      res.innerHTML='<div class="aviso info">En el Excel hay <b>'+d.preview.estandares+'</b> estándares, <b>'+d.preview.lotes+
+        '</b> lotes, <b>'+d.preview.inspecciones+'</b> inspecciones y <b>'+d.preview.certificados+
+        '</b> certificados. Si coincide con la planilla, tocá Importar.</div>';
+    }else{
+      res.innerHTML='<div class="aviso ok">Importado: '+d.importado.estandares+' estándares, '+d.importado.lotes+
+        ' lotes, '+d.importado.inspecciones+' inspecciones y '+d.importado.certificados+' certificados.</div>';
+      S.historialImportado=true;await cargar();
+    }
+  }catch(e){res.innerHTML='<div class="aviso crit">'+esc(e.message)+'</div>'}
+}
+</script>
+</body>
+</html>
