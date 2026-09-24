@@ -7,8 +7,8 @@
  *     por umbral: `aviso_umbral` guarda el ultimo avisado.
  *   - Lunes a las 8: resumen de vencidos y proximos a vencer ('resumen-semanal').
  *
- * Se prenden solos cuando el historial ya esta importado (est_importacion):
- * hasta entonces sigue avisando el Apps Script y serian dos correos.
+ * Se prenden solos cuando la app ya tiene estandares cargados: hasta entonces
+ * el que avisa es el Apps Script viejo y serian dos correos.
  * AVISOS_ESTANDARES_ACTIVOS=1 los fuerza antes, para probar.
  */
 import { consultar } from '../db.js';
@@ -34,8 +34,12 @@ function esc(s) {
 
 async function estaActivo() {
     if (FORZADO) return true;
-    const { rows } = await consultar('SELECT 1 FROM est_importacion');
-    return rows.length > 0;
+    // Con la app vacia no hay nada que avisar, y el Apps Script viejo todavia
+    // podria estar avisando: dos correos por el mismo vencimiento.
+    const { rows } = await consultar(
+        'SELECT (SELECT count(*) FROM est_estandares) + (SELECT count(*) FROM est_importacion) AS n'
+    );
+    return Number(rows[0].n) > 0;
 }
 
 /**

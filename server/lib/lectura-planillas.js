@@ -300,3 +300,81 @@ export async function leerSesiones(p) {
     }));
     return { sessions, count: sessions.length };
 }
+
+/**
+ * Bitacora de estandares en papel (SOP-LCC-071) -> filas para revisar.
+ *
+ * Sirve para las dos formas que conviven en el laboratorio: la tabla con una
+ * fila por lote y las hojas sueltas con un estandar cada una. Nada se guarda
+ * desde aca: la pantalla muestra lo leido para corregirlo antes del alta,
+ * porque es letra manuscrita y el dato es GMP.
+ */
+export async function leerEstandares(p) {
+    validar(p);
+    const hoy = new Date().toISOString().slice(0, 10);
+
+    const instruccion =
+        'Eres un asistente que lee la bitácora de estándares de referencia de Vessena S.A. (planta farmacéutica en Uruguay), ' +
+        'procedimiento SOP-LCC-071. El archivo puede ser: (a) una tabla con una fila por estándar o por lote interno, ' +
+        '(b) hojas sueltas con un estándar cada una (formularios REG-A / REG-C / rótulos), o (c) una mezcla de las dos.\n\n' +
+        'TU TAREA: devolver UNA fila por estándar, con lo que puedas leer. No inventes datos: lo que no esté, va vacío.\n\n' +
+        'CAMPOS:\n' +
+        '- nombre: el material o sustancia, tal como está escrito (ej: "Cetil alcohol", "Cafeína USP").\n' +
+        '- codigo: código del estándar si figura. Si no hay, vacío.\n' +
+        '- tipo: uno de "mp" (materia prima), "granel" (producto en proceso o base), "pt" (producto terminado) o ' +
+        '"certificado" (comprado con certificado: USP, Ph. Eur./EP, WHO, JP). Si no es evidente, dejá vacío.\n' +
+        '- lote_interno: número de lote interno Vessena (suelen ser de 3 o 4 dígitos, por ejemplo 1187). Solo el número.\n' +
+        '- lote_proveedor: lote del proveedor, tal cual.\n' +
+        '- proveedor: nombre del proveedor o laboratorio.\n' +
+        '- cantidad: con su unidad (ej: "50 g", "450 mL").\n' +
+        '- pureza: si figura (ej: "99,8%").\n' +
+        '- conservacion: condiciones de conservación (ej: "2-8 °C", "ambiente, oscuro").\n' +
+        '- ubicacion: dónde se guarda (ej: "Heladera LCC", "Estante 3").\n' +
+        '- recepcion, vencimiento, reanalisis: fechas en formato ISO yyyy-mm-dd.\n' +
+        '- observaciones: cualquier nota relevante de la fila.\n' +
+        '- confianza: 0.0 a 1.0, tu certeza sobre la lectura de esa fila.\n\n' +
+        'REGLAS:\n' +
+        '- Hoy es ' + hoy + '. Las fechas escritas como dd/mm/aa se convierten a yyyy-mm-dd, con año 2000+.\n' +
+        '- Si un año manuscrito es ambiguo, elegí el más razonable: la recepción no puede estar en el futuro.\n' +
+        '- Ignorá filas tachadas o totalmente vacías, y las que solo tengan una firma.\n' +
+        '- Si una fila está tachada pero se lee "baja", "vencido" o "obsoleto", incluila igual y ponelo en observaciones.\n' +
+        '- Si el archivo no es una bitácora de estándares, devolvé estandares: [].';
+
+    const esquema = {
+        type: 'object',
+        properties: {
+            estandares: {
+                type: 'array',
+                items: {
+                    type: 'object',
+                    properties: {
+                        nombre: { type: 'string' }, codigo: { type: 'string' }, tipo: { type: 'string' },
+                        lote_interno: { type: 'string' }, lote_proveedor: { type: 'string' },
+                        proveedor: { type: 'string' }, cantidad: { type: 'string' }, pureza: { type: 'string' },
+                        conservacion: { type: 'string' }, ubicacion: { type: 'string' },
+                        recepcion: { type: 'string' }, vencimiento: { type: 'string' },
+                        reanalisis: { type: 'string' }, observaciones: { type: 'string' },
+                        confianza: { type: 'number' },
+                    },
+                    required: ['nombre'],
+                },
+            },
+        },
+        required: ['estandares'],
+    };
+
+    const r = await preguntar({ instruccion, pedido: 'Extraé los estándares de este archivo:', p, esquema, temperatura: 0.05 });
+    const t = (v) => String(v ?? '').trim();
+    const dia = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(t(v)) ? t(v) : '');
+    const estandares = (r.estandares || []).map((e) => ({
+        nombre: t(e.nombre), codigo: t(e.codigo).toUpperCase(),
+        tipo: ['mp', 'granel', 'pt', 'certificado'].includes(t(e.tipo).toLowerCase()) ? t(e.tipo).toLowerCase() : '',
+        lote_interno: t(e.lote_interno).replace(/\D/g, ''), lote_proveedor: t(e.lote_proveedor),
+        proveedor: t(e.proveedor), cantidad: t(e.cantidad), pureza: t(e.pureza),
+        conservacion: t(e.conservacion), ubicacion: t(e.ubicacion),
+        recepcion: dia(e.recepcion), vencimiento: dia(e.vencimiento), reanalisis: dia(e.reanalisis),
+        observaciones: t(e.observaciones),
+        confianza: typeof e.confianza === 'number' ? e.confianza : 0.7,
+    })).filter((e) => e.nombre.length >= 2);
+    return { estandares, count: estandares.length };
+}

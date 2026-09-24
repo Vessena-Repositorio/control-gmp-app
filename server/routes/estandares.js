@@ -19,6 +19,7 @@ import { exigirPermiso } from '../lib/acceso.js';
 import { PERMISOS_POR_ROL } from '../lib/permisos.js';
 import { comprimirFoto } from '../lib/comprimir-foto.js';
 import { firmaDe } from '../lib/firmas.js';
+import { leerEstandares, lecturaConfigurada } from '../lib/lectura-planillas.js';
 import { ZONA } from '../lib/tareas.js';
 
 export const rutasEstandares = Router();
@@ -568,6 +569,91 @@ rutasEstandares.get('/estandar/:id/impresion', leer, async (req, res, next) => {
         await enTransaccion((c) => registrar(c, req, 'impresion', 'estandar', id,
             texto(req.query.que, 30) === 'rotulo' ? 'Rótulo REG-D' : 'Certificado REG-B'));
         res.json({ ok: true, estandar: e, firmas, impreso: { por: quien(req), en: new Date().toISOString() } });
+    } catch (err) { responder(err, res, next); }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Bitacora de papel: leer el escaneado y dar de alta lo revisado
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/** POST /api/estandares/leer  { dataBase64, mime } — propone filas, no guarda nada. */
+rutasEstandares.post('/leer', cargar, async (req, res, next) => {
+    try {
+        if (!lecturaConfigurada()) throw fallo(503, 'El servidor no tiene configurada la clave de la IA');
+        const r = await leerEstandares({
+            imageBase64: String(req.body?.dataBase64 || '').replace(/^data:[^,]*,/, ''),
+            mimeType: texto(req.body?.mime, 100) || 'application/pdf',
+        });
+        res.json({ ok: true, ...r });
+    } catch (err) {
+        if (err.status) return res.status(err.status).json({ ok: false, error: err.message });
+        console.error('[estandares] lectura fallo:', err.message);
+        res.status(502).json({ ok: false, error: err.message });
+    }
+});
+
+/**
+ * POST /api/estandares/desde-papel  { filas: [...] }
+ * Alta de lo que ya se reviso en pantalla. Queda con origen 'papel': esas
+ * filas no tienen firma electronica y las hojas impresas lo dicen.
+ *
+ * A diferencia del alta normal, aca SI se acepta un vencimiento pasado: lo que
+ * esta en el estante con fecha vencida tiene que poder registrarse para poder
+ * darlo de baja como corresponde.
+ */
+rutasEstandares.post('/desde-papel', cargar, async (req, res, next) => {
+    const filas = Array.isArray(req.body?.filas) ? req.body.filas.slice(0, 300) : [];
+    try {
+        if (!filas.length) throw fallo(400, 'No hay filas para dar de alta');
+        const resultado = await enTransaccion(async (c) => {
+            await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['estandares-lote']);
+            const creados = []; const salteados = [];
+            for (const f of filas) {
+                const nombre = texto(f?.nombre, 200);
+                const recepcion = fechaOpcional(f?.recepcion);
+                const vencimiento = fechaOpcional(f?.vencimiento);
+                const tipo = TIPOS.includes(texto(f?.tipo, 20)) ? texto(f?.tipo, 20) : 'mp';
+                if (!nombre || !recepcion || !vencimiento) {
+                    salteados.push({ nombre: nombre || '(sin nombre)', motivo: 'faltan nombre, recepción o vencimiento' });
+                    continue;
+                }
+                // Sin codigo escrito se arma uno con el lote interno, que es la
+                // clave que usa el laboratorio en el papel.
+                const loteNum = Number(String(f?.lote_interno || '').replace(/\D/g, '')) || null;
+                const codigo = (texto(f?.codigo, 60) || (loteNum ? `EST-${loteNum}` : '')).toUpperCase();
+                if (!codigo) { salteados.push({ nombre, motivo: 'sin código ni lote interno' }); continue; }
+                const { rows: ya } = await c.query('SELECT 1 FROM est_estandares WHERE codigo = $1', [codigo]);
+                if (ya.length) { salteados.push({ nombre, motivo: `ya existe el código ${codigo}` }); continue; }
+
+                if (loteNum) {
+                    await c.query(
+                        `INSERT INTO est_lotes (numero, material, lote_proveedor, observaciones, emitido_por, emitido_por_id, origen)
+                         VALUES ($1,$2,$3,$4,$5,$6,'papel') ON CONFLICT (numero) DO NOTHING`,
+                        [loteNum, nombre, texto(f?.lote_proveedor, 100) || null,
+                            'De la bitácora en papel', quien(req), req.usuario.id]
+                    );
+                }
+                const { rows } = await c.query(
+                    `INSERT INTO est_estandares
+                        (codigo, nombre, tipo, proveedor, lote_proveedor, lote_interno, cantidad, pureza,
+                         conservacion, ubicacion, recepcion, vencimiento, reanalisis, envases,
+                         observaciones, creado_por, creado_por_id, actualizado_por, origen)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$16,'papel')
+                     RETURNING id, codigo`,
+                    [codigo, nombre, tipo, texto(f?.proveedor, 200) || null, texto(f?.lote_proveedor, 100) || null,
+                        loteNum, texto(f?.cantidad, 60) || null, texto(f?.pureza, 60) || null,
+                        texto(f?.conservacion, 200) || null, texto(f?.ubicacion, 120) || null,
+                        recepcion, vencimiento, fechaOpcional(f?.reanalisis),
+                        Math.min(Math.max(Number(f?.envases) || 1, 1), 99),
+                        texto(f?.observaciones, 1000) || null, quien(req), req.usuario.id]
+                );
+                await registrar(c, req, 'alta', 'estandar', rows[0].id,
+                    'Alta desde la bitácora en papel', null, rows[0]);
+                creados.push(rows[0].codigo);
+            }
+            return { creados, salteados };
+        });
+        res.json({ ok: true, ...resultado });
     } catch (err) { responder(err, res, next); }
 });
 

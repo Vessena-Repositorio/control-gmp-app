@@ -166,7 +166,8 @@ function pintarLista(){
       Object.entries(TIPOS).map(([k,v])=>'<option value="'+k+'"'+(f.tipo===k?' selected':'')+'>'+v+'</option>').join('')+'</select></div>'+
     '<div style="flex:1;min-width:150px"><label class="lb">Estado</label><select id="fs"><option value="">Todos</option>'+
       Object.entries(ESTADOS).map(([k,v])=>'<option value="'+k+'"'+(f.estado===k?' selected':'')+'>'+v+'</option>').join('')+'</select></div>'+
-    (puede('cargar')?'<div style="align-self:flex-end"><button class="b pri" onclick="formNuevo()">➕ Nuevo estándar</button></div>':'')+
+    (puede('cargar')?'<div style="align-self:flex-end;display:flex;gap:8px"><button class="b pri" onclick="formNuevo()">➕ Nuevo estándar</button>'+
+      '<button class="b" onclick="formPapel()">📄 Leer bitácora escaneada</button></div>':'')+
     '</div></div>'+
     '<div class="card"><h3>Listado de stock · REG-SOP-LCC-071-C ('+items.length+')</h3>'+
     (items.length?tabla(items):'<div class="muted">Sin resultados.</div>')+'</div>';
@@ -236,6 +237,68 @@ async function guardarEdicion(id,btn){
   catch(e){toast('⚠️ '+e.message,true);btn.disabled=false}
 }
 function cerrarDetalle(){S.abierto=null;document.getElementById('detalle').innerHTML=''}
+
+/* ── Bitácora en papel: leer el escaneado, revisar y dar de alta ── */
+function formPapel(){
+  S.abierto=null;
+  document.getElementById('detalle').innerHTML='<div class="card"><h3>Leer la bitácora en papel</h3>'+
+    '<div class="muted" style="margin-bottom:10px">Subí el escaneado (PDF o foto) de la tabla de lotes o de las hojas de cada estándar. '+
+    'Se leen y se muestran acá para que los corrijas: <b>nada se guarda hasta que lo confirmes</b>. La letra manuscrita se lee con errores, así que revisá fila por fila.</div>'+
+    '<div class="fila"><input type="file" id="papel" accept=".pdf,.jpg,.jpeg,.png,.webp">'+
+    '<button class="b pri" id="bLeer" onclick="leerPapel()">Leer</button>'+
+    '<button class="b" onclick="cerrarDetalle()">Cancelar</button></div>'+
+    '<div id="papelRes" style="margin-top:12px"></div></div>';
+  document.getElementById('detalle').scrollIntoView({behavior:'smooth'});
+}
+async function leerPapel(){
+  const f=document.getElementById('papel').files[0];
+  if(!f){toast('⚠️ Elegí el archivo escaneado',true);return}
+  if(f.size>19*1024*1024){toast('⚠️ El archivo supera los 19 MB',true);return}
+  const btn=document.getElementById('bLeer');btn.disabled=true;btn.textContent='Leyendo…';
+  const res=document.getElementById('papelRes');
+  res.innerHTML='<div class="muted">Leyendo el escaneado. Puede demorar un minuto o más si tiene varias páginas…</div>';
+  try{
+    const d=await api('/leer',{method:'POST',body:JSON.stringify({dataBase64:await leerArchivo(f),mime:f.type||'application/pdf'})});
+    if(!d.count){res.innerHTML='<div class="aviso warn">No se reconoció ningún estándar en el archivo. Probá con un escaneo más nítido o subí una hoja por vez.</div>';return}
+    res.innerHTML='<div class="aviso info">Se leyeron <b>'+d.count+'</b> estándares. Revisá y corregí; destildá los que no quieras dar de alta. '+
+      'Los que no tengan nombre, recepción y vencimiento no se van a cargar.</div>'+
+      '<div style="overflow-x:auto"><table id="tPapel"><thead><tr><th></th><th>Nombre *</th><th>Tipo</th><th>Lote interno</th>'+
+      '<th>Lote proveedor</th><th>Proveedor</th><th>Cantidad</th><th>Recepción *</th><th>Vencimiento *</th><th>Reanálisis</th><th>Ubicación</th><th>Lectura</th></tr></thead><tbody>'+
+      d.estandares.map((e,i)=>filaPapel(e,i)).join('')+'</tbody></table></div>'+
+      '<div class="fila" style="margin-top:10px"><button class="b pri" onclick="altaPapel(this)">Dar de alta las marcadas</button>'+
+      '<span class="muted">Cada una queda marcada como venida de la bitácora en papel.</span></div>';
+  }catch(e){res.innerHTML='<div class="aviso crit">'+esc(e.message)+'</div>'}
+  finally{btn.disabled=false;btn.textContent='Leer'}
+}
+function filaPapel(e,i){
+  const c=Number(e.confianza||0);
+  const chip=c>=0.85?'<span class="chip ok">clara</span>':(c>=0.6?'<span class="chip warn">revisar</span>':'<span class="chip crit">dudosa</span>');
+  const tx=(k,v,t)=>'<td><input class="p-'+k+'" type="'+(t||'text')+'" value="'+esc(v||'')+'" style="min-width:110px"></td>';
+  return '<tr data-i="'+i+'"><td><input type="checkbox" class="p-ok" checked style="width:auto"></td>'+
+    tx('nombre',e.nombre)+
+    '<td><select class="p-tipo" style="min-width:120px">'+Object.entries(TIPOS).map(([k,v])=>'<option value="'+k+'"'+(e.tipo===k?' selected':'')+'>'+v+'</option>').join('')+'</select></td>'+
+    tx('lote_interno',e.lote_interno)+tx('lote_proveedor',e.lote_proveedor)+tx('proveedor',e.proveedor)+tx('cantidad',e.cantidad)+
+    tx('recepcion',e.recepcion,'date')+tx('vencimiento',e.vencimiento,'date')+tx('reanalisis',e.reanalisis,'date')+tx('ubicacion',e.ubicacion)+
+    '<td>'+chip+'</td></tr>';
+}
+async function altaPapel(btn){
+  const filas=[...document.querySelectorAll('#tPapel tbody tr')].filter(tr=>tr.querySelector('.p-ok').checked).map(tr=>{
+    const v=k=>{const el=tr.querySelector('.p-'+k);return el?el.value.trim():''};
+    return {nombre:v('nombre'),tipo:v('tipo'),lote_interno:v('lote_interno'),lote_proveedor:v('lote_proveedor'),
+      proveedor:v('proveedor'),cantidad:v('cantidad'),recepcion:v('recepcion'),vencimiento:v('vencimiento'),
+      reanalisis:v('reanalisis'),ubicacion:v('ubicacion'),observaciones:'De la bitácora en papel'};
+  });
+  if(!filas.length){toast('⚠️ No marcaste ninguna fila',true);return}
+  btn.disabled=true;btn.textContent='Dando de alta…';
+  try{
+    const d=await api('/desde-papel',{method:'POST',body:JSON.stringify({filas})});
+    const salteados=d.salteados.length?'<div class="aviso warn" style="margin-top:8px">No se cargaron '+d.salteados.length+': '+
+      d.salteados.map(s=>esc(s.nombre)+' ('+esc(s.motivo)+')').join(' · ')+'</div>':'';
+    document.getElementById('papelRes').innerHTML='<div class="aviso ok">Se dieron de alta <b>'+d.creados.length+'</b> estándares: '+
+      d.creados.map(esc).join(', ')+'</div>'+salteados;
+    await cargar();
+  }catch(e){toast('⚠️ '+e.message,true);btn.disabled=false;btn.textContent='Dar de alta las marcadas'}
+}
 
 /* ── Detalle ── */
 async function abrir(id,silencioso){
