@@ -183,3 +183,33 @@ export function faltantesDeTitulacion(resultados) {
     }
     return faltan;
 }
+
+/**
+ * Lo que falta para GUARDAR la muestra (pedido de Claudia, 25/09/2026): las
+ * analistas se olvidaban de completar campos, sobre todo los de conforme /
+ * no conforme, y el lote llegaba a la aprobacion a medias.
+ *
+ * Se exige: hora de salida de fabrica, hora de ingreso al control y TODOS los
+ * resultados. Las dos excepciones son el catiónico, que se ensaya los sabados,
+ * y el Cloud point, que no es requisito.
+ */
+const RE_OPCIONAL = /cloud\s*point/i;
+
+export const puedeQuedarPendiente = (r) =>
+    esDiferido(r) || RE_OPCIONAL.test(String(r?.paramName ?? r?.name ?? ''));
+
+export function faltantesParaGuardar({ horaFabrica, horaIngreso, resultados }) {
+    const faltan = [];
+    if (!horaFabrica) faltan.push('la hora de salida de fábrica');
+    if (!horaIngreso) faltan.push('la hora de ingreso al control');
+
+    const sinCargar = (Array.isArray(resultados) ? resultados : [])
+        .filter((r) => r.pass === null && !puedeQuedarPendiente(r))
+        .map((r) => r.paramName);
+    if (sinCargar.length) {
+        faltan.push(sinCargar.length <= 3
+            ? `el resultado de ${sinCargar.join(', ')}`
+            : `${sinCargar.length} resultados (${sinCargar.slice(0, 3).join(', ')}…)`);
+    }
+    return faltan;
+}

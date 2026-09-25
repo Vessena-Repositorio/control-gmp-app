@@ -2349,7 +2349,13 @@ function NewEntry({ specs, entries, acciones, usuario, navigate }) {
   };
 
   const batchExists = entries.some(e => e.batchCode === form.batchCode.trim());
-  const canSave = form.batchCode.trim() && matchedSpec && !batchExists && !guardando;
+  // No se guarda a medias: horas y todos los resultados, salvo el catiónico
+  // -que se ensaya los sábados- y el Cloud point. Lo mismo exige el servidor.
+  const faltaParaGuardar = faltantesParaGuardar({
+    horaFabrica: form.timeFactory, horaIngreso: form.timeIn, resultados: results,
+  });
+  const canSave = form.batchCode.trim() && matchedSpec && !batchExists && !guardando
+    && !faltaParaGuardar.length;
 
   // El analista, la especificación que queda guardada y el estado los pone el servidor.
   const handleSave = async () => {
@@ -2500,6 +2506,12 @@ function NewEntry({ specs, entries, acciones, usuario, navigate }) {
           style={{ padding: "7px 10px", borderRadius: 6, border: `1px solid ${V.grayMid}`, fontSize: 13, fontFamily: "inherit", resize: "vertical", width: "100%", boxSizing: "border-box" }} />
       </Field>
 
+      {faltaParaGuardar.length > 0 && matchedSpec && (
+        <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", color: "#92400E", borderRadius: 8, padding: "10px 12px", fontSize: 12.5, marginBottom: 12 }}>
+          Para guardar falta: {faltaParaGuardar.join("; ")}.
+        </div>
+      )}
+
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         <Btn variant="secondary" onClick={() => navigate("dashboard")}>Cancelar</Btn>
         <Btn disabled={!canSave} onClick={handleSave}>
@@ -2539,6 +2551,28 @@ function CamposTitulacion({ r, retest = false, onCambio, disabled }) {
       {campo(kGasto, "mL")}
     </div>
   );
+}
+
+// ── Qué falta para poder guardar ─────────────────────────────────────────────
+// Las analistas se olvidaban campos -sobre todo los de conforme / no conforme-
+// y el lote llegaba a la aprobación a medias. Se exigen las dos horas y todos
+// los resultados; el catiónico (se ensaya los sábados) y el Cloud point pueden
+// quedar pendientes. Lo mismo exige el servidor: graneles-reglas.js.
+const RE_OPCIONAL = /cloud\s*point/i;
+const puedeQuedarPendiente = (r) =>
+  RE_CATIONICO.test(String(r?.paramName || "")) || RE_OPCIONAL.test(String(r?.paramName || ""));
+
+function faltantesParaGuardar({ horaFabrica, horaIngreso, resultados }) {
+  const faltan = [];
+  if (!horaFabrica) faltan.push("la hora de salida de fábrica");
+  if (!horaIngreso) faltan.push("la hora de ingreso al control");
+  const sinCargar = (resultados || []).filter(r => r.pass === null && !puedeQuedarPendiente(r)).map(r => r.paramName);
+  if (sinCargar.length) {
+    faltan.push(sinCargar.length <= 3
+      ? `el resultado de ${sinCargar.join(", ")}`
+      : `${sinCargar.length} resultados (${sinCargar.slice(0, 3).join(", ")}…)`);
+  }
+  return faltan;
 }
 
 // ── Catiónicos de suavizantes ────────────────────────────────────────────────
@@ -2995,6 +3029,11 @@ function Detail({ entry: initialEntry, specs, entries, acciones, puede, usuario,
   const anyFailed = results.some(r => finalPass(r) === false);
   const anyRetestPending = results.some(retestPendiente);
   const allPassed = results.length > 0 && results.every(r => finalPass(r) === true);
+  // Igual que en el alta: no se guarda a medias.
+  const faltaParaGuardar = faltantesParaGuardar({
+    horaFabrica: timeFactory, horaIngreso: timeIn, resultados: results,
+  });
+
   // Titulaciones sin la toma o el gasto: el servidor tampoco deja aprobar.
   const faltanTitulaciones = results.filter(r => {
     if (!llevaTitulacion(r, spec?.parameters.find(p => p.id === r.paramId))) return false;
@@ -3195,12 +3234,15 @@ function Detail({ entry: initialEntry, specs, entries, acciones, puede, usuario,
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
                 <div style={{ fontSize: 12, color: V.gray }}>
                   <strong style={{ color: V.dark }}>Analista:</strong> guardá los cambios y la muestra queda pendiente para revisión del supervisor.
+                  {faltaParaGuardar.length > 0 && (
+                    <div style={{ color: "#92400E", marginTop: 4 }}>Para guardar falta: {faltaParaGuardar.join("; ")}.</div>
+                  )}
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
-                  <Btn variant="secondary" onClick={() => saveResults(false)} disabled={ocupado}>
+                  <Btn variant="secondary" onClick={() => saveResults(false)} disabled={ocupado || faltaParaGuardar.length > 0}>
                     <Save size={14} /> Solo guardar
                   </Btn>
-                  <Btn onClick={() => saveResults(true)} disabled={ocupado}>
+                  <Btn onClick={() => saveResults(true)} disabled={ocupado || faltaParaGuardar.length > 0}>
                     <Save size={14} /> Guardar y volver
                   </Btn>
                 </div>

@@ -5,7 +5,10 @@ import { PERMISOS_POR_ROL } from '../lib/permisos.js';
 import { auditar } from '../lib/sesiones.js';
 import { firmaDe } from '../lib/firmas.js';
 import { createHash, randomBytes } from 'node:crypto';
-import { armarResultados, bloqueosDeAprobacion, esDiferido, limpiar, numero, passFinal, soloFaltaDiferido } from '../lib/graneles-reglas.js';
+import {
+    armarResultados, bloqueosDeAprobacion, esDiferido, faltantesParaGuardar,
+    limpiar, numero, passFinal, soloFaltaDiferido,
+} from '../lib/graneles-reglas.js';
 import { hayCorreo, enviar } from '../lib/correo.js';
 import { supervisoresDe } from '../lib/destinatarios.js';
 
@@ -355,6 +358,13 @@ rutasGraneles.post('/muestras', cargar, async (req, res, next) => {
             };
 
             const resultados = armarResultados(foto.parameters, m.results);
+            const faltan = faltantesParaGuardar({
+                horaFabrica: horaValida(m.timeFactory),
+                horaIngreso: horaValida(m.timeIn),
+                resultados,
+            });
+            if (faltan.length) throw fallo(400, `falta completar: ${faltan.join('; ')}`);
+
             const { rows } = await c.query(
                 `INSERT INTO gra_muestras
                     (id, lote, producto_code, especificacion, fecha, analista, hora_fabrica,
@@ -472,6 +482,11 @@ rutasGraneles.put('/muestras/:id', cargar, async (req, res, next) => {
         const guardada = await enTransaccion(async (c) => {
             const fila = await muestraPendiente(c, req.params.id);
             const v = camposEditables(req.body || {}, fila);
+            // Nada de guardar a medias: la muestra se completa de una (pedido
+            // de Claudia, 25/09/2026). El catiónico y el Cloud point pueden
+            // quedar pendientes.
+            const faltan = faltantesParaGuardar(v);
+            if (faltan.length) throw fallo(400, `falta completar: ${faltan.join('; ')}`);
             aviso = { fila, antes: fila.resultados, ahora: v.resultados };
 
             const { rows } = await c.query(
