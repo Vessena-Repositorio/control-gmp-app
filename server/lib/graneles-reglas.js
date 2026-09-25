@@ -169,15 +169,24 @@ const RE_TITULACION = /materia\s+activa|cloro/i;
 export const llevaTitulacion = (r) => RE_TITULACION.test(String(r?.paramName ?? r?.name ?? ''))
     && (r?.type ?? 'numeric') !== 'text';
 
-/** Lo que falta anotar de una titulacion, en palabras. */
+/**
+ * Lo que falta anotar de una titulacion, en palabras.
+ *
+ * Una muestra cargada antes de que existiera esta regla no tiene los campos:
+ * a esa no se le pueden pedir datos que nadie anoto, asi que se la deja pasar.
+ * Desde que se guarda una vez, armarResultados los crea -aunque sea vacios- y
+ * pasan a ser obligatorios.
+ */
 export function faltantesDeTitulacion(resultados) {
     const faltan = [];
     for (const r of Array.isArray(resultados) ? resultados : []) {
         if (!llevaTitulacion(r)) continue;
+        if (r.toma === undefined && r.gasto === undefined) continue;
         if (r.value !== '' && (!r.toma || !r.gasto)) {
             faltan.push(`${r.paramName}: ${!r.toma && !r.gasto ? 'toma y gasto' : (!r.toma ? 'toma de muestra' : 'gasto')}`);
         }
-        if (r.retestValue !== '' && (!r.retestToma || !r.retestGasto)) {
+        if (r.retestValue !== '' && r.retestToma !== undefined
+            && (!r.retestToma || !r.retestGasto)) {
             faltan.push(`${r.paramName} (retest): ${!r.retestToma && !r.retestGasto ? 'toma y gasto' : (!r.retestToma ? 'toma de muestra' : 'gasto')}`);
         }
     }

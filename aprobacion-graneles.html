@@ -3035,10 +3035,13 @@ function Detail({ entry: initialEntry, specs, entries, acciones, puede, usuario,
   });
 
   // Titulaciones sin la toma o el gasto: el servidor tampoco deja aprobar.
+  // Las muestras cargadas antes de esta regla no tienen los campos: no se les
+  // pide un dato que nadie anotó. Ver graneles-reglas.js.
   const faltanTitulaciones = results.filter(r => {
     if (!llevaTitulacion(r, spec?.parameters.find(p => p.id === r.paramId))) return false;
+    if (r.toma === undefined && r.gasto === undefined) return false;
     if (r.value && (!r.toma || !r.gasto)) return true;
-    return !!r.retestValue && (!r.retestToma || !r.retestGasto);
+    return !!r.retestValue && r.retestToma !== undefined && (!r.retestToma || !r.retestGasto);
   }).map(r => r.paramName);
 
   const canApprove = allFilled && !anyFailed && !anyRetestPending && !!timeEnd && !faltanTitulaciones.length;
