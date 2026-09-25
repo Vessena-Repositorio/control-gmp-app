@@ -87,11 +87,17 @@ export function passFinal(r) {
     return null;
 }
 
-/** Lo que impide aprobar, en palabras. Vacio si se puede. */
-export function bloqueosDeAprobacion(resultados, horaFin) {
-    const lista = Array.isArray(resultados) ? resultados : [];
+/**
+ * Lo que impide aprobar, en palabras. Vacio si se puede.
+ *
+ * `ignorarDiferido` es para produccion: el catiónico pendiente no frena el
+ * envasado, pero si la aprobacion documental (ver mas abajo).
+ */
+export function bloqueosDeAprobacion(resultados, horaFin, opciones = {}) {
+    let lista = Array.isArray(resultados) ? resultados : [];
     const motivos = [];
     if (!lista.length) motivos.push('la muestra no tiene parametros');
+    if (opciones.ignorarDiferido) lista = lista.filter((r) => !esDiferido(r));
 
     const sinCargar = lista.filter((r) => r.pass === null).length;
     const retestPendiente = lista.filter(
@@ -104,4 +110,34 @@ export function bloqueosDeAprobacion(resultados, horaFin) {
     if (fuera) motivos.push(`${fuera} parametro(s) fuera de especificacion`);
     if (!horaFin) motivos.push('falta la hora de fin de analisis');
     return motivos;
+}
+
+/**
+ * Catiónicos de suavizantes: el ensayo se hace los sabados y se juntan los de
+ * toda la semana (pedido de Claudia, 25/09/2026). Hasta entonces la muestra
+ * tiene todo lo demas cargado y ese parametro vacio.
+ *
+ * Para PRODUCCION eso no frena el envasado: con el resto conforme el granel es
+ * apto. Para la aprobacion documental si frena, porque el registro no esta
+ * completo: la muestra espera en "Pendiente catiónico".
+ */
+const RE_DIFERIDO = /cati[oó]nico/i;
+
+export const esDiferido = (r) => RE_DIFERIDO.test(String(r?.paramName ?? ''));
+
+/** Todo lo que no es diferido esta cargado, sin retest pendiente. */
+function restoCompleto(lista) {
+    const resto = lista.filter((r) => !esDiferido(r));
+    return resto.length > 0
+        && resto.every((r) => r.pass !== null)
+        && !resto.some((r) => r.type === 'numeric' && r.pass === false && r.retestValue === '');
+}
+
+/** La muestra solo espera el catiónico: el resto ya esta. */
+export function soloFaltaDiferido(resultados) {
+    const lista = Array.isArray(resultados) ? resultados : [];
+    const dif = lista.filter(esDiferido);
+    if (!dif.length) return false;
+    if (!dif.every((r) => r.pass === null)) return false;
+    return restoCompleto(lista);
 }

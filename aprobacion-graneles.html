@@ -1354,6 +1354,7 @@ function App() {
     { id: "specs", label: "Especificaciones", icon: FlaskConical },
     puede("cargar") && { id: "new-entry", label: "Nueva Muestra", icon: PackagePlus },
     { id: "bitacora", label: "Bitácora", icon: ClipboardList },
+    { id: "cationicos", label: "Catiónicos", icon: FlaskConical },
     { id: "kpis", label: "KPIs", icon: BarChart3 },
     { id: "stats", label: "Análisis", icon: BarChart3 },
     puede("administrar") && { id: "firmas", label: "Firmas", icon: PenLine },
@@ -1443,6 +1444,7 @@ function App() {
         {view === "specs" && <SpecsManager specs={specs} onSave={acciones.guardarSpec} onDelete={acciones.borrarSpec} canAdmin={puede("administrar")} />}
         {view === "new-entry" && puede("cargar") && <NewEntry specs={specs} entries={entries} acciones={acciones} usuario={usuario} navigate={navigate} />}
         {view === "bitacora" && <Bitacora entries={entries} specs={specs} navigate={navigate} />}
+        {view === "cationicos" && <Cationicos entries={entries} specs={specs} acciones={acciones} puede={puede} usuario={usuario} navigate={navigate} />}
         {view === "kpis" && <KpiDashboard entries={entries} specs={specs} />}
         {view === "stats" && <StatAnalysis entries={entries} specs={specs} />}
         {view === "firmas" && puede("administrar") && <FirmasManager avisar={avisar} />}
@@ -2501,6 +2503,198 @@ function NewEntry({ specs, entries, acciones, usuario, navigate }) {
 // ══════════════════════════════════════════════════════════════════
 // ══ BITÁCORA ═════════════════════════════════════════════════════
 // ══════════════════════════════════════════════════════════════════
+// ── Catiónicos de suavizantes ────────────────────────────────────────────────
+// El ensayo se hace los sábados juntando los de toda la semana, así que la
+// muestra queda con todo cargado menos ese parámetro. Esta pantalla es esa cola:
+// se carga el valor de cada lote y, ahí mismo, quien aprueba firma uno por uno.
+// La misma regla vive en el servidor (lib/graneles-reglas.js).
+const RE_CATIONICO = /cati[oó]nico/i;
+const esCationico = (r) => RE_CATIONICO.test(String(r?.paramName || ""));
+
+function lunesDe(fecha) {
+  const d = new Date(String(fecha).slice(0, 10) + "T12:00:00Z");
+  const dia = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() - (dia - 1));
+  return d.toISOString().slice(0, 10);
+}
+
+function Cationicos({ entries, specs, acciones, puede, usuario, navigate }) {
+  const [valores, setValores] = useState({});
+  const [ocupado, setOcupado] = useState("");
+
+  const conCationico = entries.filter(e =>
+    e.status === STATUS.PENDING && (e.results || []).some(esCationico));
+  const pendientes = conCationico.filter(e => e.results.filter(esCationico).every(r => r.pass === null));
+  const cargados = conCationico.filter(e => e.results.some(r => esCationico(r) && r.pass !== null));
+
+  const specDe = (e) => e.spec || specs.find(s => s.code === e.productCode);
+  const rangoDe = (e) => {
+    const p = (specDe(e)?.parameters || []).find(x => RE_CATIONICO.test(x.name || ""));
+    if (!p) return "";
+    const u = p.unit ? ` ${p.unit}` : "";
+    return `${p.min ?? "—"} a ${p.max ?? "—"}${u}`;
+  };
+  const campos = (e, extra = {}) => ({
+    results: e.results, observations: e.observations,
+    timeFactory: e.timeFactory, timeIn: e.timeIn, timeEnd: e.timeEnd, ...extra,
+  });
+
+  const guardar = async (e) => {
+    const valor = String(valores[e.id] ?? "").trim();
+    if (!valor) return;
+    setOcupado(e.id);
+    const results = e.results.map(r => (esCationico(r) ? { ...r, value: valor } : r));
+    await acciones.guardarMuestra(e.id, campos(e, { results }));
+    setOcupado("");
+    setValores(v => ({ ...v, [e.id]: "" }));
+  };
+
+  const aprobar = async (e) => {
+    if (!confirm(`Vas a aprobar el lote ${e.batchCode} con la firma de ${usuario?.nombre || "tu usuario"}. No se puede deshacer. ¿Seguir?`)) return;
+    setOcupado(e.id);
+    await acciones.disponer(e.id, STATUS.APPROVED, campos(e));
+    setOcupado("");
+  };
+
+  const porSemana = {};
+  pendientes.forEach(e => {
+    const k = lunesDe(e.date);
+    (porSemana[k] = porSemana[k] || []).push(e);
+  });
+  const semanas = Object.keys(porSemana).sort().reverse();
+
+  const celda = { padding: "8px 10px", borderBottom: `1px solid ${V.grayMid}`, fontSize: 13, verticalAlign: "top" };
+
+  return (
+    <div>
+      <Card>
+        <h2 style={{ margin: "0 0 4px", fontSize: 18 }}>Catiónicos de suavizantes</h2>
+        <p style={{ color: V.gray, fontSize: 13, margin: "0 0 12px", lineHeight: 1.5 }}>
+          El ensayo se hace los sábados, juntando los lotes de toda la semana. Mientras tanto, con el
+          resto del análisis conforme, el granel ya está apto para envasar. Cargá acá el resultado de cada
+          lote y después se aprueba uno por uno.
+        </p>
+        {pendientes.length === 0 && (
+          <p style={{ color: V.gray, fontSize: 13, margin: 0 }}>No hay lotes esperando el catiónico.</p>
+        )}
+        {semanas.map(sem => (
+          <div key={sem} style={{ marginBottom: 18 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: V.dark, margin: "10px 0 6px" }}>
+              Semana del {fmt(sem)} · {porSemana[sem].length} lote(s)
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ background: V.grayLight }}>
+                    <th style={{ ...celda, textAlign: "left" }}>Fecha</th>
+                    <th style={{ ...celda, textAlign: "left" }}>Lote</th>
+                    <th style={{ ...celda, textAlign: "left" }}>Producto</th>
+                    <th style={{ ...celda, textAlign: "left" }}>Analista</th>
+                    <th style={{ ...celda, textAlign: "left" }}>Especificación</th>
+                    <th style={{ ...celda, textAlign: "left" }}>Resultado</th>
+                    <th style={celda}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {porSemana[sem].map(e => (
+                    <tr key={e.id}>
+                      <td style={celda}>{fmt(e.date)}</td>
+                      <td style={{ ...celda, fontWeight: 700 }}>{e.batchCode}</td>
+                      <td style={celda}>{specDe(e)?.name || e.productCode}</td>
+                      <td style={celda}>{e.analyst}</td>
+                      <td style={{ ...celda, color: V.gray }}>{rangoDe(e)}</td>
+                      <td style={celda}>
+                        {puede("cargar") ? (
+                          <input
+                            value={valores[e.id] ?? ""}
+                            onChange={ev => setValores(v => ({ ...v, [e.id]: ev.target.value }))}
+                            placeholder="valor"
+                            style={{ width: 110, padding: "6px 8px", border: `1px solid ${V.grayMid}`, borderRadius: 6, fontSize: 13 }}
+                          />
+                        ) : <span style={{ color: V.gray }}>—</span>}
+                      </td>
+                      <td style={celda}>
+                        {puede("cargar") && (
+                          <Btn size="sm" disabled={ocupado === e.id || !String(valores[e.id] ?? "").trim()}
+                            onClick={() => guardar(e)}>
+                            {ocupado === e.id ? "Guardando…" : "Guardar"}
+                          </Btn>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
+      </Card>
+
+      <Card>
+        <h3 style={{ margin: "0 0 4px", fontSize: 15 }}>Con el catiónico cargado, esperando aprobación ({cargados.length})</h3>
+        <p style={{ color: V.gray, fontSize: 13, margin: "0 0 10px" }}>
+          Aprueban Antonella, Gloria o Claudia. Cada firma queda con su nombre y la hora.
+        </p>
+        {cargados.length === 0 && <p style={{ color: V.gray, fontSize: 13, margin: 0 }}>No hay ninguno.</p>}
+        {cargados.length > 0 && (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ background: V.grayLight }}>
+                  <th style={{ ...celda, textAlign: "left" }}>Fecha</th>
+                  <th style={{ ...celda, textAlign: "left" }}>Lote</th>
+                  <th style={{ ...celda, textAlign: "left" }}>Producto</th>
+                  <th style={{ ...celda, textAlign: "left" }}>Catiónico</th>
+                  <th style={celda}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {cargados.map(e => {
+                  const r = e.results.find(esCationico);
+                  const fp = finalPass(r);
+                  const pendienteRetest = r.pass === false && !r.retestValue;
+                  const bloqueos = [
+                    fp === false && "quedó fuera de especificación",
+                    pendienteRetest && "falta el retest",
+                    !e.timeEnd && "falta la hora de fin",
+                    e.results.some(x => x.pass === null) && "faltan otros resultados",
+                  ].filter(Boolean);
+                  return (
+                    <tr key={e.id}>
+                      <td style={celda}>{fmt(e.date)}</td>
+                      <td style={{ ...celda, fontWeight: 700 }}>{e.batchCode}</td>
+                      <td style={celda}>{specDe(e)?.name || e.productCode}</td>
+                      <td style={celda}>
+                        <span style={{ fontWeight: 700, color: fp === false ? V.red : (fp === true ? "rgb(22 101 52)" : V.dark) }}>
+                          {r.retestValue || r.value}
+                        </span>
+                        {fp === false && <div style={{ color: V.red, fontSize: 12 }}>fuera de especificación</div>}
+                      </td>
+                      <td style={celda}>
+                        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                          <Btn size="sm" variant="secondary" onClick={() => navigate("detail", e)}>Ver</Btn>
+                          {puede("aprobar") && bloqueos.length === 0 && (
+                            <Btn size="sm" disabled={ocupado === e.id} onClick={() => aprobar(e)}>
+                              {ocupado === e.id ? "Firmando…" : "Aprobar"}
+                            </Btn>
+                          )}
+                          {bloqueos.length > 0 && (
+                            <span style={{ color: V.gray, fontSize: 12 }}>Para aprobar: {bloqueos.join(", ")}.</span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 function Bitacora({ entries, specs, navigate }) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");

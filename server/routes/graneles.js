@@ -5,7 +5,9 @@ import { PERMISOS_POR_ROL } from '../lib/permisos.js';
 import { auditar } from '../lib/sesiones.js';
 import { firmaDe } from '../lib/firmas.js';
 import { createHash, randomBytes } from 'node:crypto';
-import { armarResultados, bloqueosDeAprobacion, limpiar, numero, passFinal } from '../lib/graneles-reglas.js';
+import { armarResultados, bloqueosDeAprobacion, esDiferido, limpiar, numero, passFinal, soloFaltaDiferido } from '../lib/graneles-reglas.js';
+import { hayCorreo, enviar } from '../lib/correo.js';
+import { supervisoresDe } from '../lib/destinatarios.js';
 
 export const rutasGraneles = Router();
 
@@ -395,7 +397,9 @@ function horaFinAlGuardar(enviada, resultados) {
     const completo = lista.length > 0
         && lista.every((r) => r.pass !== null)
         && !lista.some((r) => r.type === 'numeric' && r.pass === false && r.retestValue === '');
-    if (!completo) return null;
+    // El catiónico de los suavizantes se hace los sabados: el analisis de
+    // rutina termina igual y desde ahi el granel es apto para envasar.
+    if (!completo && !soloFaltaDiferido(lista)) return null;
     return new Intl.DateTimeFormat('en-GB', {
         timeZone: ZONA, hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
     }).format(new Date());
@@ -413,13 +417,62 @@ function camposEditables(m, fila) {
     };
 }
 
+/**
+ * Catiónico que vuelve fuera de especificación con el lote ya envasado.
+ *
+ * Se ensaya el sábado, asi que para entonces el granel salio hace dias: el
+ * aviso va en el momento a quienes aprueban (Antonella, Gloria y Claudia), no
+ * en el resumen de la semana siguiente.
+ */
+async function avisarCationicoFueraDeEspec(fila, antes, ahora) {
+    if (!hayCorreo) return;
+    const previo = (Array.isArray(antes) ? antes : []).filter(esDiferido);
+    const nuevo = (Array.isArray(ahora) ? ahora : []).filter(esDiferido);
+    // Solo cuando pasa a no conforme: editar otra cosa no vuelve a avisar.
+    const eraNoConforme = previo.some((r) => passFinal(r) === false);
+    const cae = nuevo.find((r) => passFinal(r) === false);
+    if (!cae || eraNoConforme) return;
+
+    const para = await supervisoresDe(RECURSO, 'cationico');
+    if (!para.length) return;
+    const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const base = (process.env.URL_PUBLICA || 'http://192.168.30.15:3000').replace(/\/+$/, '');
+    const nombre = fila.especificacion?.name || fila.producto_code;
+    const valor = cae.retestValue || cae.value;
+    const html = `<div style="font-family:Arial,Helvetica,sans-serif;background:#f5f5f5;padding:20px">
+      <div style="max-width:600px;margin:auto">
+        <div style="background:#991B1B;color:#fff;padding:20px 22px;border-radius:8px 8px 0 0">
+          <div style="font-size:19px;font-weight:800">Catiónico fuera de especificación</div>
+          <div style="font-size:12px;opacity:.9;margin-top:2px">Aprobación de Graneles · SOP-AC-029</div>
+        </div>
+        <div style="background:#fff;padding:22px;border-radius:0 0 8px 8px">
+          <p style="margin:0 0 10px">El lote <b>${esc(fila.lote)}</b> — ${esc(nombre)} dio
+          <b>${esc(valor)}</b> en ${esc(cae.paramName)}, fuera de especificación.</p>
+          <p style="margin:0 0 10px;font-size:13px">El ensayo se hace los sábados, así que
+          <b>el granel ya pudo haberse envasado</b>: hay que revisar dónde está el producto antes de disponer el lote.</p>
+          <p style="margin:0 0 10px;font-size:13px">En la app se puede cargar el retest del parámetro; el lote queda no conforme hasta que se resuelva.</p>
+          <p style="margin:18px 0"><a href="${base}/aprobacion-graneles.html" style="display:inline-block;padding:11px 22px;background:#991B1B;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold">Abrir el lote</a></p>
+        </div></div></div>`;
+    try {
+        await enviar({
+            para, html,
+            asunto: `[Vessena · Graneles] Catiónico FUERA DE ESPECIFICACIÓN · lote ${fila.lote}`,
+            texto: `Lote ${fila.lote} (${nombre}): ${cae.paramName} = ${valor}, fuera de especificación. ${base}/aprobacion-graneles.html`,
+        });
+    } catch (err) {
+        console.error('[graneles] no se pudo avisar el catiónico:', err.message);
+    }
+}
+
 rutasGraneles.put('/muestras/:id', cargar, async (req, res, next) => {
     const usuario = req.usuario.nombre;
 
     try {
+        let aviso = null;
         const guardada = await enTransaccion(async (c) => {
             const fila = await muestraPendiente(c, req.params.id);
             const v = camposEditables(req.body || {}, fila);
+            aviso = { fila, antes: fila.resultados, ahora: v.resultados };
 
             const { rows } = await c.query(
                 `UPDATE gra_muestras SET
@@ -434,6 +487,9 @@ rutasGraneles.put('/muestras/:id', cargar, async (req, res, next) => {
             return rows[0];
         });
 
+        if (aviso) {
+            avisarCationicoFueraDeEspec(aviso.fila, aviso.antes, aviso.ahora).catch(() => {});
+        }
         res.json({ ok: true, muestra: filaAMuestra(guardada) });
     } catch (err) {
         responder(err, res, next);
@@ -741,7 +797,11 @@ function estadoParaProduccion(f) {
         return { apto: false, estado: 'rechazado', detalle: 'Control de Calidad rechazó el lote' };
     }
     const resultados = Array.isArray(f.resultados) ? f.resultados : [];
-    const motivos = bloqueosDeAprobacion(resultados, hora(f.hora_fin));
+    // El catiónico de los suavizantes se ensaya los sabados. Para produccion no
+    // frena: con el resto conforme el granel se envasa (decision de Claudia,
+    // 25/09/2026). Para la aprobacion documental si sigue frenando.
+    const esperaCationico = soloFaltaDiferido(resultados);
+    const motivos = bloqueosDeAprobacion(resultados, hora(f.hora_fin), { ignorarDiferido: esperaCationico });
     if (resultados.some((r) => passFinal(r) === false)) {
         return { apto: false, estado: 'no_conforme', detalle: motivos.join('; ') };
     }
@@ -751,9 +811,11 @@ function estadoParaProduccion(f) {
     return {
         apto: true,
         estado: 'conforme',
-        detalle: f.estado === 'approved'
-            ? 'análisis conforme y aprobado documentalmente'
-            : 'análisis conforme; aprobación documental pendiente',
+        detalle: esperaCationico
+            ? 'análisis de rutina conforme; falta el catiónico, que se ensaya el sábado'
+            : (f.estado === 'approved'
+                ? 'análisis conforme y aprobado documentalmente'
+                : 'análisis conforme; aprobación documental pendiente'),
     };
 }
 
