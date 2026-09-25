@@ -2328,6 +2328,10 @@ function NewEntry({ specs, entries, acciones, usuario, navigate }) {
       return r;
     });
   };
+  // Toma de muestra y gasto de titulante: no cambian el pass, solo acompañan.
+  const setCampo = (idx, campo, val) => {
+    setResults(prev => { const r = [...prev]; r[idx] = { ...r[idx], [campo]: val }; return r; });
+  };
   // Marcar parámetro tipo texto como conforme / no conforme
   const setTextResult = (idx, isConforme, hallazgo) => {
     setResults(prev => {
@@ -2449,6 +2453,9 @@ function NewEntry({ specs, entries, acciones, usuario, navigate }) {
                           <Input value={r.value} onChange={e => setResult(i, e.target.value)}
                             placeholder="0.00"
                             style={{ width: 120, borderColor: r.pass === false ? "#F87171" : V.grayMid }} />
+                          {llevaTitulacion(r, param) && (
+                            <CamposTitulacion r={r} onCambio={(k, v) => setCampo(i, k, v)} />
+                          )}
                           {needsRetest && (
                             <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
                               <span style={{ fontSize: 10, color: "#92400E", fontWeight: 600, minWidth: 46 }}>Retest:</span>
@@ -2456,6 +2463,9 @@ function NewEntry({ specs, entries, acciones, usuario, navigate }) {
                                 placeholder="2° medición"
                                 style={{ width: 120, borderColor: r.retestPass === false ? "#F87171" : (r.retestPass === true ? "#86EFAC" : "#F59E0B") }} />
                             </div>
+                          )}
+                          {needsRetest && r.retestValue && llevaTitulacion(r, param) && (
+                            <CamposTitulacion r={r} retest onCambio={(k, v) => setCampo(i, k, v)} />
                           )}
                         </>
                       )}
@@ -2503,6 +2513,34 @@ function NewEntry({ specs, entries, acciones, usuario, navigate }) {
 // ══════════════════════════════════════════════════════════════════
 // ══ BITÁCORA ═════════════════════════════════════════════════════
 // ══════════════════════════════════════════════════════════════════
+// ── Titulaciones: toma de muestra y gasto ────────────────────────────────────
+// Materia activa -total, catiónica o aniónica- y cloro se informan con la toma
+// de muestra y el gasto de titulante: es el dato analítico que revisa quien
+// aprueba (pedido de Claudia, 25/09/2026). Queda en el registro y en la
+// bitácora, pero NO sale en la hoja impresa del REG-SOP-AC-029.
+// La misma regla vive en el servidor: server/lib/graneles-reglas.js.
+const RE_TITULACION = /materia\s+activa|cloro/i;
+const llevaTitulacion = (r, param) => RE_TITULACION.test(String(r?.paramName || ""))
+  && ((param?.type || r?.type || "numeric") !== "text");
+
+function CamposTitulacion({ r, retest = false, onCambio, disabled }) {
+  const kToma = retest ? "retestToma" : "toma";
+  const kGasto = retest ? "retestGasto" : "gasto";
+  const campo = (k, ph) => (
+    <Input value={r[k] || ""} onChange={e => onCambio(k, e.target.value)}
+      placeholder={ph} disabled={disabled}
+      style={{ width: 82, borderColor: r[k] ? V.grayMid : "#F59E0B" }} />
+  );
+  return (
+    <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
+      <span style={{ fontSize: 10, color: V.gray, fontWeight: 600 }}>Toma</span>
+      {campo(kToma, "g / mL")}
+      <span style={{ fontSize: 10, color: V.gray, fontWeight: 600 }}>Gasto</span>
+      {campo(kGasto, "mL")}
+    </div>
+  );
+}
+
 // ── Catiónicos de suavizantes ────────────────────────────────────────────────
 // El ensayo se hace los sábados juntando los de toda la semana, así que la
 // muestra queda con todo cargado menos ese parámetro. Esta pantalla es esa cola:
@@ -2539,14 +2577,20 @@ function Cationicos({ entries, specs, acciones, puede, usuario, navigate }) {
     timeFactory: e.timeFactory, timeIn: e.timeIn, timeEnd: e.timeEnd, ...extra,
   });
 
+  // Es una titulación: además del resultado van la toma de muestra y el gasto.
+  const dato = (id, k) => String((valores[id] || {})[k] ?? "").trim();
+  const setDato = (id, k, v) => setValores(prev => ({ ...prev, [id]: { ...(prev[id] || {}), [k]: v } }));
+  const completo = (id) => dato(id, "valor") && dato(id, "toma") && dato(id, "gasto");
+
   const guardar = async (e) => {
-    const valor = String(valores[e.id] ?? "").trim();
-    if (!valor) return;
+    if (!completo(e.id)) return;
     setOcupado(e.id);
-    const results = e.results.map(r => (esCationico(r) ? { ...r, value: valor } : r));
+    const results = e.results.map(r => (esCationico(r)
+      ? { ...r, value: dato(e.id, "valor"), toma: dato(e.id, "toma"), gasto: dato(e.id, "gasto") }
+      : r));
     await acciones.guardarMuestra(e.id, campos(e, { results }));
     setOcupado("");
-    setValores(v => ({ ...v, [e.id]: "" }));
+    setValores(v => ({ ...v, [e.id]: {} }));
   };
 
   const aprobar = async (e) => {
@@ -2605,17 +2649,18 @@ function Cationicos({ entries, specs, acciones, puede, usuario, navigate }) {
                       <td style={{ ...celda, color: V.gray }}>{rangoDe(e)}</td>
                       <td style={celda}>
                         {puede("cargar") ? (
-                          <input
-                            value={valores[e.id] ?? ""}
-                            onChange={ev => setValores(v => ({ ...v, [e.id]: ev.target.value }))}
-                            placeholder="valor"
-                            style={{ width: 110, padding: "6px 8px", border: `1px solid ${V.grayMid}`, borderRadius: 6, fontSize: 13 }}
-                          />
+                          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
+                            {[["valor", "resultado", 94], ["toma", "toma g/mL", 88], ["gasto", "gasto mL", 84]].map(([k, ph, w]) => (
+                              <input key={k} value={dato(e.id, k)} placeholder={ph}
+                                onChange={ev => setDato(e.id, k, ev.target.value)}
+                                style={{ width: w, padding: "6px 8px", border: `1px solid ${V.grayMid}`, borderRadius: 6, fontSize: 13 }} />
+                            ))}
+                          </div>
                         ) : <span style={{ color: V.gray }}>—</span>}
                       </td>
                       <td style={celda}>
                         {puede("cargar") && (
-                          <Btn size="sm" disabled={ocupado === e.id || !String(valores[e.id] ?? "").trim()}
+                          <Btn size="sm" disabled={ocupado === e.id || !completo(e.id)}
                             onClick={() => guardar(e)}>
                             {ocupado === e.id ? "Guardando…" : "Guardar"}
                           </Btn>
@@ -2668,6 +2713,9 @@ function Cationicos({ entries, specs, acciones, puede, usuario, navigate }) {
                         <span style={{ fontWeight: 700, color: fp === false ? V.red : (fp === true ? "rgb(22 101 52)" : V.dark) }}>
                           {r.retestValue || r.value}
                         </span>
+                        <div style={{ color: V.gray, fontSize: 11 }}>
+                          toma {r.retestValue ? (r.retestToma || "—") : (r.toma || "—")} · gasto {r.retestValue ? (r.retestGasto || "—") : (r.gasto || "—")}
+                        </div>
                         {fp === false && <div style={{ color: V.red, fontSize: 12 }}>fuera de especificación</div>}
                       </td>
                       <td style={celda}>
@@ -2724,8 +2772,10 @@ function Bitacora({ entries, specs, navigate }) {
           Analista: e.analyst, Parámetro: r.paramName,
           Mín: param?.min ?? "", Máx: param?.max ?? "",
           Resultado: r.value,
+          "Toma": r.toma || "", "Gasto": r.gasto || "",
           "1° Cumple": r.pass === true ? "Sí" : r.pass === false ? "No" : "",
           "Retest": r.retestValue || "",
+          "Retest toma": r.retestToma || "", "Retest gasto": r.retestGasto || "",
           "Retest cumple": r.retestPass === true ? "Sí" : r.retestPass === false ? "No" : "",
           "Estado final": fp === true ? "Cumple" : fp === false ? "Fuera de spec" : (r.pass === false ? "Pendiente retest" : ""),
           Estado: STATUS_LABEL[e.status], Observaciones: e.observations || "",
@@ -2755,8 +2805,10 @@ function Bitacora({ entries, specs, navigate }) {
           Analista: e.analyst, Parámetro: r.paramName, Método: param?.method ?? "",
           Unidad: param?.unit ?? "", Mín: param?.min ?? "", Máx: param?.max ?? "",
           Objetivo: param?.target ?? "", Resultado: r.value,
+          "Toma": r.toma || "", "Gasto": r.gasto || "",
           "1° Cumple": r.pass === true ? "Sí" : r.pass === false ? "No" : "",
           "Retest (2° medición)": r.retestValue || "",
+          "Retest toma": r.retestToma || "", "Retest gasto": r.retestGasto || "",
           "Retest cumple": r.retestPass === true ? "Sí" : r.retestPass === false ? "No" : "",
           "Estado final": fp === true ? "Cumple" : fp === false ? "Fuera de spec" : (r.pass === false ? "Pendiente retest" : ""),
           "Estado General": STATUS_LABEL[e.status], Observaciones: e.observations || "",
@@ -2884,6 +2936,9 @@ function Detail({ entry: initialEntry, specs, entries, acciones, puede, usuario,
       return r;
     });
   };
+  const setCampo = (idx, campo, val) => {
+    setResults(prev => { const r = [...prev]; r[idx] = { ...r[idx], [campo]: val }; return r; });
+  };
   const setTextResult = (idx, isConforme, hallazgo) => {
     setResults(prev => {
       const r = [...prev];
@@ -2940,13 +2995,21 @@ function Detail({ entry: initialEntry, specs, entries, acciones, puede, usuario,
   const anyFailed = results.some(r => finalPass(r) === false);
   const anyRetestPending = results.some(retestPendiente);
   const allPassed = results.length > 0 && results.every(r => finalPass(r) === true);
-  const canApprove = allFilled && !anyFailed && !anyRetestPending && !!timeEnd;
+  // Titulaciones sin la toma o el gasto: el servidor tampoco deja aprobar.
+  const faltanTitulaciones = results.filter(r => {
+    if (!llevaTitulacion(r, spec?.parameters.find(p => p.id === r.paramId))) return false;
+    if (r.value && (!r.toma || !r.gasto)) return true;
+    return !!r.retestValue && (!r.retestToma || !r.retestGasto);
+  }).map(r => r.paramName);
+
+  const canApprove = allFilled && !anyFailed && !anyRetestPending && !!timeEnd && !faltanTitulaciones.length;
   // Las mismas condiciones que exige el servidor, dichas para quien aprueba.
   const faltaParaAprobar = [
     !allFilled && "completar todos los resultados",
     anyRetestPending && "hacer el retest pendiente",
     anyFailed && "no puede haber parámetros fuera de especificación",
     !timeEnd && "cargar la hora de fin de análisis",
+    faltanTitulaciones.length && `anotar toma y gasto en ${faltanTitulaciones.join(", ")}`,
   ].filter(Boolean);
 
   const exportSingle = () => {
@@ -3079,6 +3142,9 @@ function Detail({ entry: initialEntry, specs, entries, acciones, puede, usuario,
                           placeholder="0.00"
                           style={{ width: 120, borderColor: r.pass === false ? "#F87171" : V.grayMid }}
                           disabled={!editable} />
+                        {llevaTitulacion(r, param) && (
+                          <CamposTitulacion r={r} onCambio={(k, v) => setCampo(i, k, v)} disabled={!editable} />
+                        )}
                         {needsRetest && (
                           <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
                             <span style={{ fontSize: 10, color: "#92400E", fontWeight: 600, minWidth: 46 }}>Retest:</span>
@@ -3087,6 +3153,9 @@ function Detail({ entry: initialEntry, specs, entries, acciones, puede, usuario,
                               style={{ width: 120, borderColor: r.retestPass === false ? "#F87171" : (r.retestPass === true ? "#86EFAC" : "#F59E0B") }}
                               disabled={!editable} />
                           </div>
+                        )}
+                        {needsRetest && r.retestValue && llevaTitulacion(r, param) && (
+                          <CamposTitulacion r={r} retest onCambio={(k, v) => setCampo(i, k, v)} disabled={!editable} />
                         )}
                       </>
                     )}

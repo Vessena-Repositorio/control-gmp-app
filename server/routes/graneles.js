@@ -801,7 +801,8 @@ function estadoParaProduccion(f) {
     // frena: con el resto conforme el granel se envasa (decision de Claudia,
     // 25/09/2026). Para la aprobacion documental si sigue frenando.
     const esperaCationico = soloFaltaDiferido(resultados);
-    const motivos = bloqueosDeAprobacion(resultados, hora(f.hora_fin), { ignorarDiferido: esperaCationico });
+    const motivos = bloqueosDeAprobacion(resultados, hora(f.hora_fin),
+        { ignorarDiferido: esperaCationico, ignorarTitulacion: true });
     if (resultados.some((r) => passFinal(r) === false)) {
         return { apto: false, estado: 'no_conforme', detalle: motivos.join('; ') };
     }

@@ -71,7 +71,16 @@ export function armarResultados(parametros, enviados) {
         // corrige la primera y ahora cumple, el retest viejo se descarta.
         const retestValue = pass === false ? limpiar(r.retestValue) : '';
         const retestPass = retestValue === '' ? null : evaluar(p, retestValue);
-        return { ...base, value, pass, retestValue, retestPass };
+        const fila = { ...base, value, pass, retestValue, retestPass };
+        // Titulaciones: toma de muestra y gasto de titulante. Cada medicion
+        // tiene los suyos, porque el retest es otra titulacion.
+        if (llevaTitulacion({ paramName: p.name, type: base.type })) {
+            fila.toma = limpiar(r.toma);
+            fila.gasto = limpiar(r.gasto);
+            fila.retestToma = retestValue === '' ? '' : limpiar(r.retestToma);
+            fila.retestGasto = retestValue === '' ? '' : limpiar(r.retestGasto);
+        }
+        return fila;
     });
 }
 
@@ -109,6 +118,12 @@ export function bloqueosDeAprobacion(resultados, horaFin, opciones = {}) {
     if (retestPendiente) motivos.push(`${retestPendiente} parametro(s) esperan retest`);
     if (fuera) motivos.push(`${fuera} parametro(s) fuera de especificacion`);
     if (!horaFin) motivos.push('falta la hora de fin de analisis');
+    // La toma y el gasto son parte del dato analitico que se revisa al aprobar.
+    // Para produccion no cuentan: el granel es apto por el resultado, y frenar
+    // el envasado porque falta anotar el gasto seria parar la linea de mas.
+    if (!opciones.ignorarTitulacion) {
+        for (const falta of faltantesDeTitulacion(lista)) motivos.push(`falta ${falta}`);
+    }
     return motivos;
 }
 
@@ -140,4 +155,31 @@ export function soloFaltaDiferido(resultados) {
     if (!dif.length) return false;
     if (!dif.every((r) => r.pass === null)) return false;
     return restoCompleto(lista);
+}
+
+/**
+ * Titulaciones: materia activa -total, catiónico o surfactantes aniónicos- y
+ * cloro. Ademas del resultado se anota la TOMA de muestra y el GASTO de
+ * titulante (pedido de Claudia, 25/09/2026): son el dato analitico que revisa
+ * quien aprueba. Quedan en el registro y en la bitacora, pero NO salen en la
+ * hoja impresa del REG-SOP-AC-029, que informa el resultado.
+ */
+const RE_TITULACION = /materia\s+activa|cloro/i;
+
+export const llevaTitulacion = (r) => RE_TITULACION.test(String(r?.paramName ?? r?.name ?? ''))
+    && (r?.type ?? 'numeric') !== 'text';
+
+/** Lo que falta anotar de una titulacion, en palabras. */
+export function faltantesDeTitulacion(resultados) {
+    const faltan = [];
+    for (const r of Array.isArray(resultados) ? resultados : []) {
+        if (!llevaTitulacion(r)) continue;
+        if (r.value !== '' && (!r.toma || !r.gasto)) {
+            faltan.push(`${r.paramName}: ${!r.toma && !r.gasto ? 'toma y gasto' : (!r.toma ? 'toma de muestra' : 'gasto')}`);
+        }
+        if (r.retestValue !== '' && (!r.retestToma || !r.retestGasto)) {
+            faltan.push(`${r.paramName} (retest): ${!r.retestToma && !r.retestGasto ? 'toma y gasto' : (!r.retestToma ? 'toma de muestra' : 'gasto')}`);
+        }
+    }
+    return faltan;
 }
