@@ -452,6 +452,62 @@ async function firmasDeOrden(filas, cierre) {
 }
 
 /** GET /api/fabuloso-captura/ordenes/:orden — listOrder */
+/**
+ * GET /api/fabuloso-captura/ordenes?dias=30
+ *
+ * Las ordenes con muestreos y si ya estan aprobadas, para que quien aprueba
+ * entre y vea de una lo que tiene pendiente, como en Control en proceso
+ * (pedido de Claudia, 25/09/2026). Trae tambien el estado del rotulo, que es
+ * condicion para aprobar.
+ */
+rutasFabulosoCaptura.get('/ordenes', leer, async (req, res, next) => {
+    const dias = Math.min(Math.max(Number(req.query.dias) || 30, 1), 365);
+    try {
+        const { rows } = await consultar(
+            `SELECT m.orden_envasado AS orden,
+                    count(*)::int                                AS muestreos,
+                    min(m.registrado_en)                         AS desde,
+                    max(m.registrado_en)                         AS hasta,
+                    max(m.codigo_pt)                             AS producto,
+                    max(m.lote)                                  AS lote,
+                    max(m.linea)                                 AS linea,
+                    string_agg(DISTINCT m.analista_nombre, ', ') AS analistas,
+                    count(*) FILTER (WHERE m.estado = 'Rechazado')::int AS rechazados,
+                    count(*) FILTER (WHERE m.estado = 'Retenido')::int  AS retenidos,
+                    bool_or(m.origen = 'app')                    AS de_app,
+                    o.aprobada_por, o.aprobada_en, o.notas
+             FROM fab_muestreos m
+             LEFT JOIN fab_ordenes o ON o.orden_envasado = m.orden_envasado
+             WHERE m.orden_envasado IS NOT NULL AND m.orden_envasado <> ''
+               AND m.registrado_en >= now() - ($1 || ' days')::interval
+             GROUP BY m.orden_envasado, o.aprobada_por, o.aprobada_en, o.notas
+             ORDER BY max(m.registrado_en) DESC`,
+            [String(dias)]
+        );
+        const ordenes = [];
+        for (const f of rows) {
+            ordenes.push({
+                orden: f.orden,
+                muestreos: f.muestreos,
+                desde: f.desde, hasta: f.hasta,
+                producto: f.producto || '', lote: f.lote || '', linea: f.linea || '',
+                analistas: f.analistas || '',
+                rechazados: f.rechazados, retenidos: f.retenidos,
+                // Las ordenes que vienen de la app vieja nunca tuvieron esta
+                // aprobacion: se muestran aparte para no contarlas como pendientes.
+                deApp: Boolean(f.de_app),
+                aprobada: Boolean(f.aprobada_por),
+                aprobadaPor: f.aprobada_por || '', aprobadaEn: f.aprobada_en || null,
+                notas: f.notas || '',
+                rotulo: await rotuloDe('fabuloso', f.orden),
+            });
+        }
+        res.json({ ok: true, ordenes });
+    } catch (err) {
+        next(err);
+    }
+});
+
 rutasFabulosoCaptura.get('/ordenes/:orden', leer, async (req, res, next) => {
     const orden = texto(req.params.orden, 100);
     if (!orden) return res.status(400).json({ ok: false, error: 'Falta orden_envasado' });

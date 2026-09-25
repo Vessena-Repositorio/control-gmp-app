@@ -39,6 +39,17 @@ h3 { font-size: 15px; color: var(--muted); }
 }
 #topbar #title { font-weight: 600; font-size: 16px; }
 #topbar .badge { background: rgba(255,255,255,.15); padding: 3px 8px; border-radius: 999px; font-size: 12px; }
+/* Pestañas */
+#tabs {
+  display: flex; background: #fff; border-bottom: 1px solid var(--border);
+  position: sticky; top: 44px; z-index: 9; overflow-x: auto;
+}
+#tabs button {
+  flex: 1; min-width: 120px; padding: 11px 8px; background: transparent; border: none;
+  border-bottom: 2px solid transparent; font-size: 14px; font-weight: 600;
+  color: var(--muted); cursor: pointer; white-space: nowrap;
+}
+#tabs button.on { color: var(--primary); border-bottom-color: var(--primary); background: #f5f7ff; }
 .btn-icon { background: transparent; color: #fff; border: none; font-size: 22px; padding: 4px 10px; cursor: pointer; border-radius: 8px; }
 .btn-icon:hover { background: rgba(255,255,255,.15); }
 
@@ -219,6 +230,7 @@ table tr:hover td { background: #fafbff; cursor: pointer; }
     <button data-view="home">🏠 Inicio</button>
     <button data-view="new">➕ Nuevo muestreo</button>
     <button data-view="orders_today">🕒 Órdenes de hoy</button>
+    <button data-view="ordenes">📋 Órdenes para aprobar</button>
     <button data-view="rotulos">🏷️ Rótulos <span id="rotBadge" class="chip danger hidden"></span></button>
     <button data-view="list">📋 Muestreos</button>
     <button data-view="admin_import" data-min-role="Admin">📥 Importar historial</button>
@@ -232,6 +244,14 @@ table tr:hover td { background: #fafbff; cursor: pointer; }
       <small id="verLabel">v2.0.0 · portal · build 2026-09-16a</small>
     </div>
   </nav>
+
+  <!-- Pestañas siempre a la vista, como en Control en proceso: quien aprueba
+       entra y ve de una lo que tiene pendiente, sin abrir el menú. -->
+  <div id="tabs" class="hidden">
+    <button data-view="home">🏠 Inicio</button>
+    <button data-view="ordenes">📋 Órdenes <span id="ordBadge" class="chip danger hidden"></span></button>
+    <button data-view="rotulos">🏷️ Rótulos <span id="rotBadgeTab" class="chip danger hidden"></span></button>
+  </div>
 
   <main id="app"></main>
 
@@ -337,6 +357,7 @@ window.APP_CONFIG = {
     uploadPhoto: (p) => ['POST', '/fotos', { filename: p.filename, mime: p.mime, dataBase64: p.dataBase64, muestreo_ref: p.muestreo_ref }],
     getAuditLog: () => ['GET', '/actividad'],
     importar: (p) => ['POST', '/importar', p.datos],
+    listOrdenes: (p) => ['GET', '/ordenes?dias=' + (p && p.dias ? p.dias : 30)],
     listRotulos: () => ['GET', '/rotulos'],
     rotuloOk: (p) => ['POST', '/rotulos/' + encodeURIComponent(p.orden) + '/ok', {}],
     rotuloCorreccion: (p) => ['POST', '/rotulos/' + encodeURIComponent(p.orden) + '/correccion', { comentario: p.comentario, reproceso: p.reproceso }],
@@ -435,16 +456,34 @@ window.APP_CONFIG = {
     render();
   }
 
+  // Las pestañas marcan dónde estás y llevan el pendiente a la vista.
+  function refreshTabs() {
+    const barra = document.getElementById('tabs');
+    if (!barra) return;
+    barra.classList.remove('hidden');
+    const v = (state.currentView && state.currentView.view) || 'home';
+    barra.querySelectorAll('button').forEach(b => {
+      b.classList.toggle('on', b.dataset.view === v
+        || (b.dataset.view === 'ordenes' && v === 'order_detail'));
+    });
+  }
+  document.getElementById('tabs').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-view]');
+    if (b) nav(b.dataset.view);
+  });
+
   function render() {
     if (!state.session) { arrancarConSesion(); return; }
     topbar.classList.remove('hidden');
     refreshDrawer();
+    refreshTabs();
     const v = state.currentView && state.currentView.view || 'home';
     const p = state.currentView && state.currentView.params || {};
     switch (v) {
       case 'home': renderHome(); break;
       case 'new': renderNew(p); break;
       case 'orders_today': renderOrdersToday(); break;
+      case 'ordenes': renderOrdenes(); break;
       case 'rotulos': renderRotulos(); break;
       case 'order_detail': renderOrderDetail(p.orden); break;
       case 'list': renderList(); break;
@@ -484,7 +523,9 @@ window.APP_CONFIG = {
       state.session = { user: yo.user };
       if (cat) state.catalog = cat.defectos;
       nav(location.hash === '#rotulos' ? 'rotulos' : 'home');
-      cargarRotulos(); setInterval(cargarRotulos, 120000);
+      // Los dos contadores de las pestañas, al entrar y cada dos minutos.
+      const pendientes = () => { cargarRotulos(); cargarOrdenes(); };
+      pendientes(); setInterval(pendientes, 120000);
     } catch (e) {
       renderSinConexion(e.message);
     }
@@ -535,6 +576,78 @@ window.APP_CONFIG = {
     location.href = '/';
   }
 
+  // ---------- ÓRDENES (lo que hay para aprobar) ----------
+  // Misma idea que Control en proceso: quien aprueba entra y ve la lista, con
+  // el estado del rótulo al lado, que es condición para aprobar la orden.
+  state.ordenes = [];
+  async function cargarOrdenes() {
+    try {
+      const r = await api('listOrdenes', { dias: 60 });
+      state.ordenes = r.ordenes || [];
+    } catch (e) { return; }
+    const n = state.ordenes.filter(o => !o.aprobada && o.deApp).length;
+    const b = document.getElementById('ordBadge');
+    if (b) { b.textContent = n || ''; b.classList.toggle('hidden', !n); }
+  }
+
+  const ESTADO_ROT = {
+    ok: '<span class="chip ok">rótulo verificado</span>',
+    pendiente: '<span class="chip warn">rótulo sin verificar</span>',
+    correccion: '<span class="chip danger">rótulo a corregir</span>',
+    corregido: '<span class="chip warn">rótulo corregido, sin OK</span>',
+  };
+
+  async function renderOrdenes() {
+    titleEl.textContent = 'Órdenes';
+    app.innerHTML = '<div class="card"><div class="muted small">Cargando órdenes…</div></div>';
+    await cargarOrdenes();
+    const puede = hasRole('Coordinador');
+    const pendientes = state.ordenes.filter(o => !o.aprobada && o.deApp);
+    const previas = state.ordenes.filter(o => !o.aprobada && !o.deApp);
+    const aprobadas = state.ordenes.filter(o => o.aprobada);
+
+    const tarjeta = (o) => {
+      const rot = o.rotulo ? (ESTADO_ROT[o.rotulo.estado] || '') : '';
+      const alertas = (o.rechazados ? `<span class="chip danger">${o.rechazados} rechazado(s)</span>` : '')
+        + (o.retenidos ? `<span class="chip warn">${o.retenidos} retenido(s)</span>` : '');
+      return `<div class="card">
+        <div class="row" style="justify-content:space-between;align-items:flex-start">
+          <div>
+            <strong>Orden ${esc(o.orden)}</strong>
+            <div class="muted small">${esc(o.producto || '')}${o.lote ? ' · lote ' + esc(o.lote) : ''}${o.linea ? ' · ' + esc(o.linea) : ''}</div>
+            <div class="muted small">${o.muestreos} muestreo(s) · ${esc(o.analistas || '')} · ${esc(fmtDate(o.hasta))}</div>
+          </div>
+          ${o.aprobada ? '<span class="chip ok">aprobada</span>' : '<span class="chip warn">sin aprobar</span>'}
+        </div>
+        <div class="row mt8">${rot}${alertas}</div>
+        ${o.aprobada ? `<div class="muted small mt8">Aprobó ${esc(o.aprobadaPor)} · ${esc(fmtDate(o.aprobadaEn))}</div>` : ''}
+        <div class="row mt8">
+          <button class="secondary" data-orden="${esc(o.orden)}">👁️ Ver la orden</button>
+          ${!o.aprobada && puede && o.deApp ? `<button class="primary" data-aprobar="${esc(o.orden)}">✔ Revisar y aprobar</button>` : ''}
+        </div>
+      </div>`;
+    };
+
+    app.innerHTML =
+      `<div class="card">
+         <h2>Órdenes de envasado</h2>
+         <div class="muted small">Últimos 60 días. ${puede
+           ? 'Al aprobar, la orden queda cerrada y se puede imprimir para el dossier.'
+           : 'Aprueban Antonella, Gloria o Claudia.'}</div>
+       </div>` +
+      `<h3>Para aprobar (${pendientes.length})</h3>` +
+      (pendientes.length ? pendientes.map(tarjeta).join('') : '<div class="card"><div class="muted small">No hay órdenes esperando aprobación.</div></div>') +
+      (previas.length ? `<h3>De la app anterior (${previas.length})</h3>
+         <div class="card"><div class="muted small">Se cargaron antes de la migración y no llevan esta aprobación.</div></div>`
+        + previas.slice(0, 20).map(tarjeta).join('') : '') +
+      (aprobadas.length ? `<h3>Aprobadas (${aprobadas.length})</h3>` + aprobadas.slice(0, 20).map(tarjeta).join('') : '');
+
+    app.querySelectorAll('[data-orden]').forEach(b =>
+      b.addEventListener('click', () => nav('order_detail', { orden: b.dataset.orden })));
+    app.querySelectorAll('[data-aprobar]').forEach(b =>
+      b.addEventListener('click', () => nav('order_detail', { orden: b.dataset.aprobar })));
+  }
+
   // ---------- RÓTULOS (segundo control de supervisión, lib/rotulos.js) ----------
   // El primer control de cada orden manda las fotos de caja y envase a
   // supervisión. Una supervisora da el OK o pide corregir el rótulo; desde las
@@ -550,8 +663,10 @@ window.APP_CONFIG = {
     } catch (e) { return; }
     const sup = hasRole('Coordinador');
     const n = state.rotulos.filter(x => sup ? x.estado === 'pendiente' : x.estado === 'correccion').length;
-    const b = document.getElementById('rotBadge');
-    if (b) { b.textContent = n || ''; b.classList.toggle('hidden', !n); }
+    ['rotBadge', 'rotBadgeTab'].forEach((id) => {
+      const b = document.getElementById(id);
+      if (b) { b.textContent = n || ''; b.classList.toggle('hidden', !n); }
+    });
   }
   function fotoRotulo_(u, t) {
     return u ? `<a href="${esc(u)}" target="_blank" class="rot-foto"><img src="${esc(u)}" alt=""/><span>${t}</span></a>`
