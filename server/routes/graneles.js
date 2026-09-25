@@ -6,7 +6,7 @@ import { auditar } from '../lib/sesiones.js';
 import { firmaDe } from '../lib/firmas.js';
 import { createHash, randomBytes } from 'node:crypto';
 import {
-    armarResultados, bloqueosDeAprobacion, esDiferido, faltantesParaGuardar,
+    armarResultados, bloqueosDeAprobacion, esDiferido, exentosDeTitulacion, faltantesParaGuardar,
     limpiar, numero, passFinal, soloFaltaDiferido,
 } from '../lib/graneles-reglas.js';
 import { hayCorreo, enviar } from '../lib/correo.js';
@@ -418,6 +418,15 @@ function horaFinAlGuardar(enviada, resultados) {
 /** Campos que el analista puede cambiar mientras la muestra esta pendiente. */
 function camposEditables(m, fila) {
     const resultados = armarResultados(fila.especificacion?.parameters, m.results);
+    // Muestras anteriores a la regla de toma y gasto: si no se anota nada, no
+    // se les agregan los campos vacios. Guardarlos las dejaria pidiendo un dato
+    // que en su momento no se registro.
+    const exentos = exentosDeTitulacion(fila.resultados);
+    for (const r of resultados) {
+        if (exentos.has(r.paramId) && !r.toma && !r.gasto && !r.retestToma && !r.retestGasto) {
+            delete r.toma; delete r.gasto; delete r.retestToma; delete r.retestGasto;
+        }
+    }
     return {
         horaFabrica: horaValida(m.timeFactory),
         horaIngreso: horaValida(m.timeIn),
@@ -533,7 +542,10 @@ rutasGraneles.post('/muestras/:id/disposicion', aprobar, async (req, res, next) 
             const v = camposEditables(body, fila);
 
             if (body.status === 'approved') {
-                const motivos = bloqueosDeAprobacion(v.resultados, v.horaFin);
+                // Lo GUARDADO manda para saber si la muestra es anterior a la
+                // regla de toma y gasto: el recalculo agrega los campos vacios.
+                const motivos = bloqueosDeAprobacion(v.resultados, v.horaFin,
+                    { exentosTitulacion: exentosDeTitulacion(fila.resultados) });
                 if (motivos.length) throw fallo(409, 'no se puede aprobar: ' + motivos.join(', '));
             }
 

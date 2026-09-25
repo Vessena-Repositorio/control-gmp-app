@@ -122,7 +122,9 @@ export function bloqueosDeAprobacion(resultados, horaFin, opciones = {}) {
     // Para produccion no cuentan: el granel es apto por el resultado, y frenar
     // el envasado porque falta anotar el gasto seria parar la linea de mas.
     if (!opciones.ignorarTitulacion) {
-        for (const falta of faltantesDeTitulacion(lista)) motivos.push(`falta ${falta}`);
+        for (const falta of faltantesDeTitulacion(lista, opciones.exentosTitulacion)) {
+            motivos.push(`falta ${falta}`);
+        }
     }
     return motivos;
 }
@@ -172,16 +174,24 @@ export const llevaTitulacion = (r) => RE_TITULACION.test(String(r?.paramName ?? 
 /**
  * Lo que falta anotar de una titulacion, en palabras.
  *
- * Una muestra cargada antes de que existiera esta regla no tiene los campos:
- * a esa no se le pueden pedir datos que nadie anoto, asi que se la deja pasar.
- * Desde que se guarda una vez, armarResultados los crea -aunque sea vacios- y
- * pasan a ser obligatorios.
+ * Una muestra cargada antes de que existiera esta regla no tiene los campos: a
+ * esa no se le pueden pedir datos que nadie anoto. Como armarResultados se los
+ * agrega al recalcular, quien valida pasa en `exentos` los parametros que en
+ * la fila guardada no los tenian.
  */
-export function faltantesDeTitulacion(resultados) {
+export const exentosDeTitulacion = (resultadosGuardados) => new Set(
+    (Array.isArray(resultadosGuardados) ? resultadosGuardados : [])
+        .filter((r) => r.toma === undefined && r.gasto === undefined)
+        .map((r) => r.paramId)
+);
+export function faltantesDeTitulacion(resultados, exentos = null) {
     const faltan = [];
     for (const r of Array.isArray(resultados) ? resultados : []) {
         if (!llevaTitulacion(r)) continue;
         if (r.toma === undefined && r.gasto === undefined) continue;
+        // Parametros de una muestra que se cargo antes de la regla: el
+        // recalculo les agrega los campos vacios, pero el dato no existio.
+        if (exentos && exentos.has(r.paramId)) continue;
         if (r.value !== '' && (!r.toma || !r.gasto)) {
             faltan.push(`${r.paramName}: ${!r.toma && !r.gasto ? 'toma y gasto' : (!r.toma ? 'toma de muestra' : 'gasto')}`);
         }
