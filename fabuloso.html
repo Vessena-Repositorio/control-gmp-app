@@ -524,6 +524,7 @@ window.APP_CONFIG = {
       if (cat) state.catalog = cat.defectos;
       nav(location.hash === '#rotulos' ? 'rotulos' : 'home');
       // Los dos contadores de las pestañas, al entrar y cada dos minutos.
+      cargarEans();
       const pendientes = () => { cargarRotulos(); cargarOrdenes(); };
       pendientes(); setInterval(pendientes, 120000);
     } catch (e) {
@@ -575,6 +576,29 @@ window.APP_CONFIG = {
     try { loading(true); await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }); } catch(e) {}
     location.href = '/';
   }
+
+  // ---------- EAN 14 de la caja (migración 048) ----------
+  // Se le muestra a la analista al cargar el control, para que lo compare con
+  // la caja, y queda a la vista de quien aprueba. Si el producto no lo tiene
+  // cargado en el ERP no se muestra nada: inventarlo sería peor.
+  state.eans = {};
+  async function cargarEans() {
+    try {
+      const r = await fetch('/api/productos-ean', { credentials: 'same-origin' });
+      const d = await r.json();
+      if (d && d.productos) state.eans = d.productos;
+    } catch (e) { /* sin EAN se sigue trabajando igual */ }
+  }
+  function eanDe(codigo) { return state.eans[String(codigo == null ? '' : codigo).trim()] || null; }
+  window.__mostrarEan = function () {
+    const caja = document.getElementById('eanBox');
+    const inp = document.getElementById('m_pt');
+    if (!caja || !inp) return;
+    const p = eanDe(inp.value);
+    caja.innerHTML = p
+      ? `📦 <b>EAN 14 de la caja:</b> <span style="font-family:ui-monospace,Consolas,monospace;font-size:15px;letter-spacing:1px">${esc(p.ean14)}</span> · ${esc(p.unidad || '')}<br>${esc(p.nombre || '')} — verificá que sea el de la caja`
+      : '';
+  };
 
   // ---------- ÓRDENES (lo que hay para aprobar) ----------
   // Misma idea que Control en proceso: quien aprueba entra y ve la lista, con
@@ -976,8 +1000,9 @@ window.APP_CONFIG = {
         </div>
         <div class="row">
           <div><label>Lote</label><input id="m_lote" value="${esc(m.lote)}" placeholder="Lote" /></div>
-          <div><label>Código PT</label><input id="m_pt" value="${esc(m.codigo_pt)}" placeholder="Código de producto" /></div>
+          <div><label>Código PT</label><input id="m_pt" value="${esc(m.codigo_pt)}" placeholder="Código de producto" oninput="window.__mostrarEan&&window.__mostrarEan()" /></div>
         </div>
+        <div id="eanBox" class="muted small"></div>
         <div class="row">
           <div><label>Fecha</label><input id="m_fecha" type="date" value="${esc(m.fecha_muestreo)}" /></div>
           <div><label>Hora</label><input id="m_hora" type="time" value="${esc(m.hora_muestreo)}" /></div>
@@ -1052,6 +1077,7 @@ window.APP_CONFIG = {
       el.addEventListener('input', () => { m[key] = prop==='value' ? el.value : el[prop]; if (key==='n_muestras') updateQrPreview(); });
     };
     bind('m_linea','linea'); bind('m_orden','orden_envasado'); bind('m_lote','lote'); bind('m_pt','codigo_pt');
+    window.__mostrarEan();
     bind('m_fecha','fecha_muestreo'); bind('m_hora','hora_muestreo'); bind('m_n','n_muestras');
     bind('m_retira','unidades_retiradas'); bind('m_motivo','motivo_retiro'); bind('m_acc','acciones_correctivas');
 
@@ -1857,6 +1883,7 @@ window.APP_CONFIG = {
           <div><b>Orden de envasado:</b> ${esc(ordenEnvasado)}</div>
           <div><b>Lote:</b> ${esc(last.lote||'-')}</div>
           <div><b>Código PT:</b> ${esc(last.codigo_pt||'-')}</div>
+          <div><b>EAN 14 (caja):</b> ${esc((eanDe(last.codigo_pt)||{}).ean14||'-')}</div>
           <div><b>Línea:</b> ${esc(last.linea||'-')}</div>
           <div><b>Fecha:</b> ${esc(fmtDay(first.timestamp))}</div>
           <div><b>Controles del día:</b> ${controles.length}</div>

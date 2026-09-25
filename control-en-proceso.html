@@ -367,8 +367,9 @@ const LIMP_DEFECTS=[
       <div class="fd"><span class="fl">N° Orden</span><input class="fi" id="cOrden" placeholder="—" oninput="avisoPH()"/></div>
       <div class="fd"><span class="fl">F. Vencimiento</span><input class="fi" id="cVence" placeholder="—"/></div>
       <div class="fd"><span class="fl">Cód. Granel</span><input class="fi" id="cGranel" placeholder="—"/></div>
-      <div class="fd"><span class="fl">Cód. PT</span><input class="fi" id="cCodPT" placeholder="—"/></div>
+      <div class="fd"><span class="fl">Cód. PT</span><input class="fi" id="cCodPT" placeholder="—" oninput="mostrarEan()"/></div>
     </div>
+    <div id="eanAviso" class="rot-aviso" style="display:none"></div>
     <div id="rotAviso" class="rot-aviso" style="display:none"></div>
     <div id="specI" class="ri" style="display:none;background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:8px;margin-bottom:8px"></div>
 
@@ -569,6 +570,7 @@ async function arrancar(){
   if(PERMISOS.includes('aprobar'))loadOrdenes();
   // Rótulos: el estado cambia cuando supervisión da el OK; se refresca solo
   loadRotulos(true);setInterval(()=>loadRotulos(true),120000);
+  cargarEans();
   if(location.hash==='#rotulos')showTab(3);
 }
 async function logout(){try{await fetch('/api/auth/logout',{method:'POST',credentials:'same-origin'})}catch(e){}location.href='/'}
@@ -715,8 +717,30 @@ function esPrimerControl(orden){
   const o=String(orden||'').trim();if(!o)return false;
   return !allR.some(r=>String(r.orden||'').trim()===o)&&!ctrls.some(c=>String(c.orden||'').trim()===o);
 }
+/* EAN 14 de la caja (migracion 048). Se muestra al cargar el control para que
+   la analista lo compare con la caja, y despues lo ve quien aprueba. Si el
+   producto no lo tiene cargado en el ERP no se muestra nada: inventar un
+   codigo seria peor que no mostrarlo. */
+let EANS={};
+async function cargarEans(){
+  try{const r=await fetch('/api/productos-ean',{credentials:'same-origin'});const d=await r.json();
+    if(d&&d.productos)EANS=d.productos}catch(e){}
+  mostrarEan();
+}
+const eanDe=(cod)=>EANS[String(cod||'').trim()]||null;
+function mostrarEan(){
+  const el=document.getElementById('eanAviso');if(!el)return;
+  const p=eanDe(document.getElementById('cCodPT').value);
+  if(!p){el.style.display='none';return}
+  el.className='rot-aviso';el.style.display='';
+  el.style.background='#eef4ff';el.style.color='#1a3352';
+  el.innerHTML='📦 <b>EAN 14 de la caja:</b> <span style="font-family:var(--m);font-size:16px;letter-spacing:1px">'+
+    esc(p.ean14)+'</span> · '+esc(p.unidad||'')+'<div style="font-size:12px;opacity:.8">'+esc(p.nombre||'')+
+    ' · verificá que sea el de la caja</div>';
+}
 function avisoPH(){
   avisoRotulo();
+  mostrarEan();
   const el=document.getElementById('phAviso');if(!el)return;
   const orden=document.getElementById('cOrden').value.trim();
   const maq=document.getElementById('cMaq').value;
@@ -959,7 +983,7 @@ document.getElementById('tLog').innerHTML=logs.map(l=>`<div style="color:${l.i==
 // VIEW CONTROL
 function viewC(i){const c=ctrls[i];if(!c)return;document.getElementById('mTitle').textContent=c.maquina+' #'+(c.controlNum||i+1)+' '+(c.hora||'');
 let h=`<div class="ms"><div class="mt">Identificación</div>`;
-[['Analista',c.analista],['Máquina',c.maquina],['Presentación',c.presentacion],['Lote',c.lote],['Orden',c.orden],['Vence',c.vence],['Granel',c.granel],['Cód. PT',c.codPT]].forEach(([l,v])=>{h+=`<div class="mr"><span style="color:var(--text2)">${l}</span><span style="font-family:var(--m);font-weight:600">${esc(v)||'—'}</span></div>`});h+=`</div>`;
+[['Analista',c.analista],['Máquina',c.maquina],['Presentación',c.presentacion],['Lote',c.lote],['Orden',c.orden],['Vence',c.vence],['Granel',c.granel],['Cód. PT',c.codPT],['EAN 14 (caja)',(eanDe(c.codPT)||{}).ean14||'']].forEach(([l,v])=>{h+=`<div class="mr"><span style="color:var(--text2)">${l}</span><span style="font-family:var(--m);font-weight:600">${esc(v)||'—'}</span></div>`});h+=`</div>`;
 if(c.pendiente)h+=`<div class="ms"><div class="mt red">⚠️ Sin guardar en el servidor</div><div style="font-size:13px;color:var(--text2)">Este control está solo en este equipo. Cerrá esta ventana y tocá el aviso rojo para reintentar.</div></div>`;
 h+=`<div class="ms"><div class="mt">Pesos</div>`;(c.pesos||[]).forEach((p,j)=>{h+=`<div class="mr"><span style="color:var(--text2)">P${j+1}</span><span style="font-family:var(--m);font-weight:600">${esc(p)||'—'}</span></div>`});
 h+=`<div class="mr"><span style="color:var(--text2)"><b>Promedio</b></span><span style="font-family:var(--m);font-weight:700;color:var(--mint)">${esc(c.promedio)||'—'}</span></div></div>`;
@@ -1120,6 +1144,8 @@ function htmlRegistro(d,orden,imprimir){
     '<div class="meta"><div><b>Orden de envasado:</b> '+esc(orden)+'</div><div><b>Lote:</b> '+esc(u.lote||'—')+'</div>'+
     '<div><b>Producto:</b> '+esc(u.maquina||'—')+' · '+esc(u.presentacion||'')+'</div>'+
     '<div><b>Cód. PT:</b> '+esc(u.codPT||'—')+'</div><div><b>Cód. granel:</b> '+esc(u.granel||'—')+'</div>'+
+    /* El EAN 14 va en el registro: quien aprueba lo revisa contra la caja. */
+    '<div><b>EAN 14 (caja):</b> '+esc((eanDe(u.codPT)||{}).ean14||'—')+'</div>'+
     '<div><b>Vencimiento:</b> '+esc(u.vence||'—')+'</div>'+
     '<div><b>Controles:</b> '+c.length+'</div><div><b>Especificación:</b> '+esc(u.spec||'—')+'</div>'+
     (d.aprobada?'<div><b>Aprobada:</b> '+esc(new Date(d.aprobadaEn).toLocaleString('es-UY'))+'</div>':'<div></div>')+
