@@ -2494,7 +2494,7 @@
                                                                         <tr>
                                                                             <th style={{width: '80px'}}>Cavidad</th>
                                                                             <th style={{width: '180px'}}>Evaluación Estética</th>
-                                                                            {esFab && <th style={{width: '120px'}}>Espesor Hombro (mm)</th>}
+                                                                            {esFab && <th style={{width: '130px'}}>Espesor Hombros (mm)</th>}
                                                                             <th>Brimful (mL)</th>
                                                                             <th>Altura H (mm)</th>
                                                                             <th>HW (mm)</th>
@@ -2525,13 +2525,27 @@
                                                                                 </td>
                                                                                 {esFab && (
                                                                                     <td>
-                                                                                        <input type="number" step="0.01"
-                                                                                            value={mediciones[`arr_espesor_cav${cav}`] || ''}
-                                                                                            onChange={(e) => setMediciones({
-                                                                                                ...mediciones,
-                                                                                                [`arr_espesor_cav${cav}`]: e.target.value
-                                                                                            })}
-                                                                                            placeholder="mm" />
+                                                                                        {/* Dos hombros por envase: se miden los dos. */}
+                                                                                        <div style={{display: 'flex', gap: '4px', alignItems: 'center'}}>
+                                                                                            <span style={{fontSize: '10px', color: '#718096'}}>H1</span>
+                                                                                            <input type="number" step="0.01" style={{width: '70px'}}
+                                                                                                value={mediciones[`arr_espesor_cav${cav}`] || ''}
+                                                                                                onChange={(e) => setMediciones({
+                                                                                                    ...mediciones,
+                                                                                                    [`arr_espesor_cav${cav}`]: e.target.value
+                                                                                                })}
+                                                                                                placeholder="mm" />
+                                                                                        </div>
+                                                                                        <div style={{display: 'flex', gap: '4px', alignItems: 'center', marginTop: '4px'}}>
+                                                                                            <span style={{fontSize: '10px', color: '#718096'}}>H2</span>
+                                                                                            <input type="number" step="0.01" style={{width: '70px'}}
+                                                                                                value={mediciones[`arr_espesor_h2_cav${cav}`] || ''}
+                                                                                                onChange={(e) => setMediciones({
+                                                                                                    ...mediciones,
+                                                                                                    [`arr_espesor_h2_cav${cav}`]: e.target.value
+                                                                                                })}
+                                                                                                placeholder="mm" />
+                                                                                        </div>
                                                                                         <div className="spec-info">Mín: {spec.espesorHombroMin}</div>
                                                                                     </td>
                                                                                 )}
@@ -2735,20 +2749,34 @@
                                                                         </tr>
                                                                     ))}
                                                                     
+                                                                    {/* Cada envase tiene DOS hombros y se mide el espesor de los dos
+                                                                        (Claudia, 28/09/2026). El primero mantiene la clave de siempre,
+                                                                        para que los controles ya cargados se sigan leyendo igual. */}
                                                                     {esFab && Array.from({length: spec.cavidades || 2}, (_, i) => i + 1).map(cav => (
                                                                         <tr key={`espesor_cav${cav}`} style={{background: '#eef2ff'}}>
-                                                                            <td><strong>Espesor Hombro - Cavidad {cav}</strong></td>
+                                                                            <td><strong>Espesor Hombros - Cavidad {cav}</strong></td>
                                                                             <td>
-                                                                                <input type="number" step="0.01"
-                                                                                    value={mediciones[`proc_espesor_cav${cav}`] || ''}
-                                                                                    onChange={(e) => setMediciones({
-                                                                                        ...mediciones,
-                                                                                        [`proc_espesor_cav${cav}`]: e.target.value
-                                                                                    })}
-                                                                                    placeholder="mm" />
+                                                                                <div style={{display: 'flex', gap: '6px', alignItems: 'center'}}>
+                                                                                    <label style={{fontSize: '11px', color: '#718096'}}>H1</label>
+                                                                                    <input type="number" step="0.01" style={{width: '80px'}}
+                                                                                        value={mediciones[`proc_espesor_cav${cav}`] || ''}
+                                                                                        onChange={(e) => setMediciones({
+                                                                                            ...mediciones,
+                                                                                            [`proc_espesor_cav${cav}`]: e.target.value
+                                                                                        })}
+                                                                                        placeholder="mm" />
+                                                                                    <label style={{fontSize: '11px', color: '#718096'}}>H2</label>
+                                                                                    <input type="number" step="0.01" style={{width: '80px'}}
+                                                                                        value={mediciones[`proc_espesor_h2_cav${cav}`] || ''}
+                                                                                        onChange={(e) => setMediciones({
+                                                                                            ...mediciones,
+                                                                                            [`proc_espesor_h2_cav${cav}`]: e.target.value
+                                                                                        })}
+                                                                                        placeholder="mm" />
+                                                                                </div>
                                                                             </td>
                                                                             <td>
-                                                                                <span className="spec-info">Mínimo: {spec.espesorHombroMin} mm</span>
+                                                                                <span className="spec-info">Mínimo: {spec.espesorHombroMin} mm · los dos hombros</span>
                                                                             </td>
                                                                         </tr>
                                                                     ))}
