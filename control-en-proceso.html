@@ -366,7 +366,7 @@ const LIMP_DEFECTS=[
       <div class="fd"><span class="fl">N° Lote</span><input class="fi" id="cLote" placeholder="—"/></div>
       <div class="fd"><span class="fl">N° Orden</span><input class="fi" id="cOrden" placeholder="—" oninput="avisoPH()"/></div>
       <div class="fd"><span class="fl">F. Vencimiento</span><input class="fi" id="cVence" placeholder="—"/></div>
-      <div class="fd"><span class="fl">Cód. Granel</span><input class="fi" id="cGranel" placeholder="—"/></div>
+      <div class="fd"><span class="fl">Cód. Granel</span><input class="fi" id="cGranel" placeholder="G000000" oninput="mostrarEan()"/></div>
       <div class="fd"><span class="fl">Cód. PT</span><input class="fi" id="cCodPT" placeholder="—" oninput="mostrarEan()"/></div>
     </div>
     <div id="eanAviso" class="rot-aviso" style="display:none"></div>
@@ -728,15 +728,32 @@ async function cargarEans(){
   mostrarEan();
 }
 const eanDe=(cod)=>EANS[String(cod||'').trim()]||null;
+/* Los dos codigos se escriben a mano. El 26 y 27/09 aparecieron cruzados -el
+   del producto en "Cod. granel" y en "Cod. PT" el arranque del lote-, y la app
+   mostro el EAN de otro producto. Ahora se avisa en el momento: el nombre del
+   producto cuando el codigo existe, y en rojo cuando no. */
 function mostrarEan(){
   const el=document.getElementById('eanAviso');if(!el)return;
-  const p=eanDe(document.getElementById('cCodPT').value);
-  if(!p){el.style.display='none';return}
-  el.className='rot-aviso';el.style.display='';
-  el.style.background='#eef4ff';el.style.color='#1a3352';
-  el.innerHTML='📦 <b>EAN 14 de la caja:</b> <span style="font-family:var(--m);font-size:16px;letter-spacing:1px">'+
-    esc(p.ean14)+'</span> · '+esc(p.unidad||'')+'<div style="font-size:12px;opacity:.8">'+esc(p.nombre||'')+
-    ' · verificá que sea el de la caja</div>';
+  const cod=document.getElementById('cCodPT').value.trim();
+  const gr=document.getElementById('cGranel').value.trim();
+  const p=eanDe(cod);
+  const avisos=[];
+  if(cod&&!p&&Object.keys(EANS).length)
+    avisos.push('<div style="background:#fef3f2;color:#b42318;border-radius:8px;padding:8px 10px;margin-bottom:6px">'+
+      '⚠️ El código de PT <b>'+esc(cod)+'</b> no está en el ERP. Revisá que no sea el número del lote ni el del granel.</div>');
+  if(gr&&!/^G/i.test(gr))
+    avisos.push('<div style="background:#fef0c7;color:#93370d;border-radius:8px;padding:8px 10px;margin-bottom:6px">'+
+      '⚠️ El código de granel empieza con G (por ejemplo G004400). <b>'+esc(gr)+'</b> no tiene ese formato.</div>');
+  if(p)
+    avisos.push('<div style="background:#eef4ff;color:#1a3352;border-radius:8px;padding:8px 10px">'+
+      '📦 <b>'+esc(p.nombre||'')+'</b>'+
+      (p.ean14?'<div><b>EAN 14 de la caja:</b> <span style="font-family:var(--m);font-size:16px;letter-spacing:1px">'+
+        esc(p.ean14)+'</span> · '+esc(p.unidad||'')+'</div><div style="font-size:12px;opacity:.8">Verificá que sea el de la caja.</div>'
+        :'<div style="font-size:12px;opacity:.8">Este producto todavía no tiene EAN 14 cargado en el ERP.</div>')+'</div>');
+  if(!avisos.length){el.style.display='none';el.innerHTML='';return}
+  el.className='';el.style.display='';el.style.background='';el.style.color='';
+  el.style.margin='8px 0';el.style.fontSize='14px';
+  el.innerHTML=avisos.join('');
 }
 function avisoPH(){
   avisoRotulo();
@@ -757,6 +774,12 @@ function saveCtrl(){
   const vence=document.getElementById('cVence').value.trim();if(!vence){toast('⚠️ Ingresá Vencimiento',true);return}
   const granel=document.getElementById('cGranel').value.trim();if(!granel){toast('⚠️ Ingresá Cód. Granel',true);return}
   const codPT=document.getElementById('cCodPT').value.trim();if(!codPT){toast('⚠️ Ingresá Cód. PT',true);return}
+  // Dos códigos escritos a mano que se confundieron entre sí: antes de guardar
+  // se pregunta, para que no pase de largo un PT que no existe o un granel sin G.
+  const dudas=[];
+  if(Object.keys(EANS).length&&!eanDe(codPT))dudas.push('El código de PT '+codPT+' no está en el ERP.');
+  if(!/^G/i.test(granel))dudas.push('El código de granel '+granel+' no empieza con G.');
+  if(dudas.length&&!confirm(dudas.join('\n')+'\n\nRevisá que no estén cambiados entre sí. ¿Guardar igual?'))return;
   // Como en Fabuloso: sin la foto del sticker y la de lote/vencimiento no se guarda
   // Cada orden lleva al menos un pH, en su primer control (Limpiadores no mide pH)
   if(maq!=='Limpiadores'&&!String(document.getElementById('cPH').value||'').trim()&&esPrimerControl(orden)){

@@ -594,10 +594,16 @@ window.APP_CONFIG = {
     const caja = document.getElementById('eanBox');
     const inp = document.getElementById('m_pt');
     if (!caja || !inp) return;
-    const p = eanDe(inp.value);
-    caja.innerHTML = p
-      ? `📦 <b>EAN 14 de la caja:</b> <span style="font-family:ui-monospace,Consolas,monospace;font-size:15px;letter-spacing:1px">${esc(p.ean14)}</span> · ${esc(p.unidad || '')}<br>${esc(p.nombre || '')} — verificá que sea el de la caja`
-      : '';
+    const cod = inp.value.trim();
+    const p = eanDe(cod);
+    if (!cod || !Object.keys(state.eans).length) { caja.innerHTML = ''; return; }
+    if (!p) {
+      caja.innerHTML = `<span style="color:#b42318">⚠️ El código <b>${esc(cod)}</b> no está en el ERP. Revisá que sea el del producto.</span>`;
+      return;
+    }
+    caja.innerHTML = `<b>${esc(p.nombre || '')}</b><br>` + (p.ean14
+      ? `📦 <b>EAN 14 de la caja:</b> <span style="font-family:ui-monospace,Consolas,monospace;font-size:15px;letter-spacing:1px">${esc(p.ean14)}</span> · ${esc(p.unidad || '')} — verificá que sea el de la caja`
+      : 'Este producto todavía no tiene EAN 14 cargado en el ERP.');
   };
 
   // ---------- ÓRDENES (lo que hay para aprobar) ----------
