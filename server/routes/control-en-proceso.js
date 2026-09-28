@@ -323,6 +323,7 @@ rutasControlEnProceso.post('/controles', cargar, async (req, res, next) => {
                 orden: record.orden, fotoCaja: record.fotos[0], fotoEnvase: record.fotos[1],
                 lote: record.lote, vence: record.vence,
                 producto: [record.maquina, record.presentacion].filter(Boolean).join(' · '),
+                codigo: record.codPT || '',
                 analista, analistaId: req.usuario.id,
             });
             return { record, repetido: false, verificacion };

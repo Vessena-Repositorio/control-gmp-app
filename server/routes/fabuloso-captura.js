@@ -338,6 +338,7 @@ rutasFabulosoCaptura.post('/muestreos', cargar, async (req, res, next) => {
             const verificacion = await registrarControl(c, 'fabuloso', {
                 orden, fotoCaja: fotoRotulo, fotoEnvase: fotoLote, lote,
                 producto: [texto(d.linea, 60) || 'Fabuloso', texto(d.codigo_pt, 60)].filter(Boolean).join(' · '),
+                codigo: texto(d.codigo_pt, 60),
                 analista: req.usuario.nombre || req.usuario.usuario, analistaId: req.usuario.id,
             });
             return { id, QR: qr, rango, DC: dc, DM: dm, DL: dl, estado, verificacion };

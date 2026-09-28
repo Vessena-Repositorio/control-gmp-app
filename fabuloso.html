@@ -692,6 +692,15 @@ window.APP_CONFIG = {
       if (b) { b.textContent = n || ''; b.classList.toggle('hidden', !n); }
     });
   }
+  /* Lo que hay que comparar contra la foto de la caja: el EAN 14 y la
+     descripción del producto. Si el producto no tiene EAN cargado en el ERP se
+     muestra igual la descripción, y si no hay ninguno de los dos, nada. */
+  function rotuloEan_(r) {
+    if (!r.ean14 && !r.descripcion) return '';
+    return `<div class="small mt8" style="background:#eef4ff;border-radius:8px;padding:8px 10px;color:#1a3352">
+      ${r.ean14 ? `📦 <b>EAN 14 de la caja:</b> <span style="font-family:ui-monospace,Consolas,monospace;font-size:15px;letter-spacing:1px">${esc(r.ean14)}</span><br>` : ''}
+      ${r.descripcion ? esc(r.descripcion) : ''}</div>`;
+  }
   function fotoRotulo_(u, t) {
     return u ? `<a href="${esc(u)}" target="_blank" class="rot-foto"><img src="${esc(u)}" alt=""/><span>${t}</span></a>`
              : `<div class="rot-foto vacia"><span>${t}: sin foto</span></div>`;
@@ -723,6 +732,7 @@ window.APP_CONFIG = {
             <div><h3 style="margin:0;color:var(--text)">Orden ${esc(r.orden)}</h3><div class="muted small">${esc(r.producto)}</div></div>
             <div class="muted small">${esc(fmtDate(r.creadoEn))}</div></div>
           <div class="small mt8">Lote <b>${esc(r.lote || '—')}</b>${r.vence ? ` · Vence <b>${esc(r.vence)}</b>` : ''} · 👤 ${esc(r.analista)}${r.estado !== 'ok' && r.plazo ? ` · ⏰ Plazo <b>${esc(r.plazo)}</b>` : ''}</div>
+          ${rotuloEan_(r)}
           <div class="row mt8">${estado}${freno}</div>${corr}
           <div class="rot-fotos">${fotoRotulo_(r.fotoCaja, '📦 Caja / rótulo')}${fotoRotulo_(r.fotoEnvase, '🏷️ Envase: lote')}</div>
           <div id="rotForm_${esc(r.orden)}"></div>

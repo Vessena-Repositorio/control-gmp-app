@@ -1269,6 +1269,10 @@ function pintarRotulos(){
       '<div class="ord-cab"><div><div class="ord-num">Orden '+o+'</div><div class="ord-prod">'+esc(r.producto)+'</div></div>'+
       '<div class="ord-fecha">'+esc(new Date(r.creadoEn).toLocaleString('es-UY',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}))+'</div></div>'+
       '<div class="ord-det">Lote <b>'+esc(r.lote||'—')+'</b> · Vence <b>'+esc(r.vence||'—')+'</b> · 👤 '+esc(r.analista)+(r.estado!=='ok'&&r.plazo?' · ⏰ Plazo <b>'+esc(r.plazo)+'</b>':'')+'</div>'+
+      /* El EAN 14 y la descripción: es lo que se compara contra la foto de la caja. */
+      ((r.ean14||r.descripcion)?'<div style="background:#eef4ff;color:#1a3352;border-radius:8px;padding:8px 10px;margin:8px 0;font-size:14px">'+
+        (r.ean14?'📦 <b>EAN 14 de la caja:</b> <span style="font-family:var(--m);font-size:16px;letter-spacing:1px">'+esc(r.ean14)+'</span><br>':'')+
+        esc(r.descripcion||'')+'</div>':'')+
       '<div class="ord-tags">'+estado+freno+'</div>'+corr+
       '<div class="rot-fotos">'+fotoRot(r.fotoCaja,'📦 Caja / sticker')+fotoRot(r.fotoEnvase,'🏷️ Envase: lote y vence')+'</div>'+
       '<div id="rot-form-'+o+'"></div>'+

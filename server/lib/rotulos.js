@@ -113,12 +113,12 @@ export async function frenoDe(c, app, orden) {
 export async function registrarControl(c, app, d) {
     const { rows } = await c.query(
         `INSERT INTO rotulo_verificaciones
-            (app, orden, foto_caja, foto_envase, lote, vence, producto, analista, analista_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            (app, orden, foto_caja, foto_envase, lote, vence, producto, codigo, analista, analista_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          ON CONFLICT (app, orden) DO NOTHING
          RETURNING id`,
         [app, d.orden, d.fotoCaja || null, d.fotoEnvase || null, d.lote || null, d.vence || null,
-            d.producto || null, d.analista || null, d.analistaId || null]
+            d.producto || null, d.codigo || null, d.analista || null, d.analistaId || null]
     );
     if (!rows.length) return null;
     await c.query(
@@ -145,7 +145,14 @@ export async function rotuloDe(app, orden, c = null) {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 async function cargar(id) {
-    const { rows } = await consultar('SELECT * FROM rotulo_verificaciones WHERE id = $1', [id]);
+    // Con el EAN 14 y la descripcion del producto: el correo los lleva para
+    // poder comparar contra la foto de la caja sin entrar a la app.
+    const { rows } = await consultar(
+        `SELECT v.*, p.ean14, p.nombre AS descripcion
+         FROM rotulo_verificaciones v
+         LEFT JOIN producto_ean p ON p.codigo = v.codigo
+         WHERE v.id = $1`, [id]
+    );
     return rows[0] || null;
 }
 
@@ -184,7 +191,8 @@ function cuerpo(v, { titulo, intro, color, conFotos, adjuntos, enlaces }) {
         <div style="border:1px solid #e4e7ec;border-top:0;border-radius:0 0 10px 10px;padding:14px 18px">
           <p style="margin:0 0 10px;font-size:14px">${intro}</p>
           <table style="font-size:14px;margin-bottom:10px">
-            ${fila('Orden', v.orden)}${fila('Lote', v.lote)}${fila('Vencimiento', v.vence)}${fila('Producto', v.producto)}${fila('Analista', v.analista)}
+            ${fila('Orden', v.orden)}${fila('Lote', v.lote)}${fila('Vencimiento', v.vence)}${fila('Producto', v.producto)}
+            ${fila('Descripción', v.descripcion)}${fila('EAN 14 (caja)', v.ean14)}${fila('Analista', v.analista)}
           </table>
           ${v.comentario && v.estado === 'correccion' ? `<p style="background:#fef3f2;color:#b42318;padding:8px 10px;border-radius:6px;font-size:14px"><b>Corrección pedida:</b> ${esc(v.comentario)}${v.reproceso ? '<br><b>Requiere reproceso.</b>' : ''}</p>` : ''}
           ${conFotos ? `<table><tr>${foto('caja', '📦 Caja / sticker')}${foto('envase', '🏷️ Envase: lote y vencimiento')}</tr></table>` : ''}
@@ -340,7 +348,7 @@ export async function actuar(app, orden, accion, usuario, datos = {}) {
 /** Las pendientes y en correccion, y las resueltas de los ultimos dias. */
 export async function listar(app, dias = 7) {
     const { rows } = await consultar(
-        `SELECT v.*,
+        `SELECT v.*, p.ean14, p.nombre AS descripcion,
                 (SELECT json_agg(json_build_object('ts', e.ts, 'usuario', e.usuario, 'accion', e.accion,
                                                    'comentario', e.comentario, 'reproceso', e.reproceso)
                                  ORDER BY e.ts)
@@ -348,6 +356,7 @@ export async function listar(app, dias = 7) {
                 ${VENCIDA.replace(/creado_en/g, 'v.creado_en')} AND NOT ${FINDE} AS vencida,
                 to_char(${PLAZO.replace(/creado_en/g, 'v.creado_en')}, 'DD/MM HH24:MI') AS plazo
          FROM rotulo_verificaciones v
+         LEFT JOIN producto_ean p ON p.codigo = v.codigo
          WHERE v.app = $1
            AND (v.estado <> 'ok' OR v.actualizado_en >= now() - ($2 || ' days')::interval)
          ORDER BY (v.estado = 'ok'), v.creado_en DESC`,
@@ -357,6 +366,9 @@ export async function listar(app, dias = 7) {
         orden: v.orden, estado: v.estado,
         fotoCaja: v.foto_caja, fotoEnvase: v.foto_envase,
         lote: v.lote || '', vence: v.vence || '', producto: v.producto || '', analista: v.analista || '',
+        // El EAN 14 y la descripcion del producto: es lo que quien da el OK
+        // compara contra la caja de la foto (migracion 048 y 049).
+        codigo: v.codigo || '', ean14: v.ean14 || '', descripcion: v.descripcion || '',
         creadoEn: v.creado_en, revisadoPor: v.revisado_por || '', revisadoEn: v.revisado_en,
         comentario: v.comentario || '', reproceso: v.reproceso,
         plazo: v.plazo || '',
