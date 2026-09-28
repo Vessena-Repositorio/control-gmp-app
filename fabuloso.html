@@ -702,10 +702,13 @@ window.APP_CONFIG = {
      descripción del producto. Si el producto no tiene EAN cargado en el ERP se
      muestra igual la descripción, y si no hay ninguno de los dos, nada. */
   function rotuloEan_(r) {
-    if (!r.ean14 && !r.descripcion) return '';
+    if (!r.ean14 && !r.descripcion && !r.codigo) return '';
+    // El código va a la vista: si lo cargaron mal, quien da el OK ve que la
+    // descripción no coincide con la caja de la foto en vez de confiar en ella.
     return `<div class="small mt8" style="background:#eef4ff;border-radius:8px;padding:8px 10px;color:#1a3352">
-      ${r.ean14 ? `📦 <b>EAN 14 de la caja:</b> <span style="font-family:ui-monospace,Consolas,monospace;font-size:15px;letter-spacing:1px">${esc(r.ean14)}</span><br>` : ''}
-      ${r.descripcion ? esc(r.descripcion) : ''}</div>`;
+      ${r.codigo ? `Cód. de producto <b>${esc(r.codigo)}</b>${r.descripcion ? ' · ' + esc(r.descripcion) : ' · <i>no está en el ERP</i>'}<br>` : ''}
+      ${r.ean14 ? `📦 <b>EAN 14 de la caja:</b> <span style="font-family:ui-monospace,Consolas,monospace;font-size:15px;letter-spacing:1px">${esc(r.ean14)}</span>` : ''}
+      </div>`;
   }
   function fotoRotulo_(u, t) {
     return u ? `<a href="${esc(u)}" target="_blank" class="rot-foto"><img src="${esc(u)}" alt=""/><span>${t}</span></a>`
