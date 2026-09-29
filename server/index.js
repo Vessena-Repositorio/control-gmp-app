@@ -36,6 +36,7 @@ import { revisarAvisosControlCambios } from './lib/avisos-control-cambios.js';
 import { revisarRecordatoriosPlan, revisarInduccionesPendientes } from './lib/avisos-capacitaciones.js';
 import { revisarPendientesAprobacion } from './lib/avisos-envases.js';
 import { revisarVencimientosEstandares, revisarResumenEstandares } from './lib/avisos-estandares.js';
+import { revisarAccionesAuditoria, revisarAuditoriasDelMes, revisarInformesPendientes } from './lib/avisos-auditorias.js';
 import { revisarGranelesPendientes, revisarGranelesResumen } from './lib/avisos-graneles.js';
 import { revisarReporteFabuloso } from './lib/avisos-fabuloso.js';
 import { revisarProcesoPendientes } from './lib/avisos-proceso.js';
@@ -265,6 +266,9 @@ function arrancar() {
                 ['control-cambios', revisarAvisosControlCambios],
                 ['estandares:vencimientos', revisarVencimientosEstandares],
                 ['estandares:resumen', revisarResumenEstandares],
+                ['auditorias:acciones', revisarAccionesAuditoria],
+                ['auditorias:mes', revisarAuditoriasDelMes],
+                ['auditorias:informes', revisarInformesPendientes],
             ];
             const revisarAvisos = () => {
                 // Cada una falla por separado: que una se caiga no puede dejar

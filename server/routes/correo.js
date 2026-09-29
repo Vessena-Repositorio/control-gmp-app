@@ -19,6 +19,7 @@ import {
 } from '../lib/avisos-capacitaciones.js';
 import { revisarPendientesAprobacion, configEnvases } from '../lib/avisos-envases.js';
 import { revisarVencimientosEstandares, revisarResumenEstandares, configEstandares } from '../lib/avisos-estandares.js';
+import { revisarAccionesAuditoria, revisarAuditoriasDelMes, revisarInformesPendientes, configAuditorias } from '../lib/avisos-auditorias.js';
 import {
     revisarGranelesPendientes, revisarGranelesResumen, configGraneles,
 } from '../lib/avisos-graneles.js';
@@ -101,6 +102,7 @@ rutasCorreo.get('/avisos', exigirTokenSync, async (_req, res, next) => {
             controlCambios: configControlCambios(),
             fabuloso: configFabuloso(),
             estandares: configEstandares(),
+            auditorias: configAuditorias(),
             controlEnProceso: configProceso(),
             corridas: rows,
         });
@@ -138,6 +140,9 @@ endpointDeAviso('/avisos/control-cambios', revisarAvisosControlCambios);
 endpointDeAviso('/avisos/fabuloso', revisarReporteFabuloso);
 endpointDeAviso('/avisos/estandares', revisarVencimientosEstandares);
 endpointDeAviso('/avisos/estandares/resumen', revisarResumenEstandares);
+endpointDeAviso('/avisos/auditorias/acciones', revisarAccionesAuditoria);
+endpointDeAviso('/avisos/auditorias/mes', revisarAuditoriasDelMes);
+endpointDeAviso('/avisos/auditorias/informes', revisarInformesPendientes);
 endpointDeAviso('/avisos/control-en-proceso', revisarProcesoPendientes);
 endpointDeAviso('/avisos/rotulos-fin-de-semana', revisarRotulosDelFinde);
 endpointDeAviso('/avisos/resumen-aprobaciones', revisarResumenAprobaciones);
