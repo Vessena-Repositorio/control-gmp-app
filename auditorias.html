@@ -1,0 +1,1305 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vessena S.A. — QMS Audit Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Inter',-apple-system,system-ui,sans-serif;background:#F5F6F8;color:#1B1E25;font-size:14px;min-height:100vh}input,select,textarea,button{font-family:inherit}::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-thumb{background:#ccc;border-radius:3px}
+.ctx-help{background:#EFF6FF;border:1px solid #1E40AF20;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12.5px;color:#1E40AF;display:flex;align-items:flex-start;gap:8px;line-height:1.5}.ctx-help .ctx-icon{font-size:16px;flex-shrink:0}.ctx-help.warn{background:#FFFBEB;border-color:#D9770620;color:#92400E}.ctx-help.success{background:#F0FDF4;border-color:#16A34A20;color:#166534}
+.login-bg{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1B1E25,#2D3748)}.login-card{background:#fff;border-radius:16px;width:100%;max-width:400px;padding:40px;box-shadow:0 24px 80px rgba(0,0,0,.3)}
+.cfg-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid #EEF0F3;border-radius:7px;margin-bottom:6px;background:#fff}.cfg-item:hover{border-color:#1E40AF30}.cfg-section{background:#fff;border:1px solid #E1E4EA;border-radius:10px;padding:18px;margin-bottom:16px}.cfg-section h3{font-size:14px;font-weight:700;margin:0 0 4px;display:flex;align-items:center;gap:8px}.cfg-section .cfg-desc{font-size:12px;color:#5A6170;margin:0 0 12px}
+.usr-row{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid #EEF0F3}
+.prog-cell{width:100%;height:100%;min-height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:4px;font-size:10px;font-weight:700;transition:all .12s;text-transform:uppercase;letter-spacing:.03em}.prog-cell:hover{opacity:.8;transform:scale(1.05)}
+.aud-phase{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600}
+.flow-bar{display:flex;gap:2px;margin-bottom:16px}.flow-step{flex:1;padding:8px 6px;text-align:center;font-size:11px;font-weight:600;border-radius:6px;position:relative;transition:all .15s}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const{useState,useEffect,useCallback,useRef}=React;
+
+/* ── AUDIT LIFECYCLE ── */
+const PHASES=[
+  {id:"planificada",label:"Planificada",color:"#6366F1",bg:"#EEF2FF",icon:"📅",desc:"Auditoría incluida en el programa anual"},
+  {id:"plan_definido",label:"Plan definido",color:"#0891B2",bg:"#ECFEFF",icon:"📝",desc:"REG-035-B completado: equipo, alcance, listas de verificación"},
+  {id:"en_ejecucion",label:"Ejecutada — Pte. informe",color:"#D97706",bg:"#FFFBEB",icon:"🔄",desc:"Auditoría realizada — pendiente elaboración del informe"},
+  {id:"informe",label:"Informe emitido",color:"#2563EB",bg:"#EFF6FF",icon:"📊",desc:"REG-035-C completado — hallazgos registrados"},
+  {id:"cerrada",label:"Cerrada",color:"#16A34A",bg:"#F0FDF4",icon:"✅",desc:"Acciones completadas y eficacia verificada"},
+];
+const EXT_PHASES=[
+  {id:"ext_notificada",label:"Notificada",color:"#6366F1",bg:"#EEF2FF",icon:"📩",desc:"Auditoría anunciada por el cliente o autoridad"},
+  {id:"ext_recibida",label:"Recibida",color:"#D97706",bg:"#FFFBEB",icon:"🏭",desc:"Auditoría realizada en Vessena"},
+  {id:"ext_informe",label:"Informe recibido",color:"#2563EB",bg:"#EFF6FF",icon:"📨",desc:"Informe del cliente recibido — hallazgos identificados"},
+  {id:"ext_capa",label:"CAPA enviado",color:"#0891B2",bg:"#ECFEFF",icon:"📤",desc:"Plan de acción enviado al cliente"},
+  {id:"ext_cerrada",label:"Cerrada",color:"#16A34A",bg:"#F0FDF4",icon:"✅",desc:"Acciones verificadas y cerradas"},
+];
+const isExternal=(a)=>a?.type==="Externa";
+const getPhasesFor=(a)=>isExternal(a)?EXT_PHASES:PHASES;
+const phaseOf=(id,ext)=>(ext?EXT_PHASES:PHASES).find(p=>p.id===id)||(ext?EXT_PHASES:PHASES)[0];
+const phaseIdx=(id,ext)=>(ext?EXT_PHASES:PHASES).findIndex(p=>p.id===id);
+
+const DEF_CONFIG={
+  classifications:[
+    {id:"CRITICA",label:"Crítica",risk:"Riesgo moderado",deadline:6,color:"#DC2626",desc:"Riesgos inmediatos o futuros para la salud"},
+    {id:"GRAVE",label:"Grave",risk:"Riesgo significativo",deadline:3,color:"#B45309",desc:"Complicaciones para cumplir estándares"},
+    {id:"MENOR",label:"Menor",risk:"Riesgo menor",deadline:6,color:"#2563EB",desc:"Deficiencias en procedimientos internos"},
+    {id:"OTRA",label:"Otra Observación",risk:"Informativo",deadline:6,color:"#6D28D9",desc:"Desviaciones menores"},
+    {id:"OBS",label:"Observación",risk:"Informativo",deadline:0,color:"#64748B",desc:"Puede llevar a incumplimiento"},
+    {id:"OM",label:"Oportunidad de Mejora",risk:"N/A",deadline:0,color:"#059669",desc:"Mejora operativa"},
+  ],
+  auditTypes:["Interna","A proveedor","Externa","Autoinspección puntual"],
+  capaTypes:["Acción Correctiva","Acción Preventiva","Corrección"],
+  statuses:["Abierto","En proceso","Cerrado","No aplica","Evaluada — No implementar","Vencido"],
+  sectors:["Seguimiento Depósito y Distribución","Seguimiento LCC","Gestión Productiva (Fabricación)","Seguimiento Gestión Productiva (Envasado)","Gestión Productiva (Plásticos)","Gestión de Higiene y Sanitización","Seguimiento Depósito de Materias Primas","Depósito PT","Hipoclorito","Control de Calidad","Aseguramiento de Calidad","Dirección Técnica","Compras","Servicios/Agua/Tanques","Áreas auxiliares/Vestuarios","Imprimex (Proveedor)","Dimena (Proveedor)","Petropack (Proveedor)","Imprenta Grifelman (Proveedor)"],
+  teams:[
+    {name:"E2",leader:"Claudia Barlocco",members:"Claudia Barlocco, Gloria Nuñez",comments:""},
+    {name:"E3",leader:"Claudia Barlocco",members:"Claudia Barlocco, Antonella Nuñez",comments:""},
+    {name:"E4",leader:"Gloria Nuñez",members:"Antonella Nuñez, Gloria Nuñez",comments:""},
+    {name:"E5",leader:"Claudia Barlocco",members:"Claudia Barlocco, Arnoldo Braggio",comments:""},
+    {name:"E6",leader:"Gloria Nuñez",members:"Gloria Nuñez, Andrés Rodríguez",comments:""},
+    {name:"E7",leader:"Claudia Barlocco",members:"Claudia Barlocco, Andrés Rodríguez",comments:""},
+    {name:"E8",leader:"Rodrigo Cabrera",members:"Gloria Nuñez, Rodrigo Cabrera",comments:"Seguridad"},
+  ],
+  aiSectors:[{name:"Hipoclorito",day:"1er lunes"},{name:"Envasado",day:"1er lunes"},{name:"Envasado Fabuloso",day:"2do martes"},{name:"Depósito MP/Componentes",day:"2do jueves"},{name:"Depósito PT",day:"2do jueves"},{name:"Plásticos",day:"2do martes"},{name:"Fabricación",day:"4to jueves"},{name:"LCC/Minilab",day:"4to jueves"},{name:"Áreas auxiliares",day:"3er lunes"},{name:"Servicios",day:"3er lunes"}],
+  aiMonths:["Febrero","Mayo","Agosto","Noviembre"],
+  aiCriteria:[{code:"OyL",label:"Orden y Limpieza"},{code:"T",label:"Temperatura"},{code:"M",label:"Mantenimiento"},{code:"D",label:"Documentación"}],
+  auditorComps:["Inglés Técnico","GMP","Herramientas informáticas","Formación en auditorías"],
+};
+const ROLES={admin:{label:"Administrador",color:"#DC2626",bg:"#FEF2F2",icon:"🔑",canEdit:true,canAdmin:true},user:{label:"Usuario",color:"#1E40AF",bg:"#EFF6FF",icon:"👤",canEdit:true,canAdmin:false},viewer:{label:"Visualización",color:"#059669",bg:"#F0FDF4",icon:"👁",canEdit:false,canAdmin:false}};
+// Los usuarios y sus roles viven en el portal (recurso auditorias).
+const MO=["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Set","Oct","Nov","Dic"];
+
+const LS={get(k){try{return JSON.parse(localStorage.getItem(k));}catch{return null;}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{}}};
+/* ── Los datos viven en el servidor, no en el navegador ─────────────────────
+   La app nació guardando todo en localStorage: lo que cargaba una no lo veía
+   otra y se perdía al limpiar el navegador. Ahora cada lista es una colección
+   del servidor (migración 051). Se mantienen los mismos nombres de clave para
+   no tocar el resto de la pantalla.
+   Cada colección lleva versión: si dos personas guardan a la vez, el servidor
+   rechaza la segunda y la pantalla recarga en vez de pisar el trabajo ajeno. */
+const API_AUD='/api/auditorias';
+const COLECCION={v_audA:'auditorias',v_finC:'hallazgos',v_accD:'acciones',
+  v_ai1:'autoinspecciones',v_aif1:'autoinspecciones_hallazgos',
+  v_progsec:'programa_sectores',v_cfg:'config'};
+const SRV={datos:{},vers:{},sesion:null};
+async function apiAud(ruta,op){
+  const r=await fetch(API_AUD+ruta,Object.assign({credentials:'same-origin',headers:{'Content-Type':'application/json'}},op||{}));
+  if(r.status===401){location.href='/index.html';throw new Error('sesión');}
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok||d.ok===false){const e=new Error(d.error||('error '+r.status));e.status=r.status;e.actual=d.actual;throw e;}
+  return d;
+}
+async function guardarColeccion(col,datos){
+  try{
+    const d=await apiAud('/coleccion/'+col,{method:'PUT',body:JSON.stringify({version:SRV.vers[col],datos})});
+    SRV.vers[col]=d.version; SRV.datos[col]=datos;
+  }catch(e){
+    if(e.status===409){
+      alert('Otra persona guardó cambios mientras tanto. Se vuelve a cargar la pantalla para no pisarlos; revisá y volvé a hacer el cambio.');
+      location.reload(); return;
+    }
+    alert('No se pudo guardar en el servidor: '+e.message);
+  }
+}
+function useLS(k,i){
+  const col=COLECCION[k];
+  // v_year y el resto son preferencias de cada uno: siguen en el navegador.
+  const inicial=col?(SRV.datos[col]??i):(LS.get(k)??i);
+  const[v,sV]=useState(inicial);
+  const s=useCallback(fn=>{sV(p=>{const n=typeof fn==="function"?fn(p):fn;
+    if(col)guardarColeccion(col,n); else LS.set(k,n);
+    return n;});},[k,col]);
+  return[v,s];
+}
+const gid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const fd=d=>d?new Date(d).toLocaleDateString("es-UY",{day:"2-digit",month:"short",year:"numeric"}):"—";
+const fdt=d=>d?new Date(d).toLocaleString("es-UY",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}):"—";
+const tdy=()=>new Date().toISOString().split("T")[0];
+const addMo=(d,m)=>{const dt=new Date(d);dt.setMonth(dt.getMonth()+m);return dt.toISOString().split("T")[0];};
+function alog(sL,action,entity,detail,user="Sistema"){sL(p=>[{id:gid(),ts:new Date().toISOString(),user,action,entity,detail},...p]);}
+
+const K={bg:"#F5F6F8",srf:"#FFF",brd:"#E1E4EA",brdL:"#EEF0F3",txt:"#1B1E25",txS:"#5A6170",txM:"#8B92A0",pri:"#1E40AF",priL:"#EFF6FF",red:"#DC2626",redL:"#FEF2F2",grn:"#16A34A",grnL:"#F0FDF4",wrn:"#D97706",wrnL:"#FFFBEB",vio:"#6D28D9",vioL:"#F5F3FF",ves:"#C41E2A"};
+const sB=(v="pri")=>{const b={padding:"7px 15px",borderRadius:6,border:"none",cursor:"pointer",fontSize:12.5,fontWeight:600,display:"inline-flex",alignItems:"center",gap:5,transition:"all .15s",fontFamily:"inherit"};if(v==="pri")return{...b,background:K.pri,color:"#fff"};if(v==="red")return{...b,background:K.red,color:"#fff"};if(v==="g")return{...b,background:"transparent",color:K.txS,border:`1px solid ${K.brd}`};if(v==="sm")return{...b,padding:"4px 10px",fontSize:11.5,background:"transparent",color:K.txS,border:`1px solid ${K.brd}`};return b;};
+const sI={width:"100%",padding:"8px 11px",border:`1px solid ${K.brd}`,borderRadius:6,fontSize:13,fontFamily:"inherit",color:K.txt,background:K.srf,boxSizing:"border-box",outline:"none"};
+const sS={...sI,cursor:"pointer"};const sL={fontSize:11,fontWeight:700,color:K.txS,marginBottom:3,display:"block",textTransform:"uppercase",letterSpacing:".04em"};
+const sC={background:K.srf,border:`1px solid ${K.brd}`,borderRadius:9,padding:18,marginBottom:14};
+const sTh={textAlign:"left",padding:"9px 10px",borderBottom:`2px solid ${K.brd}`,color:K.txS,fontWeight:700,fontSize:10.5,textTransform:"uppercase",letterSpacing:".05em"};
+const sTd={padding:"10px",borderBottom:`1px solid ${K.brdL}`,verticalAlign:"top",fontSize:13};
+function Bg({children,color,bg}){return <span style={{display:"inline-block",padding:"2px 9px",borderRadius:16,fontSize:11,fontWeight:600,color,background:bg,whiteSpace:"nowrap"}}>{children}</span>;}
+function CBg({cls,cfg}){const c=cfg.classifications.find(x=>x.id===cls);return c?<Bg color={c.color} bg={c.color+"15"}>{c.label}</Bg>:null;}
+function SBg({s}){const m={Abierto:[K.red,K.redL],"En proceso":[K.wrn,K.wrnL],Cerrado:[K.grn,K.grnL],Vencido:["#991B1B","#FEE2E2"],"No aplica":["#6B7280","#F3F4F6"],"Evaluada — No implementar":["#7C3AED","#F5F3FF"]};const[c,b]=m[s]||[K.txM,"#F1F5F9"];return <Bg color={c} bg={b}>{s}</Bg>;}
+function PhaseBg({phase,ext}){const p=phaseOf(phase,ext);return <span className="aud-phase" style={{color:p.color,background:p.bg}}>{p.icon} {p.label}</span>;}
+function Fd({l,children}){return <div style={{marginBottom:12}}><label style={sL}>{l}</label>{children}</div>;}
+function Em({icon,t}){return <div style={{textAlign:"center",padding:"36px 20px",color:K.txM}}><div style={{fontSize:28,marginBottom:6}}>{icon}</div><div style={{fontSize:13}}>{t}</div></div>;}
+function Md({title,onClose,children,wide}){return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",zIndex:100,display:"flex",justifyContent:"center",alignItems:"flex-start",paddingTop:40,overflowY:"auto"}} onClick={onClose}><div style={{background:"#fff",borderRadius:12,width:"100%",maxWidth:wide?860:620,padding:24,boxShadow:"0 20px 60px rgba(0,0,0,.15)",margin:"0 16px 40px"}} onClick={e=>e.stopPropagation()}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><h2 style={{fontSize:16,fontWeight:800,margin:0}}>{title}</h2><button onClick={onClose} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:K.txM}}>✕</button></div>{children}</div></div>);}
+function G2({children}){return <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>{children}</div>;}
+function CtxHelp({children,type="info"}){return <div className={`ctx-help ${type==="warn"?"warn":type==="success"?"success":""}`}><span className="ctx-icon">{type==="warn"?"⚠️":type==="success"?"✅":"💡"}</span><div>{children}</div></div>;}
+function VBanner(){return <CtxHelp type="warn"><strong>Modo visualización.</strong> Solo lectura.</CtxHelp>;}
+
+/* ── FLOW BAR ── */
+function FlowBar({current,phases}){const ph=phases||PHASES;const ci=ph.findIndex(p=>p.id===current);return <div className="flow-bar">{ph.map((p,i)=>{const active=i<=ci;return <div key={p.id} className="flow-step" style={{background:active?p.color+"18":"#F1F5F9",color:active?p.color:K.txM,border:`1px solid ${active?p.color+"30":"transparent"}`}}>{p.icon}<br/>{p.label}</div>;})}</div>;}
+
+/* ── LOGIN ── */
+
+/* ══════════════════════════════════════════════════════
+   PROGRAMA ANUAL INTEGRADO + AUDITORÍAS
+   ══════════════════════════════════════════════════════ */
+function ProgramaIntegrado({data,cfg,canEdit,openAudit}){
+  const{audits}=data;const yr=data.year||2026;
+  const[progSectors,setProgSectors]=useLS("v_progsec",{2026:["Seguimiento Depósito y Distribución","Seguimiento LCC","Gestión Productiva (Fabricación)","Seguimiento Gestión Productiva (Envasado)","Gestión Productiva (Plásticos)","Gestión de Higiene y Sanitización","Seguimiento Depósito de Materias Primas","Imprimex (Proveedor)","Dimena (Proveedor)","Petropack (Proveedor)","Imprenta Grifelman (Proveedor)"]});
+  const[showPicker,setShowPicker]=useState(false);
+  const yrSectors=progSectors[yr]||[];
+  const toggleSector=(s)=>{setProgSectors(p=>{const cur=p[yr]||[];const next=cur.includes(s)?cur.filter(x=>x!==s):[...cur,s];return{...p,[yr]:next};});};
+  const addAllSectors=()=>{setProgSectors(p=>({...p,[yr]:[...cfg.sectors]}));};
+
+  const getAudit=(sector,month)=>audits.find(a=>a.progSector===sector&&a.progMonth===month);
+  const cellStyle=(a)=>{if(!a)return{background:"#F8FAFC",color:K.txM};const p=phaseOf(a.phase,isExternal(a));return{background:p.color+"18",color:p.color};};
+  const cellText=(a)=>{if(!a)return "";const p=phaseOf(a.phase,isExternal(a));return p.icon;};
+
+  return(<div>
+    <h1 style={{fontSize:20,fontWeight:800,marginBottom:4}}>Programa Anual de Auditorías — {yr}</h1>
+    <p style={{color:K.txS,margin:"0 0 12px",fontSize:12.5}}>REG-SOP-AC-035-A — Click en una celda para planificar o ver el estado de la auditoría</p>
+    <CtxHelp>Cada celda representa una auditoría para un sector/mes. <strong>Celda vacía</strong> = sin planificar. Click para crear. Las auditorías avanzan: 📅→📝→🔄→📊→✅</CtxHelp>
+
+    <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center",flexWrap:"wrap"}}>
+      {PHASES.map(p=><div key={p.id} style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:p.color}}><span>{p.icon}</span>{p.label}</div>)}
+      <div style={{marginLeft:"auto"}}>{canEdit&&<button style={sB("pri")} onClick={()=>setShowPicker(true)}>🏭 Configurar sectores {yr}</button>}</div>
+    </div>
+
+    {yrSectors.length===0?<div style={sC}><Em icon="🏭" t={`No hay sectores configurados para ${yr}. Hacé click en "Configurar sectores ${yr}" para seleccionar qué sectores incluir en el programa.`}/></div>:
+    <div style={{...sC,overflowX:"auto"}}>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+        <thead><tr><th style={{...sTh,minWidth:160,position:"sticky",left:0,background:K.srf,zIndex:2}}>Sector / Proceso</th>{MO.map(m=><th key={m} style={{...sTh,textAlign:"center",minWidth:48}}>{m}</th>)}</tr></thead>
+        <tbody>{yrSectors.map(s=><tr key={s}>
+          <td style={{...sTd,fontWeight:600,fontSize:12,position:"sticky",left:0,background:K.srf,zIndex:1}}>{s}</td>
+          {MO.map(m=>{const a=getAudit(s,m);const st=cellStyle(a);return <td key={m} style={{...sTd,padding:4,textAlign:"center"}} onClick={()=>{if(canEdit||a)openAudit(a,s,m);}}>
+            <div className="prog-cell" style={{...st,minHeight:32,fontSize:a?14:18,cursor:canEdit||a?"pointer":"default"}} title={a?`${a.code} — ${phaseOf(a.phase,isExternal(a)).label}`:"Click para planificar"}>
+              {a?cellText(a)+(a.postponed?"⏸":""):(canEdit?<span style={{opacity:.3}}>+</span>:"")}
+            </div>
+          </td>;})}
+        </tr>)}</tbody>
+      </table>
+    </div>}
+
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+      <div style={sC}>
+        <h3 style={{fontSize:13,fontWeight:700,margin:"0 0 8px"}}>Resumen por fase</h3>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{PHASES.map(p=>{const c=audits.filter(a=>a.phase===p.id&&a.progSector).length;return <div key={p.id} style={{padding:"8px 12px",background:p.bg,border:`1px solid ${p.color}20`,borderRadius:7,flex:"1 1 80px"}}><div style={{fontSize:10,fontWeight:700,color:p.color,textTransform:"uppercase"}}>{p.icon} {p.label}</div><div style={{fontSize:20,fontWeight:800,color:p.color,marginTop:2}}>{c}</div></div>;})}</div>
+      </div>
+      <div style={sC}>
+        <h3 style={{fontSize:13,fontWeight:700,margin:"0 0 8px"}}>Equipos Auditores {yr}</h3>
+        {(cfg.teams||[]).map((t,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:`1px solid ${K.brdL}`,fontSize:12}}>
+          <span style={{fontWeight:700,color:K.pri,minWidth:24}}>{t.name}</span>
+          <span style={{color:K.txS,flex:1}}>{t.members}</span>
+          <span style={{fontWeight:600,fontSize:11}}>Líder: {t.leader}</span>
+          {t.comments&&<Bg color={K.wrn} bg={K.wrnL}>{t.comments}</Bg>}
+        </div>)}
+      </div>
+    </div>
+    <div style={sC}>
+      <h3 style={{fontSize:13,fontWeight:700,margin:"0 0 6px"}}>Definido por</h3>
+      <div style={{fontSize:12.5,color:K.txS}}>Gloria Nuñez — Aseguramiento de Calidad &nbsp;|&nbsp; <strong>Aprobado:</strong> Claudia Barlocco — Dirección Técnica</div>
+    </div>
+
+    {showPicker&&<Md title={`Sectores del programa ${yr}`} onClose={()=>setShowPicker(false)} wide>
+      <CtxHelp>Seleccioná los sectores/procesos que se incluirán en el programa anual de {yr}. Solo los seleccionados aparecerán como filas en la grilla.</CtxHelp>
+      <div style={{display:"flex",gap:8,marginBottom:10}}>
+        <button style={sB("pri")} onClick={addAllSectors}>Seleccionar todos</button>
+        <button style={sB("g")} onClick={()=>setProgSectors(p=>({...p,[yr]:[]}))}>Limpiar selección</button>
+        <span style={{fontSize:12,color:K.txS,marginLeft:"auto",alignSelf:"center"}}>{yrSectors.length} de {cfg.sectors.length} seleccionados</span>
+      </div>
+      <div style={{display:"flex",gap:8,marginBottom:14}}>
+        <input style={{...sI,flex:1}} placeholder="Agregar nuevo sector..." onKeyDown={e=>{if(e.key==="Enter"&&e.target.value.trim()){const v=e.target.value.trim();if(!cfg.sectors.includes(v)){cfg.sectors.push(v);}if(!yrSectors.includes(v)){toggleSector(v);}e.target.value="";}}} />
+        <button style={sB("pri")} onClick={()=>{const inp=document.querySelector("#newSectorInput");if(inp&&inp.value.trim()){const v=inp.value.trim();if(!cfg.sectors.includes(v)){cfg.sectors.push(v);}if(!yrSectors.includes(v)){toggleSector(v);}inp.value="";}}}>+ Agregar</button>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+        {cfg.sectors.map(s=>{const sel=yrSectors.includes(s);return <div key={s} onClick={()=>toggleSector(s)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",border:`1px solid ${sel?K.pri+"40":K.brd}`,borderRadius:8,cursor:"pointer",background:sel?K.priL:"#fff",transition:"all .12s"}}>
+          <div style={{width:22,height:22,borderRadius:5,border:`2px solid ${sel?K.pri:K.brd}`,background:sel?K.pri:"#fff",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:14,fontWeight:700,flexShrink:0}}>{sel&&"✓"}</div>
+          <span style={{fontSize:13,fontWeight:sel?600:400,color:sel?K.pri:K.txt}}>{s}</span>
+        </div>;})}
+      </div>
+      <div style={{display:"flex",justifyContent:"flex-end",marginTop:16}}>
+        <button style={sB("pri")} onClick={()=>setShowPicker(false)}>Listo</button>
+      </div>
+    </Md>}
+  </div>);
+}
+
+/* ── EXPORT REPORT ── */
+function exportReport(fm,af,cfg){
+  const clsLabel=(id)=>{const c=cfg.classifications.find(x=>x.id===id);return c?c.label:"—";};
+  const ncs=af.filter(f=>["CRITICA","GRAVE","MENOR","OTRA"].includes(f.classification));
+  const obs=af.filter(f=>f.classification==="OBS");
+  const opm=af.filter(f=>f.classification==="OM");
+  const ncsHtml=ncs.length?('<table><tr><th>No conformidad</th><th>Clasificación</th></tr>'+ncs.map(f=>'<tr><td>'+f.code+': '+f.description+'</td><td><b>'+clsLabel(f.classification)+'</b></td></tr>').join('')+'</table>'):'<p>No se detectaron no conformidades.</p>';
+  const obsHtml=obs.length?obs.map(f=>'<p><b>'+f.code+':</b> '+f.description+'</p>').join(''):'<p>Sin observaciones.</p>';
+  const opmHtml=opm.length?opm.map(f=>'<p><b>'+f.code+':</b> '+f.description+'</p>').join(''):'<p>Sin oportunidades de mejora.</p>';
+  const clsTable=cfg.classifications.map(function(c){return '<tr><td><b>'+c.label+'</b></td><td>'+c.desc+(c.deadline?(' — Plazo: '+c.deadline+' meses'):'')+'</td></tr>';}).join('');
+  const scope=(fm.scope||"Sin definir").replace(/\n/g,"<br>");
+  const meth=(fm.methodology||"Sin definir").replace(/\n/g,"<br>");
+  const genImp=(fm.generalImpression||"Sin definir").replace(/\n/g,"<br>");
+  const strengths=(fm.strengths||"Sin definir").replace(/\n/g,"<br>");
+  const concl=(fm.conclusions||"Sin definir").replace(/\n/g,"<br>");
+  const expect=(fm.expectations||"Se espera plan CAPA dentro de los 15 días hábiles.").replace(/\n/g,"<br>");
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Informe de Auditoría — ${fm.code}</title>
+<style>@page{size:A4;margin:20mm 18mm}body{font-family:Arial,sans-serif;font-size:11pt;color:#1a1a1a;line-height:1.5}
+.header{display:flex;justify-content:space-between;align-items:flex-start;border:2px solid #333;padding:12px 16px;margin-bottom:20px}
+.header-left{font-size:24px;font-weight:900;font-style:italic;font-family:Georgia,serif}
+.header-right{text-align:right;font-size:9pt;color:#555}
+.header-right .brand{font-size:14pt;font-weight:700;color:#C41E2A;letter-spacing:2px}
+h2{font-size:13pt;font-weight:700;margin:18px 0 8px;border-bottom:1px solid #ccc;padding-bottom:4px}
+h3{font-size:11pt;font-weight:700;margin:12px 0 6px}
+table{width:100%;border-collapse:collapse;margin:8px 0 14px}
+th,td{border:1px solid #999;padding:6px 10px;text-align:left;font-size:10pt}
+th{background:#e8e8e8;font-weight:700}
+.cls-critica{background:#fdd;color:#a00;font-weight:700}.cls-mayor{background:#ffe8cc;color:#955;font-weight:700}
+.cls-menor{background:#ddf;color:#339;font-weight:700}.cls-obs{background:#f5f5f5;color:#555}
+.footer{margin-top:30px;font-size:9pt;color:#888;text-align:center;border-top:1px solid #ccc;padding-top:8px}
+.sign-table td{height:60px;vertical-align:top}
+.no-print{background:#1E40AF;color:#fff;border:none;padding:10px 24px;font-size:13px;font-weight:600;border-radius:6px;cursor:pointer;font-family:inherit;margin:10px}
+@media print{.no-print{display:none}}</style></head><body>
+<div style="text-align:center;margin-bottom:12px"><button class="no-print" onclick="window.print()">🖨 Imprimir / Guardar PDF</button></div>
+<div class="header"><div class="header-left">REG</div><div class="header-right"><div class="brand">☰ VESSENA</div><div>Ref. documento: <b>REG-SOP-AC-035-C</b></div><div>${fm.code}</div></div></div>
+<h1 style="font-size:16pt;text-align:center;margin:0 0 20px">Informe de Auditoría</h1>
+
+<h2>• ALCANCE</h2>
+<p>${scope}</p>
+<table><tr><th>Organismo</th><th>Referencia</th></tr><tr><td>ISO / MERCOSUR</td><td>${fm.standard||"Sin definir"}</td></tr></table>
+<table><tr><th>Lugar(es)</th><th>Fecha(s)</th></tr><tr><td>${fm.location||fm.progSector||"—"}</td><td>${fm.execDate||fm.date||"—"}</td></tr></table>
+
+<h2>• RESPONSABLES</h2>
+<table><tr><th>Auditor Líder / Co-Auditora</th><th>Equipo auditor</th></tr><tr><td>${fm.auditor||"—"}</td><td>${fm.team||"—"}</td></tr></table>
+
+<h2>• METODOLOGÍA</h2>
+<p>${meth}</p>
+
+<h2>• TERMINOLOGÍA EMPLEADA</h2>
+<table><tr><th>Término</th><th>Descripción</th></tr>
+${clsTable}
+</table>
+
+<h2>• IMPRESIÓN GENERAL</h2>
+<p>${genImp}</p>
+
+<h2>• FORTALEZAS</h2>
+<p>${strengths}</p>
+
+<h2>• NO CONFORMIDADES Y SU CLASIFICACIÓN</h2>
+${ncsHtml}
+
+<h2>• OBSERVACIONES</h2>
+${obsHtml}
+
+<h2>• OPORTUNIDADES DE MEJORA</h2>
+${opmHtml}
+
+<h2>• CONCLUSIONES</h2>
+<p>${concl}</p>
+<p><b>RESULTADO GENERAL:</b> ${fm.result||"Pendiente"}</p>
+
+<h2>• EXPECTATIVAS</h2>
+<p>${expect}</p>
+
+<h2>• FIRMA DE LOS AUDITORES</h2>
+<table class="sign-table"><tr><th>Nombre</th><th>Cargo</th><th>Fecha</th><th>Firma</th></tr>
+<tr><td>${fm.auditor||""}</td><td></td><td>${fm.execDate||""}</td><td></td></tr>
+<tr><td></td><td></td><td></td><td></td></tr></table>
+
+<div class="footer">Las versiones impresas de este documento se consideran NO controladas a menos que estén selladas como Copia Controlada y rubricadas por el responsable del sistema de documentación</div>
+</body></html>`;
+  const w=window.open("","_blank");w.document.write(html);w.document.close();
+}
+
+/* ── AUDIT DETAIL MODAL ── */
+function AuditDetail({audit,data,cfg,canEdit,onClose,onSave,onDelete}){
+  const{findings,actions}=data;
+  const[fm,sFm]=useState(audit||{});
+  const ext=isExternal(fm);
+  const phases=ext?EXT_PHASES:PHASES;
+  const af=findings.filter(f=>f.auditId===audit?.id);
+  const aa=actions.filter(a=>af.some(f=>f.id===a.findingId));
+  const ph=phaseOf(fm.phase,ext);
+  const ci=phases.findIndex(p=>p.id===fm.phase);
+  const u=(k,v)=>sFm(p=>({...p,[k]:v}));
+  const tabForPhase=(phId)=>{const extMap={ext_notificada:"xi",ext_recibida:"xr",ext_informe:"xp",ext_capa:"xc",ext_cerrada:"xx"};const intMap={planificada:"plan",plan_definido:"plan",en_ejecucion:"exec",informe:"report",cerrada:"close"};return extMap[phId]||intMap[phId]||null;};
+  const initTab=tabForPhase(fm.phase)||(ext?"xi":"plan");
+  const[tab,sTab]=useState(initTab);
+  const activeTab=tab||initTab;
+  const nextP=()=>{if(ci<phases.length-1){const np=phases[ci+1].id;sFm(p=>({...p,phase:np}));sTab(tabForPhase(np));}};
+  const prevP=()=>{if(ci>0){const np=phases[ci-1].id;sFm(p=>({...p,phase:np}));sTab(tabForPhase(np));}};
+  const chgType=(t)=>{const nExt=t==="Externa";if(ext!==nExt){const newPhase=nExt?EXT_PHASES[0].id:PHASES[0].id;sFm(p=>({...p,type:t,phase:newPhase}));sTab(tabForPhase(newPhase));}else sFm(p=>({...p,type:t}));};
+  const intTabs=[{k:"plan",l:"📅 Plan"},{k:"exec",l:"🔄 Ejecución"},{k:"report",l:"📊 Informe"},{k:"close",l:"✅ Cierre"}];
+  const extTabs=[{k:"xi",l:"📩 Datos"},{k:"xr",l:"🏭 Recepción"},{k:"xp",l:"📨 Informe cliente"},{k:"xc",l:"📤 CAPA Vessena"},{k:"xx",l:"✅ Cierre"}];
+  const curTabs=ext?extTabs:intTabs;
+
+  return(<Md title={audit?.code?`${audit.code} — ${fm.name||"Auditoría"}`:"Nueva Auditoría"} onClose={onClose} wide>
+    <FlowBar current={fm.phase||phases[0].id} phases={phases}/>
+    <div style={{display:"flex",gap:8,marginBottom:12,justifyContent:"center"}}>
+      {canEdit&&ci>0&&<button style={sB("g")} onClick={prevP}>← Anterior</button>}
+      <span className="aud-phase" style={{color:ph.color,background:ph.bg,padding:"6px 16px",fontSize:13}}>{ph.icon} {ph.label}</span>
+      {canEdit&&ci<phases.length-1&&<button style={sB("pri")} onClick={nextP}>Siguiente →</button>}
+    </div>
+    <div style={{display:"flex",gap:4,marginBottom:14,borderBottom:`2px solid ${K.brd}`,overflowX:"auto"}}>
+      {curTabs.map(t=><button key={t.k} onClick={()=>sTab(t.k)} style={{padding:"8px 12px",fontSize:12,fontWeight:activeTab===t.k?700:400,color:activeTab===t.k?K.pri:K.txS,background:activeTab===t.k?K.priL:"transparent",border:"none",borderBottom:activeTab===t.k?`2px solid ${K.pri}`:"2px solid transparent",cursor:"pointer",fontFamily:"inherit",marginBottom:-2,whiteSpace:"nowrap"}}>{t.l}</button>)}
+      {audit?.id&&!ext&&<button style={{...sB("g"),marginLeft:"auto",fontSize:11,padding:"4px 12px"}} onClick={()=>exportReport(fm,af,cfg)}>📄 Exportar</button>}
+    </div>
+
+    {/* ═══ INTERNA: Plan ═══ */}
+    {!ext&&activeTab==="plan"&&<div>
+      <div style={sC}><h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px",color:"#6366F1"}}>📅 Planificación</h3><G2>
+        <Fd l="Nombre"><input style={sI} value={fm.name||""} onChange={e=>u("name",e.target.value)} disabled={!canEdit}/></Fd>
+        <Fd l="Tipo"><select style={sS} value={fm.type||""} onChange={e=>chgType(e.target.value)} disabled={!canEdit}>{cfg.auditTypes.map(t=><option key={t}>{t}</option>)}</select></Fd>
+        <Fd l="Sector"><select style={sS} value={fm.progSector||""} onChange={e=>u("progSector",e.target.value)} disabled={!canEdit}><option value="">—</option>{cfg.sectors.map(s=><option key={s}>{s}</option>)}</select></Fd>
+        <Fd l="Mes"><select style={sS} value={fm.progMonth||""} onChange={e=>u("progMonth",e.target.value)} disabled={!canEdit}>{MO.map(m=><option key={m}>{m}</option>)}</select></Fd>
+      </G2></div>
+      <div style={sC}><h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px",color:"#0891B2"}}>📝 Plan (REG-035-B)</h3><G2>
+        <Fd l="Auditor líder"><input style={sI} value={fm.auditor||""} onChange={e=>u("auditor",e.target.value)} disabled={!canEdit}/></Fd>
+        <Fd l="Equipo"><select style={sS} value={fm.team||""} onChange={e=>u("team",e.target.value)} disabled={!canEdit}><option value="">—</option>{(cfg.teams||[]).map(t=><option key={t.name} value={`${t.members} (Líder: ${t.leader})`}>{t.name} — {t.leader}</option>)}</select></Fd>
+        <Fd l="Fecha"><input type="date" style={sI} value={fm.date||""} onChange={e=>u("date",e.target.value)} disabled={!canEdit}/></Fd>
+        <Fd l="Norma"><input style={sI} value={fm.standard||""} onChange={e=>u("standard",e.target.value)} disabled={!canEdit}/></Fd>
+      </G2>
+      <Fd l="Alcance"><textarea style={{...sI,minHeight:55,resize:"vertical"}} value={fm.scope||""} onChange={e=>u("scope",e.target.value)} disabled={!canEdit}/></Fd>
+      <G2><Fd l="Lugar"><input style={sI} value={fm.location||""} onChange={e=>u("location",e.target.value)} disabled={!canEdit}/></Fd><Fd l="Listas de verificación"><input style={sI} value={fm.checklists||""} onChange={e=>u("checklists",e.target.value)} disabled={!canEdit}/></Fd></G2></div>
+    </div>}
+
+    {/* ═══ INTERNA: Ejecución ═══ */}
+    {!ext&&activeTab==="exec"&&<div style={sC}><h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px",color:"#D97706"}}>🔄 Ejecución</h3>
+      <G2><Fd l="Fecha real"><input type="date" style={sI} value={fm.execDate||""} onChange={e=>u("execDate",e.target.value)} disabled={!canEdit}/></Fd><Fd l="Checklist"><input style={sI} value={fm.checklistApplied||""} onChange={e=>u("checklistApplied",e.target.value)} disabled={!canEdit}/></Fd></G2>
+      <Fd l="Metodología"><textarea style={{...sI,minHeight:70,resize:"vertical"}} value={fm.methodology||""} onChange={e=>u("methodology",e.target.value)} disabled={!canEdit}/></Fd>
+      <Fd l="Notas"><textarea style={{...sI,minHeight:50,resize:"vertical"}} value={fm.execNotes||""} onChange={e=>u("execNotes",e.target.value)} disabled={!canEdit}/></Fd>
+      <Fd l="Distribución"><input style={sI} value={fm.distribution||""} onChange={e=>u("distribution",e.target.value)} disabled={!canEdit}/></Fd>
+    </div>}
+
+    {/* ═══ INTERNA: Informe ═══ */}
+    {!ext&&activeTab==="report"&&<div>
+      <div style={sC}><h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px"}}>📊 Impresión General</h3><Fd l="Impresión general"><textarea style={{...sI,minHeight:70,resize:"vertical"}} value={fm.generalImpression||""} onChange={e=>u("generalImpression",e.target.value)} disabled={!canEdit}/></Fd></div>
+      <div style={sC}><h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px",color:K.grn}}>💪 Fortalezas</h3><Fd l="Fortalezas"><textarea style={{...sI,minHeight:55,resize:"vertical"}} value={fm.strengths||""} onChange={e=>u("strengths",e.target.value)} disabled={!canEdit}/></Fd></div>
+      <div style={sC}><h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px",color:K.red}}>⚠ Hallazgos ({af.length})</h3>
+        <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+          {canEdit&&<button style={{...sB("g"),color:"#0891B2"}} onClick={()=>{const h="CODIGO;CLASIFICACION;DESCRIPCION;CAUSA_RAIZ;CORRECCION;CORRECCION_RESPONSABLE;CORRECCION_FECHA;ACCION_CORRECTIVA;AC_RESPONSABLE;AC_FECHA_IMPL;AC_FECHA_REALIZADO;AC_EVIDENCIA;AC_ESTADO;VERIF_EFICACIA_METODO;VERIF_EFICACIA_FECHA;VERIF_EFICACIA_RESPONSABLE;RESULTADO\n";const r=af.length>0?af.map(f=>{const cl=cfg.classifications.find(x=>x.id===f.classification);const existAcc=data.actions.find(a=>a.findingId===f.id);return`${f.code};${cl?.label||""};${f.description.replace(/;/g,",").replace(/\n/g," ")};${f.rootCause||""};${existAcc?"":""};;${existAcc?"":""};;${existAcc?.dueDate||""};;${existAcc?"":""};;${existAcc?.responsible||""};${existAcc?.status||""};;;;;`;}).join("\n"):";;;;;;;;;;;;;;;;";const b=new Blob(["\uFEFF"+h+r],{type:"text/csv;charset=utf-8"});const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=`Plantilla_CAPA_${fm.code}.csv`;a.click();}}>📥 Plantilla CAPA ({af.length})</button>}
+          {canEdit&&<label style={{...sB("g"),color:K.grn,cursor:"pointer"}}>📤 Importar CAPA<input type="file" accept=".csv,.txt" style={{display:"none"}} onChange={e=>{const file=e.target.files[0];if(!file)return;const rd=new FileReader();rd.onload=ev=>{try{const ls=ev.target.result.split("\n").filter(l=>l.trim());if(ls.length<2)return alert("Vacío");const hd=ls[0].split(";").map(h=>h.trim());
+            const iC=hd.indexOf("CODIGO"),iCa=hd.indexOf("CAUSA_RAIZ"),iAC=hd.indexOf("ACCION_CORRECTIVA"),iAR=hd.indexOf("AC_RESPONSABLE"),iAF=hd.indexOf("AC_FECHA_IMPL"),iCo=hd.indexOf("CORRECCION"),iCR=hd.indexOf("CORRECCION_RESPONSABLE"),iVM=hd.indexOf("VERIF_EFICACIA_METODO"),iVF=hd.indexOf("VERIF_EFICACIA_FECHA"),iVR=hd.indexOf("VERIF_EFICACIA_RESPONSABLE"),iAFR=hd.indexOf("AC_FECHA_REALIZADO"),iAEV=hd.indexOf("AC_EVIDENCIA"),iAST=hd.indexOf("AC_ESTADO"),iRES=hd.indexOf("RESULTADO");
+            let uF=0,cA=0,uA=0;const nA=[];
+            for(let i=1;i<ls.length;i++){const c=ls[i].split(";").map(x=>x.trim());const code=c[iC]||"";const fin=data.findings.find(f=>f.code===code);if(!fin)continue;
+              if(c[iCa]){const newSt=c[iAST]&&c[iAST].toLowerCase()!=="en proceso"?c[iAST]:(c[iAC]&&c[iAC].toLowerCase()!=="no aplica"?"En proceso":null);data.setFindings(p=>p.map(f=>f.code===code?{...f,rootCause:c[iCa],status:newSt||f.status}:f));uF++;}
+              const ac=c[iAC]||"";const co=c[iCo]||"";const desc=(co&&co.toLowerCase()!=="no aplica"?"Corrección: "+co+". ":"")+ac;
+              const existAcc=data.actions.find(a=>a.findingId===fin.id);
+              if(existAcc){
+                const updates={};
+                if(ac&&ac.toLowerCase()!=="no aplica")updates.description=desc;
+                if(c[iAR])updates.responsible=c[iAR];
+                if(c[iAF])updates.dueDate=c[iAF];
+                if(iAFR>=0&&c[iAFR])updates.completedDate=c[iAFR];
+                if(iAEV>=0&&c[iAEV])updates.verification=c[iAEV];
+                if(iAST>=0&&c[iAST]&&c[iAST].toLowerCase()!=="")updates.status=c[iAST];
+                if(c[iVM])updates.effectiveness=(c[iVM]||"")+(c[iVR]?" — "+c[iVR]:"")+(c[iVF]?" — "+c[iVF]:"");
+                if(c[iVR])updates.followupResp=c[iVR];
+                if(iRES>=0&&c[iRES])updates.resultNote=c[iRES];
+                if(Object.keys(updates).length>0){data.setActions(p=>p.map(a=>a.id===existAcc.id?{...a,...updates}:a));uA++;}
+              }else if(ac&&ac.toLowerCase()!=="no aplica"){
+                nA.push({id:gid(),code:`ACC-${String(data.actions.length+nA.length+1).padStart(4,"0")}`,year:fin.year||2026,findingId:fin.id,description:desc,responsible:c[iAR]||"",dueDate:c[iAF]||"",status:iAST>=0&&c[iAST]?c[iAST]:"En proceso",verification:iAEV>=0&&c[iAEV]?c[iAEV]:"",effectiveness:(c[iVM]||"")+(c[iVR]?" — "+c[iVR]:""),followupResp:c[iVR]||"",createdAt:new Date().toISOString()});cA++;
+              }else if(co&&co.toLowerCase()!=="no aplica"){
+                nA.push({id:gid(),code:`ACC-${String(data.actions.length+nA.length+1).padStart(4,"0")}`,year:fin.year||2026,findingId:fin.id,description:"Corrección: "+co,responsible:c[iCR]||"",dueDate:"",status:"En proceso",verification:"",effectiveness:c[iVM]||"",followupResp:c[iVR]||"",createdAt:new Date().toISOString()});cA++;
+              }
+            }
+            if(nA.length>0)data.setActions(p=>[...p,...nA]);
+            alog(data.setLogs,"IMPORTAR CAPA","Auditoría",`${fm.code}: ${uF} hallazgos, ${cA} nuevas, ${uA} actualizadas`,data.currentUser.name);
+            alert(`Importación completada:\n• ${uF} hallazgo(s) actualizados\n• ${cA} acción(es) nueva(s)\n• ${uA} acción(es) actualizada(s)`);
+          }catch(er){alert("Error: "+er.message);}e.target.value="";};rd.readAsText(file,"UTF-8");}}/></label>}
+        </div>
+        {af.length>0?<table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5}}><thead><tr><th style={sTh}>Código</th><th style={sTh}>Descripción</th><th style={sTh}>Clasif.</th><th style={sTh}>Estado</th></tr></thead><tbody>{af.map(f=><tr key={f.id}><td style={{...sTd,fontFamily:"monospace",fontWeight:700,color:K.pri}}>{f.code}</td><td style={sTd}>{f.description}</td><td style={sTd}><CBg cls={f.classification} cfg={cfg}/></td><td style={sTd}><SBg s={f.status}/></td></tr>)}</tbody></table>:<Em icon="📝" t="Sin hallazgos"/>}
+      </div>
+      <div style={sC}><h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px"}}>📋 Conclusiones</h3>
+        <Fd l="Conclusiones"><textarea style={{...sI,minHeight:60,resize:"vertical"}} value={fm.conclusions||""} onChange={e=>u("conclusions",e.target.value)} disabled={!canEdit}/></Fd>
+        <G2><Fd l="Resultado"><select style={sS} value={fm.result||""} onChange={e=>u("result",e.target.value)} disabled={!canEdit}><option value="">—</option><option>APROBADO</option><option>APROBADO con condiciones</option><option>NO APROBADO</option></select></Fd><Fd l="Próxima auditoría"><input style={sI} value={fm.nextAudit||""} onChange={e=>u("nextAudit",e.target.value)} disabled={!canEdit}/></Fd></G2>
+        <Fd l="Expectativas"><textarea style={{...sI,minHeight:45,resize:"vertical"}} value={fm.expectations||""} onChange={e=>u("expectations",e.target.value)} disabled={!canEdit}/></Fd>
+      </div>
+    </div>}
+
+    {/* ═══ INTERNA: Cierre ═══ */}
+    {!ext&&activeTab==="close"&&<div style={sC}><h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px",color:K.grn}}>✅ Cierre</h3>
+      <Fd l="Verificación eficacia"><textarea style={{...sI,minHeight:50,resize:"vertical"}} value={fm.closeNotes||""} onChange={e=>u("closeNotes",e.target.value)} disabled={!canEdit}/></Fd>
+      <Fd l="Fecha cierre"><input type="date" style={sI} value={fm.closeDate||""} onChange={e=>u("closeDate",e.target.value)} disabled={!canEdit}/></Fd>
+      {aa.length>0&&<div style={{marginTop:10}}><div style={{fontSize:12,fontWeight:700,color:K.txS,marginBottom:6}}>Acciones ({aa.length})</div>{aa.map(a=><div key={a.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:`1px solid ${K.brdL}`,fontSize:12}}><span style={{fontFamily:"monospace",fontWeight:700,color:K.pri}}>{a.code}</span><span style={{flex:1,color:K.txS}}>{a.description.slice(0,60)}</span><SBg s={a.status}/></div>)}</div>}
+    </div>}
+
+    {/* ═══════════════════════════════════════════
+        EXTERNA: Datos
+    ═══════════════════════════════════════════ */}
+    {ext&&activeTab==="xi"&&<div>
+      <CtxHelp type="warn">Auditoría externa recibida (SOP 5.3). Registrá los datos del cliente o autoridad que audita a Vessena.</CtxHelp>
+      <div style={sC}><h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px",color:EXT_PHASES[0].color}}>📩 Datos de la auditoría externa</h3><G2>
+        <Fd l="Nombre"><input style={sI} value={fm.name||""} onChange={e=>u("name",e.target.value)} disabled={!canEdit} placeholder="Ej: Auditoría Colgate-Palmolive 2026"/></Fd>
+        <Fd l="Tipo"><select style={sS} value={fm.type} onChange={e=>chgType(e.target.value)} disabled={!canEdit}>{cfg.auditTypes.map(t=><option key={t}>{t}</option>)}</select></Fd>
+        <Fd l="Cliente / Organismo"><input style={sI} value={fm.clientName||""} onChange={e=>u("clientName",e.target.value)} disabled={!canEdit}/></Fd>
+        <Fd l="Tipo de auditor"><select style={sS} value={fm.clientType||""} onChange={e=>u("clientType",e.target.value)} disabled={!canEdit}><option value="">—</option><option>Cliente</option><option>Autoridad regulatoria</option><option>Ente certificador</option></select></Fd>
+        <Fd l="Modalidad"><select style={sS} value={fm.announced||""} onChange={e=>u("announced",e.target.value)} disabled={!canEdit}><option value="">—</option><option>Anunciada</option><option>Sorpresiva / Sin previo aviso</option></select></Fd>
+        <Fd l="Fecha"><input type="date" style={sI} value={fm.date||""} onChange={e=>u("date",e.target.value)} disabled={!canEdit}/></Fd>
+        <Fd l="Sector auditado"><select style={sS} value={fm.progSector||""} onChange={e=>u("progSector",e.target.value)} disabled={!canEdit}><option value="">—</option>{cfg.sectors.map(s=><option key={s}>{s}</option>)}<option>Toda la planta</option></select></Fd>
+        <Fd l="Mes"><select style={sS} value={fm.progMonth||""} onChange={e=>u("progMonth",e.target.value)} disabled={!canEdit}>{MO.map(m=><option key={m}>{m}</option>)}</select></Fd>
+      </G2>
+      <Fd l="Auditores del cliente"><input style={sI} value={fm.clientAuditors||""} onChange={e=>u("clientAuditors",e.target.value)} disabled={!canEdit}/></Fd>
+      <Fd l="Alcance definido por el cliente"><textarea style={{...sI,minHeight:50,resize:"vertical"}} value={fm.scope||""} onChange={e=>u("scope",e.target.value)} disabled={!canEdit}/></Fd>
+      <Fd l="Norma / Referencia"><input style={sI} value={fm.standard||""} onChange={e=>u("standard",e.target.value)} disabled={!canEdit}/></Fd>
+      </div>
+    </div>}
+
+    {/* ═══ EXTERNA: Recepción ═══ */}
+    {ext&&activeTab==="xr"&&<div>
+      <CtxHelp type="warn"><strong>SOP 5.3:</strong> Portería avisa a Directora Técnica y Especialista AC. Recepción: Director Técnico, Gte. Ingeniería, Especialista Calidad, Gte. General según corresponda. No mostrar documentación de un cliente a otro.</CtxHelp>
+      <div style={sC}><h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px",color:EXT_PHASES[1].color}}>🏭 Recepción</h3>
+      <G2><Fd l="Fecha ejecución real"><input type="date" style={sI} value={fm.execDate||""} onChange={e=>u("execDate",e.target.value)} disabled={!canEdit}/></Fd><Fd l="Lugar / Sala"><input style={sI} value={fm.location||""} onChange={e=>u("location",e.target.value)} disabled={!canEdit}/></Fd></G2>
+      <Fd l="Equipo de recepción Vessena"><textarea style={{...sI,minHeight:45,resize:"vertical"}} value={fm.receptionTeam||""} onChange={e=>u("receptionTeam",e.target.value)} disabled={!canEdit} placeholder="Claudia Barlocco (DT), Gloria Nuñez (AC)..."/></Fd>
+      <Fd l="Desarrollo (reunión apertura, recorrida, documental, cierre)"><textarea style={{...sI,minHeight:65,resize:"vertical"}} value={fm.execNotes||""} onChange={e=>u("execNotes",e.target.value)} disabled={!canEdit}/></Fd>
+      <Fd l="Notas de confidencialidad"><textarea style={{...sI,minHeight:40,resize:"vertical"}} value={fm.confidentialityNotes||""} onChange={e=>u("confidentialityNotes",e.target.value)} disabled={!canEdit}/></Fd>
+      </div>
+    </div>}
+
+    {/* ═══ EXTERNA: Informe cliente ═══ */}
+    {ext&&activeTab==="xp"&&<div>
+      <div style={sC}><h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px",color:EXT_PHASES[2].color}}>📨 Informe recibido del cliente</h3>
+        <G2><Fd l="Fecha recepción informe"><input type="date" style={sI} value={fm.reportReceivedDate||""} onChange={e=>u("reportReceivedDate",e.target.value)} disabled={!canEdit}/></Fd>
+        <Fd l="Resultado del cliente"><select style={sS} value={fm.clientResult||""} onChange={e=>u("clientResult",e.target.value)} disabled={!canEdit}><option value="">—</option><option>Aprobado</option><option>Aprobado con condiciones</option><option>No aprobado</option><option>Pendiente CAPA</option></select></Fd></G2>
+        <Fd l="Resumen del informe"><textarea style={{...sI,minHeight:70,resize:"vertical"}} value={fm.clientReportSummary||""} onChange={e=>u("clientReportSummary",e.target.value)} disabled={!canEdit}/></Fd>
+        <Fd l="Fecha límite CAPA"><input type="date" style={sI} value={fm.capaDeadline||""} onChange={e=>u("capaDeadline",e.target.value)} disabled={!canEdit}/></Fd>
+      </div>
+      <div style={sC}><h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px",color:K.red}}>⚠ Hallazgos del cliente ({af.length})</h3>
+        <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+          {canEdit&&<button style={{...sB("g"),color:"#0891B2"}} onClick={()=>{
+            const h="CODIGO_CLIENTE;CLASIFICACION;DESCRIPCION;CLAUSULA;EVIDENCIA\n";
+            const ex="NC-01;Mayor;Descripción del hallazgo encontrado por el cliente;Cap.4;Evidencia objetiva\nOBS-01;Observación;Descripción de la observación;Cap.7;\nOPM-01;Oportunidad de Mejora;Descripción de la oportunidad;;";
+            const b=new Blob(["\uFEFF"+h+ex],{type:"text/csv;charset=utf-8"});const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=`Plantilla_Hallazgos_Cliente_${fm.code}.csv`;a.click();
+          }}>📥 Descargar plantilla hallazgos</button>}
+          {canEdit&&<label style={{...sB("g"),color:K.grn,cursor:"pointer"}}>📤 Importar hallazgos del cliente<input type="file" accept=".csv,.txt" style={{display:"none"}} onChange={e=>{
+            const file=e.target.files[0];if(!file)return;const rd=new FileReader();rd.onload=ev=>{try{
+              const ls=ev.target.result.split("\n").filter(l=>l.trim());if(ls.length<2)return alert("Archivo vacío");
+              const hd=ls[0].split(";").map(h=>h.trim());
+              const iCod=hd.indexOf("CODIGO_CLIENTE"),iCls=hd.indexOf("CLASIFICACION"),iDesc=hd.indexOf("DESCRIPCION"),iClau=hd.indexOf("CLAUSULA"),iEv=hd.indexOf("EVIDENCIA");
+              const newF=[];const newA=[];
+              const clsMap={};cfg.classifications.forEach(c=>{clsMap[c.label.toLowerCase()]=c;});
+              for(let i=1;i<ls.length;i++){
+                const c=ls[i].split(";").map(x=>x.trim());
+                if(!c[iDesc])continue;
+                const clsLabel=(c[iCls]||"").toLowerCase();
+                const cls=clsMap[clsLabel]||cfg.classifications.find(x=>x.label.toLowerCase().includes(clsLabel))||cfg.classifications[0];
+                const allF=data.findings.length+newF.length;
+                const fCode=`HAL-${String(allF+1).padStart(4,"0")}`;
+                const fId=gid();
+                const clientCode=c[iCod]||"";
+                newF.push({id:fId,code:fCode,year:fm.year||2026,auditId:audit.id,clauseRef:c[iClau]||"",classification:cls.id,description:(clientCode?clientCode+": ":"")+c[iDesc],evidence:c[iEv]||"Informe de auditoría del cliente",capaType:"Acción Correctiva",rootCause:"",status:"Abierto",createdAt:new Date().toISOString()});
+                // Auto-create action plan
+                const allA=data.actions.length+newA.length;
+                const aCode=`ACC-${String(allA+1).padStart(4,"0")}`;
+                const deadline=cls.deadline>0?addMo(new Date().toISOString().split("T")[0],cls.deadline):(fm.capaDeadline||"");
+                newA.push({id:gid(),code:aCode,year:fm.year||2026,findingId:fId,description:`Plan de acción para ${clientCode||fCode}: ${c[iDesc].slice(0,80)}`,responsible:"",dueDate:deadline,status:"Abierto",verification:"",effectiveness:"",followupResp:"",createdAt:new Date().toISOString()});
+              }
+              if(newF.length>0){data.setFindings(p=>[...p,...newF]);data.setActions(p=>[...p,...newA]);}
+              alog(data.setLogs,"IMPORTAR HALLAZGOS CLIENTE","Auditoría",`${fm.code}: ${newF.length} hallazgos + ${newA.length} planes de acción creados`,data.currentUser.name);
+              alert(`Importación completada:\n• ${newF.length} hallazgo(s) creado(s)\n• ${newA.length} plan(es) de acción generado(s) automáticamente\n\nRevisá Hallazgos/CAPA y Planes de Acción para completar causa raíz, responsables y acciones correctivas.`);
+            }catch(er){alert("Error: "+er.message);}e.target.value="";};rd.readAsText(file,"UTF-8");
+          }}/></label>}
+        </div>
+        <CtxHelp>Al importar hallazgos del cliente, se crean automáticamente los registros de hallazgos (HAL) vinculados a esta auditoría Y los planes de acción (ACC) con los plazos calculados según la clasificación. Solo resta completar causa raíz, acción correctiva y responsable.</CtxHelp>
+        {af.length>0?<table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5}}><thead><tr><th style={sTh}>Código</th><th style={sTh}>Descripción</th><th style={sTh}>Clasif.</th><th style={sTh}>Estado</th></tr></thead><tbody>{af.map(f=><tr key={f.id}><td style={{...sTd,fontFamily:"monospace",fontWeight:700,color:K.pri}}>{f.code}</td><td style={sTd}>{f.description}</td><td style={sTd}><CBg cls={f.classification} cfg={cfg}/></td><td style={sTd}><SBg s={f.status}/></td></tr>)}</tbody></table>:<Em icon="📝" t="Sin hallazgos — Importá los del informe del cliente"/>}
+      </div>
+    </div>}
+
+    {/* ═══ EXTERNA: CAPA Vessena ═══ */}
+    {ext&&activeTab==="xc"&&<div>
+      <div style={sC}><h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px",color:EXT_PHASES[3].color}}>📤 Respuesta CAPA de Vessena</h3>
+        <G2><Fd l="Fecha envío CAPA"><input type="date" style={sI} value={fm.capaSentDate||""} onChange={e=>u("capaSentDate",e.target.value)} disabled={!canEdit}/></Fd><Fd l="Enviado a"><input style={sI} value={fm.capaSentTo||""} onChange={e=>u("capaSentTo",e.target.value)} disabled={!canEdit}/></Fd></G2>
+        <Fd l="Resumen CAPA"><textarea style={{...sI,minHeight:55,resize:"vertical"}} value={fm.capaResponse||""} onChange={e=>u("capaResponse",e.target.value)} disabled={!canEdit}/></Fd>
+        {aa.length>0&&<div style={{marginTop:10}}><div style={{fontSize:12,fontWeight:700,color:K.txS,marginBottom:6}}>Acciones ({aa.length})</div>{aa.map(a=><div key={a.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:`1px solid ${K.brdL}`,fontSize:12}}><span style={{fontFamily:"monospace",fontWeight:700,color:K.pri}}>{a.code}</span><span style={{flex:1,color:K.txS}}>{a.description.slice(0,60)}</span><SBg s={a.status}/></div>)}</div>}
+      </div>
+    </div>}
+
+    {/* ═══ EXTERNA: Cierre ═══ */}
+    {ext&&activeTab==="xx"&&<div style={sC}><h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px",color:EXT_PHASES[4].color}}>✅ Cierre</h3>
+      <Fd l="Verificación cierre acciones"><textarea style={{...sI,minHeight:50,resize:"vertical"}} value={fm.closeNotes||""} onChange={e=>u("closeNotes",e.target.value)} disabled={!canEdit}/></Fd>
+      <Fd l="Fecha cierre"><input type="date" style={sI} value={fm.closeDate||""} onChange={e=>u("closeDate",e.target.value)} disabled={!canEdit}/></Fd>
+      <Fd l="Confirmación del cliente"><textarea style={{...sI,minHeight:40,resize:"vertical"}} value={fm.clientConfirmation||""} onChange={e=>u("clientConfirmation",e.target.value)} disabled={!canEdit} placeholder="Respuesta del cliente sobre cierre CAPA..."/></Fd>
+    </div>}
+
+    <div style={{display:"flex",gap:8,justifyContent:"space-between",marginTop:12,flexWrap:"wrap"}}>
+      <div style={{display:"flex",gap:6}}>
+        {canEdit&&audit?.id&&<button style={{...sB("red"),fontSize:11,padding:"5px 12px"}} onClick={()=>onDelete(audit.id)}>🗑 Eliminar</button>}
+        {canEdit&&audit?.id&&fm.phase!=="cerrada"&&fm.phase!=="ext_cerrada"&&!fm.postponed&&<button style={{...sB("g"),color:"#92400E",borderColor:"#92400E30",fontSize:11,padding:"5px 12px"}} onClick={()=>{
+          const motivo=prompt("Motivo de la postergación al próximo año:");
+          if(motivo===null)return;
+          if(!motivo.trim())return alert("Debe ingresar un motivo.");
+          sFm(p=>({...p,postponed:true,postponedReason:motivo,postponedDate:tdy(),postponedToYear:(fm.year||2026)+1}));
+        }}>📅 Postergar al {(fm.year||2026)+1}</button>}
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <button style={sB("g")} onClick={onClose}>Cancelar</button>
+        {audit?.id&&!ext&&<button style={{...sB("g"),color:K.pri,borderColor:K.pri+"40"}} onClick={()=>exportReport(fm,af,cfg)}>📄 Exportar</button>}
+        {canEdit&&<button style={sB("pri")} onClick={()=>onSave(fm)} disabled={!fm.name}>Guardar</button>}
+      </div>
+    </div>
+    {fm.postponed&&<div style={{marginTop:10,padding:"12px 16px",background:"#FFFBEB",border:"1px solid #D9770630",borderRadius:8}}>
+      <div style={{fontSize:13,fontWeight:700,color:"#92400E"}}>📅 Auditoría postergada al {fm.postponedToYear}</div>
+      <div style={{fontSize:12.5,color:"#78350F",marginTop:4}}><strong>Motivo:</strong> {fm.postponedReason}</div>
+      <div style={{fontSize:11,color:"#92400E",marginTop:2}}>Fecha de postergación: {fd(fm.postponedDate)}</div>
+    </div>}
+  </Md>);
+}
+
+
+/* ── AUDITORÍAS LIST ── */
+function AuditList({data,cfg,canEdit,openAudit}){
+  const{audits,setAudits,setLogs,currentUser}=data;
+  const[fi,sFi]=useState("Todos");
+  const[ft,sFt]=useState("Todos");
+  let ls=audits;
+  if(fi!=="Todos")ls=ls.filter(a=>a.phase===fi);
+  if(ft!=="Todos")ls=ls.filter(a=>ft==="Externa"?isExternal(a):a.type===ft);
+
+  const createExt=()=>{
+    const allA=data.allAudits||audits;
+    const code=`AUD-${String(allA.length+1).padStart(4,"0")}`;
+    const yr=data.year||2026;
+    const newA={id:gid(),code,year:yr,name:"",type:"Externa",progSector:"",progMonth:"",phase:"ext_notificada",date:"",auditor:"",team:"",standard:"",scope:"",location:"",checklists:"",execNotes:"",execDate:"",methodology:"",distribution:"",generalImpression:"",strengths:"",conclusions:"",result:"",nextAudit:"",expectations:"",closeNotes:"",closeDate:"",clientName:"",clientType:"",announced:"",clientAuditors:"",receptionTeam:"",confidentialityNotes:"",reportReceivedDate:"",clientResult:"",clientReportSummary:"",capaDeadline:"",capaSentDate:"",capaSentTo:"",capaResponse:"",clientConfirmation:"",createdAt:new Date().toISOString()};
+    setAudits(p=>[...p,newA]);
+    alog(setLogs,"CREAR","Auditoría Externa",`${code}`,currentUser.name);
+    openAudit(newA);
+  };
+
+  return(<div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+      <div><h1 style={{fontSize:20,fontWeight:800}}>Auditorías</h1><p style={{color:K.txS,margin:"4px 0 0",fontSize:12.5}}>{audits.length} registros</p></div>
+      {canEdit&&<button style={{...sB("pri"),background:"#7C3AED"}} onClick={createExt}>📩 + Auditoría Externa</button>}
+    </div>
+    {!canEdit&&<VBanner/>}
+    <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
+      <span style={{fontSize:11,fontWeight:700,color:K.txS,alignSelf:"center",marginRight:4}}>TIPO:</span>
+      {["Todos","Interna","A proveedor","Externa"].map(t=><button key={t} onClick={()=>sFt(t)} style={{...sB("g"),background:ft===t?K.priL:"transparent",color:ft===t?K.pri:K.txS,fontSize:11,padding:"4px 10px"}}>{t==="Externa"?"📩 Externa":t}</button>)}
+    </div>
+    <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
+      <span style={{fontSize:11,fontWeight:700,color:K.txS,alignSelf:"center",marginRight:4}}>FASE:</span>
+      <button onClick={()=>sFi("Todos")} style={{...sB("g"),background:fi==="Todos"?K.priL:"transparent",color:fi==="Todos"?K.pri:K.txS,fontSize:11,padding:"4px 10px"}}>Todas</button>
+      {PHASES.map(p=><button key={p.id} onClick={()=>sFi(p.id)} style={{...sB("g"),background:fi===p.id?p.bg:"transparent",color:fi===p.id?p.color:K.txS,fontSize:11,padding:"4px 10px"}}>{p.icon} {p.label}</button>)}
+      {EXT_PHASES.map(p=><button key={p.id} onClick={()=>sFi(p.id)} style={{...sB("g"),background:fi===p.id?p.bg:"transparent",color:fi===p.id?p.color:K.txS,fontSize:11,padding:"4px 10px"}}>{p.icon} {p.label}</button>)}
+    </div>
+    <div style={sC}>{ls.length===0?<Em icon="📋" t="Sin auditorías en este filtro"/>:<table style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontSize:12.5}}><thead><tr><th style={sTh}>Código</th><th style={sTh}>Nombre</th><th style={sTh}>Tipo</th><th style={sTh}>Sector / Cliente</th><th style={sTh}>Fase</th><th style={sTh}>Fecha</th><th style={sTh}></th></tr></thead>
+      <tbody>{ls.map(a=>{const e=isExternal(a);return <tr key={a.id} style={{background:e?"#F5F3FF":"transparent"}}>
+        <td style={{...sTd,fontWeight:700,color:e?"#7C3AED":K.pri,fontFamily:"monospace"}}>{a.code}</td>
+        <td style={sTd}>{a.name||<span style={{color:K.txM,fontStyle:"italic"}}>Sin nombre</span>}</td>
+        <td style={sTd}>{e?<Bg color="#7C3AED" bg="#F5F3FF">📩 Externa</Bg>:<Bg color={K.pri} bg={K.priL}>{a.type}</Bg>}{a.postponed&&<Bg color="#92400E" bg="#FFFBEB">📅 Postergada</Bg>}</td>
+        <td style={sTd}>{e?(a.clientName||a.progSector||"—"):a.progSector}</td>
+        <td style={sTd}><PhaseBg phase={a.phase} ext={e}/></td>
+        <td style={{...sTd,whiteSpace:"nowrap"}}>{fd(a.date)}</td>
+        <td style={sTd}><button style={sB("sm")} onClick={()=>openAudit(a)}>Abrir</button></td>
+      </tr>;})}</tbody></table>}</div>
+  </div>);
+}
+
+/* ── HALLAZGOS ── */
+function Findings({data,cfg,canEdit}){const{findings,setFindings,audits,setLogs,currentUser}=data;const[sh,sSh]=useState(false);const[ed,sEd]=useState(null);const[fc,sFc]=useState("Todos");
+  const bl={auditId:"",clauseRef:"",classification:cfg.classifications[0]?.id||"",description:"",evidence:"",capaType:cfg.capaTypes[0]||"",rootCause:"",status:cfg.statuses[0]||"Abierto"};const[fm,sFm]=useState(bl);
+  const save=()=>{if(ed){const pv=findings.find(x=>x.id===ed.id);setFindings(p=>p.map(x=>x.id===ed.id?{...x,...fm}:x));if(pv.status!==fm.status)alog(setLogs,"CAMBIO ESTADO","Hallazgo",`${ed.code}: ${pv.status} → ${fm.status}`,currentUser.name);else alog(setLogs,"EDITAR","Hallazgo",ed.code,currentUser.name);}else{const allF=data.allFindings||findings;const code=`HAL-${String(allF.length+1).padStart(4,"0")}`;const audit=data.audits.find(a=>a.id===fm.auditId);setFindings(p=>[...p,{...fm,id:gid(),code,year:audit?.year||2026,createdAt:new Date().toISOString()}]);alog(setLogs,"CREAR","Hallazgo",code,currentUser.name);}sSh(false);sEd(null);};
+  const open=f=>{sFm(f||bl);sEd(f);sSh(true);};const cls=cfg.classifications.find(x=>x.id===fm.classification);
+  const[fiAud,sFiAud]=useState("Todos");
+  const auditNames=[...new Set(findings.map(f=>{const aud=audits.find(a=>a.id===f.auditId);return aud?aud.name:"Sin auditoría";}).filter(Boolean))];
+  let ls=findings;
+  if(fc!=="Todos")ls=ls.filter(f=>f.classification===fc);
+  if(fiAud!=="Todos")ls=ls.filter(f=>{const aud=audits.find(a=>a.id===f.auditId);return aud?.name===fiAud;});
+  const infoAudits=audits.filter(a=>phaseIdx(a.phase,isExternal(a))>=2);
+  return(<div><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}><div><h1 style={{fontSize:20,fontWeight:800}}>Hallazgos y CAPA</h1><p style={{color:K.txS,margin:"4px 0 0",fontSize:12.5}}>{findings.length} hallazgos</p></div>{canEdit&&<button style={sB("pri")} onClick={()=>open(null)}>+ Nuevo</button>}</div>{!canEdit&&<VBanner/>}
+    <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap"}}>
+      <span style={{fontSize:11,fontWeight:700,color:K.txS,alignSelf:"center",marginRight:4}}>AUDITORÍA:</span>
+      <button onClick={()=>sFiAud("Todos")} style={{...sB("g"),background:fiAud==="Todos"?K.priL:"transparent",color:fiAud==="Todos"?K.pri:K.txS,fontSize:11,padding:"4px 10px"}}>Todas ({findings.length})</button>
+      {auditNames.map(n=>{const c=findings.filter(f=>{const aud=audits.find(a=>a.id===f.auditId);return aud?.name===n;}).length;return <button key={n} onClick={()=>sFiAud(n)} style={{...sB("g"),background:fiAud===n?K.priL:"transparent",color:fiAud===n?K.pri:K.txS,fontSize:11,padding:"4px 10px"}}>{n.slice(0,25)} ({c})</button>;})}
+    </div>
+    <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}><button onClick={()=>sFc("Todos")} style={{...sB("g"),background:fc==="Todos"?K.priL:"transparent",color:fc==="Todos"?K.pri:K.txS,fontSize:12}}>Todos</button>{cfg.classifications.map(c=><button key={c.id} onClick={()=>sFc(c.id)} style={{...sB("g"),background:fc===c.id?c.color+"15":"transparent",color:fc===c.id?c.color:K.txS,fontSize:12}}>{c.label}</button>)}</div>
+    <div style={sC}>{ls.length===0?<Em icon="🔍" t="Sin hallazgos"/>:<table style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontSize:12.5}}><thead><tr><th style={sTh}>Código</th><th style={sTh}>Auditoría</th><th style={sTh}>Descripción</th><th style={sTh}>Clasificación</th><th style={sTh}>CAPA</th><th style={sTh}>Estado</th>{canEdit&&<th style={sTh}></th>}</tr></thead><tbody>{ls.map(f=><tr key={f.id}><td style={{...sTd,fontWeight:700,color:K.pri,fontFamily:"monospace"}}>{f.code}</td><td style={{...sTd,fontFamily:"monospace",fontSize:11.5}}>{audits.find(a=>a.id===f.auditId)?.code||"—"}</td><td style={{...sTd,fontSize:11,lineHeight:1.4}}>{f.description}</td><td style={sTd}><CBg cls={f.classification} cfg={cfg}/></td><td style={sTd}><Bg color={K.vio} bg={K.vioL}>{f.capaType}</Bg></td><td style={sTd}><SBg s={f.status}/></td>{canEdit&&<td style={sTd}><button style={sB("sm")} onClick={()=>open(f)}>Editar</button></td>}</tr>)}</tbody></table>}</div>
+    {sh&&<Md title={ed?`Editar ${ed.code}`:"Nuevo Hallazgo"} onClose={()=>sSh(false)}>
+      <CtxHelp>Solo puedes vincular hallazgos a auditorías que estén en fase "En ejecución" o posterior.</CtxHelp>
+      <G2><Fd l="Auditoría"><select style={sS} value={fm.auditId} onChange={e=>sFm(p=>({...p,auditId:e.target.value}))}><option value="">—</option>{infoAudits.map(a=><option key={a.id} value={a.id}>{a.code} — {a.name} ({phaseOf(a.phase,isExternal(a)).label})</option>)}</select></Fd><Fd l="Cláusula"><input style={sI} value={fm.clauseRef} onChange={e=>sFm(p=>({...p,clauseRef:e.target.value}))}/></Fd><Fd l="Clasificación"><select style={sS} value={fm.classification} onChange={e=>sFm(p=>({...p,classification:e.target.value}))}>{cfg.classifications.map(c=><option key={c.id} value={c.id}>{c.label} — {c.risk}</option>)}</select></Fd><Fd l="Tipo CAPA"><select style={sS} value={fm.capaType} onChange={e=>sFm(p=>({...p,capaType:e.target.value}))}>{cfg.capaTypes.map(c=><option key={c}>{c}</option>)}</select></Fd></G2>
+      {cls&&<div style={{padding:"8px 12px",background:cls.color+"12",borderRadius:6,marginBottom:12,fontSize:12,color:cls.color,border:`1px solid ${cls.color}20`}}><strong>{cls.label}:</strong> {cls.desc}{cls.deadline>0&&` — Plazo: ${cls.deadline} meses`}</div>}
+      <Fd l="Descripción"><textarea style={{...sI,minHeight:60,resize:"vertical"}} value={fm.description} onChange={e=>sFm(p=>({...p,description:e.target.value}))}/></Fd><Fd l="Evidencia"><textarea style={{...sI,minHeight:45,resize:"vertical"}} value={fm.evidence} onChange={e=>sFm(p=>({...p,evidence:e.target.value}))}/></Fd><Fd l="Causa raíz"><textarea style={{...sI,minHeight:45,resize:"vertical"}} value={fm.rootCause} onChange={e=>sFm(p=>({...p,rootCause:e.target.value}))}/></Fd><Fd l="Estado"><select style={sS} value={fm.status} onChange={e=>sFm(p=>({...p,status:e.target.value}))}>{cfg.statuses.map(s=><option key={s}>{s}</option>)}</select></Fd>
+      <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:14}}><button style={sB("g")} onClick={()=>sSh(false)}>Cancelar</button><button style={sB("pri")} onClick={save} disabled={!fm.description}>Guardar</button></div></Md>}</div>);
+}
+
+/* ── ACCIONES ── */
+function Actions({data,cfg,canEdit}){const{actions,setActions,findings,setLogs,currentUser}=data;const[sh,sSh]=useState(false);const[ed,sEd]=useState(null);
+  const bl={findingId:"",description:"",responsible:"",responsibleEmail:"",dueDate:"",status:cfg.statuses[0]||"Abierto",verification:"",effectiveness:"",followupResp:"",followupEmail:""};const[fm,sFm]=useState(bl);
+  const save=()=>{if(ed){const pv=actions.find(a=>a.id===ed.id);setActions(p=>p.map(a=>a.id===ed.id?{...a,...fm}:a));if(pv.status!==fm.status)alog(setLogs,"CAMBIO ESTADO","Acción",`${ed.code}: ${pv.status} → ${fm.status}`,currentUser.name);else alog(setLogs,"EDITAR","Acción",ed.code,currentUser.name);}else{const allA=data.allActions||actions;const code=`ACC-${String(allA.length+1).padStart(4,"0")}`;const fin=findings.find(f=>f.id===fm.findingId);setActions(p=>[...p,{...fm,id:gid(),code,year:fin?.year||2026,createdAt:new Date().toISOString()}]);alog(setLogs,"CREAR","Acción",code,currentUser.name);}sSh(false);sEd(null);};
+  const autoD=fId=>{const fn=findings.find(x=>x.id===fId);if(fn){const c=cfg.classifications.find(x=>x.id===fn.classification);if(c&&c.deadline>0)sFm(p=>({...p,dueDate:addMo(fn.createdAt||tdy(),c.deadline)}));}};
+  const open=a=>{sFm(a||bl);sEd(a);sSh(true);};const lk=findings.find(x=>x.id===fm.findingId);const cls=lk?cfg.classifications.find(x=>x.id===lk.classification):null;
+  const daysLeft=(d)=>{if(!d)return 999;return Math.ceil((new Date(d)-new Date())/86400000);};
+  const urgLabel=(dl)=>{if(dl<0)return{txt:"⚠ VENCIDO",bg:K.redL,color:K.red};if(dl<=7)return{txt:"🔴 "+dl+"d",bg:"#FEF2F2",color:K.red};if(dl<=15)return{txt:"🟡 "+dl+"d",bg:K.wrnL,color:"#92400E"};return null;};
+  const sendReminder=(a)=>{const fin=findings.find(f=>f.id===a.findingId);const to=a.responsibleEmail||"";const cc=a.followupEmail||"";const subj="Recordatorio: Plan de Acción "+a.code+" — Vessena S.A.";const body="Estimado/a "+a.responsible+",\n\nLe recordamos que el plan de acción "+a.code+" vinculado al hallazgo "+(fin?fin.code:"")+" tiene fecha límite el "+fd(a.dueDate)+".\n\nDescripción: "+a.description+"\n\nPor favor, actualice el estado de la acción y envíe la evidencia correspondiente.\n\nSaludos cordiales,\nEquipo de Aseguramiento de Calidad\nVessena S.A.";
+    window.open("mailto:"+to+"?cc="+cc+"&subject="+encodeURIComponent(subj)+"&body="+encodeURIComponent(body));};
+
+  // Deadline alerts
+  const upcoming=actions.filter(a=>a.status!=="Cerrado"&&daysLeft(a.dueDate)<=15).sort((a,b)=>daysLeft(a.dueDate)-daysLeft(b.dueDate));
+
+  const[fiAud,sFiAud]=useState("Todos");
+  const[fiSt,sFiSt]=useState("Todos");
+  const auditNames=[...new Set(actions.map(a=>{const f=findings.find(x=>x.id===a.findingId);const aud=data.audits?.find(x=>x.id===f?.auditId);return aud?aud.name:"Sin auditoría";}).filter(Boolean))];
+  let filtered=actions;
+  if(fiAud!=="Todos")filtered=filtered.filter(a=>{const f=findings.find(x=>x.id===a.findingId);const aud=data.audits?.find(x=>x.id===f?.auditId);return aud?.name===fiAud;});
+  if(fiSt!=="Todos")filtered=filtered.filter(a=>fiSt==="Vencido"?(daysLeft(a.dueDate)<0&&a.status!=="Cerrado"):a.status===fiSt);
+
+  return(<div><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}><div><h1 style={{fontSize:20,fontWeight:800}}>Planes de Acción</h1><p style={{color:K.txS,margin:"4px 0 0",fontSize:12.5}}>{actions.length} acciones</p></div>{canEdit&&<button style={sB("pri")} onClick={()=>open(null)}>+ Nueva</button>}</div>{!canEdit&&<VBanner/>}
+
+    <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap"}}>
+      <span style={{fontSize:11,fontWeight:700,color:K.txS,alignSelf:"center",marginRight:4}}>AUDITORÍA:</span>
+      <button onClick={()=>sFiAud("Todos")} style={{...sB("g"),background:fiAud==="Todos"?K.priL:"transparent",color:fiAud==="Todos"?K.pri:K.txS,fontSize:11,padding:"4px 10px"}}>Todas ({actions.length})</button>
+      {auditNames.map(n=>{const c=actions.filter(a=>{const f=findings.find(x=>x.id===a.findingId);const aud=data.audits?.find(x=>x.id===f?.auditId);return aud?.name===n;}).length;return <button key={n} onClick={()=>sFiAud(n)} style={{...sB("g"),background:fiAud===n?K.priL:"transparent",color:fiAud===n?K.pri:K.txS,fontSize:11,padding:"4px 10px"}}>{n.slice(0,25)} ({c})</button>;})}
+    </div>
+    <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
+      <span style={{fontSize:11,fontWeight:700,color:K.txS,alignSelf:"center",marginRight:4}}>ESTADO:</span>
+      {["Todos",...cfg.statuses,"Vencido"].map(s=><button key={s} onClick={()=>sFiSt(s)} style={{...sB("g"),background:fiSt===s?(s==="Vencido"?K.redL:K.priL):"transparent",color:fiSt===s?(s==="Vencido"?K.red:K.pri):K.txS,fontSize:11,padding:"4px 10px"}}>{s==="Vencido"?"⚠ Vencido":s}</button>)}</div>
+
+    {fiAud==="Todos"&&fiSt==="Todos"&&upcoming.length>0&&<div style={{...sC,background:"#FEF2F2",borderColor:K.red+"30",marginBottom:14}}>
+      <h3 style={{fontSize:13,fontWeight:700,color:K.red,margin:"0 0 8px"}}>🔔 Alertas de vencimiento</h3>
+      {upcoming.map(a=>{const dl=daysLeft(a.dueDate);const urg=urgLabel(dl);const fin=findings.find(f=>f.id===a.findingId);return <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:"#fff",borderRadius:8,marginBottom:6,border:`1px solid ${urg.color}20`}}>
+        <Bg color={urg.color} bg={urg.bg}>{urg.txt}</Bg>
+        <span style={{fontFamily:"monospace",fontWeight:700,color:K.pri,fontSize:12}}>{a.code}</span>
+        <span style={{flex:1,fontSize:12.5,color:K.txt}}>{a.description.slice(0,60)}</span>
+        <span style={{fontSize:11.5,color:K.txS}}>{a.responsible}</span>
+        <span style={{fontSize:11.5,fontWeight:600}}>{fd(a.dueDate)}</span>
+        {a.responsibleEmail&&<button style={{...sB("sm"),color:"#0891B2",fontSize:10}} onClick={()=>sendReminder(a)} title="Enviar recordatorio por email">✉ Recordar</button>}
+      </div>;})}
+    </div>}
+
+    <div style={sC}>{filtered.length===0?<Em icon="📌" t="Sin acciones con este filtro"/>:<table style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontSize:12.5}}><thead><tr><th style={sTh}>Código</th><th style={sTh}>Hallazgo</th><th style={sTh}>Descripción</th><th style={sTh}>Responsable</th><th style={sTh}>Vence</th><th style={sTh}>Estado</th>{canEdit&&<th style={sTh}></th>}</tr></thead><tbody>{filtered.map(a=>{const dl=daysLeft(a.dueDate);const ov=dl<0&&a.status!=="Cerrado";const warn=dl>=0&&dl<=15&&a.status!=="Cerrado";const urg=a.status!=="Cerrado"?urgLabel(dl):null;return <tr key={a.id} style={{background:ov?K.redL:warn?"#FFFBEB":"transparent"}}><td style={{...sTd,fontWeight:700,color:K.pri,fontFamily:"monospace"}}>{a.code}</td><td style={{...sTd,fontFamily:"monospace",fontSize:11.5}}>{findings.find(f=>f.id===a.findingId)?.code||"—"}</td><td style={{...sTd,fontSize:11,lineHeight:1.4}}>{a.description}</td><td style={sTd}><div>{a.responsible}</div>{a.responsibleEmail&&<div style={{fontSize:10,color:K.txS}}>{a.responsibleEmail}</div>}</td><td style={{...sTd,whiteSpace:"nowrap"}}>{fd(a.dueDate)} {urg&&<Bg color={urg.color} bg={urg.bg}>{urg.txt}</Bg>}</td><td style={sTd}><SBg s={a.status}/></td>{canEdit&&<td style={sTd}><div style={{display:"flex",gap:4}}><button style={sB("sm")} onClick={()=>open(a)}>Editar</button>{a.responsibleEmail&&a.status!=="Cerrado"&&<button style={{...sB("sm"),color:"#0891B2",padding:"2px 6px"}} onClick={()=>sendReminder(a)} title="Enviar recordatorio">✉</button>}</div></td>}</tr>;})}</tbody></table>}</div>
+    {sh&&<Md title={ed?"Editar "+ed.code:"Nueva Acción"} onClose={()=>sSh(false)}>
+      <G2>
+        <Fd l="Hallazgo"><select style={sS} value={fm.findingId} onChange={e=>{sFm(p=>({...p,findingId:e.target.value}));autoD(e.target.value);}}><option value="">—</option>{findings.map(x=><option key={x.id} value={x.id}>{x.code} — {x.description.slice(0,35)}</option>)}</select></Fd>
+        <Fd l="Estado"><select style={sS} value={fm.status} onChange={e=>sFm(p=>({...p,status:e.target.value}))}>{cfg.statuses.map(s=><option key={s}>{s}</option>)}</select></Fd>
+        <Fd l="Fecha límite"><input type="date" style={sI} value={fm.dueDate} onChange={e=>sFm(p=>({...p,dueDate:e.target.value}))}/></Fd>
+      </G2>
+      {cls&&cls.deadline>0&&<CtxHelp type="success">Plazo: <strong>{cls.deadline} meses</strong> ({cls.risk})</CtxHelp>}
+      <Fd l="Descripción"><textarea style={{...sI,minHeight:50,resize:"vertical"}} value={fm.description} onChange={e=>sFm(p=>({...p,description:e.target.value}))}/></Fd>
+      <div style={{...sC,background:"#F0F9FF",borderColor:"#0891B220"}}>
+        <h3 style={{fontSize:12,fontWeight:700,color:"#0891B2",margin:"0 0 8px"}}>👤 Responsable de la acción</h3>
+        <G2>
+          <Fd l="Nombre"><input style={sI} value={fm.responsible} onChange={e=>sFm(p=>({...p,responsible:e.target.value}))} placeholder="Nombre completo"/></Fd>
+          <Fd l="Email"><input type="email" style={sI} value={fm.responsibleEmail||""} onChange={e=>sFm(p=>({...p,responsibleEmail:e.target.value}))} placeholder="email@empresa.com"/></Fd>
+        </G2>
+      </div>
+      <div style={{...sC,background:"#F5F3FF",borderColor:"#7C3AED20"}}>
+        <h3 style={{fontSize:12,fontWeight:700,color:"#7C3AED",margin:"0 0 8px"}}>🔍 Responsable de seguimiento / verificación</h3>
+        <G2>
+          <Fd l="Nombre"><input style={sI} value={fm.followupResp||""} onChange={e=>sFm(p=>({...p,followupResp:e.target.value}))} placeholder="Nombre completo"/></Fd>
+          <Fd l="Email"><input type="email" style={sI} value={fm.followupEmail||""} onChange={e=>sFm(p=>({...p,followupEmail:e.target.value}))} placeholder="email@empresa.com"/></Fd>
+        </G2>
+      </div>
+      <Fd l="Verificación implementación"><textarea style={{...sI,minHeight:40,resize:"vertical"}} value={fm.verification} onChange={e=>sFm(p=>({...p,verification:e.target.value}))}/></Fd>
+      <Fd l="Verificación eficacia"><textarea style={{...sI,minHeight:40,resize:"vertical"}} value={fm.effectiveness} onChange={e=>sFm(p=>({...p,effectiveness:e.target.value}))}/></Fd>
+      <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:14}}><button style={sB("g")} onClick={()=>sSh(false)}>Cancelar</button><button style={sB("pri")} onClick={save} disabled={!fm.description}>Guardar</button></div>
+    </Md>}</div>);
+}
+
+/* ── AUDIT TRAIL ── */
+function Trail({logs}){const[q,sQ]=useState("");const ls=q?logs.filter(l=>Object.values(l).some(v=>String(v).toLowerCase().includes(q.toLowerCase()))):logs;
+  return(<div><h1 style={{fontSize:20,fontWeight:800,margin:"0 0 12px"}}>Audit Trail</h1><input style={{...sI,maxWidth:320,marginBottom:12}} placeholder="Buscar..." value={q} onChange={e=>sQ(e.target.value)}/><div style={sC}>{ls.length===0?<Em icon="📜" t="Sin registros"/>:<table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5}}><thead><tr><th style={sTh}>Fecha</th><th style={sTh}>Usuario</th><th style={sTh}>Acción</th><th style={sTh}>Entidad</th><th style={sTh}>Detalle</th></tr></thead><tbody>{ls.slice(0,200).map(l=><tr key={l.id}><td style={{...sTd,whiteSpace:"nowrap",fontFamily:"monospace",fontSize:11.5}}>{fdt(l.ts)}</td><td style={{...sTd,fontWeight:600}}>{l.user}</td><td style={sTd}><Bg color={l.action.includes("CREAR")?K.grn:l.action.includes("CAMBIO")?K.wrn:l.action.includes("CONFIG")||l.action.includes("USUARIO")?K.vio:l.action.includes("FASE")?PHASES[2].color:K.pri} bg={l.action.includes("CREAR")?K.grnL:l.action.includes("CAMBIO")?K.wrnL:l.action.includes("CONFIG")||l.action.includes("USUARIO")?K.vioL:l.action.includes("FASE")?PHASES[2].bg:K.priL}>{l.action}</Bg></td><td style={sTd}>{l.entity}</td><td style={{...sTd,fontSize:12,color:K.txS}}>{l.detail}</td></tr>)}</tbody></table>}</div></div>);
+}
+
+/* ── REPORTES ── */
+function Reports({data,cfg}){const{audits,findings,actions}=data;
+  const yr=data.year||2026;
+  const resolved=["Cerrado","No aplica","Evaluada — No implementar"];
+  const planificadas=audits.length;
+  const ejecutadas=audits.filter(a=>{const i=phaseIdx(a.phase,isExternal(a));return i>=2;}).length;
+  const conInforme=audits.filter(a=>{const i=phaseIdx(a.phase,isExternal(a));return i>=3;}).length;
+  const cerradas=audits.filter(a=>a.phase==="cerrada"||a.phase==="ext_cerrada").length;
+  const postergadas=audits.filter(a=>a.postponed).length;
+
+  const actTotal=actions.length;
+  const actCerradas=actions.filter(a=>resolved.includes(a.status)).length;
+  const actVencidas=actions.filter(a=>!resolved.includes(a.status)&&a.dueDate&&a.dueDate<tdy()).length;
+  const cumplimiento=actTotal?Math.round((actCerradas/actTotal)*100):0;
+
+  const gravesVencidas=findings.filter(f=>{
+    if(f.classification!=="CRITICA"&&f.classification!=="GRAVE")return false;
+    if(resolved.includes(f.status))return false;
+    const aa=actions.filter(a=>a.findingId===f.id&&!resolved.includes(a.status)&&a.dueDate);
+    return aa.some(a=>{const dias=Math.ceil((new Date()-new Date(a.dueDate))/86400000);return dias>=30;});
+  });
+  const menoresVencidas=findings.filter(f=>{
+    if(f.classification!=="MENOR")return false;
+    if(resolved.includes(f.status))return false;
+    const aa=actions.filter(a=>a.findingId===f.id&&!resolved.includes(a.status)&&a.dueDate);
+    return aa.some(a=>{const dias=Math.ceil((new Date()-new Date(a.dueDate))/86400000);return dias>=30;});
+  });
+
+  const auditIds=[...new Set(actions.map(a=>{const f=findings.find(x=>x.id===a.findingId);return f?.auditId;}).filter(Boolean))];
+  const perAudit=auditIds.map(aid=>{const aud=audits.find(a=>a.id===aid);const aa=actions.filter(a=>{const f=findings.find(x=>x.id===a.findingId);return f?.auditId===aid;});const cerr=aa.filter(a=>resolved.includes(a.status)).length;const venc=aa.filter(a=>!resolved.includes(a.status)&&a.dueDate&&a.dueDate<tdy()).length;return{name:aud?.name||"—",code:aud?.code||"—",total:aa.length,cerradas:cerr,vencidas:venc,pct:aa.length?Math.round(cerr/aa.length*100):0};});
+
+  const dlPdf=()=>{
+    var res=["Cerrado","No aplica","Evaluada \u2014 No implementar"];
+    var pctColor=cumplimiento>=80?"#16A34A":cumplimiento>=50?"#D97706":"#DC2626";
+    var barHtml=perAudit.map(function(a){var bc=a.pct>=80?"#16A34A":a.pct>=50?"#D97706":"#DC2626";return "<div style=\"margin:10px 0\"><strong>"+a.code+" \u2014 "+a.name+"</strong> <span style=\"color:"+bc+";font-weight:700\">"+a.cerradas+"/"+a.total+" ("+a.pct+"%)"+(a.vencidas?" \u2014 \u26a0 "+a.vencidas+" vencida(s)":"")+"</span><div style=\"height:12px;background:#E2E8F0;border-radius:6px;margin:3px 0 10px\"><div style=\"height:12px;border-radius:6px;width:"+Math.max(a.pct,1)+"%;background:"+bc+"\"></div></div></div>";}).join("");
+    var ncHtml="";
+    if(gravesVencidas.length>0){ncHtml+="<h2 style=\"color:#DC2626\">NC Cr\u00edticas / Mayores \u2014 Vencidas m\u00e1s de 30 d\u00edas</h2><table><tr><th>C\u00f3digo</th><th>Auditor\u00eda</th><th>Descripci\u00f3n</th><th>Estado</th></tr>";gravesVencidas.forEach(function(f){var aud=audits.find(function(a){return a.id===f.auditId});ncHtml+="<tr style=\"background:#FEF2F2\"><td><b>"+f.code+"</b></td><td>"+(aud?aud.name:"\u2014")+"</td><td>"+f.description+"</td><td>"+f.status+"</td></tr>";});ncHtml+="</table>";}
+    if(menoresVencidas.length>0){ncHtml+="<h2 style=\"color:#D97706\">NC Menores \u2014 Vencidas m\u00e1s de 30 d\u00edas</h2><table><tr><th>C\u00f3digo</th><th>Auditor\u00eda</th><th>Descripci\u00f3n</th><th>Estado</th></tr>";menoresVencidas.forEach(function(f){var aud=audits.find(function(a){return a.id===f.auditId});ncHtml+="<tr><td><b>"+f.code+"</b></td><td>"+(aud?aud.name:"\u2014")+"</td><td>"+f.description+"</td><td>"+f.status+"</td></tr>";});ncHtml+="</table>";}
+    var html="<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><title>Reporte Comit\u00e9 Gerencial</title><style>@page{size:A4 landscape;margin:15mm}body{font-family:Arial,sans-serif;font-size:11pt;color:#1a1a1a}h1{font-size:18pt;color:#1E40AF;border-bottom:3px solid #1E40AF;padding-bottom:6px}h2{font-size:14pt;color:#1E40AF;margin-top:24px}table{width:100%;border-collapse:collapse;margin:10px 0}th,td{border:1px solid #ccc;padding:6px 10px;font-size:10pt}th{background:#EEF2FF;font-weight:700;color:#1E40AF}.kpi{display:inline-block;text-align:center;padding:14px 24px;border-radius:8px;margin:6px}.kv{font-size:28pt;font-weight:800}.kl{font-size:9pt;color:#64748B;text-transform:uppercase}.np{margin:10px;text-align:center}@media print{.np{display:none}}</style></head><body>";
+    html+="<div class=\"np\"><button onclick=\"window.print()\" style=\"background:#1E40AF;color:#fff;border:none;padding:10px 24px;font-size:14px;font-weight:600;border-radius:6px;cursor:pointer\">Imprimir / Guardar PDF</button></div>";
+    html+="<h1>VESSENA S.A. \u2014 Reporte para Comit\u00e9 Gerencial ("+yr+")</h1>";
+    html+="<p style=\"color:#64748B\">Generado: "+fdt(new Date().toISOString())+"</p>";
+    html+="<h2>Programa de Auditor\u00edas</h2>";
+    html+="<div><span class=\"kpi\" style=\"background:#EEF2FF\"><span class=\"kl\">Planificadas</span><br><span class=\"kv\" style=\"color:#1E40AF\">"+planificadas+"</span></span>";
+    html+="<span class=\"kpi\" style=\"background:#FFFBEB\"><span class=\"kl\">Ejecutadas</span><br><span class=\"kv\" style=\"color:#D97706\">"+ejecutadas+"</span></span>";
+    html+="<span class=\"kpi\" style=\"background:#EFF6FF\"><span class=\"kl\">Con informe</span><br><span class=\"kv\" style=\"color:#2563EB\">"+conInforme+"</span></span>";
+    html+="<span class=\"kpi\" style=\"background:#F0FDF4\"><span class=\"kl\">Cerradas</span><br><span class=\"kv\" style=\"color:#16A34A\">"+cerradas+"</span></span></div>";
+    html+="<h2>Cumplimiento Planes de Acci\u00f3n</h2>";
+    html+="<div><span class=\"kpi\" style=\"background:"+(cumplimiento>=80?"#F0FDF4":cumplimiento>=50?"#FFFBEB":"#FEF2F2")+"\"><span class=\"kl\">Cumplimiento</span><br><span class=\"kv\" style=\"color:"+pctColor+"\">"+cumplimiento+"%</span></span>";
+    html+="<span class=\"kpi\" style=\"background:#F0FDF4\"><span class=\"kl\">Cerradas</span><br><span class=\"kv\" style=\"color:#16A34A\">"+actCerradas+"/"+actTotal+"</span></span>";
+    html+="<span class=\"kpi\" style=\"background:"+(actVencidas>0?"#FEF2F2":"#F0FDF4")+"\"><span class=\"kl\">Vencidas</span><br><span class=\"kv\" style=\"color:"+(actVencidas>0?"#DC2626":"#16A34A")+"\">"+actVencidas+"</span></span></div>";
+    html+=barHtml+ncHtml;
+    html+="<div style=\"margin-top:30px;font-size:9pt;color:#999;text-align:center;border-top:1px solid #eee;padding-top:8px\">Vessena S.A. \u2014 Sistema de Gesti\u00f3n de Auditor\u00edas</div></body></html>";
+    var w=window.open("","_blank");w.document.write(html);w.document.close();
+  };
+
+  return(<div><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}><h1 style={{fontSize:20,fontWeight:800}}>Reportes — Comité Gerencial</h1>
+      <button style={sB("pri")} onClick={dlPdf}>📄 Descargar PDF</button>
+    </div>
+
+    <div style={sC}><h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px"}}>📅 Programa de Auditorías</h3>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:12}}>
+        <div style={{padding:"12px 16px",background:K.priL,borderRadius:8}}><div style={{fontSize:10,fontWeight:700,color:K.txS,textTransform:"uppercase"}}>Planificadas</div><div style={{fontSize:28,fontWeight:800,color:K.pri}}>{planificadas}</div></div>
+        <div style={{padding:"12px 16px",background:"#FFFBEB",borderRadius:8}}><div style={{fontSize:10,fontWeight:700,color:K.txS,textTransform:"uppercase"}}>Ejecutadas</div><div style={{fontSize:28,fontWeight:800,color:"#D97706"}}>{ejecutadas}</div></div>
+        <div style={{padding:"12px 16px",background:"#EFF6FF",borderRadius:8}}><div style={{fontSize:10,fontWeight:700,color:K.txS,textTransform:"uppercase"}}>Con informe</div><div style={{fontSize:28,fontWeight:800,color:"#2563EB"}}>{conInforme}</div></div>
+        <div style={{padding:"12px 16px",background:K.grnL,borderRadius:8}}><div style={{fontSize:10,fontWeight:700,color:K.txS,textTransform:"uppercase"}}>Cerradas</div><div style={{fontSize:28,fontWeight:800,color:K.grn}}>{cerradas}</div></div>
+      </div>
+    </div>
+
+    <div style={sC}><h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px"}}>📌 Cumplimiento Planes de Acción</h3>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:12,marginBottom:14}}>
+        <div style={{padding:"12px 16px",background:cumplimiento>=80?K.grnL:cumplimiento>=50?"#FFFBEB":K.redL,borderRadius:8}}><div style={{fontSize:10,fontWeight:700,color:K.txS,textTransform:"uppercase"}}>Cumplimiento</div><div style={{fontSize:28,fontWeight:800,color:cumplimiento>=80?K.grn:cumplimiento>=50?"#D97706":K.red}}>{cumplimiento}%</div></div>
+        <div style={{padding:"12px 16px",background:K.grnL,borderRadius:8}}><div style={{fontSize:10,fontWeight:700,color:K.txS,textTransform:"uppercase"}}>Cerradas</div><div style={{fontSize:28,fontWeight:800,color:K.grn}}>{actCerradas}<span style={{fontSize:14,color:K.txS}}>/{actTotal}</span></div></div>
+        <div style={{padding:"12px 16px",background:"#FFFBEB",borderRadius:8}}><div style={{fontSize:10,fontWeight:700,color:K.txS,textTransform:"uppercase"}}>En proceso</div><div style={{fontSize:28,fontWeight:800,color:"#D97706"}}>{actions.filter(a=>a.status==="En proceso").length}</div></div>
+        <div style={{padding:"12px 16px",background:actVencidas>0?K.redL:K.grnL,borderRadius:8}}><div style={{fontSize:10,fontWeight:700,color:K.txS,textTransform:"uppercase"}}>⚠ Vencidas</div><div style={{fontSize:28,fontWeight:800,color:actVencidas>0?K.red:K.grn}}>{actVencidas}</div></div>
+      </div>
+      {perAudit.map(a=><div key={a.code} style={{marginBottom:12}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+          <span style={{fontSize:13,fontWeight:600}}>{a.code} — {a.name}</span>
+          <span style={{fontSize:13,fontWeight:700,color:a.pct>=80?K.grn:a.pct>=50?"#D97706":K.red}}>{a.cerradas}/{a.total} ({a.pct}%){a.vencidas>0?" — ⚠ "+a.vencidas+" vencida(s)":""}</span>
+        </div>
+        <div style={{height:8,background:"#F1F5F9",borderRadius:4,overflow:"hidden"}}>
+          <div style={{height:"100%",width:a.pct+"%",background:a.pct>=80?K.grn:a.pct>=50?"#D97706":K.red,borderRadius:4,transition:"width .3s"}}/>
+        </div>
+      </div>)}
+    </div>
+
+    {gravesVencidas.length>0&&<div style={{...sC,background:K.redL,borderColor:K.red+"30"}}>
+      <h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px",color:K.red}}>🔴 NC Críticas / Mayores — Vencidas más de 30 días</h3>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,background:"#fff",borderRadius:8}}>
+        <thead><tr><th style={sTh}>Código</th><th style={sTh}>Auditoría</th><th style={sTh}>Descripción</th><th style={sTh}>Clasif.</th><th style={sTh}>Estado</th></tr></thead>
+        <tbody>{gravesVencidas.map(f=>{const aud=audits.find(a=>a.id===f.auditId);const cl=cfg.classifications.find(x=>x.id===f.classification);return <tr key={f.id}><td style={{...sTd,fontFamily:"monospace",fontWeight:700,color:K.red,whiteSpace:"nowrap"}}>{f.code}</td><td style={{...sTd,fontSize:11,whiteSpace:"nowrap"}}>{aud?.name||"—"}</td><td style={{...sTd,lineHeight:1.4}}>{f.description}</td><td style={sTd}><Bg color={cl?.color||K.red} bg={cl?.color+"15"||K.redL}>{cl?.label||"—"}</Bg></td><td style={sTd}><SBg s={f.status}/></td></tr>;})}</tbody>
+      </table>
+    </div>}
+
+    {menoresVencidas.length>0&&<div style={{...sC,background:"#EFF6FF",borderColor:"#2563EB20"}}>
+      <h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px",color:"#2563EB"}}>🟡 NC Menores — Vencidas más de 30 días</h3>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,background:"#fff",borderRadius:8}}>
+        <thead><tr><th style={sTh}>Código</th><th style={sTh}>Auditoría</th><th style={sTh}>Descripción</th><th style={sTh}>Estado</th></tr></thead>
+        <tbody>{menoresVencidas.map(f=>{const aud=audits.find(a=>a.id===f.auditId);return <tr key={f.id}><td style={{...sTd,fontFamily:"monospace",fontWeight:700,color:"#2563EB",whiteSpace:"nowrap"}}>{f.code}</td><td style={{...sTd,fontSize:11,whiteSpace:"nowrap"}}>{aud?.name||"—"}</td><td style={{...sTd,lineHeight:1.4}}>{f.description}</td><td style={sTd}><SBg s={f.status}/></td></tr>;})}</tbody>
+      </table>
+    </div>}
+
+    <div style={sC}>
+      <h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px"}}>Auditorías por fase</h3>
+      <div style={{display:"flex",gap:10,height:110,alignItems:"flex-end"}}>{PHASES.map(p=>{const n=audits.filter(a=>a.phase===p.id).length;const mx=Math.max(...PHASES.map(x=>audits.filter(a=>a.phase===x.id).length),1);return <div key={p.id} style={{flex:1,textAlign:"center"}}><div style={{fontSize:16,fontWeight:800,color:p.color}}>{n}</div><div style={{height:Math.max((n/mx)*80,3),background:p.color+"25",border:`2px solid ${p.color}`,borderRadius:5}}/><div style={{fontSize:10,color:K.txS,marginTop:5,fontWeight:600}}>{p.label}</div></div>;})}</div>
+    </div>
+  </div>);
+}
+
+/* ── CONFIG (simplified) ── */
+function ConfigMod({cfg,setCfg,setLogs,currentUser}){
+  const logC=d=>alog(setLogs,"CONFIG","Configuración",d,currentUser.name);
+  function LE({title,icon,items,onUpdate}){const[v,sV]=useState("");const add=()=>{if(v.trim()&&!items.includes(v.trim())){onUpdate([...items,v.trim()]);logC(`+ "${v.trim()}" en ${title}`);sV("");}};const rm=i=>{logC(`- "${items[i]}" de ${title}`);onUpdate(items.filter((_,j)=>j!==i));};
+    return(<div className="cfg-section"><h3><span>{icon}</span>{title}</h3>{items.map((it,i)=><div key={i} className="cfg-item"><span style={{flex:1,fontSize:13}}>{it}</span><button style={{...sB("sm"),color:K.red}} onClick={()=>rm(i)}>✕</button></div>)}<div style={{display:"flex",gap:8,marginTop:8}}><input style={{...sI,flex:1}} value={v} onChange={e=>sV(e.target.value)} placeholder="Agregar..." onKeyDown={e=>e.key==="Enter"&&add()}/><button style={sB("pri")} onClick={add}>+</button></div></div>);}
+  function ClassEd(){const[sh,sSh]=useState(false);const bl={id:"",label:"",risk:"",deadline:6,color:"#2563EB",desc:""};const[fm,sFm]=useState(bl);
+    const save=()=>{if(!fm.label)return;const id=fm.label.toUpperCase().replace(/\s+/g,"_").slice(0,12);setCfg(p=>({...p,classifications:[...p.classifications,{...fm,id}]}));logC(`+ clasificación "${fm.label}"`);sSh(false);sFm(bl);};
+    const rm=i=>{logC(`- clasificación "${cfg.classifications[i].label}"`);setCfg(p=>({...p,classifications:p.classifications.filter((_,j)=>j!==i)}));};
+    return(<div className="cfg-section"><h3><span>⚠️</span>Clasificaciones<button style={{...sB("pri"),marginLeft:"auto",fontSize:11}} onClick={()=>sSh(true)}>+</button></h3>{cfg.classifications.map((c,i)=><div key={i} className="cfg-item"><div style={{width:10,height:10,borderRadius:"50%",background:c.color}}/><span style={{flex:1,fontSize:13,fontWeight:600}}>{c.label}</span><span style={{fontSize:11,color:K.txS}}>{c.risk} · {c.deadline>0?c.deadline+"m":"—"}</span><button style={{...sB("sm"),color:K.red}} onClick={()=>rm(i)}>✕</button></div>)}
+      {sh&&<Md title="Nueva clasificación" onClose={()=>sSh(false)}><G2><Fd l="Etiqueta"><input style={sI} value={fm.label} onChange={e=>sFm(p=>({...p,label:e.target.value}))}/></Fd><Fd l="Riesgo"><input style={sI} value={fm.risk} onChange={e=>sFm(p=>({...p,risk:e.target.value}))}/></Fd><Fd l="Plazo meses (0=sin)"><input type="number" min="0" style={sI} value={fm.deadline} onChange={e=>sFm(p=>({...p,deadline:parseInt(e.target.value)||0}))}/></Fd><Fd l="Color"><input type="color" value={fm.color} onChange={e=>sFm(p=>({...p,color:e.target.value}))}/></Fd></G2><Fd l="Descripción"><textarea style={{...sI,minHeight:40}} value={fm.desc} onChange={e=>sFm(p=>({...p,desc:e.target.value}))}/></Fd><div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:14}}><button style={sB("g")} onClick={()=>sSh(false)}>Cancelar</button><button style={sB("pri")} onClick={save} disabled={!fm.label}>Guardar</button></div></Md>}</div>);}
+  return(<div><h1 style={{fontSize:20,fontWeight:800,marginBottom:14}}>Configuración del Sistema</h1>
+    <CtxHelp type="warn"><strong>Solo administradores.</strong> Cambios aplican inmediatamente y se registran en Audit Trail.</CtxHelp>
+    <ClassEd/>
+    <LE title="Sectores" icon="🏭" items={cfg.sectors} onUpdate={v=>setCfg(p=>({...p,sectors:v}))}/>
+    <LE title="Tipos de Auditoría" icon="📋" items={cfg.auditTypes} onUpdate={v=>setCfg(p=>({...p,auditTypes:v}))}/>
+    <LE title="Tipos CAPA" icon="🔧" items={cfg.capaTypes} onUpdate={v=>setCfg(p=>({...p,capaTypes:v}))}/>
+    <LE title="Estados" icon="🔄" items={cfg.statuses} onUpdate={v=>setCfg(p=>({...p,statuses:v}))}/>
+    {/* Teams editor */}
+    {(()=>{
+      const addTeam=()=>{setCfg(p=>({...p,teams:[...(p.teams||[]),{name:`E${(p.teams||[]).length+1}`,leader:"",members:"",comments:""}]}));logC("+ equipo auditor");};
+      const rmTeam=(i)=>{const t=(cfg.teams||[])[i];setCfg(p=>({...p,teams:(p.teams||[]).filter((_,j)=>j!==i)}));logC(`- equipo "${t?.name}"`);};
+      const updTeam=(i,field,val)=>{setCfg(p=>{const ts=[...(p.teams||[])];ts[i]={...ts[i],[field]:val};return{...p,teams:ts};});};
+      return(<div className="cfg-section"><h3><span>👥</span>Equipos Auditores<button style={{...sB("pri"),marginLeft:"auto",fontSize:11}} onClick={addTeam}>+ Agregar</button></h3><p className="cfg-desc">Equipos disponibles para asignar a auditorías. Se muestran en el Programa Anual y en el selector de equipo al planificar.</p>
+        {(cfg.teams||[]).map((t,i)=><div key={i} style={{border:`1px solid ${K.brdL}`,borderRadius:8,padding:12,marginBottom:8,background:"#fff"}}>
+          <div style={{display:"grid",gridTemplateColumns:"80px 1fr 1fr 120px auto",gap:8,alignItems:"center"}}>
+            <div><div style={{fontSize:10,fontWeight:700,color:K.txS,marginBottom:2}}>CÓDIGO</div><input style={{...sI,fontWeight:700,textAlign:"center"}} value={t.name} onChange={e=>updTeam(i,"name",e.target.value)}/></div>
+            <div><div style={{fontSize:10,fontWeight:700,color:K.txS,marginBottom:2}}>LÍDER</div><input style={sI} value={t.leader} onChange={e=>updTeam(i,"leader",e.target.value)} placeholder="Nombre del líder"/></div>
+            <div><div style={{fontSize:10,fontWeight:700,color:K.txS,marginBottom:2}}>INTEGRANTES</div><input style={sI} value={t.members} onChange={e=>updTeam(i,"members",e.target.value)} placeholder="Nombres separados por coma"/></div>
+            <div><div style={{fontSize:10,fontWeight:700,color:K.txS,marginBottom:2}}>NOTA</div><input style={sI} value={t.comments||""} onChange={e=>updTeam(i,"comments",e.target.value)} placeholder="Opcional"/></div>
+            <button style={{...sB("sm"),color:K.red,borderColor:K.red+"30",marginTop:14}} onClick={()=>rmTeam(i)}>✕</button>
+          </div>
+        </div>)}
+      </div>);
+    })()}
+    <div className="cfg-section" style={{borderColor:K.red+"30",background:K.redL}}><h3 style={{color:K.red}}>🔄 Restaurar</h3><button style={sB("red")} onClick={()=>{if(confirm("¿Restaurar?")){setCfg(DEF_CONFIG);logC("Restaurado");}}}>Restaurar todo</button></div>
+  </div>);
+}
+
+/* ── USERS ── */
+function UserMgmt({users,setUsers,currentUser,setLogs}){const[sh,sSh]=useState(false);const[ed,sEd]=useState(null);const bl={username:"",password:"",role:"user",name:"",active:true};const[fm,sFm]=useState(bl);
+  const save=()=>{if(!fm.username||!fm.password||!fm.name)return;if(ed){setUsers(p=>p.map(u=>u.id===ed.id?{...u,...fm}:u));alog(setLogs,"EDITAR USUARIO","Usuarios",fm.username,currentUser.name);}else{if(users.some(x=>x.username.toLowerCase()===fm.username.toLowerCase()))return alert("Ya existe");setUsers(p=>[...p,{...fm,id:gid()}]);alog(setLogs,"CREAR USUARIO","Usuarios",fm.username,currentUser.name);}sSh(false);sEd(null);sFm(bl);};
+  return(<div><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}><h1 style={{fontSize:20,fontWeight:800}}>Usuarios</h1><button style={sB("pri")} onClick={()=>{sEd(null);sFm(bl);sSh(true);}}>+ Nuevo</button></div>
+    <div style={sC}>{users.map(u=>{const r=ROLES[u.role];return <div key={u.id} className="usr-row"><div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:32,height:32,borderRadius:"50%",background:r?.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>{r?.icon}</div><div><div style={{fontWeight:600,fontSize:13}}>{u.name}</div><div style={{fontSize:11,color:K.txS}}>@{u.username}</div></div></div><div style={{display:"flex",alignItems:"center",gap:8}}><Bg color={r?.color} bg={r?.bg}>{r?.label}</Bg><span style={{fontSize:11,color:u.active?K.grn:K.red}}>{u.active?"Activo":"Inactivo"}</span><button style={sB("sm")} onClick={()=>{sEd(u);sFm({...u});sSh(true);}}>Editar</button>{u.id!==currentUser.id&&<button style={{...sB("sm"),color:u.active?K.red:K.grn}} onClick={()=>setUsers(p=>p.map(x=>x.id===u.id?{...x,active:!x.active}:x))}>{u.active?"Des":"Act"}</button>}</div></div>;})}</div>
+    {sh&&<Md title={ed?"Editar":"Nuevo usuario"} onClose={()=>sSh(false)}><G2><Fd l="Nombre"><input style={sI} value={fm.name} onChange={e=>sFm(p=>({...p,name:e.target.value}))}/></Fd><Fd l="Usuario"><input style={sI} value={fm.username} onChange={e=>sFm(p=>({...p,username:e.target.value}))} disabled={!!ed}/></Fd><Fd l="Contraseña"><input style={sI} value={fm.password} onChange={e=>sFm(p=>({...p,password:e.target.value}))}/></Fd><Fd l="Rol"><select style={sS} value={fm.role} onChange={e=>sFm(p=>({...p,role:e.target.value}))}>{Object.entries(ROLES).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}</select></Fd></G2><div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:14}}><button style={sB("g")} onClick={()=>sSh(false)}>Cancelar</button><button style={sB("pri")} onClick={save} disabled={!fm.name||!fm.username}>Guardar</button></div></Md>}</div>);
+}
+
+/* ── AUTOINSPECCIONES ── */
+const AI_QUARTERS=[{q:"Q1",month:"Feb",label:"Febrero"},{q:"Q2",month:"May",label:"Mayo"},{q:"Q3",month:"Ago",label:"Agosto"},{q:"Q4",month:"Nov",label:"Noviembre"}];
+const AI_CRITERIA=[{id:"OL",label:"Orden y Limpieza",icon:"🧹",desc:"Estado general de orden, limpieza de superficies, pisos, equipos"},{id:"T",label:"Temperatura / Condiciones ambientales",icon:"🌡",desc:"Temperatura, humedad, ventilación de áreas"},{id:"M",label:"Mantenimiento",icon:"🔧",desc:"Estado de equipos, instalaciones, infraestructura"},{id:"D",label:"Documentación",icon:"📄",desc:"Registros al día, procedimientos disponibles, identificación"}];
+const AI_RATINGS=[{v:"C",label:"Conforme",color:"#16A34A",bg:"#F0FDF4"},{v:"NC",label:"No Conforme",color:"#DC2626",bg:"#FEF2F2"},{v:"NA",label:"N/A",color:"#6B7280",bg:"#F3F4F6"},{v:"OBS",label:"Observación",color:"#D97706",bg:"#FFFBEB"}];
+
+function Autoinspecciones({data,cfg,canEdit}){
+  const yr=data.year||2026;
+  const[inspections,setInspections]=useLS("v_ai1",[]);
+  const[aiFindings,setAiFindings]=useLS("v_aif1",[]);
+  const[ed,sEd]=useState(null);
+  const[showFind,sShowFind]=useState(false);
+  const[findEd,sFindEd]=useState(null);
+
+  const yrInsp=inspections.filter(i=>i.year===yr);
+  const yrFinds=aiFindings.filter(f=>f.year===yr);
+
+  const getInsp=(q,sector)=>yrInsp.find(i=>i.quarter===q&&i.sector===sector);
+
+  const openInsp=(q,sector)=>{
+    const existing=getInsp(q,sector);
+    if(existing){sEd(existing);}
+    else if(canEdit){
+      const newI={id:gid(),year:yr,quarter:q,sector,date:"",inspector:"",ratings:{},notes:"",status:"Pendiente",createdAt:new Date().toISOString()};
+      sEd(newI);
+    }
+  };
+
+  const saveInsp=(insp)=>{
+    const exists=inspections.find(i=>i.id===insp.id);
+    if(exists)setInspections(p=>p.map(i=>i.id===insp.id?insp:i));
+    else setInspections(p=>[...p,insp]);
+    alog(data.setLogs,exists?"EDITAR":"CREAR","Autoinspección",`${insp.quarter} — ${insp.sector} (${yr})`,data.currentUser?.name||"Sistema");
+    sEd(null);
+  };
+
+  const delInsp=(id)=>{
+    if(!confirm("¿Eliminar esta autoinspección?"))return;
+    const i=inspections.find(x=>x.id===id);
+    setInspections(p=>p.filter(x=>x.id!==id));
+    alog(data.setLogs,"ELIMINAR","Autoinspección",`${i?.quarter} — ${i?.sector}`,data.currentUser?.name||"Sistema");
+    sEd(null);
+  };
+
+  const sectors=cfg.sectors.filter(s=>!s.includes("Proveedor"));
+
+  const findBl={sector:"",quarter:"",description:"",criteria:"",severity:"Observación",action:"",responsible:"",status:"Abierto"};
+  const[findFm,sFindFm]=useState(findBl);
+
+  const saveFinding=()=>{
+    if(findEd){setAiFindings(p=>p.map(f=>f.id===findEd.id?{...findFm,id:findEd.id}:f));
+    }else{setAiFindings(p=>[...p,{...findFm,id:gid(),year:yr,code:`AI-${String(yrFinds.length+1).padStart(3,"0")}`,createdAt:new Date().toISOString()}]);}
+    alog(data.setLogs,findEd?"EDITAR":"CREAR","Hallazgo Autoinspección",`${findFm.sector} ${findFm.quarter}`,data.currentUser?.name||"Sistema");
+    sShowFind(false);sFindEd(null);sFindFm(findBl);
+  };
+
+  const statusColor=(s)=>s==="Realizada"?{c:K.grn,bg:K.grnL}:s==="Pendiente"?{c:"#D97706",bg:"#FFFBEB"}:{c:K.txS,bg:"#F1F5F9"};
+
+  return(<div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+      <div><h1 style={{fontSize:20,fontWeight:800}}>Autoinspecciones — {yr}</h1><p style={{color:K.txS,margin:"4px 0 0",fontSize:12.5}}>REG-SOP-AC-035-F — Bitácora de autoinspecciones puntuales (trimestral)</p></div>
+      {canEdit&&<div/>}
+    </div>
+
+    {(()=>{const allDevs=[];yrInsp.forEach(insp=>{const devMap=insp.deviations||{};Object.keys(devMap).forEach(crId=>{const crLabel=AI_CRITERIA.find(c=>c.id===crId)?.label||crId;devMap[crId].forEach((d,idx)=>{allDevs.push({...d,sector:insp.sector,quarter:insp.quarter,date:insp.date,criteria:crLabel,rating:insp.ratings?.[crId]||"",inspId:insp.id});});});});
+    return allDevs.length>0?<div style={{...sC,marginTop:14}}>
+      <h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px"}}>📋 Resumen de desvíos del año ({allDevs.length})</h3>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+        <thead><tr><th style={sTh}>Trim.</th><th style={sTh}>Sector</th><th style={sTh}>Criterio</th><th style={sTh}>Tipo</th><th style={sTh}>¿Qué se encontró?</th><th style={sTh}>Acción tomada</th><th style={sTh}>Resp.</th><th style={sTh}>¿Resuelto?</th></tr></thead>
+        <tbody>{allDevs.map((d,i)=><tr key={i} style={{background:d.rating==="NC"?"#FEF2F2":"#FFFBEB"}}>
+          <td style={sTd}>{d.quarter}</td>
+          <td style={sTd}>{d.sector}</td>
+          <td style={sTd}>{d.criteria}</td>
+          <td style={sTd}>{d.rating==="NC"?<Bg color={K.red} bg={K.redL}>NC</Bg>:<Bg color="#D97706" bg="#FFFBEB">OBS</Bg>}</td>
+          <td style={{...sTd,lineHeight:1.4}}>{d.finding||"—"}</td>
+          <td style={{...sTd,lineHeight:1.4}}>{d.action||"—"}</td>
+          <td style={sTd}>{d.responsible||"—"}</td>
+          <td style={sTd}>{d.resolved?<Bg color={d.resolved==="Sí"?K.grn:d.resolved==="En proceso"?"#D97706":K.red} bg={d.resolved==="Sí"?K.grnL:d.resolved==="En proceso"?"#FFFBEB":K.redL}>{d.resolved}</Bg>:"—"}</td>
+        </tr>)}</tbody>
+      </table>
+    </div>:null;})()}
+
+    <div style={{display:"flex",gap:8,marginBottom:14}}>
+      {AI_QUARTERS.map(q=>{const done=yrInsp.filter(i=>i.quarter===q.q&&i.status==="Realizada").length;const total=yrInsp.filter(i=>i.quarter===q.q).length;return <div key={q.q} style={{flex:1,padding:"12px 16px",background:done===total&&total>0?K.grnL:total>0?"#FFFBEB":"#F8FAFC",border:`1px solid ${done===total&&total>0?K.grn+"30":total>0?"#D9770630":K.brd}`,borderRadius:8,textAlign:"center"}}>
+        <div style={{fontSize:11,fontWeight:700,color:K.txS,textTransform:"uppercase"}}>{q.q} — {q.label}</div>
+        <div style={{fontSize:20,fontWeight:800,color:done===total&&total>0?K.grn:total>0?"#D97706":K.txM,marginTop:2}}>{done}/{total||"—"}</div>
+      </div>;})}
+    </div>
+
+    <div style={{...sC,overflowX:"auto"}}>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+        <thead><tr><th style={{...sTh,minWidth:160,position:"sticky",left:0,background:K.srf,zIndex:2}}>Sector</th>{AI_QUARTERS.map(q=><th key={q.q} style={{...sTh,textAlign:"center",minWidth:100}}>{q.q} — {q.label}</th>)}</tr></thead>
+        <tbody>{sectors.map(s=><tr key={s}>
+          <td style={{...sTd,fontWeight:600,fontSize:12,position:"sticky",left:0,background:K.srf,zIndex:1}}>{s}</td>
+          {AI_QUARTERS.map(q=>{const insp=getInsp(q.q,s);const sc=insp?statusColor(insp.status):{c:K.txM,bg:"#F8FAFC"};return <td key={q.q} style={{...sTd,padding:4,textAlign:"center"}} onClick={()=>openInsp(q.q,s)}>
+            <div style={{padding:"6px 4px",background:insp?sc.bg:"#F8FAFC",borderRadius:6,cursor:canEdit||insp?"pointer":"default",border:`1px solid ${insp?sc.c+"30":"transparent"}`}}>
+              {insp?<div><div style={{fontSize:11,fontWeight:700,color:sc.c}}>{insp.status==="Realizada"?"✅":"🔶"} {insp.status}</div>{insp.date&&<div style={{fontSize:10,color:K.txS}}>{fd(insp.date)}</div>}</div>:<span style={{fontSize:16,opacity:.3}}>+</span>}
+            </div>
+          </td>;})}
+        </tr>)}</tbody>
+      </table>
+    </div>
+
+    {/* Modal editar autoinspección */}
+    {ed&&<Md title={`Autoinspección ${ed.quarter} — ${ed.sector}`} onClose={()=>sEd(null)}>
+      <G2>
+        <Fd l="Fecha"><input type="date" style={sI} value={ed.date||""} onChange={e=>sEd(p=>({...p,date:e.target.value}))}/></Fd>
+        <Fd l="Inspector"><input style={sI} value={ed.inspector||""} onChange={e=>sEd(p=>({...p,inspector:e.target.value}))} placeholder="Nombre del inspector"/></Fd>
+        <Fd l="Estado"><select style={sS} value={ed.status} onChange={e=>sEd(p=>({...p,status:e.target.value}))}><option>Pendiente</option><option>Realizada</option></select></Fd>
+      </G2>
+      <div style={{marginTop:10}}>
+        <div style={{fontSize:12,fontWeight:700,color:K.txS,marginBottom:8}}>EVALUACIÓN POR CRITERIO</div>
+        {AI_CRITERIA.map(cr=>{const rv=ed.ratings?.[cr.id];const needsDetail=rv==="NC"||rv==="OBS";const devs=ed.deviations?.[cr.id]||[];
+          const addDev=()=>sEd(p=>({...p,deviations:{...p.deviations,[cr.id]:[...(p.deviations?.[cr.id]||[]),{id:gid(),finding:"",action:"",responsible:"",resolved:""}]}}));
+          const updDev=(idx,field,val)=>sEd(p=>{const ds=[...(p.deviations?.[cr.id]||[])];ds[idx]={...ds[idx],[field]:val};return{...p,deviations:{...p.deviations,[cr.id]:ds}};});
+          const rmDev=(idx)=>sEd(p=>{const ds=[...(p.deviations?.[cr.id]||[])];ds.splice(idx,1);return{...p,deviations:{...p.deviations,[cr.id]:ds}};});
+          return <div key={cr.id} style={{border:`1px solid ${needsDetail?(rv==="NC"?K.red+"30":"#D9770630"):K.brdL}`,borderRadius:8,marginBottom:8,overflow:"hidden"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px"}}>
+            <span style={{fontSize:16}}>{cr.icon}</span>
+            <div style={{flex:1}}><div style={{fontSize:12.5,fontWeight:600}}>{cr.label}</div><div style={{fontSize:11,color:K.txS}}>{cr.desc}</div></div>
+            <div style={{display:"flex",gap:4}}>{AI_RATINGS.map(r=><button key={r.v} onClick={()=>{sEd(p=>({...p,ratings:{...p.ratings,[cr.id]:r.v}}));if((r.v==="NC"||r.v==="OBS")&&devs.length===0)addDev();}} style={{padding:"4px 10px",fontSize:11,fontWeight:ed.ratings?.[cr.id]===r.v?700:400,background:ed.ratings?.[cr.id]===r.v?r.bg:"transparent",color:ed.ratings?.[cr.id]===r.v?r.color:K.txM,border:`1px solid ${ed.ratings?.[cr.id]===r.v?r.color+"40":K.brd}`,borderRadius:5,cursor:"pointer",fontFamily:"inherit"}}>{r.label}</button>)}</div>
+          </div>
+          {needsDetail&&<div style={{padding:"8px 12px",background:rv==="NC"?"#FEF2F210":"#FFFBEB10",borderTop:`1px solid ${K.brdL}`}}>
+            {devs.map((d,idx)=><div key={d.id||idx} style={{padding:"10px 12px",background:"#fff",border:`1px solid ${rv==="NC"?K.red+"20":"#D9770620"}`,borderRadius:8,marginBottom:8}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                <div style={{fontSize:11,fontWeight:700,color:rv==="NC"?K.red:"#D97706"}}>{rv==="NC"?"⚠":"📝"} Desvío {idx+1}</div>
+                {devs.length>1&&<button style={{background:"none",border:"none",color:K.red,cursor:"pointer",fontSize:12,fontFamily:"inherit"}} onClick={()=>rmDev(idx)}>✕ Quitar</button>}
+              </div>
+              <Fd l="¿Qué se encontró?"><textarea style={{...sI,minHeight:35,resize:"vertical",fontSize:12}} value={d.finding||""} onChange={e=>updDev(idx,"finding",e.target.value)}/></Fd>
+              <Fd l="Acción tomada / corrección"><textarea style={{...sI,minHeight:35,resize:"vertical",fontSize:12}} value={d.action||""} onChange={e=>updDev(idx,"action",e.target.value)}/></Fd>
+              <G2>
+                <Fd l="Responsable"><input style={sI} value={d.responsible||""} onChange={e=>updDev(idx,"responsible",e.target.value)}/></Fd>
+                <Fd l="¿Resuelto?"><select style={sS} value={d.resolved||""} onChange={e=>updDev(idx,"resolved",e.target.value)}><option value="">—</option><option>Sí</option><option>No — Pendiente</option><option>En proceso</option></select></Fd>
+              </G2>
+            </div>)}
+            <button style={{...sB("g"),fontSize:11,width:"100%"}} onClick={addDev}>+ Agregar otro desvío en {cr.label}</button>
+          </div>}
+        </div>;})}
+
+      </div>
+      <Fd l="Notas / Observaciones"><textarea style={{...sI,minHeight:60,resize:"vertical"}} value={ed.notes||""} onChange={e=>sEd(p=>({...p,notes:e.target.value}))}/></Fd>
+      <div style={{display:"flex",gap:8,justifyContent:"space-between",marginTop:12}}>
+        <div>{ed.id&&inspections.find(i=>i.id===ed.id)&&<button style={{...sB("red"),fontSize:11}} onClick={()=>delInsp(ed.id)}>🗑 Eliminar</button>}</div>
+        <div style={{display:"flex",gap:8}}><button style={sB("g")} onClick={()=>sEd(null)}>Cancelar</button><button style={sB("pri")} onClick={()=>saveInsp(ed)}>Guardar</button></div>
+      </div>
+    </Md>}
+
+  </div>);
+}
+
+/* ── GUÍA DE USO ── */
+function GuidePage({goTo}){
+  const sections=[
+    {icon:"📅",title:"Programa Anual",id:"prog",content:"Planificación anual de auditorías por sector y mes. Cada celda está vinculada a una auditoría real. Los sectores se configuran por año de forma independiente.",
+      steps:["Usá el selector ◀ AÑO ▶ en el sidebar para elegir el año de gestión","Hacé click en '🏭 Configurar sectores' para elegir qué sectores incluir en el programa de ese año","Click en una celda vacía → confirma → se crea auditoría en fase 📅 Planificada","El ícono de cada celda muestra la fase actual: 📅→📝→🔄→📊→✅","Click en una celda con ícono para abrir y editar la auditoría","Los equipos auditores se muestran en el panel derecho","Si creaste una auditoría por error, abrila y usá '🗑 Eliminar'"]},
+    {icon:"📋",title:"Auditorías (Internas y Proveedores)",id:"aud",content:"Lista de todas las auditorías del año seleccionado. Cada auditoría interna o a proveedor tiene un ciclo de 5 fases con pestañas dedicadas.",
+      steps:["Filtrá por TIPO (Interna, A proveedor, Externa) o por FASE","Click en 'Abrir' para ver el detalle completo","Pestaña '📅 Plan': nombre, tipo, sector, auditor líder, equipo, fecha, norma, alcance, listas de verificación","Pestaña '🔄 Ejecución': fecha real, checklist aplicado, metodología, notas, distribución del informe","Pestaña '📊 Informe': impresión general, fortalezas, hallazgos vinculados, conclusiones, resultado (APROBADO/NO APROBADO), próxima auditoría, expectativas","Pestaña '✅ Cierre': verificación de eficacia, fecha de cierre, acciones vinculadas","Usá 'Siguiente →' y '← Anterior' para avanzar las fases — la pestaña se sincroniza automáticamente","'📄 Exportar' genera el informe REG-035-C en formato imprimible con todos los datos"]},
+    {icon:"📩",title:"Auditorías Externas (de clientes)",id:"aud",content:"Flujo específico para auditorías que recibe Vessena de clientes o autoridades regulatorias. Tienen 5 fases propias y campos adaptados al rol de auditado.",
+      steps:["Desde Auditorías, click en el botón violeta '📩 + Auditoría Externa'","Pestaña '📩 Datos': cliente/organismo, tipo (Cliente, Autoridad, Certificador), modalidad (Anunciada/Sorpresiva), auditores del cliente, alcance","Pestaña '🏭 Recepción': equipo de recepción Vessena (DT, AC, Gte.), desarrollo de la auditoría, notas de confidencialidad","Pestaña '📨 Informe cliente': fecha recepción, resultado del cliente, resumen del informe, fecha límite CAPA","En esta pestaña: '📥 Descargar plantilla hallazgos' genera un CSV para cargar los hallazgos del cliente","'📤 Importar hallazgos del cliente' lee el CSV y crea automáticamente los hallazgos (HAL) + planes de acción (ACC) con plazos calculados","Pestaña '📤 CAPA Vessena': fecha envío, destinatario, resumen de la respuesta, acciones vinculadas","Pestaña '✅ Cierre': verificación, fecha cierre, confirmación del cliente"]},
+    {icon:"⚠",title:"Hallazgos y CAPA",id:"hal",content:"Registro de hallazgos vinculados a auditorías con clasificación configurable. Solo se pueden vincular a auditorías en fase 'En ejecución' o posterior.",
+      steps:["Click en '+ Nuevo' y seleccioná la auditoría (solo las que están en ejecución o posterior)","Elegí la clasificación — el sistema muestra la descripción y el plazo de cierre","Completá: descripción, evidencia objetiva, análisis de causa raíz","Seleccioná el tipo CAPA: Correctiva, Preventiva o Corrección","Filtrá por clasificación con los botones de colores","Los hallazgos aparecen automáticamente en el informe de la auditoría"]},
+    {icon:"📌",title:"Planes de Acción",id:"acc",content:"Cada hallazgo debe tener un plan de acción. La fecha límite se calcula automáticamente según el plazo de la clasificación del hallazgo.",
+      steps:["Click en '+ Nueva' y vinculá al hallazgo correspondiente","La fecha límite se calcula sola (Grave=3 meses, Crítica/Menor=6 meses, etc.)","Indicá responsable de la acción y responsable de seguimiento","Completá verificación de implementación y verificación de eficacia","Las acciones vencidas se resaltan en rojo con ⚠","Cambiá el estado conforme avanza: Abierto → En proceso → Cerrado"]},
+    {icon:"📥",title:"Importar / Exportar CAPA",id:"aud",content:"Sistema de plantillas CSV para intercambiar planes de acción con proveedores y clientes auditados.",
+      steps:["Dentro de una auditoría interna/proveedor (pestaña Informe): '📥 Descargar plantilla CAPA' genera un CSV con los hallazgos prellenados","Enviá el CSV al proveedor/auditado para que complete: causa raíz, corrección, acción correctiva, responsable, fechas, verificación de eficacia","Cuando te lo devuelvan completado: '📤 Importar respuesta CAPA' lee el CSV y crea los registros automáticamente","Para auditorías externas (pestaña Informe cliente): '📥 Descargar plantilla hallazgos' genera CSV para cargar los hallazgos del cliente","'📤 Importar hallazgos del cliente' crea hallazgos + planes de acción automáticamente con plazos calculados"]},
+    {icon:"📜",title:"Audit Trail",id:"trail",content:"Registro automático e inmutable de todas las operaciones del sistema, incluyendo nombre de usuario, fecha/hora y detalle de cada cambio.",
+      steps:["Todo se registra automáticamente: crear, editar, eliminar, cambiar fase, cambiar estado, importar CAPA, iniciar/cerrar sesión, cambios de configuración","Usá el buscador para filtrar por cualquier campo","Los registros no se pueden editar ni eliminar — garantiza trazabilidad","No se filtra por año — muestra el histórico completo"]},
+    {icon:"📊",title:"Reportes",id:"rep",content:"Métricas clave del año seleccionado y descarga de reporte completo en formato texto.",
+      steps:["Revisá los 3 indicadores: tasa de cierre, riesgo alto abiertos, acciones vencidas","Consultá la gráfica de auditorías por fase","Click en '⬇ Descargar' para obtener el reporte en texto con todo el detalle"]},
+  ];
+  return(<div>
+    <h1 style={{fontSize:20,fontWeight:800,marginBottom:4}}>Guía de Uso</h1>
+    <p style={{color:K.txS,margin:"0 0 16px",fontSize:12.5}}>Manual completo del sistema de gestión de auditorías</p>
+
+    <div className="cfg-section" style={{background:K.priL,borderColor:K.pri+"20"}}>
+      <h3 style={{color:K.pri,fontSize:14}}>🚀 Flujos de trabajo</h3>
+      <div style={{marginTop:8}}>
+        <div style={{fontSize:12,fontWeight:700,color:K.pri,marginBottom:6}}>Auditoría interna o a proveedor:</div>
+        <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:12}}>
+          {["1. Programa Anual","2. Definir plan","3. Ejecutar","4. Registrar hallazgos","5. Exportar plantilla CAPA","6. Importar respuesta","7. Seguimiento acciones","8. Verificar eficacia","9. Cerrar","10. Exportar informe"].map((s,i)=>
+            <div key={i} style={{background:"#fff",border:`1px solid ${K.pri}20`,borderRadius:6,padding:"4px 8px",fontSize:11,fontWeight:600,color:K.pri}}>{s}</div>
+          )}
+        </div>
+        <div style={{fontSize:12,fontWeight:700,color:"#7C3AED",marginBottom:6}}>Auditoría externa (de cliente):</div>
+        <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+          {["1. Crear externa","2. Cargar datos cliente","3. Registrar recepción","4. Recibir informe","5. Importar hallazgos","6. Completar CAPA","7. Enviar respuesta","8. Seguimiento","9. Cerrar"].map((s,i)=>
+            <div key={i} style={{background:"#fff",border:"1px solid #7C3AED20",borderRadius:6,padding:"4px 8px",fontSize:11,fontWeight:600,color:"#7C3AED"}}>{s}</div>
+          )}
+        </div>
+      </div>
+    </div>
+
+    <div className="cfg-section">
+      <h3>📆 Gestión por año</h3>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:4}}>
+        <div style={{padding:"10px 14px",background:"#F8FAFC",borderRadius:8}}><div style={{fontWeight:700,fontSize:13}}>◀ 2026 ▶</div><div style={{fontSize:12,color:K.txS,marginTop:4}}>El selector en el sidebar filtra todos los datos por año. Programa, auditorías, hallazgos y acciones son independientes por año.</div></div>
+        <div style={{padding:"10px 14px",background:"#F8FAFC",borderRadius:8}}><div style={{fontWeight:700,fontSize:13}}>🏭 Sectores por año</div><div style={{fontSize:12,color:K.txS,marginTop:4}}>Cada año tiene su propia selección de sectores para el programa. Al pasar a un año nuevo, configurá qué sectores incluir sin afectar los anteriores.</div></div>
+      </div>
+    </div>
+
+    <div className="cfg-section">
+      <h3>👥 Niveles de acceso</h3>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginTop:4}}>
+        <div style={{padding:"10px 14px",background:"#FEF2F2",borderRadius:8}}><div style={{fontWeight:700,color:"#DC2626",fontSize:13}}>🔑 Administrador</div><div style={{fontSize:12,color:K.txS,marginTop:4}}>Acceso total + gestión de usuarios + configuración del sistema (clasificaciones, sectores, equipos, tipos)</div></div>
+        <div style={{padding:"10px 14px",background:K.priL,borderRadius:8}}><div style={{fontWeight:700,color:K.pri,fontSize:13}}>👤 Usuario</div><div style={{fontSize:12,color:K.txS,marginTop:4}}>Puede crear, editar y gestionar auditorías, hallazgos y acciones</div></div>
+        <div style={{padding:"10px 14px",background:K.grnL,borderRadius:8}}><div style={{fontWeight:700,color:K.grn,fontSize:13}}>👁 Visualización</div><div style={{fontSize:12,color:K.txS,marginTop:4}}>Solo lectura — consulta datos sin poder crear ni editar</div></div>
+      </div>
+    </div>
+
+    {sections.map(s=>(
+      <div key={s.title} className="cfg-section">
+        <h3 style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:18}}>{s.icon}</span> {s.title}
+          <button style={{...sB("sm"),marginLeft:"auto"}} onClick={()=>goTo(s.id)}>Ir al módulo →</button>
+        </h3>
+        <p style={{fontSize:13,color:K.txS,lineHeight:1.6,margin:"0 0 10px"}}>{s.content}</p>
+        {s.steps.map((st,i)=><div key={i} style={{display:"flex",gap:10,alignItems:"flex-start",padding:"8px 12px",border:`1px solid ${K.brdL}`,borderRadius:8,marginBottom:6,background:"#fff"}}>
+          <div style={{width:24,height:24,borderRadius:"50%",background:K.priL,color:K.pri,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:12,flexShrink:0}}>{i+1}</div>
+          <div style={{fontSize:13,color:K.txt,lineHeight:1.5,paddingTop:2}}>{st}</div>
+        </div>)}
+      </div>
+    ))}
+
+    <div className="cfg-section" style={{background:"#FEF2F2",borderColor:"#DC262620"}}>
+      <h3 style={{color:"#DC2626"}}>⚠ Clasificación de hallazgos — Referencia rápida</h3>
+      <p style={{fontSize:12,color:K.txS,margin:"0 0 8px"}}>Configurables por el administrador desde ⚙️ Configuración.</p>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>{DEF_CONFIG.classifications.map(c=>
+        <div key={c.id} style={{background:"#fff",border:`1px solid ${c.color}20`,borderRadius:7,padding:"8px 12px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:10,height:10,borderRadius:"50%",background:c.color}}/><span style={{fontWeight:700,fontSize:12.5,color:c.color}}>{c.label}</span><span style={{fontSize:11,color:K.txS}}>— {c.risk}</span></div>
+          <div style={{fontSize:12,color:K.txS,marginTop:3}}>{c.desc}{c.deadline?(" · Plazo: "+c.deadline+" meses"):""}</div>
+        </div>
+      )}</div>
+    </div>
+
+    <div className="cfg-section">
+      <h3>⚙️ Configuración del sistema (solo admin)</h3>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginTop:4}}>
+        {[
+          {l:"Clasificaciones",d:"Agregar, editar o eliminar niveles con color, riesgo y plazo de cierre."},
+          {l:"Sectores",d:"Lista maestra de sectores disponibles para auditorías."},
+          {l:"Tipos de auditoría",d:"Interna, A proveedor, Externa u otros que necesites."},
+          {l:"Tipos CAPA",d:"Correctiva, Preventiva, Corrección u otros."},
+          {l:"Equipos auditores",d:"Código, líder, integrantes y notas de cada equipo."},
+          {l:"Estados",d:"Estados posibles para hallazgos y acciones."},
+        ].map(x=><div key={x.l} style={{background:"#F8FAFC",borderRadius:7,padding:"10px 12px"}}><div style={{fontSize:12,fontWeight:700,marginBottom:2}}>{x.l}</div><div style={{fontSize:11.5,color:K.txS}}>{x.d}</div></div>)}
+      </div>
+    </div>
+
+    <div className="cfg-section">
+      <h3>⚡ Tips rápidos</h3>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+        {[
+          {l:"Datos por año",d:"Cada año tiene sus propios datos independientes. Usá ◀ ▶ para navegar."},
+          {l:"Códigos automáticos",d:"AUD-0001, HAL-0001, ACC-0001 se asignan automáticamente."},
+          {l:"Plazos automáticos",d:"Al vincular acción a hallazgo, la fecha límite se calcula por clasificación."},
+          {l:"Exportar informes",d:"'📄 Exportar' genera el REG-035-C imprimible con tabla de firmas."},
+          {l:"Importar CAPA",d:"Plantillas CSV para intercambiar planes de acción con proveedores."},
+          {l:"Eliminar auditorías",d:"Botón '🗑 Eliminar' abajo a la izquierda en el detalle. Pide confirmación."},
+          {l:"Audit Trail",d:"Todo queda registrado con usuario, fecha, hora y detalle. No se borra."},
+          {l:"Externas vs Internas",d:"Al seleccionar tipo 'Externa', las fases y pestañas cambian automáticamente."},
+          {l:"Sincronización fase-pestaña",d:"Al avanzar fase, la pestaña sigue automáticamente."},
+        ].map(x=><div key={x.l} style={{background:"#F8FAFC",borderRadius:7,padding:"10px 12px"}}><div style={{fontSize:12,fontWeight:700,marginBottom:2}}>{x.l}</div><div style={{fontSize:11.5,color:K.txS}}>{x.d}</div></div>)}
+      </div>
+    </div>
+  </div>);
+}
+
+/* ══ MAIN ══ */
+const NAV=[{k:"prog",l:"Programa Anual",i:"📅"},{k:"aud",l:"Auditorías",i:"📋"},{k:"hal",l:"Hallazgos / CAPA",i:"⚠"},{k:"acc",l:"Planes de Acción",i:"📌"},{k:"autoinsp",l:"Autoinspecciones",i:"🔍"},{k:"trail",l:"Audit Trail",i:"📜"},{k:"rep",l:"Reportes",i:"📊"},{k:"guide",l:"Guía de Uso",i:"❓"}];
+
+function App(){
+  /* Quién entra lo dice el portal: se fueron el login propio, la lista de
+     usuarios y el usuario fijo con contraseña escrita en el archivo. El rol sale
+     de los permisos del recurso 'auditorias'. */
+  const permisos=(SRV.sesion&&SRV.sesion.permisos)||[];
+  const cu={name:(SRV.sesion&&SRV.sesion.nombre)||'',
+            role:permisos.includes('administrar')?'admin':(permisos.includes('cargar')?'user':'viewer')};
+  const users=[];const setUsers=()=>{};
+  const[cfg,setCfg]=useLS("v_cfg",DEF_CONFIG);
+  const DEF_AUDITS=[
+    {id:"a1",code:"AUD-0001",year:2026,name:"Gestión Productiva (Fabricación)",type:"Interna",progSector:"Gestión Productiva (Fabricación)",progMonth:"Oct",phase:"planificada",date:"",auditor:"",team:"",standard:"",scope:"",checklists:"",execNotes:"",execDate:"",conclusions:"",strengths:"",closeNotes:"",createdAt:"2026-01-15T00:00:00.000Z"},
+    {id:"a2",code:"AUD-0002",year:2026,name:"Gestión Productiva (Plásticos)",type:"Interna",progSector:"Gestión Productiva (Plásticos)",progMonth:"Ago",phase:"planificada",date:"",auditor:"",team:"",standard:"",scope:"",checklists:"",execNotes:"",execDate:"",conclusions:"",strengths:"",closeNotes:"",createdAt:"2026-01-15T00:00:00.000Z"},
+    {id:"a3",code:"AUD-0003",year:2026,name:"Gestión de Higiene y Sanitización",type:"Interna",progSector:"Gestión de Higiene y Sanitización",progMonth:"Set",phase:"planificada",date:"",auditor:"",team:"",standard:"",scope:"",checklists:"",execNotes:"",execDate:"",conclusions:"",strengths:"",closeNotes:"",createdAt:"2026-01-15T00:00:00.000Z"},
+    {id:"a4",code:"AUD-0004",year:2026,name:"Auditoría Imprimex S.A.",type:"A proveedor",progSector:"Imprimex (Proveedor)",progMonth:"Set",phase:"plan_definido",date:"2026-09-30",auditor:"Claudia Barlocco",team:"Claudia Barlocco, Gloria Nuñez (Líder: Claudia Barlocco)",standard:"GMC 31/012 — BPF Domisanitarios, 9/11 — BPF Higiene Personal/Cosméticos y Perfumes",scope:"Verificar cumplimiento GMP: 1. Aseguramiento de calidad, 2. BPM para productos, 3. Sanitización e higiene, 4. Calificación y validación, 5. Reclamos, 6. Retiros de plaza, 7. Producción y análisis por contrato, 8. Autoinspección y auditoría de calidad, 9. Personal, 10. Capacitación, 11. Higiene personal, 12. Instalaciones, 13. Equipos, 14. Materiales, 15. Documentación, 16. BPP, 17. BP en control de calidad, 18. Revisión de auditorías previas y CAPA asociadas",location:"Vega Helguera 88 esq. La Ilíada, 15500 Barros Blancos, Canelones",checklists:"9/11 MERCOSUR, GMC 31/012, Site Master File de la empresa",execNotes:"",execDate:"",checklistApplied:"",methodology:"",distribution:"Marcela Savio (marcelasavio@imprimex.com.uy)",generalImpression:"",strengths:"",conclusions:"",result:"",nextAudit:"",expectations:"Informe: 30 días siguientes a la realización",closeNotes:"",closeDate:"",createdAt:"2026-01-15T00:00:00.000Z"},
+    {id:"a5",code:"AUD-0005",year:2026,name:"Auditoría DIMENA",type:"A proveedor",progSector:"Dimena (Proveedor)",progMonth:"Ago",phase:"informe",date:"2026-08-21",auditor:"Q.F. Claudia Barlocco",team:"Claudia Barlocco, Gloria Nuñez (Líder: Claudia Barlocco)",standard:"ISO 9001:2015, GMC Res. 31/012 — BPF Domisanitarios, GMC Res. 9/11 — BPF Higiene Personal/Cosméticos y Perfumes",scope:"Auditoría inicial de acercamiento y conocimiento al proveedor de materia prima DIMENA, abarcando la evaluación de instalaciones, procesos de producción, control de calidad, gestión de materias primas, trazabilidad, capacitación, higiene, control de plagas, calibración de equipos, almacenamiento y distribución.",location:"5XQ6+V74, 15000 Gral. Líber Seregni, Canelones",checklists:"Guía MERCOSUR BPF",execNotes:"Auditoría realizada durante operación normal de producción.",execDate:"2026-08-21",checklistApplied:"Guía MERCOSUR BPF",methodology:"Se realizó la auditoría en las instalaciones de DIMENA el día 21 de agosto de 2026, durante la operación normal de producción. La metodología incluyó recorrida de instalaciones productivas, de almacenamiento y laboratorio, entrevistas con personal clave (Ing. Quím. Jorge Hirschfeld, Ing. Quím. Federico Lassere - Área comercial, Ing. Quím. Victoria Castro — Responsable de Control de Calidad, Ing. Quím. Alberto Menéndez — Gerente General), revisión de prácticas de manufactura y verificación de controles en proceso.",distribution:"Ing. Quím. Federico Lassere, Ing. Quím. Jorge Hirschfeld",generalImpression:"DIMENA es una empresa del rubro químico con trayectoria en la fabricación y comercialización de productos químicos para diversos sectores industriales. Trabajan en un solo turno y cuentan aproximadamente con 12 personas. La empresa se encuentra en una etapa de desarrollo y formalización de su sistema de gestión, con avances en la implementación de herramientas informáticas. Se destaca la muy buena predisposición del personal. No obstante, se identificaron áreas con oportunidades de mejora, particularmente en calibración de equipos de medición, control de plagas, documentación de procesos, capacitación del personal y gestión de limpieza de equipos (IBC y reactores).",strengths:"Equipo profesional sólido: equipo compuesto íntegramente por ingenieros químicos en las áreas clave (producción, calidad, dirección).\nDesarrollo de herramientas propias: la empresa se encuentra desarrollando aplicaciones informáticas internas para la gestión de sus procesos operativos.\nPredisposición y apertura: el personal demostró excelente disposición para compartir información y recibir comentarios constructivos.",conclusions:"DIMENA es una empresa con un equipo técnico sólido y buena predisposición hacia la mejora, que se encuentra en proceso de formalización de su SGC. La auditoría reveló 8 no conformidades Mayores y 2 Menores, además de 2 observaciones y 2 oportunidades de mejora. Las NC mayores abarcan: calibración de equipos, control de plagas, capacitaciones, identificación de estado de productos, limpieza de IBC, verificación microbiológica, orden de producción y limpieza de reactores.",result:"APROBADO con condiciones",nextAudit:"",expectations:"Se espera que DIMENA presente un plan de acciones correctivas y preventivas (CAPA) para cada no conformidad dentro de los 30 días hábiles siguientes a la recepción de este informe, dirigido al equipo auditor de Vessena S.A. El plan CAPA deberá incluir: acción propuesta, responsable, fecha de implementación y evidencia de cierre.",closeNotes:"",closeDate:"",createdAt:"2026-01-15T00:00:00.000Z"},
+    {id:"a6",code:"AUD-0006",year:2026,name:"Auditoría Petropack",type:"A proveedor",progSector:"Petropack (Proveedor)",progMonth:"Set",phase:"planificada",date:"",auditor:"",team:"",standard:"",scope:"",checklists:"",execNotes:"",execDate:"",conclusions:"",strengths:"",closeNotes:"",createdAt:"2026-01-15T00:00:00.000Z"},
+    {id:"a7",code:"AUD-0007",year:2026,name:"Auditoría Imprenta Grifelman",type:"A proveedor",progSector:"Imprenta Grifelman (Proveedor)",progMonth:"Jun",phase:"informe",date:"2026-06-18",auditor:"Q.F. Claudia Barlocco",team:"Claudia Barlocco, Gloria Nuñez (Líder: Claudia Barlocco)",standard:"ISO 9001:2015, GMC Res. 31/012 — BPF Domisanitarios, GMC Res. 9/11 — BPF Higiene Personal/Cosméticos",scope:"Auditoría inicial anual al proveedor de material de empaque impreso Impresora Grifelman, abarcando la evaluación documental y de instalaciones del SGC, procesos de impresión offset, control de calidad, gestión de materias primas, trazabilidad, CAPA, personal, capacitación, higiene, mantenimiento, almacenamiento y distribución.",location:"José Serrato 3589, Montevideo",checklists:"CL-AUD-IMP-001 (109 requisitos en 15 áreas)",execDate:"2026-06-18",execNotes:"Auditoría realizada durante operación normal de producción. Contacto en planta: Miguel Baladón.",checklistApplied:"CL-AUD-IMP-001 (109 requisitos en 15 áreas)",methodology:"Se realizó la auditoría en las instalaciones de Impresora Grifelman (José Serrato 3589, Montevideo) el día 18 de junio de 2026, durante la operación normal de producción. La metodología incluyó revisión de documentación del SGC (manual de calidad MC V14, procedimientos, registros, certificados de calibración), recorrida de instalaciones productivas y de almacenamiento, entrevistas con personal clave (Miguel Baladón – Jefe de Calidad, Jimena Ramírez – Dto Calidad, Diego Mesías – Jefe de Producción), observación directa de prácticas de manufactura y verificación de controles en proceso. Se aplicó el Check List CL-AUD-IMP-001 (109 requisitos en 15 áreas). Distribución del informe: Miguel Baladón y Matías Cobelli (Gerente General).",distribution:"Miguel Baladón, Matías Cobelli (Gerente General)",generalImpression:"Impresora Grifelman es una empresa con trayectoria consolidada en el rubro de impresión offset de material de empaque, certificada ISO 9001:2015 desde el año 2013 (MC V14). Se observa un SGC documentado con procedimientos, registros y controles implementados en la mayoría de los procesos evaluados. La empresa demuestra compromiso con la mejora continua, evidenciado por su programa de excelencia operacional y la sistematización de sus procesos productivos. No obstante, se identificaron áreas con brechas de calidad, particularmente en calibración de equipos críticos de medición y control de vencimientos de materias primas. El sistema de trazabilidad es robusto, la gestión de riesgos mediante excelencia operacional constituye una fortaleza destacable, y los controles en proceso de impresión (densidad de color, códigos de barra en línea, muestras de retención) están adecuadamente implementados.",strengths:"Matriz de polivalencia del personal: la empresa cuenta con una matriz de competencias que permite la asignación flexible del personal según necesidades productivas, asegurando cobertura de puestos críticos.\n\nAnálisis de riesgo por máquina (Excelencia Operacional): se evidenció un mapeo de riesgos por cada proceso y máquina, integrado al SGC. Este enfoque proactivo constituye una práctica superior al estándar habitual del sector.\n\nCertificación ISO 9001:2015 sostenida desde 2013, con manual de calidad en versión 14.\n\nSistema de trazabilidad completo y control de códigos de barra en línea.\n\nSistema de liberación de producto terminado con muestreo AQL en inicio, medio y fin del proceso (PG08.14 V16).",conclusions:"Impresora Grifelman demuestra un Sistema de Gestión de Calidad maduro y certificado, con fortalezas destacables en gestión de riesgos operacionales y trazabilidad. Sin embargo, la auditoría reveló 2 no conformidades Mayores (calibración de equipo de medición crítico vencida y falta de control de vencimiento de materias primas) y 1 no conformidad Menor (limpieza y mantenimiento de instalaciones).\n\nRESULTADO GENERAL: APROBADO con condiciones. Fecha límite CAPA: 18/12/2026 (NC mayores). Próxima auditoría: Junio 2028 (bi-anual), sujeta a cierre satisfactorio de CAPA.",result:"APROBADO con condiciones",nextAudit:"Junio 2028 (bi-anual)",expectations:"Se espera que Impresora Grifelman presente un plan de acciones correctivas y preventivas (CAPA) para cada no conformidad dentro de los 15 días hábiles siguientes a la recepción de este informe, dirigido al equipo auditor de Vessena S.A. El plan CAPA deberá incluir: análisis de causa raíz, acción correctiva propuesta, responsable, fecha de implementación y evidencia de cierre.\n\nPara la NC-03, se deberá presentar el certificado de calibración vigente del espectrodensitómetro y la evaluación del impacto de las mediciones realizadas durante el período fuera de calibración. Se realizará verificación documental del cierre de CAPA.",closeNotes:"",closeDate:"",createdAt:"2026-01-15T00:00:00.000Z"},
+  ];
+  const[audits,setAudits]=useLS("v_audA",DEF_AUDITS);const DEF_FINDINGS=[
+    {id:"f1",code:"HAL-0001",year:2026,auditId:"a7",clauseRef:"Cap.2 Instalaciones",classification:"MENOR",description:"NC-01: Limpieza y mantenimiento de instalaciones. Se observaron tachos de basura sin tapa en el área de producción, implementos de limpieza (escobas, mopas) sin ubicación definida y zonas con presencia de humedad y deterioro en paredes/techos. Si bien la empresa indica estar trabajando en la mejora, aún persisten las condiciones inadecuadas.",evidence:"Observación directa durante recorrida de planta.",capaType:"Acción Correctiva",rootCause:"1- Tachos de basura sin tapa: no se había considerado la importancia de tener los recipientes de descarte de material inorgánico con tapas en ciertos puestos de producción. 2- Implementos de limpieza sin ubicación definida: si bien en todos los puestos se verifica la existencia de ciertos elementos, no se consideró la necesidad de definir un lugar específico. 3- Mantenimiento de instalaciones: se encuentra en ejecución plan de mantenimiento edilicio.",status:"En proceso",createdAt:"2026-06-18T00:00:00.000Z"},
+    {id:"f2",code:"HAL-0002",year:2026,auditId:"a7",clauseRef:"Cap.4 Control MP",classification:"GRAVE",description:"NC-02: Control de vencimientos de materias primas. Se detectó materia prima (pintura/tintas) con un período aproximado de dos meses sin control de fechas de vencimiento.",evidence:"Revisión de registros de almacén y verificación física de materiales en depósito.",capaType:"Acción Correctiva",rootCause:"1- Falta de instructivo: no se encuentra descripto en un documento cómo realizar el control del estado de las tintas y su vencimiento. 2- Omisión operativa.",status:"Cerrado",createdAt:"2026-06-18T00:00:00.000Z"},
+    {id:"f3",code:"HAL-0003",year:2026,auditId:"a7",clauseRef:"Cap.3 Equipos",classification:"GRAVE",description:"NC-03: Calibración vencida de espectrodensitómetro. El equipo de medición crítico para el control de color presenta calibración vencida desde el 07/08/2025 (fecha de calibración: 07/08/2023, vigencia expirada hace aproximadamente un año).",evidence:"Certificado de calibración con fecha 07/08/2023, vencimiento 07/08/2025.",capaType:"Acción Correctiva",rootCause:"Si bien el equipo se encuentra con la fecha de calibración vencida, este no es usado asiduamente durante el proceso productivo ya que cada máquina cuenta con su espectrodensitómetro incorporado con autocalibración. Su uso se encuentra supeditado a las situaciones específicas surgidas ante una duda durante algún control visual de color. Acorde a lo expresado no se tomó en cuenta el extender el vencimiento de dicha calibración por el plazo de 1 año.",status:"En proceso",createdAt:"2026-06-18T00:00:00.000Z"},
+    {id:"f4",code:"HAL-0004",year:2026,auditId:"a7",clauseRef:"Cap.4 Proveedores",classification:"OBS",description:"OBS-01: Evaluación de proveedores. El procedimiento (PG08.16 V8) no establece la obligación de notificar al proveedor sobre el motivo del puntaje obtenido en la evaluación. No se realiza clasificación de proveedores en críticos y no críticos.",evidence:"Revisión del procedimiento PG08.16 V8 y registros de evaluación LC 07 01 V1.0.",capaType:"Acción Correctiva",rootCause:"No se había contemplado a la fecha dicha observación.",status:"Cerrado",createdAt:"2026-06-18T00:00:00.000Z"},
+    {id:"f5",code:"HAL-0005",year:2026,auditId:"a7",clauseRef:"Cap.4 Control MP",classification:"OBS",description:"OBS-02: Los certificados de calidad de proveedores se solicitan y archivan pero no se evalúan sistemáticamente frente a las especificaciones internas. Se recomienda solicitar al proveedor que aclare o informe si cambia la especificación que pueda afectar los materiales.",evidence:"Revisión de archivos de certificados de proveedores.",capaType:"Acción Preventiva",rootCause:"La materia prima recibida es aceptada por calidad certificada, de ahí que no se realiza la evaluación en forma sistemática frente a las especificaciones internas. Existe un canal fluido y diario en cuanto a las comunicaciones con los proveedores. En estos momentos se encuentra en proceso un cambio en todos los gramajes de las materias primas provenientes de Chile (CMPC), dicho cambio fue anunciado con antelación acorde a lo definido en los contratos correspondientes.",status:"Cerrado",createdAt:"2026-06-18T00:00:00.000Z"},
+    {id:"f6",code:"HAL-0006",year:2026,auditId:"a7",clauseRef:"Cap.9 Personal",classification:"OBS",description:"OBS-03: Ausencia de capacitación en higiene y GMP. No se evidenció capacitación al personal en temas de higiene (lavado de manos, cabello recogido/corto, uso de cofia).",evidence:"Revisión de registros de capacitación. Observación directa del personal en planta.",capaType:"Acción Correctiva",rootCause:"Si bien se ha realizado la capacitación correspondiente luego de un plan de acción resultante de la auditoría de otro cliente, no quedó registro físico de esta.",status:"Cerrado",createdAt:"2026-06-18T00:00:00.000Z"},
+    {id:"f7",code:"HAL-0007",year:2026,auditId:"a7",clauseRef:"Cap.5 Control proceso",classification:"OBS",description:"OBS-04: La prueba de fricción se realiza sobre una sola muestra. Se recomienda evaluar representatividad estadística según tamaño de lote.",evidence:"Entrevista con personal de calidad y revisión de procedimiento de control en proceso.",capaType:"Acción Preventiva",rootCause:"Se considera acorde a los resultados de los controles realizados durante los últimos años y no presentar ninguna reclamación por parte de los clientes en ese período, el mantener la prueba de fricción sobre una sola muestra. Dicha resolución se basa en la estabilidad y aseguramiento de los diferentes procesos productivos.",status:"Cerrado",createdAt:"2026-06-18T00:00:00.000Z"},
+    {id:"f8",code:"HAL-0008",year:2026,auditId:"a7",clauseRef:"Cap.5 Proceso",classification:"OM",description:"OPM-01: Implementar identificación visible del número de orden de trabajo en cada máquina durante la producción.",evidence:"Observación directa en planta durante recorrida.",capaType:"Acción Preventiva",rootCause:"",status:"Evaluada — No implementar",createdAt:"2026-06-18T00:00:00.000Z"},
+    {id:"f9",code:"HAL-0009",year:2026,auditId:"a7",clauseRef:"Cap.1 SGC",classification:"OM",description:"OPM-02: Vincular el procedimiento de control de cambios con el plan de contingencia y el análisis de riesgos de forma explícita en la documentación del SGC.",evidence:"Revisión de PG 06.05 V07 y documentación de control de cambios 002/2025.",capaType:"Acción Preventiva",rootCause:"",status:"Evaluada — No implementar",createdAt:"2026-06-18T00:00:00.000Z"},
+    {id:"f10",code:"HAL-0010",year:2026,auditId:"a7",clauseRef:"Cap.9 Capacitación",classification:"OM",description:"OPM-03: Establecer un porcentaje mínimo de aprobación por capacitación/entrenamiento en el procedimiento correspondiente (PG 07.05).",evidence:"Revisión de procedimiento de capacitación.",capaType:"Acción Preventiva",rootCause:"",status:"Evaluada — No implementar",createdAt:"2026-06-18T00:00:00.000Z"},
+    {id:"f11",code:"HAL-0011",year:2026,auditId:"a7",clauseRef:"Cap.8 Reclamos",classification:"OM",description:"OPM-04: Documentar en el procedimiento de reclamos el tiempo máximo de respuesta al cliente (actualmente 5 días hábiles de manera informal).",evidence:"Entrevista con responsable de calidad.",capaType:"Acción Preventiva",rootCause:"",status:"Evaluada — No implementar",createdAt:"2026-06-18T00:00:00.000Z"},
+    {id:"f12",code:"HAL-0012",year:2026,auditId:"a7",clauseRef:"Cap.2 Instalaciones",classification:"OM",description:"OPM-05: Instalar insectocutores en áreas de almacén. El programa de control de plagas (F09 11 V1) no hace referencia a insectocutores.",evidence:"Revisión de programa de control de plagas y recorrida de almacén.",capaType:"Acción Preventiva",rootCause:"",status:"Evaluada — No implementar",createdAt:"2026-06-18T00:00:00.000Z"},
+    {id:"f13",code:"HAL-0013",year:2026,auditId:"a5",clauseRef:"Cap.10 Capacitación",classification:"GRAVE",description:"NC-01: Capacitaciones. Falta de registro de capacitaciones impartidas al personal. No se cuenta con procedimiento establecido ni plan de capacitación.",evidence:"Revisión de registros de capacitación.",capaType:"Acción Correctiva",rootCause:"",status:"Abierto",createdAt:"2026-08-21T00:00:00.000Z"},
+    {id:"f14",code:"HAL-0014",year:2026,auditId:"a5",clauseRef:"Cap.3 Sanitización",classification:"GRAVE",description:"NC-02: Control de plagas. No hay evidencia de habilitación de los cebos utilizados por parte del MSP. Falta capacitación del personal en seguridad sobre manejo de productos químicos. Faltan controles para hormigas, cucarachas e insectos voladores.",evidence:"Revisión de registros de control de plagas y recorrida de instalaciones.",capaType:"Acción Correctiva",rootCause:"",status:"Abierto",createdAt:"2026-08-21T00:00:00.000Z"},
+    {id:"f15",code:"HAL-0015",year:2026,auditId:"a5",clauseRef:"Cap.14 Materiales",classification:"GRAVE",description:"NC-03: Identificación de estado de productos. No existe forma de identificar visualmente el estado de los productos elaborados (aprobado, cuarentena, rechazado), ni procedimiento escrito que lo avale.",evidence:"Observación directa en planta.",capaType:"Acción Correctiva",rootCause:"",status:"Abierto",createdAt:"2026-08-21T00:00:00.000Z"},
+    {id:"f16",code:"HAL-0016",year:2026,auditId:"a5",clauseRef:"Cap.13 Equipos",classification:"GRAVE",description:"NC-04: Limpieza de IBC. No está definido el orden y flujo de trabajo para la limpieza de IBC. No existe instructivo ni procedimiento escrito.",evidence:"Entrevista con personal y revisión documental.",capaType:"Acción Correctiva",rootCause:"",status:"Abierto",createdAt:"2026-08-21T00:00:00.000Z"},
+    {id:"f17",code:"HAL-0017",year:2026,auditId:"a5",clauseRef:"Cap.13 Equipos",classification:"MENOR",description:"NC-05: Gestión de IBC. Falta identificación de las áreas de almacenamiento de los IBC segregados por tipo de producto.",evidence:"Recorrida de almacén de IBC.",capaType:"Acción Correctiva",rootCause:"",status:"Abierto",createdAt:"2026-08-21T00:00:00.000Z"},
+    {id:"f18",code:"HAL-0018",year:2026,auditId:"a5",clauseRef:"Cap.17 Control Calidad",classification:"GRAVE",description:"NC-06: Verificación microbiológica. Falta verificación microbiológica por hisopado o agua de enjuague de la limpieza de IBC y reactores de fabricación.",evidence:"Revisión de registros de limpieza y control microbiológico.",capaType:"Acción Correctiva",rootCause:"",status:"Abierto",createdAt:"2026-08-21T00:00:00.000Z"},
+    {id:"f19",code:"HAL-0019",year:2026,auditId:"a5",clauseRef:"Cap.16 Producción",classification:"GRAVE",description:"NC-07: Orden de producción. Orden 74713 (02/07/2026, Diclean): falta cancelar campos de MP no participantes, faltan firmas de operarios, no se evidencia rango de tolerancia para pesadas, falta firma del responsable de análisis, faltan datos de certificado de análisis de origen.",evidence:"Revisión de orden de producción 74713.",capaType:"Acción Correctiva",rootCause:"",status:"Abierto",createdAt:"2026-08-21T00:00:00.000Z"},
+    {id:"f20",code:"HAL-0020",year:2026,auditId:"a5",clauseRef:"Cap.13 Equipos",classification:"GRAVE",description:"NC-08: Limpieza de reactores. No hay frecuencia establecida por procedimiento ni procedimiento escrito para la limpieza de reactores.",evidence:"Entrevista con personal de producción.",capaType:"Acción Correctiva",rootCause:"",status:"Abierto",createdAt:"2026-08-21T00:00:00.000Z"},
+    {id:"f21",code:"HAL-0021",year:2026,auditId:"a5",clauseRef:"Cap.12 Instalaciones",classification:"MENOR",description:"NC-09: Almacenamiento, expedición y recepción. No se observan lugares definidos ni identificados para estas áreas; la ubicación es según disponibilidad.",evidence:"Recorrida de instalaciones.",capaType:"Acción Correctiva",rootCause:"",status:"Abierto",createdAt:"2026-08-21T00:00:00.000Z"},
+    {id:"f22",code:"HAL-0022",year:2026,auditId:"a5",clauseRef:"Cap.13 Equipos",classification:"GRAVE",description:"NC-10: Calibración de equipos. Balanza de producción sin calibración ni verificación. No hay listado de equipos definidos. En el laboratorio no se realiza ni hay registro de verificación diaria de pHmetro ni de balanza. Tampoco hay identificación ni calibración de estos equipos.",evidence:"Revisión de registros de calibración y verificación en planta y laboratorio.",capaType:"Acción Correctiva",rootCause:"",status:"Abierto",createdAt:"2026-08-21T00:00:00.000Z"},
+    {id:"f23",code:"HAL-0023",year:2026,auditId:"a5",clauseRef:"Cap.14 Proveedores",classification:"OBS",description:"OBS-01: Evaluación de proveedores. El proceso de evaluación se encuentra en desarrollo, aún no terminado de definir (criticidad de proveedores, porcentaje de aprobación, ponderación según categoría).",evidence:"Entrevista con responsable de calidad.",capaType:"Acción Preventiva",rootCause:"",status:"Abierto",createdAt:"2026-08-21T00:00:00.000Z"},
+    {id:"f24",code:"HAL-0024",year:2026,auditId:"a5",clauseRef:"Cap.1 Aseg. Calidad",classification:"OBS",description:"OBS-02: Gestión de no conformidades. No se encuentra unificado el análisis de causa raíz para que todos los involucrados apliquen el mismo criterio. Tampoco se lleva un listado unificado de no conformidades.",evidence:"Revisión de registros de no conformidades.",capaType:"Acción Preventiva",rootCause:"",status:"Abierto",createdAt:"2026-08-21T00:00:00.000Z"},
+    {id:"f25",code:"HAL-0025",year:2026,auditId:"a5",clauseRef:"Cap.16 Producción",classification:"OM",description:"OPM-01: En el proceso de preparación de pedido de los clientes, implementar doble verificación de lote del producto con foto (ya que cuentan con aplicación desarrollada por la empresa).",evidence:"Observación del proceso de despacho.",capaType:"Acción Preventiva",rootCause:"",status:"Abierto",createdAt:"2026-08-21T00:00:00.000Z"},
+    {id:"f26",code:"HAL-0026",year:2026,auditId:"a5",clauseRef:"Cap.12 Instalaciones",classification:"OM",description:"OPM-02: Reutilizar la cartelería existente de la zona de expedición y recepción del depósito para identificar los procesos que se llevan a cabo en dichas áreas.",evidence:"Recorrida de zona de expedición.",capaType:"Acción Preventiva",rootCause:"",status:"Abierto",createdAt:"2026-08-21T00:00:00.000Z"},
+  ];
+  const[findings,setFindings]=useLS("v_finC",DEF_FINDINGS);  const DEF_ACTIONS=[
+    {id:"ac1",code:"ACC-0001",year:2026,findingId:"f4",description:"Modificación procedimiento PG 08.16 (emisión nueva V9): Incorporación de criterios de clasificación en proveedores críticos y no críticos, y notificación de puntaje de evaluación al proveedor.",responsible:"J. Ramirez (Grifelman)",dueDate:"2026-07-31",status:"Cerrado",verification:"Realizado 23/06/2026. Verificación eficacia: Auditoría interna de sistema 06-07/ago/2026 — M. Arada.",effectiveness:"Ok sin observaciones.",followupResp:"M. Arada (Grifelman)",createdAt:"2026-06-30T00:00:00.000Z"},
+    {id:"ac2",code:"ACC-0002",year:2026,findingId:"f6",description:"Corrección: Se realiza retroalimentación al personal dejando constancia en registro físico de la capacitación realizada en higiene y GMP. Acción correctiva: Capacitación formal con registro documentado.",responsible:"J. Ramirez (Grifelman)",dueDate:"2026-07-31",status:"Cerrado",verification:"Corrección impl. Jul-2026 (J. Ramirez). Verificación eficacia: Auditoría interna de sistema 06-07/ago/2026 — M. Arada.",effectiveness:"Ok sin observaciones.",followupResp:"M. Arada (Grifelman)",createdAt:"2026-06-30T00:00:00.000Z"},
+    {id:"ac3",code:"ACC-0003",year:2026,findingId:"f1",description:"1- Implementación de tapas para recipientes de descarte. 2- Colocación de soportes para escobas y palas en puestos de trabajo. 3- En proceso de ejecución de plan de mantenimiento edilicio.",responsible:"1-2: D. Mesias, 3: M. Baladón / Empresa de construcción (Grifelman)",dueDate:"2027-01-31",status:"En proceso",verification:"Items 1-2: Realizados 24/07/2026. Verificación eficacia 06-07/ago/2026 (M. Arada): OK sin observaciones. Item 3: En proceso — cumplimiento de plan anual.",effectiveness:"Items 1-2: Ok sin observaciones. Item 3: En proceso (verificación Ene-2027 por M. Baladón).",followupResp:"M. Arada / M. Baladón (Grifelman)",createdAt:"2026-06-30T00:00:00.000Z"},
+    {id:"ac4",code:"ACC-0004",year:2026,findingId:"f2",description:"1- Confección de instructivo para el stock y control de vencimientos de tintas (IT 08.31 V1, 01/07/2026). 2- Retroalimentación a operarios del sector.",responsible:"J. Ramirez (Grifelman)",dueDate:"2026-07-31",status:"Cerrado",verification:"Evidencia: IT 08.31 V1 (01/07/2026). Implementado 01/07/2026. Verificación eficacia: Auditoría interna de sistema 06-07/ago/2026 — M. Arada.",effectiveness:"Ok sin observaciones.",followupResp:"M. Arada (Grifelman)",createdAt:"2026-06-30T00:00:00.000Z"},
+    {id:"ac5",code:"ACC-0005",year:2026,findingId:"f3",description:"Se coordina con el proveedor sito en Argentina la calibración del espectrodensitómetro. NOTA: El equipo aún no ha sido calibrado por temas de coordinación por parte del proveedor. Nueva fecha estimada: Oct 2026.",responsible:"M. Cobelli, M. Baladón (Grifelman)",dueDate:"2026-10-31",status:"En proceso",verification:"Pendiente: Certificado de calibración vigente del espectrodensitómetro.",effectiveness:"Auditoría interna de sistema — verificación prevista Oct-2026 por M. Baladón.",followupResp:"M. Baladón (Grifelman)",createdAt:"2026-06-30T00:00:00.000Z"},
+    {id:"ac6",code:"ACC-0006",year:2026,findingId:"f5",description:"No aplica según Grifelman. Justificación: La materia prima recibida es aceptada por calidad certificada, no se realiza la evaluación en forma sistemática frente a las especificaciones internas. Existe un canal fluido y diario con los proveedores. Se encuentra en proceso un cambio en todos los gramajes de las MP provenientes de Chile (CMPC), anunciado con antelación acorde a contratos.",responsible:"No aplica",dueDate:"",status:"Cerrado",verification:"No aplica.",effectiveness:"No aplica.",followupResp:"",createdAt:"2026-06-30T00:00:00.000Z"},
+    {id:"ac7",code:"ACC-0007",year:2026,findingId:"f7",description:"No aplica según Grifelman. Justificación: Se considera acorde a los resultados de los controles realizados durante los últimos años y no presentar ninguna reclamación por parte de los clientes en ese período, el mantener la prueba de fricción sobre una sola muestra. Dicha resolución se basa en la estabilidad y aseguramiento de los diferentes procesos productivos.",responsible:"No aplica",dueDate:"",status:"Cerrado",verification:"No aplica.",effectiveness:"No aplica.",followupResp:"",createdAt:"2026-06-30T00:00:00.000Z"},
+  ];
+  const[actions,setActions]=useLS("v_accD",DEF_ACTIONS);
+  /* El audit trail lo escribe el servidor en cada guardado, con el usuario del
+     portal. Acá solo se muestra lo que él tiene. */
+  const[logs,setLogs]=useState([]);
+  useEffect(()=>{apiAud('/actividad?limite=300')
+    .then(d=>setLogs((d.actividad||[]).map(a=>({id:a.ts+a.accion,ts:a.ts,user:a.usuario,action:a.accion,entity:a.entidad,detail:a.detalle}))))
+    .catch(()=>{});},[]);
+  const[pg,sPg]=useState("prog");const[col,sCol]=useState(false);
+  const[year,sYear]=useLS("v_year",2026);
+  const[audDet,sAudDet]=useState(null);
+
+  // Year-filtered data
+  const yAudits=audits.filter(a=>a.year===year);
+  const yFindings=findings.filter(f=>f.year===year||!f.year);
+  const yActions=actions.filter(a=>a.year===year||!a.year);
+  const yData={...dt,audits:yAudits,findings:yFindings,actions:yActions,allAudits:audits,allFindings:findings,allActions:actions,year};// audit detail modal
+
+  const logout=async()=>{try{await fetch('/api/auth/logout',{method:'POST',credentials:'same-origin'});}catch(e){}location.href='/';};
+
+  const role=ROLES[cu.role]||{};const canEdit=role.canEdit;const canAdmin=role.canAdmin;
+  const dt={audits,setAudits,findings,setFindings,actions,setActions,logs,setLogs,currentUser:cu};
+  // Los usuarios se administran en el portal, no acá.
+  const nv=[...NAV];if(canAdmin)nv.push({k:"cfg",l:"Configuración",i:"⚙️"});
+
+  /* ── Open audit from program grid or list ── */
+  const openAudit=(existing,sector,month)=>{
+    if(existing){sAudDet(existing);}
+    else if(canEdit&&sector&&month){
+      if(!confirm(`¿Crear auditoría planificada para "${sector}" en ${month}?`))return;
+      const code=`AUD-${String(audits.length+1).padStart(4,"0")}`;
+      const newA={id:gid(),code,year,name:`Auditoría ${sector}`,type:cfg.auditTypes[0]||"Interna",progSector:sector,progMonth:month,phase:"planificada",date:"",auditor:"",team:"",standard:"",scope:"",location:"",checklists:"",execNotes:"",execDate:"",checklistApplied:"",methodology:"",distribution:"",generalImpression:"",strengths:"",conclusions:"",result:"",nextAudit:"",expectations:"",closeNotes:"",closeDate:"",createdAt:new Date().toISOString()};
+      setAudits(p=>[...p,newA]);
+      alog(setLogs,"CREAR","Auditoría",`${code} — ${sector} (${month})`,cu.name);
+      sAudDet(newA);
+    }
+  };
+  const saveAudit=(fm)=>{
+    const prev=audits.find(a=>a.id===fm.id);
+    setAudits(p=>p.map(a=>a.id===fm.id?{...a,...fm}:a));
+    if(prev&&prev.phase!==fm.phase)alog(setLogs,"CAMBIO FASE","Auditoría",`${fm.code}: ${phaseOf(prev.phase,isExternal(prev)).label} → ${phaseOf(fm.phase,isExternal(fm)).label}`,cu.name);
+    else alog(setLogs,"EDITAR","Auditoría",fm.code,cu.name);
+    if(fm.postponed&&(!prev||!prev.postponed)){
+      const nextYr=fm.postponedToYear||(fm.year||2026)+1;
+      const newCode=`AUD-${String(audits.length+1).padStart(4,"0")}`;
+      const clone={id:gid(),code:newCode,year:nextYr,name:fm.name,type:fm.type,progSector:fm.progSector,progMonth:fm.progMonth,phase:isExternal(fm)?"ext_notificada":"planificada",date:"",auditor:fm.auditor,team:fm.team,standard:fm.standard,scope:fm.scope,location:fm.location,checklists:fm.checklists,execNotes:"",execDate:"",checklistApplied:"",methodology:"",distribution:fm.distribution,generalImpression:"",strengths:"",conclusions:"",result:"",nextAudit:"",expectations:"",closeNotes:"",closeDate:"",postponed:false,postponedReason:"",postponedDate:"",postponedToYear:0,createdAt:new Date().toISOString()};
+      setAudits(p=>[...p,clone]);
+      alog(setLogs,"POSTERGAR","Auditoría",`${fm.code} (${fm.year}) → ${newCode} (${nextYr}). Motivo: ${fm.postponedReason}`,cu.name);
+    }
+    sAudDet(null);
+  };
+
+  return(<div style={{background:K.bg,minHeight:"100vh"}}>
+    <div style={{width:col?52:220,background:K.txt,color:"#fff",display:"flex",flexDirection:"column",position:"fixed",top:0,left:0,bottom:0,zIndex:10,transition:"width .2s"}}>
+      <div style={{padding:col?"16px 8px":"16px 14px",borderBottom:"1px solid rgba(255,255,255,.08)",textAlign:col?"center":"left"}}>{col?<span style={{fontSize:15,fontWeight:800}}>V</span>:<div><div style={{fontSize:10,fontWeight:800,color:K.ves,letterSpacing:".1em",textTransform:"uppercase"}}>Vessena S.A.</div><div style={{fontSize:13.5,fontWeight:700,marginTop:2}}>QMS Audit Tracker</div></div>}</div>
+      {!col&&<div style={{padding:"10px 14px",borderBottom:"1px solid rgba(255,255,255,.06)",display:"flex",alignItems:"center",gap:8}}><div style={{width:28,height:28,borderRadius:"50%",background:role.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13}}>{role.icon}</div><div style={{flex:1,overflow:"hidden"}}><div style={{fontSize:12,fontWeight:600,color:"#fff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cu.name}</div><div style={{fontSize:10,color:role.color}}>{role.label}</div></div></div>}
+      {!col&&<div style={{padding:"8px 14px",borderBottom:"1px solid rgba(255,255,255,.06)"}}>
+        <div style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,.4)",textTransform:"uppercase",letterSpacing:".05em",marginBottom:4}}>Año de gestión</div>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <button onClick={()=>sYear(y=>y-1)} style={{background:"rgba(255,255,255,.1)",border:"none",color:"#fff",borderRadius:4,width:24,height:24,cursor:"pointer",fontSize:12,fontFamily:"inherit"}}>◀</button>
+          <span style={{flex:1,textAlign:"center",fontSize:16,fontWeight:800,color:"#fff"}}>{year}</span>
+          <button onClick={()=>sYear(y=>y+1)} style={{background:"rgba(255,255,255,.1)",border:"none",color:"#fff",borderRadius:4,width:24,height:24,cursor:"pointer",fontSize:12,fontFamily:"inherit"}}>▶</button>
+        </div>
+      </div>}
+      <nav style={{flex:1,padding:"6px 0",overflowY:"auto"}}>{nv.map(n=><div key={n.k} onClick={()=>sPg(n.k)} title={n.l} style={{display:"flex",alignItems:"center",gap:9,padding:"9px 14px",cursor:"pointer",background:pg===n.k?"rgba(255,255,255,.1)":"transparent",borderRadius:5,margin:"1px 6px",fontSize:12.5,fontWeight:pg===n.k?600:400,color:pg===n.k?"#fff":"rgba(255,255,255,.6)",borderTop:n.k==="cfg"?"1px solid rgba(255,255,255,.06)":"none",marginTop:n.k==="cfg"?6:1}}><span style={{fontSize:14,flexShrink:0}}>{n.i}</span>{!col&&<span>{n.l}</span>}</div>)}</nav>
+      <div style={{padding:"6px",borderTop:"1px solid rgba(255,255,255,.08)"}}><div onClick={logout} style={{display:"flex",alignItems:"center",justifyContent:col?"center":"flex-start",gap:8,padding:"9px 14px",cursor:"pointer",borderRadius:5,margin:"1px 6px",fontSize:12.5,color:"rgba(255,255,255,.5)"}}><span>🚪</span>{!col&&<span>Salir</span>}</div><div onClick={()=>sCol(!col)} style={{display:"flex",alignItems:"center",justifyContent:"center",padding:"8px",cursor:"pointer",fontSize:12,color:"rgba(255,255,255,.4)"}}>{col?"▸":"◂"}</div></div>
+    </div>
+    <div style={{marginLeft:col?52:220,padding:"20px 28px",transition:"margin .2s"}}>
+      {/* El servidor todavía no tiene nada: lo que se ve es el año que traía
+          el archivo viejo. Se trae una sola vez, y recién ahí queda para todas. */}
+      {!SRV.datos.auditorias&&canAdmin&&<div style={{background:"#FFFBEB",border:"1px solid #FDE68A",color:"#92400E",borderRadius:10,padding:"12px 16px",marginBottom:14,fontSize:13}}>
+        <b>Este año todavía no está en el servidor.</b> Lo que ves ahora sale del archivo anterior y no lo ve nadie más.
+        <button onClick={async()=>{
+          const cols={auditorias:audits,hallazgos:findings,acciones:actions,config:cfg,
+                      autoinspecciones:[],autoinspecciones_hallazgos:[]};
+          try{
+            const p=await apiAud('/importar',{method:'POST',body:JSON.stringify({colecciones:cols})});
+            const det=Object.entries(p.preview).map(([k,v])=>`${k}: ${v}`).join(', ');
+            if(!confirm(`Se va a guardar en el servidor:\n${det}\n\n¿Confirmás?`))return;
+            await apiAud('/importar',{method:'POST',body:JSON.stringify({colecciones:cols,confirmar:true})});
+            alert('Listo: el año quedó en el servidor.');location.reload();
+          }catch(e){alert('No se pudo importar: '+e.message);}
+        }} style={{marginLeft:10,padding:"6px 14px",background:"#92400E",color:"#fff",border:"none",borderRadius:7,cursor:"pointer",fontWeight:600}}>Traer el año al servidor</button>
+      </div>}
+      {pg==="prog"&&<ProgramaIntegrado data={yData} cfg={cfg} canEdit={canEdit} openAudit={openAudit}/>}
+      {pg==="aud"&&<AuditList data={{...yData,setAudits,setLogs}} cfg={cfg} canEdit={canEdit} openAudit={(a)=>sAudDet(a)}/>}
+      {pg==="hal"&&<Findings data={{...yData,setFindings,setLogs}} cfg={cfg} canEdit={canEdit}/>}
+      {pg==="acc"&&<Actions data={{...yData,setActions,setLogs}} cfg={cfg} canEdit={canEdit}/>}
+      {pg==="autoinsp"&&<Autoinspecciones data={{...yData,setLogs,currentUser:cu}} cfg={cfg} canEdit={canEdit}/>}
+      {pg==="trail"&&<Trail logs={logs}/>}
+      {pg==="rep"&&<Reports data={yData} cfg={cfg}/>}
+      {pg==="guide"&&<GuidePage goTo={sPg}/>}
+      {pg==="cfg"&&canAdmin&&<ConfigMod cfg={cfg} setCfg={setCfg} setLogs={setLogs} currentUser={cu}/>}
+    </div>
+    {audDet&&<AuditDetail audit={audDet} data={{...dt,setFindings,setActions,setLogs,currentUser:cu}} cfg={cfg} canEdit={canEdit} onClose={()=>sAudDet(null)} onSave={saveAudit} onDelete={(id)=>{
+      if(confirm("¿Eliminar esta auditoría? Los hallazgos vinculados no se eliminarán pero perderán la vinculación.")){
+        const a=audits.find(x=>x.id===id);
+        setAudits(p=>p.filter(x=>x.id!==id));
+        alog(setLogs,"ELIMINAR","Auditoría",`${a?.code} — ${a?.name}`,cu.name);
+        sAudDet(null);
+      }
+    }}/>}
+  </div>);
+}
+/* Primero se traen los datos y la sesión del portal; recién ahí se pinta la
+   pantalla, porque las listas se leen al construir el estado. */
+(async function arrancar(){
+  const raiz=document.getElementById("root");
+  raiz.innerHTML='<div style="padding:40px;font-family:system-ui;color:#64748B">Cargando auditorías…</div>';
+  try{
+    const d=await apiAud('/datos');
+    for(const[nombre,c]of Object.entries(d.colecciones||{})){SRV.datos[nombre]=c.datos;SRV.vers[nombre]=c.version;}
+    SRV.sesion={nombre:d.nombre,permisos:d.permisos||[],importado:d.importado};
+    ReactDOM.render(<App/>,raiz);
+  }catch(e){
+    raiz.innerHTML='<div style="padding:40px;font-family:system-ui;color:#B91C1C">No se pudo entrar: '+
+      (e&&e.message?e.message:'error')+'</div>';
+  }
+})();
+</script>
+</body>
+</html>

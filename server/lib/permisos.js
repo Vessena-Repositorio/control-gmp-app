@@ -49,6 +49,7 @@ export const RECURSOS = [
     'supervision-envases',
     'panel-supervision-tapas',
     'estandares',
+    'auditorias',
     'aprobacion-graneles',
     'sao001-carga',
 ];
