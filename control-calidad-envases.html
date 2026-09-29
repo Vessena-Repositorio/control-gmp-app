@@ -320,6 +320,20 @@
                 nombre: 'PET 600 ESP', tipo: 'PET', codigo: 'pendiente',
                 parametros: {}
             },
+            // Envase del suavizante concentrado (ESP-COM-272 v1.0, 10/09/2026).
+            // La ficha da cuatro parametros y ninguno de espesor: no lleva el
+            // control de hombros, que es propio de los envases de Fabuloso.
+            // El brimful se informa en GRAMOS, como dice la especificacion.
+            'SUAV-1L': {
+                nombre: 'Suavizante concentrado 1 L', tipo: 'PEAD', codigo: 'ESP-COM-272',
+                cavidades: 4,
+                parametros: {
+                    'altura_h':           { min: 240.00, max: 244.00, unidad: 'mm', nombre: 'Altura' },
+                    'profundidad_pie_hd': { min:  64.00, max:  66.00, unidad: 'mm', nombre: 'Profundidad de base' },
+                    'brimful':            { min: 1180,   max: 1220,   unidad: 'g',  nombre: 'Brimful' },
+                    'peso':               { min:  50.00, max:  54.00, unidad: 'g',  nombre: 'Peso del envase' }
+                }
+            },
             'HIPO-750': {
                 nombre: 'Hipoclorito 750-800 ML', tipo: 'PEAD', codigo: 'ESP-COM-225',
                 cavidades: 4,
@@ -2495,7 +2509,7 @@
                                                                             <th style={{width: '80px'}}>Cavidad</th>
                                                                             <th style={{width: '180px'}}>Evaluación Estética</th>
                                                                             {esFab && <th style={{width: '130px'}}>Espesor Hombros (mm)</th>}
-                                                                            <th>Brimful (mL)</th>
+                                                                            <th>Brimful ({spec.parametros.brimful?.unidad || 'mL'})</th>
                                                                             <th>Altura H (mm)</th>
                                                                             <th>HW (mm)</th>
                                                                             <th>HD (mm)</th>
