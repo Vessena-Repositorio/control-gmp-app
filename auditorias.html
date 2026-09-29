@@ -53,6 +53,12 @@ const DEF_CONFIG={
     {id:"OM",label:"Oportunidad de Mejora",risk:"N/A",deadline:0,color:"#059669",desc:"Mejora operativa"},
   ],
   auditTypes:["Interna","A proveedor","Externa","Autoinspección puntual"],
+  // Las normas contra las que audita Vessena -domisanitarios y cosméticos en
+  // Uruguay-, con el decreto nacional que incorpora cada reglamento MERCOSUR,
+  // que es lo que exige el MSP. Se marcan en el plan y se editan acá.
+  standards:["Decreto 148/015 — RT MERCOSUR BPF Productos Domisanitarios (GMC Res. 31/012)",
+             "Decreto 338/014 — RT MERCOSUR BPF Productos de Higiene Personal, Cosméticos y Perfumes (GMC Res. 19/11)",
+             "ISO 9001:2015"],
   capaTypes:["Acción Correctiva","Acción Preventiva","Corrección"],
   statuses:["Abierto","En proceso","Cerrado","No aplica","Evaluada — No implementar","Vencido"],
   sectors:["Seguimiento Depósito y Distribución","Seguimiento LCC","Gestión Productiva (Fabricación)","Seguimiento Gestión Productiva (Envasado)","Gestión Productiva (Plásticos)","Gestión de Higiene y Sanitización","Seguimiento Depósito de Materias Primas","Depósito PT","Hipoclorito","Control de Calidad","Aseguramiento de Calidad","Dirección Técnica","Compras","Servicios/Agua/Tanques","Áreas auxiliares/Vestuarios","Imprimex (Proveedor)","Dimena (Proveedor)","Petropack (Proveedor)","Imprenta Grifelman (Proveedor)"],
@@ -109,7 +115,11 @@ async function guardarColeccion(col,datos){
 function useLS(k,i){
   const col=COLECCION[k];
   // v_year y el resto son preferencias de cada uno: siguen en el navegador.
-  const inicial=col?(SRV.datos[col]??i):(LS.get(k)??i);
+  let inicial=col?(SRV.datos[col]??i):(LS.get(k)??i);
+  // La configuración guardada no tiene las claves que se agregan después -las
+  // normas, por ejemplo-: se completan con las de fábrica para que aparezcan
+  // sin tener que volver a importar nada.
+  if(col==='config'&&inicial&&typeof inicial==='object'&&!Array.isArray(inicial))inicial={...i,...inicial};
   const[v,sV]=useState(inicial);
   const s=useCallback(fn=>{sV(p=>{const n=typeof fn==="function"?fn(p):fn;
     if(col)guardarColeccion(col,n); else LS.set(k,n);
@@ -272,6 +282,13 @@ async function exportReport(fm,af,cfg){
   const clsTable=cfg.classifications.map(function(c){return '<tr><td><b>'+c.label+'</b></td><td>'+c.desc+(c.deadline?(' — Plazo: '+c.deadline+' meses'):'')+'</td></tr>';}).join('');
   const scope=(fm.scope||"Sin definir").replace(/\n/g,"<br>");
   const meth=(fm.methodology||"Sin definir").replace(/\n/g,"<br>");
+  // Una fila por norma, con el organismo que corresponde a cada una: los
+  // decretos son del MSP -incorporan el reglamento MERCOSUR- y la ISO no.
+  const organismoDe=(n)=>/^\s*decreto/i.test(n)?"MSP Uruguay / MERCOSUR":(/^\s*iso/i.test(n)?"ISO":(/mercosur|gmc/i.test(n)?"MERCOSUR":"—"));
+  const normas=String(fm.standard||"").split(/\s*,\s*(?=Decreto|ISO|GMC|MERCOSUR|Res\.)|\s*;\s*/i).map(s=>s.trim()).filter(Boolean);
+  const normasRows=normas.length
+    ? normas.map(n=>'<tr><td>'+organismoDe(n)+'</td><td>'+n+'</td></tr>').join('')
+    : '<tr><td>—</td><td>Sin definir</td></tr>';
   const genImp=(fm.generalImpression||"Sin definir").replace(/\n/g,"<br>");
   const strengths=(fm.strengths||"Sin definir").replace(/\n/g,"<br>");
   const concl=(fm.conclusions||"Sin definir").replace(/\n/g,"<br>");
@@ -306,7 +323,7 @@ th{background:#e8e8e8;font-weight:700}
 
 <h2>• ALCANCE</h2>
 <p>${scope}</p>
-<table><tr><th>Organismo</th><th>Referencia</th></tr><tr><td>ISO / MERCOSUR</td><td>${fm.standard||"Sin definir"}</td></tr></table>
+<table><tr><th>Organismo</th><th>Norma / Referencia</th></tr>${normasRows}</table>
 <table><tr><th>Lugar(es)</th><th>Fecha(s)</th></tr><tr><td>${fm.location||fm.progSector||"—"}</td><td>${fm.execDate||fm.date||"—"}</td></tr></table>
 
 <h2>• RESPONSABLES</h2>
@@ -397,7 +414,22 @@ function AuditDetail({audit,data,cfg,canEdit,onClose,onSave,onDelete}){
         <Fd l="Auditor líder"><input style={sI} value={fm.auditor||""} onChange={e=>u("auditor",e.target.value)} disabled={!canEdit}/></Fd>
         <Fd l="Equipo"><select style={sS} value={fm.team||""} onChange={e=>u("team",e.target.value)} disabled={!canEdit}><option value="">—</option>{(cfg.teams||[]).map(t=><option key={t.name} value={`${t.members} (Líder: ${t.leader})`}>{t.name} — {t.leader}</option>)}</select></Fd>
         <Fd l="Fecha"><input type="date" style={sI} value={fm.date||""} onChange={e=>u("date",e.target.value)} disabled={!canEdit}/></Fd>
-        <Fd l="Norma"><input style={sI} value={fm.standard||""} onChange={e=>u("standard",e.target.value)} disabled={!canEdit}/></Fd>
+        {/* Las normas se marcan de una lista, para que se escriban siempre
+            igual; la lista se edita en Configuración. El campo de abajo sigue
+            libre para una norma puntual que no esté en la lista. */}
+        <Fd l="Norma">
+          <div style={{display:"flex",flexWrap:"wrap",gap:10,marginBottom:6}}>
+            {(cfg.standards||[]).map(n=>{
+              const sel=String(fm.standard||"").split(/\s*,\s*/).includes(n);
+              return <label key={n} style={{display:"flex",alignItems:"center",gap:5,fontSize:12.5,cursor:canEdit?"pointer":"default"}}>
+                <input type="checkbox" checked={sel} disabled={!canEdit} onChange={()=>{
+                  const act=String(fm.standard||"").split(/\s*,\s*/).filter(Boolean);
+                  u("standard",(sel?act.filter(x=>x!==n):[...act,n]).join(", "));
+                }}/>{n}</label>;
+            })}
+          </div>
+          <input style={sI} value={fm.standard||""} onChange={e=>u("standard",e.target.value)} disabled={!canEdit} placeholder="Normas aplicables"/>
+        </Fd>
       </G2>
       <Fd l="Alcance"><textarea style={{...sI,minHeight:55,resize:"vertical"}} value={fm.scope||""} onChange={e=>u("scope",e.target.value)} disabled={!canEdit}/></Fd>
       <G2><Fd l="Lugar"><input style={sI} value={fm.location||""} onChange={e=>u("location",e.target.value)} disabled={!canEdit}/></Fd><Fd l="Listas de verificación"><input style={sI} value={fm.checklists||""} onChange={e=>u("checklists",e.target.value)} disabled={!canEdit}/></Fd></G2></div>
@@ -864,6 +896,7 @@ function ConfigMod({cfg,setCfg,setLogs,currentUser}){
     <ClassEd/>
     <LE title="Sectores" icon="🏭" items={cfg.sectors} onUpdate={v=>setCfg(p=>({...p,sectors:v}))}/>
     <LE title="Tipos de Auditoría" icon="📋" items={cfg.auditTypes} onUpdate={v=>setCfg(p=>({...p,auditTypes:v}))}/>
+    <LE title="Normas" icon="📖" items={cfg.standards||[]} onUpdate={v=>setCfg(p=>({...p,standards:v}))}/>
     <LE title="Tipos CAPA" icon="🔧" items={cfg.capaTypes} onUpdate={v=>setCfg(p=>({...p,capaTypes:v}))}/>
     <LE title="Estados" icon="🔄" items={cfg.statuses} onUpdate={v=>setCfg(p=>({...p,statuses:v}))}/>
     {/* Teams editor */}
