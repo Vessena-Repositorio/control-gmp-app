@@ -14,6 +14,7 @@ import { Router } from 'express';
 import { consultar, enTransaccion } from '../db.js';
 import { exigirPermiso } from '../lib/acceso.js';
 import { PERMISOS_POR_ROL } from '../lib/permisos.js';
+import { nombreComparable } from '../lib/firmas.js';
 
 export const rutasAuditorias = Router();
 
@@ -119,6 +120,46 @@ rutasAuditorias.put('/coleccion/:nombre', cargar, async (req, res, next) => {
         }
         responder(err, res, next);
     }
+});
+
+/**
+ * POST /api/auditorias/firmas  { nombres: [...], fecha, codigo }
+ *
+ * Las firmas electrónicas para el informe REG-035-C: las mismas de la tabla
+ * `firmas` que usan Graneles y los demás registros, cargadas una sola vez
+ * desde Graneles → Firmas. Se busca por nombre porque el informe guarda el
+ * nombre del auditor, no su usuario; quien no tenga firma registrada sale con
+ * el renglón en blanco para firmar a mano, en vez de aparentar una firma.
+ */
+rutasAuditorias.post('/firmas', leer, async (req, res, next) => {
+    const nombres = (Array.isArray(req.body?.nombres) ? req.body.nombres : [])
+        .map((n) => String(n || '').trim()).filter(Boolean).slice(0, 12);
+    const fecha = String(req.body?.fecha || '').slice(0, 10);
+    try {
+        const { rows } = await consultar(
+            'SELECT usuario_id, nombre, cargo, imagen, cargada_en, reemplazada_en FROM firmas ORDER BY cargada_en'
+        );
+        const instante = /^\d{4}-\d{2}-\d{2}$/.test(fecha) ? new Date(`${fecha}T12:00:00Z`) : new Date();
+        const firmas = [];
+        for (const nombre of nombres) {
+            const esperado = nombreComparable(nombre);
+            // Un mismo nombre puede tener firmas sucesivas: vale la que estaba
+            // vigente cuando se hizo la auditoría.
+            const propias = rows.filter((f) => nombreComparable(f.nombre) === esperado);
+            const vigente = propias.find((f) => new Date(f.cargada_en) <= instante
+                && (!f.reemplazada_en || new Date(f.reemplazada_en) > instante));
+            const f = vigente || propias[0] || null;
+            firmas.push({
+                nombre, cargo: f?.cargo || '', imagen: f?.imagen || '',
+                sinFirma: !f, posterior: Boolean(f && !vigente),
+            });
+        }
+        if (req.body?.codigo) {
+            await enTransaccion((c) => registrar(c, req, 'IMPRIMIR', 'Informe',
+                `${String(req.body.codigo).slice(0, 40)} · ${firmas.filter((f) => !f.sinFirma).length} firma(s)`));
+        }
+        res.json({ ok: true, firmas });
+    } catch (err) { next(err); }
 });
 
 /** GET /api/auditorias/actividad — la bitácora de la app. */

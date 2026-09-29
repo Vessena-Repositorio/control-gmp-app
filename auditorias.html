@@ -231,7 +231,26 @@ function ProgramaIntegrado({data,cfg,canEdit,openAudit}){
 }
 
 /* ── EXPORT REPORT ── */
-function exportReport(fm,af,cfg){
+/* Las firmas salen de la tabla `firmas` del servidor, la misma que usan
+   Graneles y los demás registros: se busca por el nombre del auditor y se toma
+   la que estaba vigente el día de la auditoría. Quien no tenga firma cargada
+   sale con el renglón en blanco para firmar a mano. */
+async function firmasDelInforme(fm){
+  const nombres=[fm.auditor,...String(fm.team||"").split(/[,;]/)]
+    .map(n=>String(n||"").replace(/\(.*?\)/g,"").trim()).filter(Boolean);
+  const unicos=[...new Set(nombres)];
+  if(!unicos.length)return[];
+  try{
+    const d=await apiAud('/firmas',{method:'POST',body:JSON.stringify({nombres:unicos,fecha:fm.execDate||fm.date||'',codigo:fm.code})});
+    return d.firmas||[];
+  }catch(e){return unicos.map(n=>({nombre:n,cargo:'',imagen:'',sinFirma:true}));}
+}
+async function exportReport(fm,af,cfg){
+  /* La ventana se abre ANTES de ir a buscar las firmas: si se abriera después,
+     el navegador la trata como emergente no pedida y la bloquea. */
+  const w=window.open("","_blank");
+  if(!w){alert("El navegador bloqueó la ventana. Permití las ventanas emergentes para esta página.");return;}
+  w.document.write('<p style="font-family:Arial;padding:20px">Preparando el informe…</p>');
   const clsLabel=(id)=>{const c=cfg.classifications.find(x=>x.id===id);return c?c.label:"—";};
   const ncs=af.filter(f=>["CRITICA","GRAVE","MENOR","OTRA"].includes(f.classification));
   const obs=af.filter(f=>f.classification==="OBS");
@@ -246,6 +265,13 @@ function exportReport(fm,af,cfg){
   const strengths=(fm.strengths||"Sin definir").replace(/\n/g,"<br>");
   const concl=(fm.conclusions||"Sin definir").replace(/\n/g,"<br>");
   const expect=(fm.expectations||"Se espera plan CAPA dentro de los 15 días hábiles.").replace(/\n/g,"<br>");
+  const fechaFirma=fm.execDate||fm.date||"";
+  const firmas=await firmasDelInforme(fm);
+  const firmasHtml=(firmas.length?firmas:[{nombre:fm.auditor||"",cargo:"",imagen:"",sinFirma:true}])
+    .map(f=>'<tr><td>'+(f.nombre||"")+'</td><td>'+(f.cargo||"")+'</td><td>'+(f.sinFirma?"":fechaFirma)+'</td><td style="height:52px">'+
+      (f.imagen?'<img src="'+f.imagen+'" style="max-height:44px;max-width:180px;object-fit:contain">'+
+        (f.posterior?'<div style="font-size:7pt;color:#777">Firma registrada después de esta auditoría</div>':'')
+       :'<span style="font-size:8pt;color:#999;font-style:italic">Sin firma electrónica registrada</span>')+'</td></tr>').join('');
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Informe de Auditoría — ${fm.code}</title>
 <style>@page{size:A4;margin:20mm 18mm}body{font-family:Arial,sans-serif;font-size:11pt;color:#1a1a1a;line-height:1.5}
 .header{display:flex;justify-content:space-between;align-items:flex-start;border:2px solid #333;padding:12px 16px;margin-bottom:20px}
@@ -307,12 +333,11 @@ ${opmHtml}
 
 <h2>• FIRMA DE LOS AUDITORES</h2>
 <table class="sign-table"><tr><th>Nombre</th><th>Cargo</th><th>Fecha</th><th>Firma</th></tr>
-<tr><td>${fm.auditor||""}</td><td></td><td>${fm.execDate||""}</td><td></td></tr>
-<tr><td></td><td></td><td></td><td></td></tr></table>
+${firmasHtml}</table>
 
 <div class="footer">Las versiones impresas de este documento se consideran NO controladas a menos que estén selladas como Copia Controlada y rubricadas por el responsable del sistema de documentación</div>
 </body></html>`;
-  const w=window.open("","_blank");w.document.write(html);w.document.close();
+  w.document.open();w.document.write(html);w.document.close();
 }
 
 /* ── AUDIT DETAIL MODAL ── */
