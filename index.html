@@ -1050,7 +1050,14 @@
       code: 'II',
       roles: ['admin'],
       items: [
-        { placeholder: true, name: 'Sistema de Auditorías', desc: 'Módulo de gestión de auditorías internas y externas.' }
+        {
+          id: 'auditorias-app',
+          name: 'Auditorías',
+          desc: 'Programa anual, auditorías internas, de proveedores y de clientes, hallazgos, planes de acción y autoinspecciones.',
+          url: 'auditorias.html',
+          icon: 'clipboard',
+          code: 'AUD-001'
+        }
       ]
     },
     {
@@ -1155,14 +1162,6 @@
           url: 'fabuloso.html',
           icon: 'flow',
           code: 'LCC-005'
-        },
-        {
-          id: 'auditorias',
-          name: 'Auditorías',
-          desc: 'Programa anual, auditorías internas, de proveedores y de clientes, hallazgos, planes de acción y autoinspecciones.',
-          url: 'auditorias.html',
-          icon: 'clipboard',
-          code: 'LCC-007'
         },
         {
           id: 'gestion-estandares',
