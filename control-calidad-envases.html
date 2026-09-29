@@ -222,6 +222,28 @@
         /** @jsxFrag React.Fragment */
         const { useState, useEffect } = React;
 
+        // Columnas dimensionales de los controles de arranque y proceso. Cada
+        // ficha define las suyas: el envase de suavizante 1 L (ESP-COM-272)
+        // solo lleva altura y profundidad de base, y mostrarle las seis
+        // columnas de siempre le pedía medidas que su especificación no tiene.
+        // Si la ficha todavía no tiene ningún parámetro cargado se muestran
+        // todas, como antes, para no dejar sin registrar lo que se mida.
+        const PARAMS_DIM = ['brimful', 'altura_h', 'ancho_pie_hw', 'profundidad_pie_hd',
+                            'ancho_hombro_sw', 'profundidad_hombro_sd'];
+        const ETIQUETA_DIM = {
+            brimful: 'Brimful', altura_h: 'Altura H', ancho_pie_hw: 'HW',
+            profundidad_pie_hd: 'HD', ancho_hombro_sw: 'SW', profundidad_hombro_sd: 'SD',
+        };
+        const dimsDe = (spec) => {
+            const propias = PARAMS_DIM.filter(k => spec?.parametros?.[k]);
+            return propias.length ? propias : PARAMS_DIM;
+        };
+        const tituloDim = (spec, k) => {
+            const p = spec?.parametros?.[k];
+            const unidad = p?.unidad || (k === 'brimful' ? 'mL' : 'mm');
+            return `${p?.nombre || ETIQUETA_DIM[k]} (${unidad})`;
+        };
+
         const ESPECIFICACIONES = {
             'FAB-2L': {
                 nombre: 'Fabuloso 2L', tipo: 'PEAD', codigo: 'ESP-COM-033',
@@ -326,7 +348,8 @@
             // El brimful se informa en GRAMOS, como dice la especificacion.
             'SUAV-1L': {
                 nombre: 'Suavizante concentrado 1 L', tipo: 'PEAD', codigo: 'ESP-COM-272',
-                cavidades: 4,
+                // Molde de una sola cavidad (Claudia, 29/09/2026).
+                cavidades: 1,
                 parametros: {
                     'altura_h':           { min: 240.00, max: 244.00, unidad: 'mm', nombre: 'Altura' },
                     'profundidad_pie_hd': { min:  64.00, max:  66.00, unidad: 'mm', nombre: 'Profundidad de base' },
@@ -2509,13 +2532,8 @@
                                                                             <th style={{width: '80px'}}>Cavidad</th>
                                                                             <th style={{width: '180px'}}>Evaluación Estética</th>
                                                                             {esFab && <th style={{width: '130px'}}>Espesor Hombros (mm)</th>}
-                                                                            <th>Brimful ({spec.parametros.brimful?.unidad || 'mL'})</th>
-                                                                            <th>Altura H (mm)</th>
-                                                                            <th>HW (mm)</th>
-                                                                            <th>HD (mm)</th>
-                                                                            <th>SW (mm)</th>
-                                                                            <th>SD (mm)</th>
-                                                                            {spec.parametros.peso && <th style={{background: '#fef3c7'}}>Peso (g) *</th>}
+                                                                            {dimsDe(spec).map(k => <th key={k}>{tituloDim(spec, k)}</th>)}
+                                                                            {spec.parametros.peso && <th style={{background: '#fef3c7'}}>Peso ({spec.parametros.peso.unidad || 'g'}) *</th>}
                                                                         </tr>
                                                                     </thead>
                                                                     <tbody>
@@ -2563,7 +2581,7 @@
                                                                                         <div className="spec-info">Mín: {spec.espesorHombroMin}</div>
                                                                                     </td>
                                                                                 )}
-                                                                                {['brimful', 'altura_h', 'ancho_pie_hw', 'profundidad_pie_hd', 'ancho_hombro_sw', 'profundidad_hombro_sd'].map(param => {
+                                                                                {dimsDe(spec).map(param => {
                                                                                     const p = spec.parametros[param];
                                                                                     return (
                                                                                         <td key={param}>
