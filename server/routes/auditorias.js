@@ -141,11 +141,19 @@ rutasAuditorias.post('/firmas', leer, async (req, res, next) => {
         );
         const instante = /^\d{4}-\d{2}-\d{2}$/.test(fecha) ? new Date(`${fecha}T12:00:00Z`) : new Date();
         const firmas = [];
+        // El titulo delante del nombre -"Q.F. Claudia Barlocco"- no puede
+        // impedir que se encuentre la firma, y tampoco esta siempre en la tabla.
+        const TITULOS = /^(q\.?\s*f\.?|ing\.?|lic\.?|dra?\.?|sra?\.?|t[eé]c\.?|mg\.?|farm\.?)\s+/i;
+        const sinTitulo = (n) => {
+            let s = String(n || '').replace(/\(.*?\)/g, '').trim();
+            while (TITULOS.test(s)) s = s.replace(TITULOS, '').trim();
+            return nombreComparable(s);
+        };
         for (const nombre of nombres) {
-            const esperado = nombreComparable(nombre);
+            const esperado = sinTitulo(nombre);
             // Un mismo nombre puede tener firmas sucesivas: vale la que estaba
             // vigente cuando se hizo la auditoría.
-            const propias = rows.filter((f) => nombreComparable(f.nombre) === esperado);
+            const propias = rows.filter((f) => sinTitulo(f.nombre) === esperado);
             const vigente = propias.find((f) => new Date(f.cargada_en) <= instante
                 && (!f.reemplazada_en || new Date(f.reemplazada_en) > instante));
             const f = vigente || propias[0] || null;

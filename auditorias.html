@@ -235,10 +235,21 @@ function ProgramaIntegrado({data,cfg,canEdit,openAudit}){
    Graneles y los demás registros: se busca por el nombre del auditor y se toma
    la que estaba vigente el día de la auditoría. Quien no tenga firma cargada
    sale con el renglón en blanco para firmar a mano. */
+/* El informe guarda el nombre como lo escribió quien cargó el plan: "Q.F.
+   Claudia Barlocco", "Gloria Nuñez (Líder)". Se limpian el título y la
+   aclaración para que coincida con el nombre de la tabla de firmas, y para que
+   la misma persona no aparezca dos veces. */
+const TITULOS=/^(q\.?\s*f\.?|ing\.?|lic\.?|dra?\.?|sra?\.?|t[eé]c\.?|mg\.?|farm\.?)\s+/i;
+function nombreLimpio(n){
+  let s=String(n||"").replace(/\(.*?\)/g,"").replace(/\s+/g," ").trim();
+  while(TITULOS.test(s))s=s.replace(TITULOS,"").trim();
+  return s;
+}
+const comparable=n=>nombreLimpio(n).normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase();
 async function firmasDelInforme(fm){
-  const nombres=[fm.auditor,...String(fm.team||"").split(/[,;]/)]
-    .map(n=>String(n||"").replace(/\(.*?\)/g,"").trim()).filter(Boolean);
-  const unicos=[...new Set(nombres)];
+  const nombres=[fm.auditor,...String(fm.team||"").split(/[,;]/)].map(nombreLimpio).filter(Boolean);
+  const vistos=new Set();
+  const unicos=nombres.filter(n=>{const k=comparable(n);if(vistos.has(k))return false;vistos.add(k);return true;});
   if(!unicos.length)return[];
   try{
     const d=await apiAud('/firmas',{method:'POST',body:JSON.stringify({nombres:unicos,fecha:fm.execDate||fm.date||'',codigo:fm.code})});
