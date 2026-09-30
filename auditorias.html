@@ -149,53 +149,119 @@ const DEF_CHECKLISTS=[
  {n:51,a:"17. Autoinspección",q:"Las acciones de auditorías anteriores se cerraron y se verificó su eficacia."},
  {n:52,a:"18. Trazabilidad",q:"A partir de un lote de producto terminado se reconstruye el origen de materias primas, envases, controles y despacho."}]},
 
-{id:"emp",code:"CL-AUD-EMP-001",version:"1.0",nombre:"Material de empaque — imprentas y envases",
- normas:["ISO 15378:2017 + Amd 1:2024 — Material de envasado primario: ISO 9001:2015 con referencia a BPF","BRCGS Packaging Materials, Issue 7 — Material de envasado","PS 9000:2016 (PQG) — BPF para material de envasado impreso","ISO 9001:2015"],
+{id:"imp",code:"CL-AUD-IMP-001",version:"1.0",nombre:"Impresor / proveedor de material de empaque impreso",
+ normas:["ISO 9001:2015","ISO 15378:2017 + Amd 1:2024 — Material de envasado primario: ISO 9001:2015 con referencia a BPF"],
  items:[
- {n:1,a:"1. Sistema de gestión",q:"El sistema de gestión está certificado o documentado, con alcance que cubre la fabricación y el suministro del material que provee a Vessena.",r:"ISO 15378 cl. 4 · ISO 9001 cl. 4"},
- {n:2,a:"1. Sistema de gestión",q:"La dirección demostró compromiso: objetivos de calidad e inocuidad, recursos asignados y revisión por la dirección con registros.",r:"ISO 15378 cl. 5 · BRCGS PM 7 sec. 1"},
- {n:3,a:"1. Sistema de gestión",q:"Existe cultura de calidad e inocuidad del producto con acciones planificadas y medidas de avance.",r:"BRCGS PM 7 sec. 1"},
- {n:4,a:"2. Gestión de riesgos",q:"Hay análisis de riesgos del material de envasado (contaminación, migración, mezcla, error de impresión) documentado y revisado.",r:"ISO 15378 cl. 6 · BRCGS PM 7 sec. 2"},
- {n:5,a:"2. Gestión de riesgos",q:"Se evaluó la aptitud del material para el contacto con el producto y hay declaración de conformidad o idoneidad del proveedor.",r:"ISO 15378 cl. 8.2 · PS 9000"},
- {n:6,a:"3. Documentación",q:"Los documentos y registros están controlados: versión vigente, aprobación, distribución y conservación por el plazo definido.",r:"ISO 15378 cl. 7.5"},
- {n:7,a:"3. Documentación",q:"Los cambios de material, proceso, arte o proveedor pasan por control de cambios y se comunican al cliente cuando corresponde.",r:"ISO 15378 cl. 8.5.6 · PS 9000"},
- {n:8,a:"4. Personal",q:"Hay descripciones de puesto, matriz de competencias y plan de capacitación con registros, incluida la inducción en BPF.",r:"ISO 15378 cl. 7.2"},
- {n:9,a:"4. Personal",q:"Se cumplen las reglas de higiene y vestimenta en planta, con control de salud y de acceso de visitantes.",r:"ISO 15378 cl. 7.1.4 · BRCGS PM 7 sec. 6"},
- {n:10,a:"5. Instalaciones",q:"El sitio está protegido, con control de accesos y zonificación acorde al riesgo del material que se produce.",r:"ISO 15378 cl. 7.1.3 · BRCGS PM 7 sec. 4"},
- {n:11,a:"5. Instalaciones",q:"El estado de pisos, paredes, techos e iluminación no representa riesgo de contaminación del material impreso.",r:"ISO 15378 cl. 7.1.3"},
- {n:12,a:"5. Instalaciones",q:"Hay control de vidrios, plásticos rígidos y objetos cortantes en áreas de producción y depósito.",r:"BRCGS PM 7 sec. 4"},
- {n:13,a:"6. Higiene y plagas",q:"Los programas de limpieza por área y equipo están escritos, con responsables, frecuencia y registro de ejecución.",r:"ISO 15378 cl. 8.5 · BRCGS PM 7 sec. 4"},
- {n:14,a:"6. Higiene y plagas",q:"El control de plagas está vigente, con plano, registros de visita y acciones ante hallazgos.",r:"BRCGS PM 7 sec. 4"},
- {n:15,a:"6. Higiene y plagas",q:"Los residuos y el material de descarte se segregan, identifican y retiran con frecuencia definida.",r:"BRCGS PM 7 sec. 4"},
- {n:16,a:"7. Equipos y calibración",q:"Hay plan de mantenimiento preventivo por equipo, con registros y evaluación del impacto de las intervenciones sobre el producto.",r:"ISO 15378 cl. 7.1.3"},
- {n:17,a:"7. Equipos y calibración",q:"Los equipos de medición críticos —espectrodensitómetro, lectores de código, balanzas, calibres— están calibrados y vigentes.",r:"ISO 15378 cl. 7.1.5"},
- {n:18,a:"7. Equipos y calibración",q:"Cuando se detecta un equipo fuera de calibración se evalúa el impacto sobre el material ya entregado.",r:"ISO 15378 cl. 7.1.5"},
- {n:19,a:"8. Compras y proveedores",q:"Los proveedores de papel, cartón, tintas, barnices y adhesivos están evaluados y aprobados, con criterios y reevaluación periódica.",r:"ISO 15378 cl. 8.4"},
- {n:20,a:"8. Compras y proveedores",q:"Cada material que ingresa tiene especificación y certificado o control de recepción antes de liberarse a producción.",r:"ISO 15378 cl. 8.4 · 8.6"},
- {n:21,a:"8. Compras y proveedores",q:"Se controla el vencimiento de tintas, barnices y adhesivos, y el material vencido se segrega.",r:"ISO 15378 cl. 8.5.4"},
- {n:22,a:"9. Arte y material impreso",q:"El arte, la tipografía y los textos se aprueban por escrito con el cliente antes de imprimir, y se conserva la versión aprobada.",r:"PS 9000 · ISO 15378 cl. 8.2"},
- {n:23,a:"9. Arte y material impreso",q:"Hay control de versiones del arte: al cambiar, la versión anterior se retira de producción y se destruye con registro.",r:"PS 9000"},
- {n:24,a:"9. Arte y material impreso",q:"Se verifica el código de barras / EAN en línea o por muestreo, con registro del resultado.",r:"PS 9000 · BRCGS PM 7 sec. 5"},
- {n:25,a:"9. Arte y material impreso",q:"El material impreso obsoleto, mal impreso o de sobrante se destruye o segrega bajo control, con registro de cantidades.",r:"PS 9000"},
- {n:26,a:"10. Producción y controles",q:"Cada orden de trabajo define material, arte, versión, cantidad y controles a realizar.",r:"ISO 15378 cl. 8.5.1"},
- {n:27,a:"10. Producción y controles",q:"Hay control de arranque de máquina con aprobación antes de producir en serie.",r:"ISO 15378 cl. 8.5.1"},
- {n:28,a:"10. Producción y controles",q:"Los controles en proceso —color, registro, medidas, legibilidad, pegado— se realizan con frecuencia definida y se registran.",r:"ISO 15378 cl. 8.5.1 · BRCGS PM 7 sec. 5"},
- {n:29,a:"10. Producción y controles",q:"Se conservan muestras de retención por lote y por versión de arte, identificadas y accesibles.",r:"PS 9000 · ISO 15378 cl. 8.5.1"},
- {n:30,a:"10. Producción y controles",q:"La limpieza de línea entre trabajos evita mezcla de materiales o de versiones (despeje de línea verificado y registrado).",r:"PS 9000 · BRCGS PM 7 sec. 5"},
- {n:31,a:"11. Trazabilidad y liberación",q:"Cada lote entregado se puede trazar hacia atrás hasta las materias primas y hacia adelante hasta el cliente.",r:"ISO 15378 cl. 8.5.2"},
- {n:32,a:"11. Trazabilidad y liberación",q:"El estado del material —en proceso, en espera, aprobado, rechazado— está identificado en todo momento.",r:"ISO 15378 cl. 8.5.2"},
- {n:33,a:"11. Trazabilidad y liberación",q:"La liberación de producto terminado la hace personal autorizado contra criterios definidos, con registro de muestreo.",r:"ISO 15378 cl. 8.6"},
- {n:34,a:"12. No conformes y reclamos",q:"El material no conforme se identifica, segrega y su destino se decide y registra.",r:"ISO 15378 cl. 8.7"},
- {n:35,a:"12. No conformes y reclamos",q:"Los reclamos de clientes se registran, investigan con causa raíz y derivan en acción correctiva verificada.",r:"ISO 15378 cl. 10.2"},
- {n:36,a:"12. No conformes y reclamos",q:"Hay procedimiento de retiro de material entregado, con responsable y prueba de eficacia.",r:"BRCGS PM 7 sec. 3"},
- {n:37,a:"13. Almacenamiento y despacho",q:"El material se almacena protegido de humedad, polvo y luz, separado de químicos y sin contacto con el piso.",r:"ISO 15378 cl. 8.5.4"},
- {n:38,a:"13. Almacenamiento y despacho",q:"El material terminado se embala e identifica de forma que llegue protegido e identificable al cliente.",r:"ISO 15378 cl. 8.5.4"},
- {n:39,a:"13. Almacenamiento y despacho",q:"Los vehículos y el despacho se verifican en cuanto a limpieza y estado antes de cargar.",r:"BRCGS PM 7 sec. 4"},
- {n:40,a:"14. Auditorías y mejora",q:"Se realizan auditorías internas programadas que cubren todo el sistema, con informe y seguimiento.",r:"ISO 15378 cl. 9.2"},
- {n:41,a:"14. Auditorías y mejora",q:"Las no conformidades de auditorías previas —internas, de certificación y de clientes— están cerradas con eficacia verificada.",r:"ISO 15378 cl. 10.2"},
- {n:42,a:"14. Auditorías y mejora",q:"Se analizan indicadores de calidad y reclamos, y se toman decisiones a partir de ellos.",r:"ISO 15378 cl. 9.1"},
- {n:43,a:"15. Auditorías previas Vessena",q:"Se revisaron los hallazgos y las CAPA de la auditoría anterior de Vessena y se verificó su implementación.",r:"SOP-AC-035"},
- {n:44,a:"15. Auditorías previas Vessena",q:"Los requisitos particulares acordados con Vessena (artes, EAN, muestras, plazos, avisos de cambio) se cumplen.",r:"SOP-AC-035"}]},
+ {n:1,a:"1. SISTEMA DE GESTIÓN DE CALIDAD (ISO 9001 / ISO 15378)",q:"¿Existe un Sistema de Gestión de Calidad (SGC) documentado e implementado?"},
+ {n:2,a:"1. SISTEMA DE GESTIÓN DE CALIDAD (ISO 9001 / ISO 15378)",q:"¿Se dispone de una Política de Calidad definida y comunicada al personal?"},
+ {n:3,a:"1. SISTEMA DE GESTIÓN DE CALIDAD (ISO 9001 / ISO 15378)",q:"¿Se encuentran definidos los objetivos de calidad con metas medibles?"},
+ {n:4,a:"1. SISTEMA DE GESTIÓN DE CALIDAD (ISO 9001 / ISO 15378)",q:"¿Se realizan revisiones por la dirección del SGC con frecuencia establecida?"},
+ {n:5,a:"1. SISTEMA DE GESTIÓN DE CALIDAD (ISO 9001 / ISO 15378)",q:"¿Se dispone de un manual de calidad o documentación equivalente?"},
+ {n:6,a:"1. SISTEMA DE GESTIÓN DE CALIDAD (ISO 9001 / ISO 15378)",q:"¿Se mantiene un control de documentos y registros conforme a procedimientos?"},
+ {n:7,a:"1. SISTEMA DE GESTIÓN DE CALIDAD (ISO 9001 / ISO 15378)",q:"¿Existe un procedimiento de control de cambios documentado?"},
+ {n:8,a:"1. SISTEMA DE GESTIÓN DE CALIDAD (ISO 9001 / ISO 15378)",q:"¿Se gestiona la información documentada con control de versiones y aprobaciones?"},
+ {n:9,a:"2. INSTALACIONES Y CONDICIONES AMBIENTALES",q:"¿Las instalaciones se encuentran en buen estado de mantenimiento y limpieza?"},
+ {n:10,a:"2. INSTALACIONES Y CONDICIONES AMBIENTALES",q:"¿Existen áreas separadas y definidas para recepción, almacén, producción y despacho?"},
+ {n:11,a:"2. INSTALACIONES Y CONDICIONES AMBIENTALES",q:"¿Se controlan las condiciones ambientales (temperatura, humedad) en áreas críticas?"},
+ {n:12,a:"2. INSTALACIONES Y CONDICIONES AMBIENTALES",q:"¿Existen registros de monitoreo de condiciones ambientales?"},
+ {n:13,a:"2. INSTALACIONES Y CONDICIONES AMBIENTALES",q:"¿La iluminación es adecuada en las áreas de inspección y control de calidad?"},
+ {n:14,a:"2. INSTALACIONES Y CONDICIONES AMBIENTALES",q:"¿Se cuenta con un programa de control de plagas documentado y vigente?"},
+ {n:15,a:"2. INSTALACIONES Y CONDICIONES AMBIENTALES",q:"¿Existen medidas para evitar la contaminación cruzada entre productos?"},
+ {n:16,a:"2. INSTALACIONES Y CONDICIONES AMBIENTALES",q:"¿Los flujos de materiales y personal minimizan el riesgo de contaminación?"},
+ {n:17,a:"2. INSTALACIONES Y CONDICIONES AMBIENTALES",q:"¿Las áreas de almacenamiento de materias primas y producto terminado son adecuadas?"},
+ {n:18,a:"2. INSTALACIONES Y CONDICIONES AMBIENTALES",q:"¿Se controla el acceso a las áreas de producción y almacén?"},
+ {n:19,a:"3. EQUIPOS E INSTRUMENTOS",q:"¿Existe un inventario actualizado de equipos de producción e inspección?"},
+ {n:20,a:"3. EQUIPOS E INSTRUMENTOS",q:"¿Se dispone de un programa de mantenimiento preventivo documentado?"},
+ {n:21,a:"3. EQUIPOS E INSTRUMENTOS",q:"¿Se registran las actividades de mantenimiento correctivo y preventivo?"},
+ {n:22,a:"3. EQUIPOS E INSTRUMENTOS",q:"¿Los instrumentos de medición están calibrados y dentro de su periodo de vigencia?"},
+ {n:23,a:"3. EQUIPOS E INSTRUMENTOS",q:"¿Existen certificados de calibración trazables a patrones nacionales/internacionales?"},
+ {n:24,a:"3. EQUIPOS E INSTRUMENTOS",q:"¿Se identifican los instrumentos con su estado de calibración (etiquetas)?"},
+ {n:25,a:"3. EQUIPOS E INSTRUMENTOS",q:"¿Se realiza calificación de equipos (IQ, OQ, PQ) cuando corresponde?"},
+ {n:26,a:"3. EQUIPOS E INSTRUMENTOS",q:"¿Existe un procedimiento para el manejo de equipos fuera de calibración?"},
+ {n:27,a:"4. CONTROL DE MATERIAS PRIMAS Y MATERIALES",q:"¿Existe un procedimiento de recepción e inspección de materias primas?"},
+ {n:28,a:"4. CONTROL DE MATERIAS PRIMAS Y MATERIALES",q:"¿Se verifican los certificados de calidad / certificados de análisis de proveedores?"},
+ {n:29,a:"4. CONTROL DE MATERIAS PRIMAS Y MATERIALES",q:"¿Se realiza muestreo de materia prima según un plan de muestreo definido?"},
+ {n:30,a:"4. CONTROL DE MATERIAS PRIMAS Y MATERIALES",q:"¿Las tintas, barnices, adhesivos y sustratos cumplen con especificaciones de seguridad alimentaria o farmacéutica según aplique?"},
+ {n:31,a:"4. CONTROL DE MATERIAS PRIMAS Y MATERIALES",q:"¿Se dispone de Fichas Técnicas y Hojas de Seguridad (SDS) de todos los insumos?"},
+ {n:32,a:"4. CONTROL DE MATERIAS PRIMAS Y MATERIALES",q:"¿Se controla la trazabilidad de lotes de materia prima hasta el producto terminado?"},
+ {n:33,a:"4. CONTROL DE MATERIAS PRIMAS Y MATERIALES",q:"¿Se gestionan los materiales con sistema FIFO/FEFO?"},
+ {n:34,a:"4. CONTROL DE MATERIAS PRIMAS Y MATERIALES",q:"¿Existe un procedimiento para el manejo de materiales no conformes o rechazados?"},
+ {n:35,a:"4. CONTROL DE MATERIAS PRIMAS Y MATERIALES",q:"¿Se evalúa y aprueba formalmente a los proveedores críticos?"},
+ {n:36,a:"5. PROCESO DE IMPRESIÓN Y CONTROLES EN PROCESO",q:"¿Existen instrucciones de trabajo / órdenes de producción documentadas para cada trabajo?"},
+ {n:37,a:"5. PROCESO DE IMPRESIÓN Y CONTROLES EN PROCESO",q:"¿Se realiza la aprobación de pruebas de color (color proof) antes del tiraje?"},
+ {n:38,a:"5. PROCESO DE IMPRESIÓN Y CONTROLES EN PROCESO",q:"¿Se verifican textos, códigos de barras, datos variables y arte final antes de imprimir?"},
+ {n:39,a:"5. PROCESO DE IMPRESIÓN Y CONTROLES EN PROCESO",q:"¿Se realizan controles en proceso: densidad de color, registro, viscosidad de tintas?"},
+ {n:40,a:"5. PROCESO DE IMPRESIÓN Y CONTROLES EN PROCESO",q:"¿Se cuenta con patrones de color aprobados por el cliente?"},
+ {n:41,a:"5. PROCESO DE IMPRESIÓN Y CONTROLES EN PROCESO",q:"¿Se utiliza espectrofotómetro o densitómetro para el control de color?"},
+ {n:42,a:"5. PROCESO DE IMPRESIÓN Y CONTROLES EN PROCESO",q:"¿Se realizan controles de adherencia de tinta al sustrato?"},
+ {n:43,a:"5. PROCESO DE IMPRESIÓN Y CONTROLES EN PROCESO",q:"¿Se controla la resistencia al frote (rub resistance) del impreso?"},
+ {n:44,a:"5. PROCESO DE IMPRESIÓN Y CONTROLES EN PROCESO",q:"¿Se verifican las dimensiones de corte, troquelado y plegado?"},
+ {n:45,a:"5. PROCESO DE IMPRESIÓN Y CONTROLES EN PROCESO",q:"¿Se controla el contenido de solventes residuales cuando aplica?"},
+ {n:46,a:"5. PROCESO DE IMPRESIÓN Y CONTROLES EN PROCESO",q:"¿Existe un sistema para detectar y segregar producto defectuoso en línea?"},
+ {n:47,a:"5. PROCESO DE IMPRESIÓN Y CONTROLES EN PROCESO",q:"¿Se realizan controles de legibilidad y verificación de códigos de barras?"},
+ {n:48,a:"5. PROCESO DE IMPRESIÓN Y CONTROLES EN PROCESO",q:"¿Se registran los parámetros de proceso para cada orden de producción?"},
+ {n:49,a:"6. CONTROL DE CALIDAD Y LIBERACIÓN",q:"¿Existe un laboratorio o área de control de calidad equipada adecuadamente?"},
+ {n:50,a:"6. CONTROL DE CALIDAD Y LIBERACIÓN",q:"¿Se dispone de especificaciones de producto terminado documentadas?"},
+ {n:51,a:"6. CONTROL DE CALIDAD Y LIBERACIÓN",q:"¿Se realizan ensayos de producto terminado según un plan de inspección?"},
+ {n:52,a:"6. CONTROL DE CALIDAD Y LIBERACIÓN",q:"¿Existe un procedimiento formal de liberación de producto terminado?"},
+ {n:53,a:"6. CONTROL DE CALIDAD Y LIBERACIÓN",q:"¿Se conservan muestras de retención por el periodo definido?"},
+ {n:54,a:"6. CONTROL DE CALIDAD Y LIBERACIÓN",q:"¿Se cuenta con un sistema de aprobación de artes (artwork management)?"},
+ {n:55,a:"6. CONTROL DE CALIDAD Y LIBERACIÓN",q:"¿Se realiza la verificación de conformidad contra la muestra aprobada por el cliente?"},
+ {n:56,a:"6. CONTROL DE CALIDAD Y LIBERACIÓN",q:"¿Los registros de control de calidad son completos, legibles y trazables?"},
+ {n:57,a:"7. TRAZABILIDAD E IDENTIFICACIÓN",q:"¿Existe un sistema de trazabilidad que vincule materia prima, proceso y producto terminado?"},
+ {n:58,a:"7. TRAZABILIDAD E IDENTIFICACIÓN",q:"¿Se asigna número de lote o identificación única a cada orden de producción?"},
+ {n:59,a:"7. TRAZABILIDAD E IDENTIFICACIÓN",q:"¿Se puede realizar un ejercicio de trazabilidad hacia adelante y hacia atrás?"},
+ {n:60,a:"7. TRAZABILIDAD E IDENTIFICACIÓN",q:"¿Se identifican claramente los materiales en todas las etapas del proceso?"},
+ {n:61,a:"7. TRAZABILIDAD E IDENTIFICACIÓN",q:"¿Se controlan los estados de inspección (aprobado, rechazado, en cuarentena)?"},
+ {n:62,a:"7. TRAZABILIDAD E IDENTIFICACIÓN",q:"¿Se realiza conciliación de cantidades (material ingresado vs. producto terminado + merma)?"},
+ {n:63,a:"8. GESTIÓN DE NO CONFORMIDADES, CAPA Y RECLAMOS",q:"¿Existe un procedimiento para el manejo de productos no conformes?"},
+ {n:64,a:"8. GESTIÓN DE NO CONFORMIDADES, CAPA Y RECLAMOS",q:"¿Se registran y analizan las no conformidades internas?"},
+ {n:65,a:"8. GESTIÓN DE NO CONFORMIDADES, CAPA Y RECLAMOS",q:"¿Se implementan acciones correctivas con análisis de causa raíz?"},
+ {n:66,a:"8. GESTIÓN DE NO CONFORMIDADES, CAPA Y RECLAMOS",q:"¿Se implementan acciones preventivas de forma sistemática?"},
+ {n:67,a:"8. GESTIÓN DE NO CONFORMIDADES, CAPA Y RECLAMOS",q:"¿Se realiza seguimiento a la eficacia de las acciones correctivas/preventivas (CAPA)?"},
+ {n:68,a:"8. GESTIÓN DE NO CONFORMIDADES, CAPA Y RECLAMOS",q:"¿Existe un procedimiento para la gestión de reclamos de clientes?"},
+ {n:69,a:"8. GESTIÓN DE NO CONFORMIDADES, CAPA Y RECLAMOS",q:"¿Se registran y analizan los reclamos con tiempos de respuesta definidos?"},
+ {n:70,a:"8. GESTIÓN DE NO CONFORMIDADES, CAPA Y RECLAMOS",q:"¿Existe un procedimiento de retiro de producto (recall) documentado?"},
+ {n:71,a:"9. PERSONAL Y CAPACITACIÓN",q:"¿Existe un programa de capacitación documentado para el personal?"},
+ {n:72,a:"9. PERSONAL Y CAPACITACIÓN",q:"¿Se capacita al personal en GMP, higiene y buenas prácticas de manufactura?"},
+ {n:73,a:"9. PERSONAL Y CAPACITACIÓN",q:"¿Se evalúa la eficacia de las capacitaciones realizadas?"},
+ {n:74,a:"9. PERSONAL Y CAPACITACIÓN",q:"¿El personal utiliza vestimenta adecuada según los requisitos del área?"},
+ {n:75,a:"9. PERSONAL Y CAPACITACIÓN",q:"¿Se definen las competencias requeridas para cada puesto crítico?"},
+ {n:76,a:"9. PERSONAL Y CAPACITACIÓN",q:"¿Se mantienen registros actualizados de capacitación por empleado?"},
+ {n:77,a:"9. PERSONAL Y CAPACITACIÓN",q:"¿Existen normas de higiene personal documentadas y comunicadas?"},
+ {n:78,a:"9. PERSONAL Y CAPACITACIÓN",q:"¿Existe restricción sobre alimentos, bebidas y objetos personales en áreas de producción?"},
+ {n:79,a:"10. AUDITORÍAS INTERNAS",q:"¿Se realiza un programa anual de auditorías internas?"},
+ {n:80,a:"10. AUDITORÍAS INTERNAS",q:"¿Los auditores internos están calificados y son independientes del área auditada?"},
+ {n:81,a:"10. AUDITORÍAS INTERNAS",q:"¿Se documentan los hallazgos y se genera un informe de auditoría?"},
+ {n:82,a:"10. AUDITORÍAS INTERNAS",q:"¿Se da seguimiento a las acciones derivadas de auditorías internas?"},
+ {n:83,a:"10. AUDITORÍAS INTERNAS",q:"¿Se auditan todos los procesos del SGC con frecuencia planificada?"},
+ {n:84,a:"11. SEGURIDAD DEL PRODUCTO Y PREVENCIÓN DE CONTAMINACIÓN",q:"¿Existe un análisis de riesgos de contaminación del producto impreso?"},
+ {n:85,a:"11. SEGURIDAD DEL PRODUCTO Y PREVENCIÓN DE CONTAMINACIÓN",q:"¿Se controlan los materiales de contacto alimentario según normativa aplicable (FDA, EU, Mercosur)?"},
+ {n:86,a:"11. SEGURIDAD DEL PRODUCTO Y PREVENCIÓN DE CONTAMINACIÓN",q:"¿Se cuenta con declaraciones de conformidad de tintas y barnices para contacto alimentario?"},
+ {n:87,a:"11. SEGURIDAD DEL PRODUCTO Y PREVENCIÓN DE CONTAMINACIÓN",q:"¿Existen medidas para prevenir la migración de sustancias del empaque al producto?"},
+ {n:88,a:"11. SEGURIDAD DEL PRODUCTO Y PREVENCIÓN DE CONTAMINACIÓN",q:"¿Se realizan ensayos de migración cuando es requerido por el cliente o la regulación?"},
+ {n:89,a:"11. SEGURIDAD DEL PRODUCTO Y PREVENCIÓN DE CONTAMINACIÓN",q:"¿Existen controles para evitar la mezcla de productos (mix-up) en línea?"},
+ {n:90,a:"11. SEGURIDAD DEL PRODUCTO Y PREVENCIÓN DE CONTAMINACIÓN",q:"¿Se controla la presencia de materiales extraños (vidrio, metal, etc.) en el área de producción?"},
+ {n:91,a:"11. SEGURIDAD DEL PRODUCTO Y PREVENCIÓN DE CONTAMINACIÓN",q:"¿Existe un programa de limpieza y sanitización de equipos y áreas?"},
+ {n:92,a:"12. ALMACENAMIENTO Y DISTRIBUCIÓN",q:"¿Las condiciones de almacenamiento protegen la integridad del producto terminado?"},
+ {n:93,a:"12. ALMACENAMIENTO Y DISTRIBUCIÓN",q:"¿Se controlan las condiciones de temperatura y humedad en el almacén?"},
+ {n:94,a:"12. ALMACENAMIENTO Y DISTRIBUCIÓN",q:"¿El embalaje de despacho protege adecuadamente el producto durante el transporte?"},
+ {n:95,a:"12. ALMACENAMIENTO Y DISTRIBUCIÓN",q:"¿Existe un procedimiento de despacho que asegure la entrega del producto correcto?"},
+ {n:96,a:"12. ALMACENAMIENTO Y DISTRIBUCIÓN",q:"¿Se mantiene la trazabilidad hasta el punto de entrega al cliente?"},
+ {n:97,a:"13. GESTIÓN DE RIESGOS",q:"¿Se aplica una metodología de gestión de riesgos (FMEA, HACCP u otra)?"},
+ {n:98,a:"13. GESTIÓN DE RIESGOS",q:"¿Se han identificado los puntos críticos de control del proceso de impresión?"},
+ {n:99,a:"13. GESTIÓN DE RIESGOS",q:"¿Se evalúan periódicamente los riesgos y se actualizan los controles?"},
+ {n:100,a:"13. GESTIÓN DE RIESGOS",q:"¿Se integra la gestión de riesgos con el sistema de calidad?"},
+ {n:101,a:"14. VALIDACIÓN DE PROCESOS",q:"¿Se validan los procesos críticos de impresión, troquelado y acabado?"},
+ {n:102,a:"14. VALIDACIÓN DE PROCESOS",q:"¿Existen protocolos e informes de validación documentados?"},
+ {n:103,a:"14. VALIDACIÓN DE PROCESOS",q:"¿Se realiza revalidación ante cambios significativos en proceso, equipo o materiales?"},
+ {n:104,a:"14. VALIDACIÓN DE PROCESOS",q:"¿Se validan los métodos de limpieza de equipos entre cambios de producto?"},
+ {n:105,a:"15. MEDIO AMBIENTE Y SEGURIDAD INDUSTRIAL",q:"¿Se cumple con la legislación ambiental aplicable (emisiones, residuos, efluentes)?"},
+ {n:106,a:"15. MEDIO AMBIENTE Y SEGURIDAD INDUSTRIAL",q:"¿Existe un programa de gestión de residuos (peligrosos y no peligrosos)?"},
+ {n:107,a:"15. MEDIO AMBIENTE Y SEGURIDAD INDUSTRIAL",q:"¿Se dispone de elementos de seguridad industrial (extintores, señalización, EPP)?"},
+ {n:108,a:"15. MEDIO AMBIENTE Y SEGURIDAD INDUSTRIAL",q:"¿El personal cuenta con los EPP adecuados y los utiliza correctamente?"},
+ {n:109,a:"15. MEDIO AMBIENTE Y SEGURIDAD INDUSTRIAL",q:"¿Existe un plan de emergencia y evacuación documentado y ensayado?"},
+ ]},
 
 {id:"mp",code:"CL-AUD-MP-001",version:"1.0",nombre:"Materia prima e ingredientes",
  normas:["Health Canada GUI-0104 (2022) — BPF para ingredientes farmacéuticos activos (ICH Q7)","EFfCI GMP for Cosmetic Ingredients, 5.ª ed. 2017-1 — Ingredientes cosméticos","WHO TRS 1060, Anexo 3 (2025) — BPF para excipientes","WHO TRS 996, Anexo 6 (2016) — Buenas prácticas de comercio y distribución de materias primas (GTDP)","ISO 9001:2015"],
@@ -693,11 +759,49 @@ Observación | Revisión por la dirección: se realiza anualmente pero no hay pr
    y de un "no conforme" se crea el hallazgo con un botón, ya vinculado.
    La observación se guarda al salir del campo y no en cada tecla: cada guardado
    escribe la colección entera en el servidor. */
+/* Pegar las respuestas de una check list que ya se llenó afuera -en papel o en
+   el Word-: una línea por requisito, "Nº | C/NC/NA | observación". */
+function leerRespuestasPegadas(texto,tpl){
+  const validos={C:"C",NC:"NC",NA:"NA","N.A.":"NA","N/A":"NA","-":"","":""};
+  return String(texto||"").split(/\r?\n/).map(l=>l.trim()).filter(Boolean).map(l=>{
+    const p=l.split("|").map(x=>x.trim());
+    const n=Number(p[0]);
+    const clave=String(p[1]||"").toUpperCase();
+    const item=(tpl.items||[]).find(i=>i.n===n);
+    if(!item)return{n:p[0],error:`No existe el requisito ${p[0]} en ${tpl.code}`};
+    if(!(clave in validos))return{n,error:`"${p[1]}" no es C, NC ni N.A.`};
+    return{n,r:validos[clave],nota:p.slice(2).join(" | ").trim(),q:item.q};
+  });
+}
+function PegarRespuestas({tpl,onAplicar,onClose}){
+  const[texto,sTexto]=useState("");
+  const filas=leerRespuestasPegadas(texto,tpl);
+  const buenas=filas.filter(f=>!f.error);
+  return(<Md title={`Pegar respuestas — ${tpl.code}`} onClose={onClose} wide>
+    <p style={{fontSize:12.5,color:K.txS,margin:"0 0 8px"}}>Una línea por requisito: <b>número | C, NC o N.A. | observación</b>. Los requisitos que no aparezcan quedan como están. Un guion en el resultado lo deja sin responder.</p>
+    <pre style={{fontSize:11.5,background:K.bg,border:`1px solid ${K.brd}`,borderRadius:6,padding:10,margin:"0 0 10px",whiteSpace:"pre-wrap"}}>1 | C | Certificados ISO 9001 desde 2025
+4 | NC | Se realiza anualmente pero no hay procedimiento
+13 | - | Determinar cuántos lux se requieren</pre>
+    <textarea style={{...sI,minHeight:180,resize:"vertical",fontFamily:"inherit"}} value={texto} onChange={e=>sTexto(e.target.value)} placeholder="Pegá acá las respuestas"/>
+    {!!filas.filter(f=>f.error).length&&<div style={{marginTop:8,fontSize:12,color:K.red}}>
+      {filas.filter(f=>f.error).slice(0,6).map((f,i)=><div key={i}>Línea del requisito {String(f.n)}: {f.error}</div>)}
+    </div>}
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:14}}>
+      <span style={{fontSize:12,color:K.txS}}>{buenas.length} respuesta(s) para cargar de {tpl.items.length} requisitos</span>
+      <div style={{display:"flex",gap:8}}>
+        <button style={sB("g")} onClick={onClose}>Cancelar</button>
+        <button style={sB("pri")} disabled={!buenas.length} onClick={()=>onAplicar(buenas)}>Cargar {buenas.length}</button>
+      </div>
+    </div>
+  </Md>);
+}
+
 function PanelChecklist({fm,u,data,cfg,canEdit}){
   const resp=(data.chkRes||[]).find(r=>r.auditId===fm.id)||null;
   const tpl=resp?chkDe(resp.checklistId):null;
   const[filtro,sFiltro]=useState("todos");
   const[notas,sNotas]=useState({});
+  const[pegarR,sPegarR]=useState(false);
   const res=resumenChk(tpl,resp);
   const marcadas=partirNormas(fm.standard);
   const sugeridas=DEF_CHECKLISTS.filter(c=>c.normas.some(n=>marcadas.includes(n)));
@@ -764,6 +868,7 @@ function PanelChecklist({fm,u,data,cfg,canEdit}){
           <div style={{fontSize:11,color:K.txM,marginTop:2}}>Aplicada {resp.aplicadaEn?.slice(0,10)}{resp.aplicadaPor?` por ${resp.aplicadaPor}`:""}</div>
         </div>
         <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          {canEdit&&<button style={sB("sm")} onClick={()=>sPegarR(true)}>📋 Pegar respuestas</button>}
           <button style={sB("sm")} onClick={()=>imprimirChecklist(fm,tpl,resp)}>🖨 Imprimir</button>
           {canEdit&&<button style={{...sB("sm"),color:K.red}} onClick={quitar}>Quitar</button>}
         </div>
@@ -822,6 +927,16 @@ function PanelChecklist({fm,u,data,cfg,canEdit}){
         </div>
       </div>;
     })}
+    {pegarR&&<PegarRespuestas tpl={tpl} onClose={()=>sPegarR(false)} onAplicar={(filas)=>{
+      data.setChkRes(p=>p.map(r=>{
+        if(r.auditId!==fm.id)return r;
+        const respuestas={...r.respuestas};
+        for(const f of filas)respuestas[f.n]={...(respuestas[f.n]||{}),r:f.r,nota:f.nota||(respuestas[f.n]||{}).nota||""};
+        return{...r,respuestas};
+      }));
+      alog(data.setLogs,"CARGAR","Check list",`${fm.code}: ${filas.length} respuestas pegadas en ${tpl.code}`,data.currentUser?.name);
+      sPegarR(false);
+    }}/>}
   </div>);
 }
 
