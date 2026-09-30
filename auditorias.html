@@ -53,18 +53,22 @@ const DEF_CONFIG={
     {id:"OM",label:"Oportunidad de Mejora",risk:"N/A",deadline:0,color:"#059669",desc:"Mejora operativa"},
   ],
   auditTypes:["Interna","A proveedor","Externa","Autoinspección puntual"],
-  // Las normas contra las que audita Vessena -domisanitarios y cosméticos en
-  // Uruguay-, con el decreto nacional que incorpora cada reglamento MERCOSUR,
-  // que es lo que exige el MSP. Se marcan en el plan y se editan acá.
-  // Las tres últimas son las de material de empaque, para las imprentas: la
-  // 15378 es justamente ISO 9001 con los requisitos de BPF del material de
-  // envasado, que es lo que se les pide.
+  // Las normas contra las que audita Vessena. Las de producto son los decretos
+  // del MSP que incorporan los reglamentos MERCOSUR, que es lo que se exige acá;
+  // despues van las que corresponden segun que se audite: material de empaque
+  // para las imprentas -la 15378 es ISO 9001 con los requisitos de BPF del
+  // envasado- y materia prima para los proveedores quimicos. Se marcan en el
+  // plan y la lista se edita en Configuracion.
   standards:["Decreto 148/015 — RT MERCOSUR BPF Productos Domisanitarios (GMC Res. 31/012)",
              "Decreto 338/014 — RT MERCOSUR BPF Productos de Higiene Personal, Cosméticos y Perfumes (GMC Res. 19/11)",
              "ISO 9001:2015",
              "ISO 15378:2017 + Amd 1:2024 — Material de envasado primario: ISO 9001:2015 con referencia a BPF",
              "BRCGS Packaging Materials, Issue 7 — Material de envasado",
-             "PS 9000:2016 (PQG) — BPF para material de envasado impreso"],
+             "PS 9000:2016 (PQG) — BPF para material de envasado impreso",
+             "WHO TRS 1060, Anexo 3 (2025) — BPF para excipientes",
+             "WHO TRS 996, Anexo 6 (2016) — Buenas prácticas de comercio y distribución de materias primas (GTDP)",
+             "Health Canada GUI-0104 (2022) — BPF para ingredientes farmacéuticos activos (ICH Q7)",
+             "EFfCI GMP for Cosmetic Ingredients, 5.ª ed. 2017-1 — Ingredientes cosméticos"],
   capaTypes:["Acción Correctiva","Acción Preventiva","Corrección"],
   statuses:["Abierto","En proceso","Cerrado","No aplica","Evaluada — No implementar","Vencido"],
   sectors:["Seguimiento Depósito y Distribución","Seguimiento LCC","Gestión Productiva (Fabricación)","Seguimiento Gestión Productiva (Envasado)","Gestión Productiva (Plásticos)","Gestión de Higiene y Sanitización","Seguimiento Depósito de Materias Primas","Depósito PT","Hipoclorito","Control de Calidad","Aseguramiento de Calidad","Dirección Técnica","Compras","Servicios/Agua/Tanques","Áreas auxiliares/Vestuarios","Imprimex (Proveedor)","Dimena (Proveedor)","Petropack (Proveedor)","Imprenta Grifelman (Proveedor)"],
@@ -90,8 +94,20 @@ const MO=["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Set","Oct","Nov","Dic
    comas adentro -"Higiene Personal, Cosméticos y Perfumes"-: se corta solo
    antes de donde empieza otra norma, o en punto y coma. */
 const partirNormas=(s)=>String(s||"")
-  .split(/\s*,\s*(?=Decreto|ISO|GMC|MERCOSUR|Res\.|BRCGS|PS\s*9000|EN\s*\d)|\s*;\s*/i)
+  .split(/\s*,\s*(?=Decreto|ISO|GMC|MERCOSUR|Res\.|BRCGS|PS\s*9000|EN\s*\d|WHO|OMS|Health\s*Canada|EFfCI|ICH\s*Q)|\s*;\s*/i)
   .map(x=>x.trim()).filter(Boolean);
+
+/* Las normas se agrupan por lo que se audita, porque no son las mismas para una
+   imprenta que para un proveedor de materia prima: asi la lista de casillas se
+   lee de un saque. Se deduce del nombre para que la configuracion siga siendo
+   una lista de textos que Claudia edita sola. */
+const GRUPOS_NORMA=["Producto (Uruguay / MERCOSUR)","Sistema de gestión","Material de empaque (imprentas)","Materia prima","Otras"];
+const grupoDeNorma=(n)=>
+  /^\s*decreto|gmc\s*res/i.test(n) ? GRUPOS_NORMA[0]
+  : /15378|brcgs|ps\s*9000|22002-4|15593|envas|empaque/i.test(n) ? GRUPOS_NORMA[2]
+  : /who|oms|health\s*canada|effci|excipient|materia\s*prima|ich\s*q7|starting\s*material/i.test(n) ? GRUPOS_NORMA[3]
+  : /^\s*iso\s*9001|^\s*iso\s*22716/i.test(n) ? GRUPOS_NORMA[1]
+  : GRUPOS_NORMA[4];
 
 const LS={get(k){try{return JSON.parse(localStorage.getItem(k));}catch{return null;}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{}}};
 /* ── Los datos viven en el servidor, no en el navegador ─────────────────────
@@ -301,6 +317,10 @@ async function exportReport(fm,af,cfg){
     :/^\s*iso/i.test(n)?"ISO"
     :/^\s*brcgs/i.test(n)?"BRCGS"
     :/^\s*ps\s*9000/i.test(n)?"PQG (Reino Unido)"
+    :/^\s*(who|oms)\b/i.test(n)?"OMS"
+    :/^\s*health\s*canada/i.test(n)?"Health Canada"
+    :/^\s*effci/i.test(n)?"EFfCI (Europa)"
+    :/^\s*ich\s*q/i.test(n)?"ICH"
     :/mercosur|gmc/i.test(n)?"MERCOSUR":"—";
   const normas=partirNormas(fm.standard);
   const normasRows=normas.length
@@ -437,14 +457,23 @@ function AuditDetail({audit,data,cfg,canEdit,onClose,onSave,onDelete}){
           -llevan el decreto- así que va una por línea y a todo el ancho. El
           campo de texto sigue debajo para una norma puntual que no esté. */}
       <Fd l="Norma">
-        <div style={{display:"flex",flexDirection:"column",gap:5,marginBottom:6}}>
-          {(cfg.standards||[]).map(n=>{
-            const sel=partirNormas(fm.standard).includes(n);
-            return <label key={n} style={{display:"flex",alignItems:"flex-start",gap:6,fontSize:12.5,lineHeight:1.35,cursor:canEdit?"pointer":"default"}}>
-              <input type="checkbox" checked={sel} disabled={!canEdit} style={{marginTop:2}} onChange={()=>{
-                const act=partirNormas(fm.standard);
-                u("standard",(sel?act.filter(x=>x!==n):[...act,n]).join(", "));
-              }}/><span>{n}</span></label>;
+        <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:6}}>
+          {GRUPOS_NORMA.map(g=>{
+            const propias=(cfg.standards||[]).filter(n=>grupoDeNorma(n)===g);
+            if(!propias.length)return null;
+            return <div key={g}>
+              <div style={{fontSize:10.5,fontWeight:700,color:K.txS,textTransform:"uppercase",letterSpacing:.4,marginBottom:3}}>{g}</div>
+              <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                {propias.map(n=>{
+                  const sel=partirNormas(fm.standard).includes(n);
+                  return <label key={n} style={{display:"flex",alignItems:"flex-start",gap:6,fontSize:12.5,lineHeight:1.35,cursor:canEdit?"pointer":"default"}}>
+                    <input type="checkbox" checked={sel} disabled={!canEdit} style={{marginTop:2}} onChange={()=>{
+                      const act=partirNormas(fm.standard);
+                      u("standard",(sel?act.filter(x=>x!==n):[...act,n]).join(", "));
+                    }}/><span>{n}</span></label>;
+                })}
+              </div>
+            </div>;
           })}
         </div>
         <input style={sI} value={fm.standard||""} onChange={e=>u("standard",e.target.value)} disabled={!canEdit} placeholder="Normas aplicables"/>
