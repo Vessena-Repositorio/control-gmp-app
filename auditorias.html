@@ -628,6 +628,66 @@ ${firmasHtml}</table>
 }
 
 /* ── AUDIT DETAIL MODAL ── */
+/* ── PEGAR HALLAZGOS ──────────────────────────────────────────────────────────
+   Un informe de auditoría trae veinte hallazgos; cargarlos de a uno en el
+   formulario es media tarde. Acá se pegan del informe, una por línea, con la
+   clasificación adelante separada por | o ;. Se muestra lo que entendió antes
+   de crear nada. */
+const CLASIF_TEXTO=[
+  [/cr[ií]tic/i,"CRITICA"],[/mayor|grave/i,"GRAVE"],[/menor/i,"MENOR"],
+  [/oportunidad|^\s*om\b/i,"OM"],[/observaci|^\s*obs\b/i,"OBS"],[/otra/i,"OTRA"]];
+function clasificarTexto(t,cfg){
+  const s=String(t||"").trim();
+  for(const[re,id]of CLASIF_TEXTO)if(re.test(s)&&cfg.classifications.some(c=>c.id===id))return id;
+  return null;
+}
+function leerHallazgosPegados(texto,cfg){
+  return String(texto||"").split(/\r?\n/).map(l=>l.trim()).filter(Boolean).map(l=>{
+    const m=l.match(/^(.*?)\s*[|;]\s*(.+)$/);
+    const cls=m?clasificarTexto(m[1],cfg):null;
+    return cls?{clasificacion:cls,descripcion:m[2].trim()}
+               :{clasificacion:null,descripcion:l,error:"No se entiende la clasificación al principio de la línea"};
+  });
+}
+function PegarHallazgos({fm,data,cfg,onClose}){
+  const[texto,sTexto]=useState("");
+  const filas=leerHallazgosPegados(texto,cfg);
+  const buenas=filas.filter(f=>f.clasificacion);
+  const crear=()=>{
+    let n=(data.findings||[]).length;
+    const nuevos=buenas.map(f=>{n++;return{id:gid(),code:`HAL-${String(n).padStart(4,"0")}`,year:fm.year||2026,
+      auditId:fm.id,clauseRef:"",classification:f.clasificacion,description:f.descripcion,
+      evidence:"",capaType:"Acción Correctiva",rootCause:"",status:"Abierto",createdAt:new Date().toISOString()};});
+    data.setFindings(p=>[...p,...nuevos]);
+    alog(data.setLogs,"CREAR","Hallazgo",`${fm.code}: ${nuevos.length} hallazgos pegados del informe`,data.currentUser?.name);
+    alert(`Se crearon ${nuevos.length} hallazgo(s): ${nuevos[0]?.code} a ${nuevos[nuevos.length-1]?.code}.\nRevisalos para completar evidencia y causa raíz.`);
+    onClose();
+  };
+  return(<Md title={`Pegar hallazgos — ${fm.code}`} onClose={onClose} wide>
+    <p style={{fontSize:12.5,color:K.txS,margin:"0 0 8px"}}>Una línea por hallazgo, con la clasificación adelante separada por <b>|</b>. Se entienden crítica, mayor o grave, menor, otra, observación y oportunidad de mejora.</p>
+    <pre style={{fontSize:11.5,background:K.bg,border:`1px solid ${K.brd}`,borderRadius:6,padding:10,margin:"0 0 10px",whiteSpace:"pre-wrap"}}>Mayor | Aprobación de patrones: la orden cuenta con patrón pero sin firma ni fecha del responsable.
+Observación | Revisión por la dirección: se realiza anualmente pero no hay procedimiento que la describa.</pre>
+    <textarea style={{...sI,minHeight:180,resize:"vertical",fontFamily:"inherit"}} value={texto} onChange={e=>sTexto(e.target.value)} placeholder="Pegá acá los hallazgos del informe"/>
+    {!!filas.length&&<div style={{marginTop:10,maxHeight:220,overflowY:"auto",border:`1px solid ${K.brd}`,borderRadius:6}}>
+      <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+        <tbody>{filas.map((f,i)=><tr key={i} style={{borderTop:i?`1px solid ${K.brdL}`:"none"}}>
+          <td style={{padding:"6px 8px",width:110,verticalAlign:"top"}}>
+            {f.clasificacion?<CBg cls={f.clasificacion} cfg={cfg}/>:<span style={{color:K.red,fontSize:11}}>revisar</span>}</td>
+          <td style={{padding:"6px 8px",color:f.clasificacion?K.txt:K.red}}>{f.descripcion}</td>
+        </tr>)}</tbody>
+      </table>
+    </div>}
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:14}}>
+      <span style={{fontSize:12,color:filas.length-buenas.length?K.red:K.txS}}>
+        {buenas.length} para crear{filas.length-buenas.length?` · ${filas.length-buenas.length} línea(s) sin clasificación, no se crean`:""}</span>
+      <div style={{display:"flex",gap:8}}>
+        <button style={sB("g")} onClick={onClose}>Cancelar</button>
+        <button style={sB("pri")} disabled={!buenas.length} onClick={crear}>Crear {buenas.length} hallazgo(s)</button>
+      </div>
+    </div>
+  </Md>);
+}
+
 /* ── CHECK LIST APLICADA A UNA AUDITORÍA ──────────────────────────────────────
    Se elige la plantilla, se marca cada requisito C / NC / N.A. con la evidencia
    y de un "no conforme" se crea el hallazgo con un botón, ya vinculado.
@@ -837,6 +897,7 @@ function AuditDetail({audit,data,cfg,canEdit,onClose,onSave,onDelete}){
   const tabForPhase=(phId)=>{const extMap={ext_notificada:"xi",ext_recibida:"xr",ext_informe:"xp",ext_capa:"xc",ext_cerrada:"xx"};const intMap={planificada:"plan",plan_definido:"plan",en_ejecucion:"exec",informe:"report",cerrada:"close"};return extMap[phId]||intMap[phId]||null;};
   const initTab=tabForPhase(fm.phase)||(ext?"xi":"plan");
   const[tab,sTab]=useState(initTab);
+  const[pegar,sPegar]=useState(false);
   const activeTab=tab||initTab;
   const nextP=()=>{if(ci<phases.length-1){const np=phases[ci+1].id;sFm(p=>({...p,phase:np}));sTab(tabForPhase(np));}};
   const prevP=()=>{if(ci>0){const np=phases[ci-1].id;sFm(p=>({...p,phase:np}));sTab(tabForPhase(np));}};
@@ -917,6 +978,7 @@ function AuditDetail({audit,data,cfg,canEdit,onClose,onSave,onDelete}){
       <div style={sC}><h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px",color:K.grn}}>💪 Fortalezas</h3><Fd l="Fortalezas"><textarea style={{...sI,minHeight:55,resize:"vertical"}} value={fm.strengths||""} onChange={e=>u("strengths",e.target.value)} disabled={!canEdit}/></Fd></div>
       <div style={sC}><h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px",color:K.red}}>⚠ Hallazgos ({af.length})</h3>
         <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+          {canEdit&&<button style={{...sB("g"),color:K.red}} onClick={()=>sPegar(true)}>📋 Pegar hallazgos</button>}
           {canEdit&&<button style={{...sB("g"),color:"#0891B2"}} onClick={()=>{const h="CODIGO;CLASIFICACION;DESCRIPCION;CAUSA_RAIZ;CORRECCION;CORRECCION_RESPONSABLE;CORRECCION_FECHA;ACCION_CORRECTIVA;AC_RESPONSABLE;AC_FECHA_IMPL;AC_FECHA_REALIZADO;AC_EVIDENCIA;AC_ESTADO;VERIF_EFICACIA_METODO;VERIF_EFICACIA_FECHA;VERIF_EFICACIA_RESPONSABLE;RESULTADO\n";const r=af.length>0?af.map(f=>{const cl=cfg.classifications.find(x=>x.id===f.classification);const existAcc=data.actions.find(a=>a.findingId===f.id);return`${f.code};${cl?.label||""};${f.description.replace(/;/g,",").replace(/\n/g," ")};${f.rootCause||""};${existAcc?"":""};;${existAcc?"":""};;${existAcc?.dueDate||""};;${existAcc?"":""};;${existAcc?.responsible||""};${existAcc?.status||""};;;;;`;}).join("\n"):";;;;;;;;;;;;;;;;";const b=new Blob(["\uFEFF"+h+r],{type:"text/csv;charset=utf-8"});const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=`Plantilla_CAPA_${fm.code}.csv`;a.click();}}>📥 Plantilla CAPA ({af.length})</button>}
           {canEdit&&<label style={{...sB("g"),color:K.grn,cursor:"pointer"}}>📤 Importar CAPA<input type="file" accept=".csv,.txt" style={{display:"none"}} onChange={e=>{const file=e.target.files[0];if(!file)return;const rd=new FileReader();rd.onload=ev=>{try{const ls=ev.target.result.split("\n").filter(l=>l.trim());if(ls.length<2)return alert("Vacío");const hd=ls[0].split(";").map(h=>h.trim());
             const iC=hd.indexOf("CODIGO"),iCa=hd.indexOf("CAUSA_RAIZ"),iAC=hd.indexOf("ACCION_CORRECTIVA"),iAR=hd.indexOf("AC_RESPONSABLE"),iAF=hd.indexOf("AC_FECHA_IMPL"),iCo=hd.indexOf("CORRECCION"),iCR=hd.indexOf("CORRECCION_RESPONSABLE"),iVM=hd.indexOf("VERIF_EFICACIA_METODO"),iVF=hd.indexOf("VERIF_EFICACIA_FECHA"),iVR=hd.indexOf("VERIF_EFICACIA_RESPONSABLE"),iAFR=hd.indexOf("AC_FECHA_REALIZADO"),iAEV=hd.indexOf("AC_EVIDENCIA"),iAST=hd.indexOf("AC_ESTADO"),iRES=hd.indexOf("RESULTADO");
@@ -1082,6 +1144,7 @@ function AuditDetail({audit,data,cfg,canEdit,onClose,onSave,onDelete}){
       <div style={{fontSize:12.5,color:"#78350F",marginTop:4}}><strong>Motivo:</strong> {fm.postponedReason}</div>
       <div style={{fontSize:11,color:"#92400E",marginTop:2}}>Fecha de postergación: {fd(fm.postponedDate)}</div>
     </div>}
+    {pegar&&<PegarHallazgos fm={fm} data={data} cfg={cfg} onClose={()=>sPegar(false)}/>}
   </Md>);
 }
 
