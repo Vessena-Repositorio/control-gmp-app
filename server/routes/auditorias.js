@@ -28,6 +28,7 @@ const administrar = exigirPermiso(RECURSO, 'administrar');
 const COLECCIONES = new Set([
     'auditorias', 'hallazgos', 'acciones', 'autoinspecciones',
     'autoinspecciones_hallazgos', 'programa_sectores', 'config',
+    'checklist_respuestas',
 ]);
 // La configuracion define clasificaciones, sectores y equipos: la toca quien
 // administra, no el turno.

@@ -86,6 +86,209 @@ const DEF_CONFIG={
   aiCriteria:[{code:"OyL",label:"Orden y Limpieza"},{code:"T",label:"Temperatura"},{code:"M",label:"Mantenimiento"},{code:"D",label:"Documentación"}],
   auditorComps:["Inglés Técnico","GMP","Herramientas informáticas","Formación en auditorías"],
 };
+/* ── CHECK LIST POR NORMA ─────────────────────────────────────────────────────
+   Las check list son documentos controlados: van acá, con su código y versión,
+   y se versionan con el archivo. Cada requisito se redacta como afirmación para
+   verificar -el auditor marca C / NC / N.A. y anota la evidencia-, con la
+   referencia a la cláusula de la norma. No se copia el texto de las normas.
+   n: número dentro de la lista · a: área · q: requisito · r: referencia. */
+const DEF_CHECKLISTS=[
+{id:"bpf",code:"CL-AUD-BPF-001",version:"1.0",nombre:"BPF MERCOSUR — auditoría interna y a fabricantes",
+ normas:["Decreto 148/015 — RT MERCOSUR BPF Productos Domisanitarios (GMC Res. 31/012)","Decreto 338/014 — RT MERCOSUR BPF Productos de Higiene Personal, Cosméticos y Perfumes (GMC Res. 19/11)"],
+ items:[
+ {n:1,a:"1. Gestión de la calidad",q:"La política de calidad está definida por escrito y el sistema de calidad documentado, con responsabilidades asignadas."},
+ {n:2,a:"1. Gestión de la calidad",q:"La unidad de calidad es independiente de producción y tiene autoridad para aprobar o rechazar materiales, graneles y producto terminado."},
+ {n:3,a:"1. Gestión de la calidad",q:"La dirección revisa periódicamente el sistema de calidad y quedan registros de las decisiones."},
+ {n:4,a:"1. Gestión de la calidad",q:"La Dirección Técnica está habilitada, con funciones definidas y presencia acorde a la actividad."},
+ {n:5,a:"2. Personal",q:"Hay organigrama actualizado y descripción de funciones del personal clave, con reemplazos previstos."},
+ {n:6,a:"2. Personal",q:"El personal tiene la formación y experiencia necesarias para las tareas que realiza."},
+ {n:7,a:"3. Capacitación",q:"Existe plan anual de capacitación en BPF que incluye al personal nuevo, a los traslados y a terceros que ingresan a planta."},
+ {n:8,a:"3. Capacitación",q:"Las capacitaciones se registran y se evalúa su eficacia."},
+ {n:9,a:"4. Higiene personal",q:"Hay procedimientos de higiene personal y vestimenta por área, y se cumplen en la práctica."},
+ {n:10,a:"4. Higiene personal",q:"Se realizan controles de salud al ingreso y periódicos, y se registra la exclusión de tareas por enfermedad o lesión."},
+ {n:11,a:"4. Higiene personal",q:"Está prohibido comer, beber, fumar y usar alhajas en áreas productivas, y hay sectores habilitados para ello."},
+ {n:12,a:"5. Instalaciones",q:"El diseño y la ubicación de las áreas evitan la contaminación cruzada; los flujos de personal, materiales y residuos están definidos."},
+ {n:13,a:"5. Instalaciones",q:"Pisos, paredes y techos de áreas productivas son lisos, lavables y están en buen estado de mantenimiento."},
+ {n:14,a:"5. Instalaciones",q:"Iluminación, ventilación y temperatura son adecuadas al proceso y a los materiales que se manipulan."},
+ {n:15,a:"5. Instalaciones",q:"Hay áreas identificadas y separadas para cuarentena, aprobados, rechazados, devoluciones y recuperados."},
+ {n:16,a:"5. Instalaciones",q:"Vestuarios, baños y comedor están separados de las áreas productivas y en condiciones de higiene."},
+ {n:17,a:"6. Equipos",q:"Los equipos están diseñados, instalados y ubicados de modo de facilitar la limpieza y el mantenimiento."},
+ {n:18,a:"6. Equipos",q:"Hay plan de mantenimiento preventivo con registros por equipo."},
+ {n:19,a:"6. Equipos",q:"Los instrumentos de medición críticos están calibrados con trazabilidad y llevan etiqueta con el estado y el vencimiento."},
+ {n:20,a:"6. Equipos",q:"Equipos, tanques y cañerías están identificados, incluido el contenido y el estado de limpieza."},
+ {n:21,a:"7. Materiales",q:"Las materias primas y el material de envasado se reciben, identifican, cuarentenan y se aprueban antes de usarse."},
+ {n:22,a:"7. Materiales",q:"Cada material tiene especificación aprobada y proveedor calificado."},
+ {n:23,a:"7. Materiales",q:"Se controla el vencimiento o la fecha de reanálisis y se respeta la rotación de existencias."},
+ {n:24,a:"7. Materiales",q:"El material de envasado impreso se controla contra el arte aprobado, se conserva bajo custodia y el obsoleto se destruye con registro."},
+ {n:25,a:"7. Materiales",q:"El agua de proceso tiene especificación, controles físico-químicos y microbiológicos periódicos y registro de resultados."},
+ {n:26,a:"8. Documentación",q:"Los procedimientos y registros están aprobados, con control de versiones y sólo circulan copias vigentes."},
+ {n:27,a:"8. Documentación",q:"Cada lote tiene su orden de producción y de envasado completa, firmada, con reconciliación de materiales."},
+ {n:28,a:"8. Documentación",q:"Los registros se completan en el momento, son legibles y las correcciones dejan ver el dato original, con firma y fecha."},
+ {n:29,a:"8. Documentación",q:"Los registros se conservan por el plazo establecido y están disponibles para consulta."},
+ {n:30,a:"9. Producción",q:"La fabricación sigue la fórmula maestra y el procedimiento aprobado, con los controles en proceso registrados."},
+ {n:31,a:"9. Producción",q:"Productos y semielaborados están identificados con producto, lote y estado en todas las etapas."},
+ {n:32,a:"9. Producción",q:"Se registran los rendimientos y se investigan los desvíos de proceso."},
+ {n:33,a:"9. Producción",q:"Sobrantes, recuperados y reprocesos tienen procedimiento escrito y autorización de calidad."},
+ {n:34,a:"10. Control de calidad",q:"El laboratorio cuenta con métodos aprobados, personal calificado y equipos calibrados."},
+ {n:35,a:"10. Control de calidad",q:"Se analizan materias primas, graneles y producto terminado contra especificación antes de liberar."},
+ {n:36,a:"10. Control de calidad",q:"Se conservan muestras de retención de cada lote por el plazo establecido."},
+ {n:37,a:"10. Control de calidad",q:"Los resultados fuera de especificación se investigan según procedimiento escrito, con conclusión y acciones."},
+ {n:38,a:"10. Control de calidad",q:"Hay estudios de estabilidad que respaldan el vencimiento declarado."},
+ {n:39,a:"11. Saneamiento e higiene",q:"Hay procedimientos de limpieza y sanitización por área y por equipo, con responsable y registro."},
+ {n:40,a:"11. Saneamiento e higiene",q:"Los productos de limpieza están aprobados, identificados y almacenados separados de los materiales de producción."},
+ {n:41,a:"11. Saneamiento e higiene",q:"La eficacia de la limpieza se verifica —visual, microbiológica o por residuos— según el riesgo, con registro."},
+ {n:42,a:"12. Control de plagas",q:"Hay programa de control de plagas con plano de cebos, registros de visitas y acciones ante hallazgos."},
+ {n:43,a:"12. Control de plagas",q:"Las aberturas al exterior tienen barreras y se verifica su estado."},
+ {n:44,a:"13. Validación y control de cambios",q:"Procesos, equipos y métodos críticos están validados o calificados, con protocolo e informe aprobados."},
+ {n:45,a:"13. Validación y control de cambios",q:"Los cambios que afectan la calidad pasan por control de cambios con evaluación de impacto y cierre."},
+ {n:46,a:"14. Reclamos y devoluciones",q:"Los reclamos se registran, investigan y responden, evaluando si corresponde acción correctiva o retiro."},
+ {n:47,a:"14. Reclamos y devoluciones",q:"Las devoluciones se cuarentenan y su destino lo decide calidad con registro y justificación."},
+ {n:48,a:"15. Retiro de plaza",q:"Hay procedimiento de retiro con responsable designado, y su eficacia se prueba periódicamente."},
+ {n:49,a:"16. Tercerizaciones",q:"Los trabajos tercerizados —fabricación, envasado o análisis— están cubiertos por contrato técnico y el contratista fue auditado."},
+ {n:50,a:"17. Autoinspección",q:"Se realizan autoinspecciones programadas con informe, hallazgos y plan de acción."},
+ {n:51,a:"17. Autoinspección",q:"Las acciones de auditorías anteriores se cerraron y se verificó su eficacia."},
+ {n:52,a:"18. Trazabilidad",q:"A partir de un lote de producto terminado se reconstruye el origen de materias primas, envases, controles y despacho."}]},
+
+{id:"emp",code:"CL-AUD-EMP-001",version:"1.0",nombre:"Material de empaque — imprentas y envases",
+ normas:["ISO 15378:2017 + Amd 1:2024 — Material de envasado primario: ISO 9001:2015 con referencia a BPF","BRCGS Packaging Materials, Issue 7 — Material de envasado","PS 9000:2016 (PQG) — BPF para material de envasado impreso","ISO 9001:2015"],
+ items:[
+ {n:1,a:"1. Sistema de gestión",q:"El sistema de gestión está certificado o documentado, con alcance que cubre la fabricación y el suministro del material que provee a Vessena.",r:"ISO 15378 cl. 4 · ISO 9001 cl. 4"},
+ {n:2,a:"1. Sistema de gestión",q:"La dirección demostró compromiso: objetivos de calidad e inocuidad, recursos asignados y revisión por la dirección con registros.",r:"ISO 15378 cl. 5 · BRCGS PM 7 sec. 1"},
+ {n:3,a:"1. Sistema de gestión",q:"Existe cultura de calidad e inocuidad del producto con acciones planificadas y medidas de avance.",r:"BRCGS PM 7 sec. 1"},
+ {n:4,a:"2. Gestión de riesgos",q:"Hay análisis de riesgos del material de envasado (contaminación, migración, mezcla, error de impresión) documentado y revisado.",r:"ISO 15378 cl. 6 · BRCGS PM 7 sec. 2"},
+ {n:5,a:"2. Gestión de riesgos",q:"Se evaluó la aptitud del material para el contacto con el producto y hay declaración de conformidad o idoneidad del proveedor.",r:"ISO 15378 cl. 8.2 · PS 9000"},
+ {n:6,a:"3. Documentación",q:"Los documentos y registros están controlados: versión vigente, aprobación, distribución y conservación por el plazo definido.",r:"ISO 15378 cl. 7.5"},
+ {n:7,a:"3. Documentación",q:"Los cambios de material, proceso, arte o proveedor pasan por control de cambios y se comunican al cliente cuando corresponde.",r:"ISO 15378 cl. 8.5.6 · PS 9000"},
+ {n:8,a:"4. Personal",q:"Hay descripciones de puesto, matriz de competencias y plan de capacitación con registros, incluida la inducción en BPF.",r:"ISO 15378 cl. 7.2"},
+ {n:9,a:"4. Personal",q:"Se cumplen las reglas de higiene y vestimenta en planta, con control de salud y de acceso de visitantes.",r:"ISO 15378 cl. 7.1.4 · BRCGS PM 7 sec. 6"},
+ {n:10,a:"5. Instalaciones",q:"El sitio está protegido, con control de accesos y zonificación acorde al riesgo del material que se produce.",r:"ISO 15378 cl. 7.1.3 · BRCGS PM 7 sec. 4"},
+ {n:11,a:"5. Instalaciones",q:"El estado de pisos, paredes, techos e iluminación no representa riesgo de contaminación del material impreso.",r:"ISO 15378 cl. 7.1.3"},
+ {n:12,a:"5. Instalaciones",q:"Hay control de vidrios, plásticos rígidos y objetos cortantes en áreas de producción y depósito.",r:"BRCGS PM 7 sec. 4"},
+ {n:13,a:"6. Higiene y plagas",q:"Los programas de limpieza por área y equipo están escritos, con responsables, frecuencia y registro de ejecución.",r:"ISO 15378 cl. 8.5 · BRCGS PM 7 sec. 4"},
+ {n:14,a:"6. Higiene y plagas",q:"El control de plagas está vigente, con plano, registros de visita y acciones ante hallazgos.",r:"BRCGS PM 7 sec. 4"},
+ {n:15,a:"6. Higiene y plagas",q:"Los residuos y el material de descarte se segregan, identifican y retiran con frecuencia definida.",r:"BRCGS PM 7 sec. 4"},
+ {n:16,a:"7. Equipos y calibración",q:"Hay plan de mantenimiento preventivo por equipo, con registros y evaluación del impacto de las intervenciones sobre el producto.",r:"ISO 15378 cl. 7.1.3"},
+ {n:17,a:"7. Equipos y calibración",q:"Los equipos de medición críticos —espectrodensitómetro, lectores de código, balanzas, calibres— están calibrados y vigentes.",r:"ISO 15378 cl. 7.1.5"},
+ {n:18,a:"7. Equipos y calibración",q:"Cuando se detecta un equipo fuera de calibración se evalúa el impacto sobre el material ya entregado.",r:"ISO 15378 cl. 7.1.5"},
+ {n:19,a:"8. Compras y proveedores",q:"Los proveedores de papel, cartón, tintas, barnices y adhesivos están evaluados y aprobados, con criterios y reevaluación periódica.",r:"ISO 15378 cl. 8.4"},
+ {n:20,a:"8. Compras y proveedores",q:"Cada material que ingresa tiene especificación y certificado o control de recepción antes de liberarse a producción.",r:"ISO 15378 cl. 8.4 · 8.6"},
+ {n:21,a:"8. Compras y proveedores",q:"Se controla el vencimiento de tintas, barnices y adhesivos, y el material vencido se segrega.",r:"ISO 15378 cl. 8.5.4"},
+ {n:22,a:"9. Arte y material impreso",q:"El arte, la tipografía y los textos se aprueban por escrito con el cliente antes de imprimir, y se conserva la versión aprobada.",r:"PS 9000 · ISO 15378 cl. 8.2"},
+ {n:23,a:"9. Arte y material impreso",q:"Hay control de versiones del arte: al cambiar, la versión anterior se retira de producción y se destruye con registro.",r:"PS 9000"},
+ {n:24,a:"9. Arte y material impreso",q:"Se verifica el código de barras / EAN en línea o por muestreo, con registro del resultado.",r:"PS 9000 · BRCGS PM 7 sec. 5"},
+ {n:25,a:"9. Arte y material impreso",q:"El material impreso obsoleto, mal impreso o de sobrante se destruye o segrega bajo control, con registro de cantidades.",r:"PS 9000"},
+ {n:26,a:"10. Producción y controles",q:"Cada orden de trabajo define material, arte, versión, cantidad y controles a realizar.",r:"ISO 15378 cl. 8.5.1"},
+ {n:27,a:"10. Producción y controles",q:"Hay control de arranque de máquina con aprobación antes de producir en serie.",r:"ISO 15378 cl. 8.5.1"},
+ {n:28,a:"10. Producción y controles",q:"Los controles en proceso —color, registro, medidas, legibilidad, pegado— se realizan con frecuencia definida y se registran.",r:"ISO 15378 cl. 8.5.1 · BRCGS PM 7 sec. 5"},
+ {n:29,a:"10. Producción y controles",q:"Se conservan muestras de retención por lote y por versión de arte, identificadas y accesibles.",r:"PS 9000 · ISO 15378 cl. 8.5.1"},
+ {n:30,a:"10. Producción y controles",q:"La limpieza de línea entre trabajos evita mezcla de materiales o de versiones (despeje de línea verificado y registrado).",r:"PS 9000 · BRCGS PM 7 sec. 5"},
+ {n:31,a:"11. Trazabilidad y liberación",q:"Cada lote entregado se puede trazar hacia atrás hasta las materias primas y hacia adelante hasta el cliente.",r:"ISO 15378 cl. 8.5.2"},
+ {n:32,a:"11. Trazabilidad y liberación",q:"El estado del material —en proceso, en espera, aprobado, rechazado— está identificado en todo momento.",r:"ISO 15378 cl. 8.5.2"},
+ {n:33,a:"11. Trazabilidad y liberación",q:"La liberación de producto terminado la hace personal autorizado contra criterios definidos, con registro de muestreo.",r:"ISO 15378 cl. 8.6"},
+ {n:34,a:"12. No conformes y reclamos",q:"El material no conforme se identifica, segrega y su destino se decide y registra.",r:"ISO 15378 cl. 8.7"},
+ {n:35,a:"12. No conformes y reclamos",q:"Los reclamos de clientes se registran, investigan con causa raíz y derivan en acción correctiva verificada.",r:"ISO 15378 cl. 10.2"},
+ {n:36,a:"12. No conformes y reclamos",q:"Hay procedimiento de retiro de material entregado, con responsable y prueba de eficacia.",r:"BRCGS PM 7 sec. 3"},
+ {n:37,a:"13. Almacenamiento y despacho",q:"El material se almacena protegido de humedad, polvo y luz, separado de químicos y sin contacto con el piso.",r:"ISO 15378 cl. 8.5.4"},
+ {n:38,a:"13. Almacenamiento y despacho",q:"El material terminado se embala e identifica de forma que llegue protegido e identificable al cliente.",r:"ISO 15378 cl. 8.5.4"},
+ {n:39,a:"13. Almacenamiento y despacho",q:"Los vehículos y el despacho se verifican en cuanto a limpieza y estado antes de cargar.",r:"BRCGS PM 7 sec. 4"},
+ {n:40,a:"14. Auditorías y mejora",q:"Se realizan auditorías internas programadas que cubren todo el sistema, con informe y seguimiento.",r:"ISO 15378 cl. 9.2"},
+ {n:41,a:"14. Auditorías y mejora",q:"Las no conformidades de auditorías previas —internas, de certificación y de clientes— están cerradas con eficacia verificada.",r:"ISO 15378 cl. 10.2"},
+ {n:42,a:"14. Auditorías y mejora",q:"Se analizan indicadores de calidad y reclamos, y se toman decisiones a partir de ellos.",r:"ISO 15378 cl. 9.1"},
+ {n:43,a:"15. Auditorías previas Vessena",q:"Se revisaron los hallazgos y las CAPA de la auditoría anterior de Vessena y se verificó su implementación.",r:"SOP-AC-035"},
+ {n:44,a:"15. Auditorías previas Vessena",q:"Los requisitos particulares acordados con Vessena (artes, EAN, muestras, plazos, avisos de cambio) se cumplen.",r:"SOP-AC-035"}]},
+
+{id:"mp",code:"CL-AUD-MP-001",version:"1.0",nombre:"Materia prima e ingredientes",
+ normas:["Health Canada GUI-0104 (2022) — BPF para ingredientes farmacéuticos activos (ICH Q7)","EFfCI GMP for Cosmetic Ingredients, 5.ª ed. 2017-1 — Ingredientes cosméticos","WHO TRS 1060, Anexo 3 (2025) — BPF para excipientes","WHO TRS 996, Anexo 6 (2016) — Buenas prácticas de comercio y distribución de materias primas (GTDP)","ISO 9001:2015"],
+ items:[
+ {n:1,a:"1. Sistema de calidad",q:"Hay un sistema de calidad documentado y una unidad de calidad independiente con autoridad para liberar o rechazar.",r:"GUI-0104 / ICH Q7 §2"},
+ {n:2,a:"1. Sistema de calidad",q:"Las responsabilidades de calidad y de producción están definidas por escrito y se cumplen.",r:"ICH Q7 §2.2"},
+ {n:3,a:"1. Sistema de calidad",q:"Se realizan revisiones periódicas de la calidad del producto y revisión por la dirección, con registros.",r:"ICH Q7 §2.5"},
+ {n:4,a:"1. Sistema de calidad",q:"Los desvíos se registran, investigan y cierran con acción correctiva.",r:"ICH Q7 §2.16"},
+ {n:5,a:"2. Personal",q:"El personal tiene la calificación y la capacitación registradas para las tareas que realiza.",r:"ICH Q7 §3.1"},
+ {n:6,a:"2. Personal",q:"Se cumplen las prácticas de higiene y vestimenta, y hay control de salud acorde al riesgo del producto.",r:"ICH Q7 §3.2 · EFfCI"},
+ {n:7,a:"3. Instalaciones",q:"El diseño, el flujo y la separación de áreas evitan la contaminación cruzada entre productos.",r:"ICH Q7 §4.1"},
+ {n:8,a:"3. Instalaciones",q:"Hay áreas definidas e identificadas para recepción, cuarentena, aprobado, rechazado y despacho.",r:"ICH Q7 §4.1 · §7.1"},
+ {n:9,a:"3. Instalaciones",q:"Los servicios que contactan el producto —agua, aire comprimido, nitrógeno, vapor— tienen especificación y control.",r:"ICH Q7 §4.3"},
+ {n:10,a:"3. Instalaciones",q:"El agua utilizada cumple una especificación definida y se controla periódicamente, incluida la carga microbiana cuando aplica.",r:"ICH Q7 §4.3 · EFfCI"},
+ {n:11,a:"4. Equipos",q:"Los equipos y sus materiales de construcción son adecuados al producto y no aportan contaminación.",r:"ICH Q7 §5.1"},
+ {n:12,a:"4. Equipos",q:"Hay procedimientos de limpieza de equipos, reactores e IBC, con registro y criterio de aceptación.",r:"ICH Q7 §5.2"},
+ {n:13,a:"4. Equipos",q:"La limpieza está validada o verificada cuando el equipo es multiproducto, con muestreo y límites justificados.",r:"ICH Q7 §12.7 · EFfCI"},
+ {n:14,a:"4. Equipos",q:"Los instrumentos de medición críticos están calibrados, vigentes e identificados.",r:"ICH Q7 §5.3"},
+ {n:15,a:"4. Equipos",q:"Los sistemas informáticos que afectan la calidad están controlados y con respaldo de datos.",r:"ICH Q7 §5.4"},
+ {n:16,a:"5. Documentación",q:"Los procedimientos y especificaciones están aprobados y con control de versiones.",r:"ICH Q7 §6.1"},
+ {n:17,a:"5. Documentación",q:"Cada lote tiene registro de producción completo, con firmas, rendimiento y desvíos.",r:"ICH Q7 §6.5"},
+ {n:18,a:"5. Documentación",q:"Los registros se conservan por el plazo definido y son legibles, trazables y sin enmiendas que oculten el dato original.",r:"ICH Q7 §6.1"},
+ {n:19,a:"6. Gestión de materiales",q:"Los materiales se reciben, identifican por lote, cuarentenan y se muestrean según procedimiento antes de aprobar.",r:"ICH Q7 §7.2"},
+ {n:20,a:"6. Gestión de materiales",q:"Se verifica la identidad de cada lote de material recibido, no sólo el certificado del proveedor.",r:"ICH Q7 §7.3"},
+ {n:21,a:"6. Gestión de materiales",q:"Los proveedores están evaluados y aprobados, con auditoría o justificación del grado de control.",r:"ICH Q7 §7.1 · ISO 9001 cl. 8.4"},
+ {n:22,a:"6. Gestión de materiales",q:"Se controlan vencimientos y fechas de reanálisis, y se respeta la rotación de existencias.",r:"ICH Q7 §7.5 · §11.6"},
+ {n:23,a:"7. Producción",q:"La producción sigue la fórmula y el procedimiento aprobados, con pesada verificada y controles en proceso registrados.",r:"ICH Q7 §8.1"},
+ {n:24,a:"7. Producción",q:"Los lotes, intermedios y equipos en uso están identificados con producto, lote y estado.",r:"ICH Q7 §8.2"},
+ {n:25,a:"7. Producción",q:"Los rendimientos se registran y los desvíos se investigan antes de liberar.",r:"ICH Q7 §8.4"},
+ {n:26,a:"7. Producción",q:"El reproceso y la recuperación de solventes o materiales tienen procedimiento, justificación y aprobación de calidad.",r:"ICH Q7 §14.2"},
+ {n:27,a:"8. Envasado e identificación",q:"Los envases utilizados protegen el producto y no interactúan con él; su limpieza está controlada.",r:"ICH Q7 §9.1"},
+ {n:28,a:"8. Envasado e identificación",q:"Los rótulos se controlan: emisión, conciliación, custodia y destrucción de los obsoletos.",r:"ICH Q7 §9.2"},
+ {n:29,a:"8. Envasado e identificación",q:"El rótulo indica producto, lote, cantidad, fecha de vencimiento o reanálisis y las advertencias que correspondan.",r:"ICH Q7 §9.4"},
+ {n:30,a:"9. Almacenamiento y distribución",q:"Las condiciones de almacenamiento son las declaradas y se monitorean cuando el producto lo exige.",r:"ICH Q7 §10.1 · TRS 996"},
+ {n:31,a:"9. Almacenamiento y distribución",q:"El transporte y la distribución protegen el producto, y se puede identificar a quién se entregó cada lote.",r:"ICH Q7 §10.2 · TRS 996"},
+ {n:32,a:"9. Almacenamiento y distribución",q:"Si fracciona o reenvasa material de terceros, la trazabilidad al fabricante original y al lote de origen está documentada.",r:"TRS 996 · ICH Q7 §17"},
+ {n:33,a:"10. Laboratorio",q:"Los métodos de análisis están aprobados y, cuando no son de compendio, validados.",r:"ICH Q7 §11.1 · §12.8"},
+ {n:34,a:"10. Laboratorio",q:"Cada lote se analiza contra especificación y el certificado de análisis refleja los resultados reales obtenidos.",r:"ICH Q7 §11.4"},
+ {n:35,a:"10. Laboratorio",q:"Se conservan muestras de retención por el plazo establecido y en condiciones adecuadas.",r:"ICH Q7 §11.7"},
+ {n:36,a:"10. Laboratorio",q:"Los resultados fuera de especificación se investigan con procedimiento escrito y conclusión documentada.",r:"ICH Q7 §11.15"},
+ {n:37,a:"10. Laboratorio",q:"Hay control microbiológico del producto cuando el uso previsto lo requiere, con límites definidos.",r:"EFfCI · TRS 1060"},
+ {n:38,a:"10. Laboratorio",q:"Hay estudios de estabilidad que respaldan la vida útil o el período de reanálisis declarado.",r:"ICH Q7 §11.5"},
+ {n:39,a:"11. Validación y cambios",q:"Los procesos críticos están validados y hay control de cambios con evaluación de impacto y notificación al cliente.",r:"ICH Q7 §12 · §13"},
+ {n:40,a:"12. Reclamos y retiro",q:"Los reclamos se registran, investigan y responden, y hay procedimiento de retiro con responsable.",r:"ICH Q7 §15"},
+ {n:41,a:"13. Ingredientes cosméticos",q:"Se entrega documentación del ingrediente: especificación, ficha de seguridad, INCI, alérgenos, origen (animal, vegetal, GMO) y declaración de conformidad.",r:"EFfCI"},
+ {n:42,a:"13. Ingredientes cosméticos",q:"El proveedor informa por escrito cualquier cambio de origen, proceso o especificación antes de aplicarlo.",r:"EFfCI"},
+ {n:43,a:"14. Auditorías previas Vessena",q:"Los hallazgos y CAPA de la auditoría anterior de Vessena están cerrados y se verificó su eficacia.",r:"SOP-AC-035"}]},
+
+{id:"iso",code:"CL-AUD-ISO-001",version:"1.0",nombre:"ISO 9001:2015 — sistema de gestión de la calidad",
+ normas:["ISO 9001:2015"],
+ items:[
+ {n:1,a:"4. Contexto",q:"Están determinadas las cuestiones internas y externas y las partes interesadas pertinentes, y se revisan.",r:"cl. 4.1 · 4.2"},
+ {n:2,a:"4. Contexto",q:"El alcance del sistema está definido por escrito, con las exclusiones justificadas.",r:"cl. 4.3"},
+ {n:3,a:"4. Contexto",q:"Los procesos, sus entradas, salidas, secuencia e indicadores están identificados.",r:"cl. 4.4"},
+ {n:4,a:"5. Liderazgo",q:"La dirección demuestra liderazgo: política de calidad comunicada, recursos y responsabilidades asignadas.",r:"cl. 5.1 · 5.2 · 5.3"},
+ {n:5,a:"5. Liderazgo",q:"El enfoque al cliente se traduce en requisitos comprendidos y en seguimiento de su satisfacción.",r:"cl. 5.1.2"},
+ {n:6,a:"6. Planificación",q:"Los riesgos y oportunidades están identificados con acciones planificadas y evaluación de su eficacia.",r:"cl. 6.1"},
+ {n:7,a:"6. Planificación",q:"Hay objetivos de calidad medibles, con plan para alcanzarlos y seguimiento.",r:"cl. 6.2"},
+ {n:8,a:"6. Planificación",q:"Los cambios en el sistema se planifican y se controlan.",r:"cl. 6.3"},
+ {n:9,a:"7. Apoyo",q:"Los recursos, la infraestructura y el ambiente de trabajo son adecuados y se mantienen.",r:"cl. 7.1.1 · 7.1.3 · 7.1.4"},
+ {n:10,a:"7. Apoyo",q:"Los equipos de seguimiento y medición están calibrados o verificados, con trazabilidad y registros.",r:"cl. 7.1.5"},
+ {n:11,a:"7. Apoyo",q:"La competencia del personal está determinada, cubierta con formación y evaluada, con registros.",r:"cl. 7.2"},
+ {n:12,a:"7. Apoyo",q:"El personal conoce la política, los objetivos y su contribución al sistema.",r:"cl. 7.3"},
+ {n:13,a:"7. Apoyo",q:"La información documentada está controlada: aprobación, versión, distribución, conservación y protección.",r:"cl. 7.5"},
+ {n:14,a:"8. Operación",q:"La planificación operativa define criterios de proceso, controles y registros necesarios.",r:"cl. 8.1"},
+ {n:15,a:"8. Operación",q:"Los requisitos del cliente se revisan antes de comprometerse y los cambios se comunican.",r:"cl. 8.2"},
+ {n:16,a:"8. Operación",q:"El diseño y desarrollo, cuando aplica, está planificado, verificado y validado, con registros.",r:"cl. 8.3"},
+ {n:17,a:"8. Operación",q:"Los proveedores externos se evalúan, seleccionan y reevalúan con criterios definidos, y se controlan sus entregas.",r:"cl. 8.4"},
+ {n:18,a:"8. Operación",q:"La producción se realiza bajo condiciones controladas, con identificación y trazabilidad del producto.",r:"cl. 8.5.1 · 8.5.2"},
+ {n:19,a:"8. Operación",q:"La propiedad del cliente —artes, herramientas, materiales— se cuida e identifica, y se informa cualquier daño.",r:"cl. 8.5.3"},
+ {n:20,a:"8. Operación",q:"El producto se preserva durante el proceso, el almacenamiento y la entrega.",r:"cl. 8.5.4"},
+ {n:21,a:"8. Operación",q:"Los cambios no planificados en producción se revisan y controlan con registro de la autorización.",r:"cl. 8.5.6"},
+ {n:22,a:"8. Operación",q:"La liberación del producto se hace contra criterios definidos y por personal autorizado, con registro.",r:"cl. 8.6"},
+ {n:23,a:"8. Operación",q:"Las salidas no conformes se identifican, controlan y su tratamiento queda registrado.",r:"cl. 8.7"},
+ {n:24,a:"9. Evaluación",q:"Hay seguimiento y medición planificados, con análisis de datos que respalda las decisiones.",r:"cl. 9.1.1 · 9.1.3"},
+ {n:25,a:"9. Evaluación",q:"La satisfacción del cliente se mide y los reclamos se analizan.",r:"cl. 9.1.2"},
+ {n:26,a:"9. Evaluación",q:"El programa de auditorías internas cubre todos los procesos, con auditores competentes e independientes del área auditada.",r:"cl. 9.2"},
+ {n:27,a:"9. Evaluación",q:"La revisión por la dirección se realiza con las entradas y salidas requeridas, y queda registrada.",r:"cl. 9.3"},
+ {n:28,a:"10. Mejora",q:"Las no conformidades se tratan con corrección, análisis de causa y acción correctiva verificada en su eficacia.",r:"cl. 10.2"},
+ {n:29,a:"10. Mejora",q:"Hay evidencia de mejora continua del sistema a partir de datos, auditorías y revisión por la dirección.",r:"cl. 10.3"},
+ {n:30,a:"11. Auditorías previas Vessena",q:"Los hallazgos y CAPA de la auditoría anterior de Vessena están cerrados y se verificó su eficacia.",r:"SOP-AC-035"}]}
+];
+const chkDe=(id)=>DEF_CHECKLISTS.find(c=>c.id===id)||null;
+const areasDe=(tpl)=>[...new Set((tpl?.items||[]).map(i=>i.a))];
+/* Resumen de una check list aplicada: cuántas conformes, no conformes, no
+   aplicables y cuántas quedan sin responder. */
+function resumenChk(tpl,resp){
+  const items=tpl?.items||[];const r=resp?.respuestas||{};
+  const cuenta=(v)=>items.filter(i=>(r[i.n]||{}).r===v).length;
+  const c=cuenta("C"),nc=cuenta("NC"),na=cuenta("NA");
+  return{total:items.length,c,nc,na,pend:items.length-c-nc-na};
+}
+
 const ROLES={admin:{label:"Administrador",color:"#DC2626",bg:"#FEF2F2",icon:"🔑",canEdit:true,canAdmin:true},user:{label:"Usuario",color:"#1E40AF",bg:"#EFF6FF",icon:"👤",canEdit:true,canAdmin:false},viewer:{label:"Visualización",color:"#059669",bg:"#F0FDF4",icon:"👁",canEdit:false,canAdmin:false}};
 // Los usuarios y sus roles viven en el portal (recurso auditorias).
 const MO=["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Set","Oct","Nov","Dic"];
@@ -120,7 +323,7 @@ const LS={get(k){try{return JSON.parse(localStorage.getItem(k));}catch{return nu
 const API_AUD='/api/auditorias';
 const COLECCION={v_audA:'auditorias',v_finC:'hallazgos',v_accD:'acciones',
   v_ai1:'autoinspecciones',v_aif1:'autoinspecciones_hallazgos',
-  v_progsec:'programa_sectores',v_cfg:'config'};
+  v_progsec:'programa_sectores',v_cfg:'config',v_chkR:'checklist_respuestas'};
 const SRV={datos:{},vers:{},sesion:null};
 async function apiAud(ruta,op){
   const r=await fetch(API_AUD+ruta,Object.assign({credentials:'same-origin',headers:{'Content-Type':'application/json'}},op||{}));
@@ -295,7 +498,7 @@ async function firmasDelInforme(fm){
     return d.firmas||[];
   }catch(e){return unicos.map(n=>({nombre:n,cargo:'',imagen:'',sinFirma:true}));}
 }
-async function exportReport(fm,af,cfg){
+async function exportReport(fm,af,cfg,chkResp){
   /* La ventana se abre ANTES de ir a buscar las firmas: si se abriera después,
      el navegador la trata como emergente no pedida y la bloquea. */
   const w=window.open("","_blank");
@@ -323,6 +526,24 @@ async function exportReport(fm,af,cfg){
     :/^\s*ich\s*q/i.test(n)?"ICH"
     :/mercosur|gmc/i.test(n)?"MERCOSUR":"—";
   const normas=partirNormas(fm.standard);
+  /* Si se aplicó una check list, el informe dice cuál y cómo dio por área: es
+     la evidencia de que la auditoría recorrió todos los requisitos. */
+  const chkTpl=chkResp?chkDe(chkResp.checklistId):null;
+  let chkHtml='';
+  if(chkTpl){
+    const rr=chkResp.respuestas||{};
+    const resChk=resumenChk(chkTpl,chkResp);
+    const filasArea=areasDe(chkTpl).map(area=>{
+      const propios=chkTpl.items.filter(i=>i.a===area);
+      const cont=(v)=>propios.filter(i=>(rr[i.n]||{}).r===v).length;
+      return '<tr><td>'+area+'</td><td>'+propios.length+'</td><td>'+cont("C")+'</td><td>'+cont("NC")+'</td><td>'+cont("NA")+'</td></tr>';
+    }).join('');
+    chkHtml=`<h2>• CHECK LIST APLICADA</h2>
+<table><tr><th>Check list</th><th>Versión</th><th>Requisitos</th><th>Conformes</th><th>No conformes</th><th>N.A.</th></tr>
+<tr><td>${chkTpl.code} — ${chkTpl.nombre}</td><td>${chkTpl.version}</td><td>${resChk.total}</td><td>${resChk.c}</td><td>${resChk.nc}</td><td>${resChk.na}</td></tr></table>
+<table><tr><th>Área evaluada</th><th>Requisitos</th><th>C</th><th>NC</th><th>N.A.</th></tr>${filasArea}</table>
+${resChk.pend?'<p><i>Quedaron '+resChk.pend+' requisito(s) sin responder al momento de emitir el informe.</i></p>':''}`;
+  }
   const normasRows=normas.length
     ? normas.map(n=>'<tr><td>'+organismoDe(n)+'</td><td>'+n+'</td></tr>').join('')
     : '<tr><td>—</td><td>Sin definir</td></tr>';
@@ -368,6 +589,7 @@ th{background:#e8e8e8;font-weight:700}
 
 <h2>• METODOLOGÍA</h2>
 <p>${meth}</p>
+${chkHtml}
 
 <h2>• TERMINOLOGÍA EMPLEADA</h2>
 <table><tr><th>Término</th><th>Descripción</th></tr>
@@ -406,6 +628,202 @@ ${firmasHtml}</table>
 }
 
 /* ── AUDIT DETAIL MODAL ── */
+/* ── CHECK LIST APLICADA A UNA AUDITORÍA ──────────────────────────────────────
+   Se elige la plantilla, se marca cada requisito C / NC / N.A. con la evidencia
+   y de un "no conforme" se crea el hallazgo con un botón, ya vinculado.
+   La observación se guarda al salir del campo y no en cada tecla: cada guardado
+   escribe la colección entera en el servidor. */
+function PanelChecklist({fm,u,data,cfg,canEdit}){
+  const resp=(data.chkRes||[]).find(r=>r.auditId===fm.id)||null;
+  const tpl=resp?chkDe(resp.checklistId):null;
+  const[filtro,sFiltro]=useState("todos");
+  const[notas,sNotas]=useState({});
+  const res=resumenChk(tpl,resp);
+  const marcadas=partirNormas(fm.standard);
+  const sugeridas=DEF_CHECKLISTS.filter(c=>c.normas.some(n=>marcadas.includes(n)));
+
+  const aplicar=(t)=>{
+    if(resp&&!confirm(`Esta auditoría ya tiene aplicada la ${resp.code}. ¿Cambiar a ${t.code}? Se pierden las respuestas marcadas.`))return;
+    data.setChkRes(p=>[...p.filter(r=>r.auditId!==fm.id),
+      {id:gid(),auditId:fm.id,checklistId:t.id,code:t.code,version:t.version,
+       aplicadaEn:new Date().toISOString(),aplicadaPor:data.currentUser?.name||"",respuestas:{}}]);
+    u("checklistApplied",`${t.code} v${t.version} (${t.items.length} requisitos en ${areasDe(t).length} áreas)`);
+  };
+  const cambiar=(n,campos)=>data.setChkRes(p=>p.map(r=>r.auditId===fm.id
+    ?{...r,respuestas:{...r.respuestas,[n]:{...(r.respuestas[n]||{}),...campos}}}:r));
+  const quitar=()=>{
+    if(!confirm(`¿Quitar la ${resp.code} de esta auditoría? Se pierden las respuestas.`))return;
+    data.setChkRes(p=>p.filter(r=>r.auditId!==fm.id));
+  };
+  const crearHallazgo=(it)=>{
+    const r=resp.respuestas[it.n]||{};
+    const code=`HAL-${String((data.findings||[]).length+1).padStart(4,"0")}`;
+    const cls=cfg.classifications.find(c=>c.id==="MENOR")||cfg.classifications[0];
+    data.setFindings(p=>[...p,{id:gid(),code,year:fm.year||2026,auditId:fm.id,
+      clauseRef:it.r||it.a,classification:cls.id,
+      description:`${resp.code} Nº ${it.n}: ${it.q}${r.nota?" — "+r.nota:""}`,
+      evidence:r.nota||"",capaType:"Acción Correctiva",rootCause:"",status:"Abierto",
+      createdAt:new Date().toISOString()}]);
+    cambiar(it.n,{hallazgoId:code});
+    alog(data.setLogs,"CREAR","Hallazgo",`${code} desde ${resp.code} Nº ${it.n}`,data.currentUser?.name);
+  };
+
+  if(!tpl)return(<div style={sC}>
+    <h3 style={{fontSize:13,fontWeight:700,margin:"0 0 4px",color:"#0891B2"}}>☑ Check list</h3>
+    <p style={{fontSize:12.5,color:K.txS,margin:"0 0 12px"}}>Elegí la check list a aplicar en esta auditoría. Las primeras son las que corresponden a las normas marcadas en el plan.</p>
+    {!marcadas.length&&<p style={{fontSize:12,color:K.wrn,margin:"0 0 10px"}}>No hay normas marcadas en el plan: se muestran todas.</p>}
+    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+      {[...sugeridas,...DEF_CHECKLISTS.filter(c=>!sugeridas.includes(c))].map(t=>
+        <div key={t.id} style={{border:`1px solid ${sugeridas.includes(t)?K.pri:K.brd}`,borderRadius:8,padding:12,display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:700}}>{t.code} v{t.version} — {t.nombre}</div>
+            <div style={{fontSize:11.5,color:K.txS,marginTop:2}}>{t.items.length} requisitos en {areasDe(t).length} áreas</div>
+            <div style={{fontSize:11,color:K.txM,marginTop:2}}>{t.normas.join(" · ")}</div>
+          </div>
+          <div style={{display:"flex",gap:6,flexShrink:0}}>
+            <button style={sB("sm")} onClick={()=>imprimirChecklist(fm,t,null)}>🖨 En blanco</button>
+            {canEdit&&<button style={sB("pri")} onClick={()=>aplicar(t)}>Aplicar</button>}
+          </div>
+        </div>)}
+    </div>
+  </div>);
+
+  const items=tpl.items.filter(i=>{
+    const r=(resp.respuestas[i.n]||{}).r;
+    if(filtro==="pend")return !r;
+    if(filtro==="nc")return r==="NC";
+    return true;
+  });
+  const BOT=[{v:"C",l:"C",t:"Conforme",col:K.grn,bg:K.grnL},{v:"NC",l:"NC",t:"No conforme",col:K.red,bg:K.redL},{v:"NA",l:"N.A.",t:"No aplica",col:K.txS,bg:K.bg}];
+  return(<div>
+    <div style={sC}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
+        <div>
+          <h3 style={{fontSize:13,fontWeight:700,margin:"0 0 2px",color:"#0891B2"}}>☑ {tpl.code} v{tpl.version}</h3>
+          <div style={{fontSize:12,color:K.txS}}>{tpl.nombre}</div>
+          <div style={{fontSize:11,color:K.txM,marginTop:2}}>Aplicada {resp.aplicadaEn?.slice(0,10)}{resp.aplicadaPor?` por ${resp.aplicadaPor}`:""}</div>
+        </div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          <button style={sB("sm")} onClick={()=>imprimirChecklist(fm,tpl,resp)}>🖨 Imprimir</button>
+          {canEdit&&<button style={{...sB("sm"),color:K.red}} onClick={quitar}>Quitar</button>}
+        </div>
+      </div>
+      <div style={{display:"flex",gap:14,marginTop:12,flexWrap:"wrap",fontSize:12.5}}>
+        <span><b>{res.total}</b> requisitos</span>
+        <span style={{color:K.grn}}>Conformes <b>{res.c}</b></span>
+        <span style={{color:K.red}}>No conformes <b>{res.nc}</b></span>
+        <span style={{color:K.txS}}>N.A. <b>{res.na}</b></span>
+        <span style={{color:res.pend?K.wrn:K.txM}}>Sin responder <b>{res.pend}</b></span>
+      </div>
+      <div style={{height:6,background:K.brdL,borderRadius:4,marginTop:8,overflow:"hidden",display:"flex"}}>
+        <div style={{width:`${res.c/res.total*100}%`,background:K.grn}}/>
+        <div style={{width:`${res.nc/res.total*100}%`,background:K.red}}/>
+        <div style={{width:`${res.na/res.total*100}%`,background:K.txM}}/>
+      </div>
+      <div style={{display:"flex",gap:6,marginTop:12}}>
+        {[{k:"todos",l:`Todos (${res.total})`},{k:"pend",l:`Sin responder (${res.pend})`},{k:"nc",l:`No conformes (${res.nc})`}].map(f=>
+          <button key={f.k} style={{...sB("sm"),...(filtro===f.k?{background:K.priL,color:K.pri,borderColor:K.pri}:{})}} onClick={()=>sFiltro(f.k)}>{f.l}</button>)}
+      </div>
+    </div>
+    {areasDe(tpl).map(area=>{
+      const propios=items.filter(i=>i.a===area);
+      if(!propios.length)return null;
+      return <div key={area} style={sC}>
+        <h4 style={{fontSize:12.5,fontWeight:700,margin:"0 0 10px",color:K.txt}}>{area}</h4>
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {propios.map(it=>{
+            const r=resp.respuestas[it.n]||{};
+            return <div key={it.n} style={{borderTop:`1px solid ${K.brdL}`,paddingTop:10}}>
+              <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+                <span style={{fontSize:11,fontWeight:700,color:K.txM,minWidth:22}}>{it.n}</span>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:12.5,lineHeight:1.4}}>{it.q}</div>
+                  {it.r&&<div style={{fontSize:10.5,color:K.txM,marginTop:2}}>{it.r}</div>}
+                </div>
+                <div style={{display:"flex",gap:4,flexShrink:0}}>
+                  {BOT.map(b=><button key={b.v} title={b.t} disabled={!canEdit}
+                    onClick={()=>cambiar(it.n,{r:r.r===b.v?"":b.v})}
+                    style={{...sB("sm"),minWidth:38,justifyContent:"center",
+                      ...(r.r===b.v?{background:b.bg,color:b.col,borderColor:b.col,fontWeight:700}:{})}}>{b.l}</button>)}
+                </div>
+              </div>
+              <div style={{display:"flex",gap:6,marginTop:6,marginLeft:32,alignItems:"center"}}>
+                <input style={{...sI,fontSize:12,padding:"6px 9px"}} disabled={!canEdit}
+                  placeholder={r.r==="NC"?"Evidencia de la no conformidad":"Observación / evidencia"}
+                  value={notas[it.n]!==undefined?notas[it.n]:(r.nota||"")}
+                  onChange={e=>sNotas(p=>({...p,[it.n]:e.target.value}))}
+                  onBlur={()=>{if(notas[it.n]!==undefined&&notas[it.n]!==(r.nota||""))cambiar(it.n,{nota:notas[it.n]});}}/>
+                {r.r==="NC"&&(r.hallazgoId
+                  ?<span style={{fontSize:11.5,fontWeight:700,color:K.red,whiteSpace:"nowrap"}}>{r.hallazgoId}</span>
+                  :canEdit&&<button style={{...sB("sm"),color:K.red,whiteSpace:"nowrap"}} onClick={()=>crearHallazgo(it)}>+ Hallazgo</button>)}
+              </div>
+            </div>;
+          })}
+        </div>
+      </div>;
+    })}
+  </div>);
+}
+
+/* Impresión de la check list: con las respuestas marcadas, o en blanco para
+   llevar en papel. Con respuestas salen además las firmas electrónicas del
+   equipo auditor, igual que el informe. */
+async function imprimirChecklist(fm,tpl,resp){
+  const w=window.open("","_blank");
+  if(!w){alert("El navegador bloqueó la ventana. Permití las ventanas emergentes para esta página.");return;}
+  w.document.write('<p style="font-family:Arial;padding:20px">Preparando la check list…</p>');
+  const firmas=resp?await firmasDelInforme(fm):[];
+  const esc=(s)=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const r=resp?.respuestas||{};
+  const etiqueta={C:"Conforme",NC:"No conforme",NA:"N.A."};
+  const filas=areasDe(tpl).map(area=>
+    '<tr class="area"><td colspan="4">'+esc(area)+'</td></tr>'+
+    tpl.items.filter(i=>i.a===area).map(i=>{
+      const v=(r[i.n]||{});
+      return '<tr><td class="num">'+i.n+'</td><td>'+esc(i.q)+(i.r?'<div class="ref">'+esc(i.r)+'</div>':'')+'</td>'+
+        '<td class="res '+(v.r==="NC"?"nc":v.r==="C"?"ok":"")+'">'+(resp?(etiqueta[v.r]||"—"):'<span class="cajas">C &nbsp; NC &nbsp; N.A.</span>')+'</td>'+
+        '<td>'+esc(v.nota||"")+(v.hallazgoId?'<div class="ref">'+esc(v.hallazgoId)+'</div>':"")+'</td></tr>';
+    }).join('')).join('');
+  const res=resumenChk(tpl,resp);
+  const resumen=resp?`<table><tr><th>Requisitos</th><th>Conformes</th><th>No conformes</th><th>N.A.</th><th>Sin responder</th></tr>
+    <tr><td>${res.total}</td><td>${res.c}</td><td>${res.nc}</td><td>${res.na}</td><td>${res.pend}</td></tr></table>`:"";
+  const firmasHtml=firmas.length?('<table class="sign-table"><tr>'+firmas.map(f=>'<th>'+esc(f.nombre)+(f.cargo?'<div style="font-weight:400;font-size:9pt">'+esc(f.cargo)+'</div>':"")+'</th>').join('')+'</tr><tr>'+
+    firmas.map(f=>'<td>'+(f.imagen?'<img src="'+f.imagen+'" style="max-height:52px">':'')+'</td>').join('')+'</tr></table>'):"";
+  w.document.open();
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(tpl.code)} — ${esc(fm.code)}</title>
+<style>@page{size:A4;margin:14mm}body{font-family:Arial,sans-serif;font-size:9.5pt;color:#222;margin:0}
+.header{display:flex;justify-content:space-between;border-bottom:2px solid #333;padding-bottom:8px;margin-bottom:14px}
+.brand{font-size:13pt;font-weight:700;color:#C41E2A}
+h1{font-size:14pt;text-align:center;margin:0 0 6px}h2{font-size:10.5pt;margin:16px 0 6px;border-bottom:1px solid #ccc;padding-bottom:3px}
+table{width:100%;border-collapse:collapse;margin:8px 0}
+th,td{border:1px solid #999;padding:4px 7px;text-align:left;vertical-align:top}
+th{background:#e8e8e8;font-weight:700}
+tr.area td{background:#f2f4f7;font-weight:700}
+td.num{width:26px;text-align:center;color:#555}td.res{width:78px;text-align:center}
+td.res.nc{background:#fdd;color:#a00;font-weight:700}td.res.ok{color:#176}
+.cajas{font-size:8.5pt;color:#555;white-space:nowrap}
+.ref{font-size:8pt;color:#777;margin-top:2px}
+.sign-table td{height:60px}
+.footer{margin-top:22px;font-size:8.5pt;color:#888;text-align:center;border-top:1px solid #ccc;padding-top:6px}
+.no-print{background:#1E40AF;color:#fff;border:none;padding:10px 24px;font-size:13px;font-weight:600;border-radius:6px;cursor:pointer;font-family:inherit;margin:10px}
+@media print{.no-print{display:none}}</style></head><body>
+<div style="text-align:center"><button class="no-print" onclick="window.print()">🖨 Imprimir / Guardar PDF</button></div>
+<div class="header"><div><div class="brand">☰ VESSENA</div><div>${esc(tpl.code)} v${esc(tpl.version)}</div></div>
+<div style="text-align:right"><div>SOP-AC-035</div><div>${esc(fm.code)} — ${esc(fm.name||"")}</div></div></div>
+<h1>Check List de Auditoría</h1>
+<p style="text-align:center;margin:0 0 10px">${esc(tpl.nombre)}</p>
+<table><tr><th>Auditado / Sector</th><th>Fecha</th><th>Auditor líder</th></tr>
+<tr><td>${esc(fm.location||fm.progSector||"—")}</td><td>${esc(fm.execDate||fm.date||"")||"&nbsp;"}</td><td>${esc(fm.auditor||"")||"&nbsp;"}</td></tr></table>
+<table><tr><th>Normas de referencia</th></tr><tr><td>${tpl.normas.map(esc).join("<br>")}</td></tr></table>
+${resumen}
+<h2>• REQUISITOS</h2>
+<table><tr><th>Nº</th><th>Requisito</th><th>Resultado</th><th>Observación / evidencia</th></tr>${filas}</table>
+${firmasHtml?'<h2>• EQUIPO AUDITOR</h2>'+firmasHtml:''}
+<div class="footer">Vessena S.A. — ${esc(tpl.code)} v${esc(tpl.version)} · ${esc(fm.code)} · Impreso el ${new Date().toLocaleDateString("es-UY")}</div>
+</body></html>`);
+  w.document.close();
+}
+
 function AuditDetail({audit,data,cfg,canEdit,onClose,onSave,onDelete}){
   const{findings,actions}=data;
   const[fm,sFm]=useState(audit||{});
@@ -423,7 +841,7 @@ function AuditDetail({audit,data,cfg,canEdit,onClose,onSave,onDelete}){
   const nextP=()=>{if(ci<phases.length-1){const np=phases[ci+1].id;sFm(p=>({...p,phase:np}));sTab(tabForPhase(np));}};
   const prevP=()=>{if(ci>0){const np=phases[ci-1].id;sFm(p=>({...p,phase:np}));sTab(tabForPhase(np));}};
   const chgType=(t)=>{const nExt=t==="Externa";if(ext!==nExt){const newPhase=nExt?EXT_PHASES[0].id:PHASES[0].id;sFm(p=>({...p,type:t,phase:newPhase}));sTab(tabForPhase(newPhase));}else sFm(p=>({...p,type:t}));};
-  const intTabs=[{k:"plan",l:"📅 Plan"},{k:"exec",l:"🔄 Ejecución"},{k:"report",l:"📊 Informe"},{k:"close",l:"✅ Cierre"}];
+  const intTabs=[{k:"plan",l:"📅 Plan"},{k:"exec",l:"🔄 Ejecución"},{k:"chk",l:"☑ Check list"},{k:"report",l:"📊 Informe"},{k:"close",l:"✅ Cierre"}];
   const extTabs=[{k:"xi",l:"📩 Datos"},{k:"xr",l:"🏭 Recepción"},{k:"xp",l:"📨 Informe cliente"},{k:"xc",l:"📤 CAPA Vessena"},{k:"xx",l:"✅ Cierre"}];
   const curTabs=ext?extTabs:intTabs;
 
@@ -436,7 +854,7 @@ function AuditDetail({audit,data,cfg,canEdit,onClose,onSave,onDelete}){
     </div>
     <div style={{display:"flex",gap:4,marginBottom:14,borderBottom:`2px solid ${K.brd}`,overflowX:"auto"}}>
       {curTabs.map(t=><button key={t.k} onClick={()=>sTab(t.k)} style={{padding:"8px 12px",fontSize:12,fontWeight:activeTab===t.k?700:400,color:activeTab===t.k?K.pri:K.txS,background:activeTab===t.k?K.priL:"transparent",border:"none",borderBottom:activeTab===t.k?`2px solid ${K.pri}`:"2px solid transparent",cursor:"pointer",fontFamily:"inherit",marginBottom:-2,whiteSpace:"nowrap"}}>{t.l}</button>)}
-      {audit?.id&&!ext&&<button style={{...sB("g"),marginLeft:"auto",fontSize:11,padding:"4px 12px"}} onClick={()=>exportReport(fm,af,cfg)}>📄 Exportar</button>}
+      {audit?.id&&!ext&&<button style={{...sB("g"),marginLeft:"auto",fontSize:11,padding:"4px 12px"}} onClick={()=>exportReport(fm,af,cfg,(data.chkRes||[]).find(r=>r.auditId===fm.id)||null)}>📄 Exportar</button>}
     </div>
 
     {/* ═══ INTERNA: Plan ═══ */}
@@ -489,6 +907,9 @@ function AuditDetail({audit,data,cfg,canEdit,onClose,onSave,onDelete}){
       <Fd l="Notas"><textarea style={{...sI,minHeight:50,resize:"vertical"}} value={fm.execNotes||""} onChange={e=>u("execNotes",e.target.value)} disabled={!canEdit}/></Fd>
       <Fd l="Distribución"><input style={sI} value={fm.distribution||""} onChange={e=>u("distribution",e.target.value)} disabled={!canEdit}/></Fd>
     </div>}
+
+    {/* ═══ INTERNA: Check list ═══ */}
+    {!ext&&activeTab==="chk"&&<PanelChecklist fm={fm} u={u} data={data} cfg={cfg} canEdit={canEdit}/>}
 
     {/* ═══ INTERNA: Informe ═══ */}
     {!ext&&activeTab==="report"&&<div>
@@ -1299,6 +1720,10 @@ function App(){
     {id:"ac7",code:"ACC-0007",year:2026,findingId:"f7",description:"No aplica según Grifelman. Justificación: Se considera acorde a los resultados de los controles realizados durante los últimos años y no presentar ninguna reclamación por parte de los clientes en ese período, el mantener la prueba de fricción sobre una sola muestra. Dicha resolución se basa en la estabilidad y aseguramiento de los diferentes procesos productivos.",responsible:"No aplica",dueDate:"",status:"Cerrado",verification:"No aplica.",effectiveness:"No aplica.",followupResp:"",createdAt:"2026-06-30T00:00:00.000Z"},
   ];
   const[actions,setActions]=useLS("v_accD",DEF_ACTIONS);
+  /* Las check list aplicadas: una por auditoria, con la respuesta de cada
+     requisito. Las plantillas viven en el codigo (DEF_CHECKLISTS); esto es lo
+     que se marca en cada auditoria. */
+  const[chkRes,setChkRes]=useLS("v_chkR",[]);
   /* El audit trail lo escribe el servidor en cada guardado, con el usuario del
      portal. Acá solo se muestra lo que él tiene. */
   const[logs,setLogs]=useState([]);
@@ -1318,7 +1743,7 @@ function App(){
   const logout=async()=>{try{await fetch('/api/auth/logout',{method:'POST',credentials:'same-origin'});}catch(e){}location.href='/';};
 
   const role=ROLES[cu.role]||{};const canEdit=role.canEdit;const canAdmin=role.canAdmin;
-  const dt={audits,setAudits,findings,setFindings,actions,setActions,logs,setLogs,currentUser:cu};
+  const dt={audits,setAudits,findings,setFindings,actions,setActions,chkRes,setChkRes,logs,setLogs,currentUser:cu};
   // Los usuarios se administran en el portal, no acá.
   const nv=[...NAV];if(canAdmin)nv.push({k:"cfg",l:"Configuración",i:"⚙️"});
 
