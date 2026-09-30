@@ -56,9 +56,15 @@ const DEF_CONFIG={
   // Las normas contra las que audita Vessena -domisanitarios y cosméticos en
   // Uruguay-, con el decreto nacional que incorpora cada reglamento MERCOSUR,
   // que es lo que exige el MSP. Se marcan en el plan y se editan acá.
+  // Las tres últimas son las de material de empaque, para las imprentas: la
+  // 15378 es justamente ISO 9001 con los requisitos de BPF del material de
+  // envasado, que es lo que se les pide.
   standards:["Decreto 148/015 — RT MERCOSUR BPF Productos Domisanitarios (GMC Res. 31/012)",
              "Decreto 338/014 — RT MERCOSUR BPF Productos de Higiene Personal, Cosméticos y Perfumes (GMC Res. 19/11)",
-             "ISO 9001:2015"],
+             "ISO 9001:2015",
+             "ISO 15378:2017 + Amd 1:2024 — Material de envasado primario: ISO 9001:2015 con referencia a BPF",
+             "BRCGS Packaging Materials, Issue 7 — Material de envasado",
+             "PS 9000:2016 (PQG) — BPF para material de envasado impreso"],
   capaTypes:["Acción Correctiva","Acción Preventiva","Corrección"],
   statuses:["Abierto","En proceso","Cerrado","No aplica","Evaluada — No implementar","Vencido"],
   sectors:["Seguimiento Depósito y Distribución","Seguimiento LCC","Gestión Productiva (Fabricación)","Seguimiento Gestión Productiva (Envasado)","Gestión Productiva (Plásticos)","Gestión de Higiene y Sanitización","Seguimiento Depósito de Materias Primas","Depósito PT","Hipoclorito","Control de Calidad","Aseguramiento de Calidad","Dirección Técnica","Compras","Servicios/Agua/Tanques","Áreas auxiliares/Vestuarios","Imprimex (Proveedor)","Dimena (Proveedor)","Petropack (Proveedor)","Imprenta Grifelman (Proveedor)"],
@@ -79,6 +85,13 @@ const DEF_CONFIG={
 const ROLES={admin:{label:"Administrador",color:"#DC2626",bg:"#FEF2F2",icon:"🔑",canEdit:true,canAdmin:true},user:{label:"Usuario",color:"#1E40AF",bg:"#EFF6FF",icon:"👤",canEdit:true,canAdmin:false},viewer:{label:"Visualización",color:"#059669",bg:"#F0FDF4",icon:"👁",canEdit:false,canAdmin:false}};
 // Los usuarios y sus roles viven en el portal (recurso auditorias).
 const MO=["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Set","Oct","Nov","Dic"];
+
+/* El campo Norma guarda las normas separadas por coma, pero los nombres tienen
+   comas adentro -"Higiene Personal, Cosméticos y Perfumes"-: se corta solo
+   antes de donde empieza otra norma, o en punto y coma. */
+const partirNormas=(s)=>String(s||"")
+  .split(/\s*,\s*(?=Decreto|ISO|GMC|MERCOSUR|Res\.|BRCGS|PS\s*9000|EN\s*\d)|\s*;\s*/i)
+  .map(x=>x.trim()).filter(Boolean);
 
 const LS={get(k){try{return JSON.parse(localStorage.getItem(k));}catch{return null;}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{}}};
 /* ── Los datos viven en el servidor, no en el navegador ─────────────────────
@@ -284,8 +297,12 @@ async function exportReport(fm,af,cfg){
   const meth=(fm.methodology||"Sin definir").replace(/\n/g,"<br>");
   // Una fila por norma, con el organismo que corresponde a cada una: los
   // decretos son del MSP -incorporan el reglamento MERCOSUR- y la ISO no.
-  const organismoDe=(n)=>/^\s*decreto/i.test(n)?"MSP Uruguay / MERCOSUR":(/^\s*iso/i.test(n)?"ISO":(/mercosur|gmc/i.test(n)?"MERCOSUR":"—"));
-  const normas=String(fm.standard||"").split(/\s*,\s*(?=Decreto|ISO|GMC|MERCOSUR|Res\.)|\s*;\s*/i).map(s=>s.trim()).filter(Boolean);
+  const organismoDe=(n)=>/^\s*decreto/i.test(n)?"MSP Uruguay / MERCOSUR"
+    :/^\s*iso/i.test(n)?"ISO"
+    :/^\s*brcgs/i.test(n)?"BRCGS"
+    :/^\s*ps\s*9000/i.test(n)?"PQG (Reino Unido)"
+    :/mercosur|gmc/i.test(n)?"MERCOSUR":"—";
+  const normas=partirNormas(fm.standard);
   const normasRows=normas.length
     ? normas.map(n=>'<tr><td>'+organismoDe(n)+'</td><td>'+n+'</td></tr>').join('')
     : '<tr><td>—</td><td>Sin definir</td></tr>';
@@ -414,23 +431,24 @@ function AuditDetail({audit,data,cfg,canEdit,onClose,onSave,onDelete}){
         <Fd l="Auditor líder"><input style={sI} value={fm.auditor||""} onChange={e=>u("auditor",e.target.value)} disabled={!canEdit}/></Fd>
         <Fd l="Equipo"><select style={sS} value={fm.team||""} onChange={e=>u("team",e.target.value)} disabled={!canEdit}><option value="">—</option>{(cfg.teams||[]).map(t=><option key={t.name} value={`${t.members} (Líder: ${t.leader})`}>{t.name} — {t.leader}</option>)}</select></Fd>
         <Fd l="Fecha"><input type="date" style={sI} value={fm.date||""} onChange={e=>u("date",e.target.value)} disabled={!canEdit}/></Fd>
-        {/* Las normas se marcan de una lista, para que se escriban siempre
-            igual; la lista se edita en Configuración. El campo de abajo sigue
-            libre para una norma puntual que no esté en la lista. */}
-        <Fd l="Norma">
-          <div style={{display:"flex",flexWrap:"wrap",gap:10,marginBottom:6}}>
-            {(cfg.standards||[]).map(n=>{
-              const sel=String(fm.standard||"").split(/\s*,\s*/).includes(n);
-              return <label key={n} style={{display:"flex",alignItems:"center",gap:5,fontSize:12.5,cursor:canEdit?"pointer":"default"}}>
-                <input type="checkbox" checked={sel} disabled={!canEdit} onChange={()=>{
-                  const act=String(fm.standard||"").split(/\s*,\s*/).filter(Boolean);
-                  u("standard",(sel?act.filter(x=>x!==n):[...act,n]).join(", "));
-                }}/>{n}</label>;
-            })}
-          </div>
-          <input style={sI} value={fm.standard||""} onChange={e=>u("standard",e.target.value)} disabled={!canEdit} placeholder="Normas aplicables"/>
-        </Fd>
       </G2>
+      {/* Las normas se marcan de una lista, para que se escriban siempre igual;
+          la lista se edita en Configuración → Normas. Los nombres son largos
+          -llevan el decreto- así que va una por línea y a todo el ancho. El
+          campo de texto sigue debajo para una norma puntual que no esté. */}
+      <Fd l="Norma">
+        <div style={{display:"flex",flexDirection:"column",gap:5,marginBottom:6}}>
+          {(cfg.standards||[]).map(n=>{
+            const sel=partirNormas(fm.standard).includes(n);
+            return <label key={n} style={{display:"flex",alignItems:"flex-start",gap:6,fontSize:12.5,lineHeight:1.35,cursor:canEdit?"pointer":"default"}}>
+              <input type="checkbox" checked={sel} disabled={!canEdit} style={{marginTop:2}} onChange={()=>{
+                const act=partirNormas(fm.standard);
+                u("standard",(sel?act.filter(x=>x!==n):[...act,n]).join(", "));
+              }}/><span>{n}</span></label>;
+          })}
+        </div>
+        <input style={sI} value={fm.standard||""} onChange={e=>u("standard",e.target.value)} disabled={!canEdit} placeholder="Normas aplicables"/>
+      </Fd>
       <Fd l="Alcance"><textarea style={{...sI,minHeight:55,resize:"vertical"}} value={fm.scope||""} onChange={e=>u("scope",e.target.value)} disabled={!canEdit}/></Fd>
       <G2><Fd l="Lugar"><input style={sI} value={fm.location||""} onChange={e=>u("location",e.target.value)} disabled={!canEdit}/></Fd><Fd l="Listas de verificación"><input style={sI} value={fm.checklists||""} onChange={e=>u("checklists",e.target.value)} disabled={!canEdit}/></Fd></G2></div>
     </div>}
