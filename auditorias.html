@@ -757,6 +757,41 @@ ${firmasHtml}</table>
 }
 
 /* ── AUDIT DETAIL MODAL ── */
+/* ── FICHA DE UN HALLAZGO ─────────────────────────────────────────────────────
+   La misma ficha se abre desde Hallazgos / CAPA y desde la auditoría, para que
+   el texto se corrija donde uno lo está mirando y no haya dos formularios que
+   después se separen. */
+function FichaHallazgo({hallazgo,auditorias,cfg,onGuardar,onEliminar,onClose,auditoriaFija}){
+  const[fm,sFm]=useState(hallazgo);
+  const cls=cfg.classifications.find(x=>x.id===fm.classification);
+  const esNuevo=!fm.code;
+  return(<Md title={fm.code?`Editar ${fm.code}`:"Nuevo hallazgo"} onClose={onClose}>
+    {!auditoriaFija&&<CtxHelp>Solo se pueden vincular hallazgos a auditorías que estén en fase "Ejecutada" o posterior.</CtxHelp>}
+    <G2>
+      {auditoriaFija
+        ?<Fd l="Auditoría"><input style={{...sI,background:K.bg}} value={auditoriaFija} readOnly/></Fd>
+        :<Fd l="Auditoría"><select style={sS} value={fm.auditId||""} onChange={e=>sFm(p=>({...p,auditId:e.target.value}))}><option value="">—</option>{(auditorias||[]).map(a=><option key={a.id} value={a.id}>{a.code} — {a.name} ({phaseOf(a.phase,isExternal(a)).label})</option>)}</select></Fd>}
+      <Fd l="Cláusula / requisito"><input style={sI} value={fm.clauseRef||""} onChange={e=>sFm(p=>({...p,clauseRef:e.target.value}))}/></Fd>
+      <Fd l="Clasificación"><select style={sS} value={fm.classification||""} onChange={e=>sFm(p=>({...p,classification:e.target.value}))}>{cfg.classifications.map(c=><option key={c.id} value={c.id}>{c.label} — {c.risk}</option>)}</select></Fd>
+      {exigeCapa(fm.classification,cfg)
+        ?<Fd l="Tipo CAPA"><select style={sS} value={fm.capaType||""} onChange={e=>sFm(p=>({...p,capaType:e.target.value}))}>{cfg.capaTypes.map(c=><option key={c}>{c}</option>)}</select></Fd>
+        :<Fd l="Tipo CAPA"><input style={{...sI,background:K.bg,color:K.txM}} value="No requiere" readOnly/></Fd>}
+    </G2>
+    {cls&&<div style={{padding:"8px 12px",background:cls.color+"12",borderRadius:6,marginBottom:12,fontSize:12,color:cls.color,border:`1px solid ${cls.color}20`}}><strong>{cls.label}:</strong> {cls.desc}{cls.deadline>0?` — Plazo: ${cls.deadline} meses`:" — No se exige plan de acción al auditado"}</div>}
+    <Fd l="Descripción"><textarea style={{...sI,minHeight:90,resize:"vertical"}} value={fm.description||""} onChange={e=>sFm(p=>({...p,description:e.target.value}))}/></Fd>
+    <Fd l="Evidencia"><textarea style={{...sI,minHeight:45,resize:"vertical"}} value={fm.evidence||""} onChange={e=>sFm(p=>({...p,evidence:e.target.value}))}/></Fd>
+    <Fd l="Causa raíz"><textarea style={{...sI,minHeight:45,resize:"vertical"}} value={fm.rootCause||""} onChange={e=>sFm(p=>({...p,rootCause:e.target.value}))}/></Fd>
+    <Fd l="Estado"><select style={sS} value={fm.status||""} onChange={e=>sFm(p=>({...p,status:e.target.value}))}>{cfg.statuses.map(s=><option key={s}>{s}</option>)}</select></Fd>
+    <div style={{display:"flex",gap:8,alignItems:"center",marginTop:14}}>
+      {!esNuevo&&onEliminar&&<button style={sB("red")} onClick={()=>onEliminar(fm)}>🗑 Eliminar</button>}
+      <div style={{display:"flex",gap:8,marginLeft:"auto"}}>
+        <button style={sB("g")} onClick={onClose}>Cancelar</button>
+        <button style={sB("pri")} onClick={()=>onGuardar(fm)} disabled={!fm.description}>Guardar</button>
+      </div>
+    </div>
+  </Md>);
+}
+
 /* ── PEGAR HALLAZGOS ──────────────────────────────────────────────────────────
    Un informe de auditoría trae veinte hallazgos; cargarlos de a uno en el
    formulario es media tarde. Acá se pegan del informe, una por línea, con la
@@ -1110,6 +1145,7 @@ function AuditDetail({audit,data,cfg,canEdit,onClose,onSave,onDelete}){
   const initTab=tabForPhase(fm.phase)||(ext?"xi":"plan");
   const[tab,sTab]=useState(initTab);
   const[pegar,sPegar]=useState(false);
+  const[edHal,sEdHal]=useState(null);
   const activeTab=tab||initTab;
   const nextP=()=>{if(ci<phases.length-1){const np=phases[ci+1].id;sFm(p=>({...p,phase:np}));sTab(tabForPhase(np));}};
   const prevP=()=>{if(ci>0){const np=phases[ci-1].id;sFm(p=>({...p,phase:np}));sTab(tabForPhase(np));}};
@@ -1222,7 +1258,7 @@ function AuditDetail({audit,data,cfg,canEdit,onClose,onSave,onDelete}){
             alert(`Importación completada:\n• ${uF} hallazgo(s) actualizados\n• ${cA} acción(es) nueva(s)\n• ${uA} acción(es) actualizada(s)`);
           }catch(er){alert("Error: "+er.message);}e.target.value="";};rd.readAsText(file,"UTF-8");}}/></label>}
         </div>
-        {af.length>0?<table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5}}><thead><tr><th style={sTh}>Código</th><th style={sTh}>Descripción</th><th style={sTh}>Clasif.</th><th style={sTh}>Estado</th></tr></thead><tbody>{af.map(f=><tr key={f.id}><td style={{...sTd,fontFamily:"monospace",fontWeight:700,color:K.pri}}>{f.code}</td><td style={sTd}>{f.description}</td><td style={sTd}><CBg cls={f.classification} cfg={cfg}/></td><td style={sTd}><SBg s={f.status}/></td></tr>)}</tbody></table>:<Em icon="📝" t="Sin hallazgos"/>}
+        {af.length>0?<table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5}}><thead><tr><th style={sTh}>Código</th><th style={sTh}>Descripción</th><th style={sTh}>Clasif.</th><th style={sTh}>Estado</th>{canEdit&&<th style={sTh}></th>}</tr></thead><tbody>{af.map(f=><tr key={f.id}><td style={{...sTd,fontFamily:"monospace",fontWeight:700,color:K.pri}}>{f.code}</td><td style={sTd}>{f.description}</td><td style={sTd}><CBg cls={f.classification} cfg={cfg}/></td><td style={sTd}><SBg s={f.status}/></td>{canEdit&&<td style={sTd}><button style={sB("sm")} onClick={()=>sEdHal(f)}>Editar</button></td>}</tr>)}</tbody></table>:<Em icon="📝" t="Sin hallazgos"/>}
       </div>
       <div style={sC}><h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px"}}>📋 Conclusiones</h3>
         <Fd l="Conclusiones"><textarea style={{...sI,minHeight:60,resize:"vertical"}} value={fm.conclusions||""} onChange={e=>u("conclusions",e.target.value)} disabled={!canEdit}/></Fd>
@@ -1357,6 +1393,23 @@ function AuditDetail({audit,data,cfg,canEdit,onClose,onSave,onDelete}){
       <div style={{fontSize:11,color:"#92400E",marginTop:2}}>Fecha de postergación: {fd(fm.postponedDate)}</div>
     </div>}
     {pegar&&<PegarHallazgos fm={fm} data={data} cfg={cfg} onClose={()=>sPegar(false)}/>}
+    {/* La ficha del hallazgo, acá adentro: la redacción se corrige mirando el
+        informe, sin ir a otra pantalla. */}
+    {edHal&&<FichaHallazgo hallazgo={edHal} cfg={cfg} auditoriaFija={`${fm.code} — ${fm.name||""}`}
+      onClose={()=>sEdHal(null)}
+      onGuardar={(nf)=>{
+        data.setFindings(p=>p.map(x=>x.id===nf.id?{...x,...nf}:x));
+        alog(data.setLogs,"EDITAR","Hallazgo",nf.code,data.currentUser?.name);
+        sEdHal(null);
+      }}
+      onEliminar={(nf)=>{
+        const acc=(data.actions||[]).filter(a=>a.findingId===nf.id);
+        if(!confirm(`¿Eliminar ${nf.code}?${acc.length?`\n\nSe elimina también su plan de acción (${acc.length}).`:""}\n\nNo se puede deshacer.`))return;
+        data.setFindings(p=>p.filter(x=>x.id!==nf.id));
+        if(acc.length&&data.setActions)data.setActions(p=>p.filter(a=>a.findingId!==nf.id));
+        alog(data.setLogs,"ELIMINAR","Hallazgo",`${nf.code}${acc.length?` y ${acc.length} acción(es)`:""}`,data.currentUser?.name);
+        sEdHal(null);
+      }}/>}
   </Md>);
 }
 
@@ -1412,7 +1465,7 @@ function AuditList({data,cfg,canEdit,openAudit}){
 /* ── HALLAZGOS ── */
 function Findings({data,cfg,canEdit}){const{findings,setFindings,audits,setLogs,currentUser}=data;const[sh,sSh]=useState(false);const[ed,sEd]=useState(null);const[fc,sFc]=useState("Todos");
   const bl={auditId:"",clauseRef:"",classification:cfg.classifications[0]?.id||"",description:"",evidence:"",capaType:cfg.capaTypes[0]||"",rootCause:"",status:cfg.statuses[0]||"Abierto"};const[fm,sFm]=useState(bl);
-  const save=()=>{if(ed){const pv=findings.find(x=>x.id===ed.id);setFindings(p=>p.map(x=>x.id===ed.id?{...x,...fm}:x));if(pv.status!==fm.status)alog(setLogs,"CAMBIO ESTADO","Hallazgo",`${ed.code}: ${pv.status} → ${fm.status}`,currentUser.name);else alog(setLogs,"EDITAR","Hallazgo",ed.code,currentUser.name);}else{const allF=data.allFindings||findings;const code=`HAL-${String(allF.length+1).padStart(4,"0")}`;const audit=data.audits.find(a=>a.id===fm.auditId);setFindings(p=>[...p,{...fm,id:gid(),code,year:audit?.year||2026,createdAt:new Date().toISOString()}]);alog(setLogs,"CREAR","Hallazgo",code,currentUser.name);}sSh(false);sEd(null);};
+  const save=(fm)=>{if(ed){const pv=findings.find(x=>x.id===ed.id);setFindings(p=>p.map(x=>x.id===ed.id?{...x,...fm}:x));if(pv.status!==fm.status)alog(setLogs,"CAMBIO ESTADO","Hallazgo",`${ed.code}: ${pv.status} → ${fm.status}`,currentUser.name);else alog(setLogs,"EDITAR","Hallazgo",ed.code,currentUser.name);}else{const allF=data.allFindings||findings;const code=`HAL-${String(allF.length+1).padStart(4,"0")}`;const audit=data.audits.find(a=>a.id===fm.auditId);setFindings(p=>[...p,{...fm,id:gid(),code,year:audit?.year||2026,createdAt:new Date().toISOString()}]);alog(setLogs,"CREAR","Hallazgo",code,currentUser.name);}sSh(false);sEd(null);};
   const open=f=>{sFm(f||bl);sEd(f);sSh(true);};const cls=cfg.classifications.find(x=>x.id===fm.classification);
   const[fiAud,sFiAud]=useState("Todos");
   const auditNames=[...new Set(findings.map(f=>{const aud=audits.find(a=>a.id===f.auditId);return aud?aud.name:"Sin auditoría";}).filter(Boolean))];
@@ -1428,28 +1481,18 @@ function Findings({data,cfg,canEdit}){const{findings,setFindings,audits,setLogs,
     </div>
     <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}><button onClick={()=>sFc("Todos")} style={{...sB("g"),background:fc==="Todos"?K.priL:"transparent",color:fc==="Todos"?K.pri:K.txS,fontSize:12}}>Todos</button>{cfg.classifications.map(c=><button key={c.id} onClick={()=>sFc(c.id)} style={{...sB("g"),background:fc===c.id?c.color+"15":"transparent",color:fc===c.id?c.color:K.txS,fontSize:12}}>{c.label}</button>)}</div>
     <div style={sC}>{ls.length===0?<Em icon="🔍" t="Sin hallazgos"/>:<table style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontSize:12.5}}><thead><tr><th style={sTh}>Código</th><th style={sTh}>Auditoría</th><th style={sTh}>Descripción</th><th style={sTh}>Clasificación</th><th style={sTh}>CAPA</th><th style={sTh}>Estado</th>{canEdit&&<th style={sTh}></th>}</tr></thead><tbody>{ls.map(f=><tr key={f.id}><td style={{...sTd,fontWeight:700,color:K.pri,fontFamily:"monospace"}}>{f.code}</td><td style={{...sTd,fontFamily:"monospace",fontSize:11.5}}>{audits.find(a=>a.id===f.auditId)?.code||"—"}</td><td style={{...sTd,fontSize:11,lineHeight:1.4}}>{f.description}</td><td style={sTd}><CBg cls={f.classification} cfg={cfg}/></td><td style={sTd}>{exigeCapa(f.classification,cfg)?<Bg color={K.vio} bg={K.vioL}>{f.capaType}</Bg>:<span style={{fontSize:11,color:K.txM}}>No requiere</span>}</td><td style={sTd}><SBg s={f.status}/></td>{canEdit&&<td style={sTd}><button style={sB("sm")} onClick={()=>open(f)}>Editar</button></td>}</tr>)}</tbody></table>}</div>
-    {sh&&<Md title={ed?`Editar ${ed.code}`:"Nuevo Hallazgo"} onClose={()=>sSh(false)}>
-      <CtxHelp>Solo puedes vincular hallazgos a auditorías que estén en fase "En ejecución" o posterior.</CtxHelp>
-      <G2><Fd l="Auditoría"><select style={sS} value={fm.auditId} onChange={e=>sFm(p=>({...p,auditId:e.target.value}))}><option value="">—</option>{infoAudits.map(a=><option key={a.id} value={a.id}>{a.code} — {a.name} ({phaseOf(a.phase,isExternal(a)).label})</option>)}</select></Fd><Fd l="Cláusula"><input style={sI} value={fm.clauseRef} onChange={e=>sFm(p=>({...p,clauseRef:e.target.value}))}/></Fd><Fd l="Clasificación"><select style={sS} value={fm.classification} onChange={e=>sFm(p=>({...p,classification:e.target.value}))}>{cfg.classifications.map(c=><option key={c.id} value={c.id}>{c.label} — {c.risk}</option>)}</select></Fd><Fd l="Tipo CAPA"><select style={sS} value={fm.capaType} onChange={e=>sFm(p=>({...p,capaType:e.target.value}))}>{cfg.capaTypes.map(c=><option key={c}>{c}</option>)}</select></Fd></G2>
-      {cls&&<div style={{padding:"8px 12px",background:cls.color+"12",borderRadius:6,marginBottom:12,fontSize:12,color:cls.color,border:`1px solid ${cls.color}20`}}><strong>{cls.label}:</strong> {cls.desc}{cls.deadline>0?` — Plazo: ${cls.deadline} meses`:" — No se exige plan de acción al auditado"}</div>}
-      <Fd l="Descripción"><textarea style={{...sI,minHeight:60,resize:"vertical"}} value={fm.description} onChange={e=>sFm(p=>({...p,description:e.target.value}))}/></Fd><Fd l="Evidencia"><textarea style={{...sI,minHeight:45,resize:"vertical"}} value={fm.evidence} onChange={e=>sFm(p=>({...p,evidence:e.target.value}))}/></Fd><Fd l="Causa raíz"><textarea style={{...sI,minHeight:45,resize:"vertical"}} value={fm.rootCause} onChange={e=>sFm(p=>({...p,rootCause:e.target.value}))}/></Fd><Fd l="Estado"><select style={sS} value={fm.status} onChange={e=>sFm(p=>({...p,status:e.target.value}))}>{cfg.statuses.map(s=><option key={s}>{s}</option>)}</select></Fd>
-      <div style={{display:"flex",gap:8,alignItems:"center",marginTop:14}}>
-        {/* Borrar un hallazgo hace falta cuando se cargó de más o se pegó dos
-            veces; se lleva su plan de acción, que sin el hallazgo no significa
-            nada. */}
-        {ed&&<button style={sB("red")} onClick={()=>{
-          const acc=(data.actions||[]).filter(a=>a.findingId===ed.id);
-          if(!confirm(`¿Eliminar ${ed.code}?${acc.length?`\n\nSe elimina también su plan de acción (${acc.length}).`:""}\n\nNo se puede deshacer.`))return;
-          setFindings(p=>p.filter(x=>x.id!==ed.id));
-          if(acc.length&&data.setActions)data.setActions(p=>p.filter(a=>a.findingId!==ed.id));
-          alog(setLogs,"ELIMINAR","Hallazgo",`${ed.code}${acc.length?` y ${acc.length} acción(es)`:""}`,currentUser.name);
-          sSh(false);sEd(null);
-        }}>🗑 Eliminar</button>}
-        <div style={{display:"flex",gap:8,marginLeft:"auto"}}>
-          <button style={sB("g")} onClick={()=>sSh(false)}>Cancelar</button>
-          <button style={sB("pri")} onClick={save} disabled={!fm.description}>Guardar</button>
-        </div>
-      </div></Md>}</div>);
+    {/* La misma ficha que se abre desde la auditoría. */}
+    {sh&&<FichaHallazgo hallazgo={ed||bl} auditorias={infoAudits} cfg={cfg}
+      onClose={()=>{sSh(false);sEd(null);}}
+      onGuardar={(nf)=>{save(nf);}}
+      onEliminar={ed?((nf)=>{
+        const acc=(data.actions||[]).filter(a=>a.findingId===nf.id);
+        if(!confirm(`¿Eliminar ${nf.code}?${acc.length?`\n\nSe elimina también su plan de acción (${acc.length}).`:""}\n\nNo se puede deshacer.`))return;
+        setFindings(p=>p.filter(x=>x.id!==nf.id));
+        if(acc.length&&data.setActions)data.setActions(p=>p.filter(a=>a.findingId!==nf.id));
+        alog(setLogs,"ELIMINAR","Hallazgo",`${nf.code}${acc.length?` y ${acc.length} acción(es)`:""}`,currentUser.name);
+        sSh(false);sEd(null);
+      }):null}/>}</div>);
 }
 
 /* ── ACCIONES ── */
@@ -2038,12 +2081,17 @@ function App(){
   const yAudits=audits.filter(a=>a.year===year);
   const yFindings=findings.filter(f=>f.year===year||!f.year);
   const yActions=actions.filter(a=>a.year===year||!a.year);
+  /* dt va ANTES que yData: yData lo copia, y estaba declarado después, así que
+     cuando se armaba todavía valía undefined. Resultado: las pantallas que
+     reciben yData -Hallazgos, Acciones, Reportes- se quedaban sin
+     currentUser, y al guardar un hallazgo el cambio se grababa pero la
+     ventana no se cerraba, porque fallaba al escribir la bitácora. */
+  const dt={audits,setAudits,findings,setFindings,actions,setActions,chkRes,setChkRes,logs,setLogs,currentUser:cu};
   const yData={...dt,audits:yAudits,findings:yFindings,actions:yActions,allAudits:audits,allFindings:findings,allActions:actions,year};// audit detail modal
 
   const logout=async()=>{try{await fetch('/api/auth/logout',{method:'POST',credentials:'same-origin'});}catch(e){}location.href='/';};
 
   const role=ROLES[cu.role]||{};const canEdit=role.canEdit;const canAdmin=role.canAdmin;
-  const dt={audits,setAudits,findings,setFindings,actions,setActions,chkRes,setChkRes,logs,setLogs,currentUser:cu};
   // Los usuarios se administran en el portal, no acá.
   const nv=[...NAV];if(canAdmin)nv.push({k:"cfg",l:"Configuración",i:"⚙️"});
 
