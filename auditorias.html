@@ -657,6 +657,17 @@ async function exportReport(fm,af,cfg,chkResp){
     :/^\s*ich\s*q/i.test(n)?"ICH"
     :/mercosur|gmc/i.test(n)?"MERCOSUR":"—";
   const normas=partirNormas(fm.standard);
+  /* El equipo se guarda como "Fulana, Mengana (Líder: Fulana)". En el cuadro de
+     responsables va el líder en una celda y el resto del equipo en la otra:
+     antes había una sola celda titulada "Auditor Líder / Co-Auditora" con un
+     solo nombre, y la co-auditora no aparecía por ningún lado. */
+  const coAuditores=(()=>{
+    const miembros=String(fm.team||"").replace(/\(.*?\)/g,"").split(/[,;]/).map(s=>nombreLimpio(s)).filter(Boolean);
+    const lider=comparable(fm.auditor||"");
+    const vistos=new Set();
+    return miembros.filter(m=>{const k=comparable(m);
+      if(!k||k===lider||vistos.has(k))return false;vistos.add(k);return true;}).join(", ");
+  })();
   /* Si se aplicó una check list, el informe dice cuál y cómo dio por área: es
      la evidencia de que la auditoría recorrió todos los requisitos. */
   const chkTpl=chkResp?chkDe(chkResp.checklistId):null;
@@ -724,7 +735,7 @@ th{background:#e8e8e8;font-weight:700}
 <table><tr><th>Lugar(es)</th><th>Fecha(s)</th></tr><tr><td>${fm.location||fm.progSector||"—"}</td><td>${fm.execDate||fm.date||"—"}</td></tr></table>
 
 <h2>• RESPONSABLES</h2>
-<table><tr><th>Auditor Líder / Co-Auditora</th><th>Equipo auditor</th></tr><tr><td>${fm.auditor||"—"}</td><td>${fm.team||"—"}</td></tr></table>
+<table><tr><th>Auditor líder</th><th>Co-auditor(es)</th></tr><tr><td>${fm.auditor||"—"}</td><td>${coAuditores||"—"}</td></tr></table>
 
 <h2>• METODOLOGÍA</h2>
 <p>${meth}</p>
