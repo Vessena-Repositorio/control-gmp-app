@@ -444,7 +444,15 @@ function SBg({s}){const m={Abierto:[K.red,K.redL],"En proceso":[K.wrn,K.wrnL],Ce
 function PhaseBg({phase,ext}){const p=phaseOf(phase,ext);return <span className="aud-phase" style={{color:p.color,background:p.bg}}>{p.icon} {p.label}</span>;}
 function Fd({l,children}){return <div style={{marginBottom:12}}><label style={sL}>{l}</label>{children}</div>;}
 function Em({icon,t}){return <div style={{textAlign:"center",padding:"36px 20px",color:K.txM}}><div style={{fontSize:28,marginBottom:6}}>{icon}</div><div style={{fontSize:13}}>{t}</div></div>;}
-function Md({title,onClose,children,wide}){return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",zIndex:100,display:"flex",justifyContent:"center",alignItems:"flex-start",paddingTop:40,overflowY:"auto"}} onClick={onClose}><div style={{background:"#fff",borderRadius:12,width:"100%",maxWidth:wide?860:620,padding:24,boxShadow:"0 20px 60px rgba(0,0,0,.15)",margin:"0 16px 40px"}} onClick={e=>e.stopPropagation()}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><h2 style={{fontSize:16,fontWeight:800,margin:0}}>{title}</h2><button onClick={onClose} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:K.txM}}>✕</button></div>{children}</div></div>);}
+/* La ventana se cierra al hacer clic afuera, pero sólo si el clic EMPEZÓ
+   afuera: si uno selecciona el texto de un campo y suelta el botón sobre el
+   fondo oscuro, el navegador avisa un clic en el fondo y antes se cerraba la
+   ventana con lo que se estaba escribiendo adentro. */
+function Md({title,onClose,children,wide}){
+  const desdeElFondo=useRef(false);
+  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",zIndex:100,display:"flex",justifyContent:"center",alignItems:"flex-start",paddingTop:40,overflowY:"auto"}}
+    onMouseDown={e=>{desdeElFondo.current=e.target===e.currentTarget;}}
+    onClick={e=>{if(e.target===e.currentTarget&&desdeElFondo.current)onClose();}}><div style={{background:"#fff",borderRadius:12,width:"100%",maxWidth:wide?860:620,padding:24,boxShadow:"0 20px 60px rgba(0,0,0,.15)",margin:"0 16px 40px"}} onClick={e=>e.stopPropagation()}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><h2 style={{fontSize:16,fontWeight:800,margin:0}}>{title}</h2><button onClick={onClose} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:K.txM}}>✕</button></div>{children}</div></div>);}
 function G2({children}){return <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>{children}</div>;}
 function CtxHelp({children,type="info"}){return <div className={`ctx-help ${type==="warn"?"warn":type==="success"?"success":""}`}><span className="ctx-icon">{type==="warn"?"⚠️":type==="success"?"✅":"💡"}</span><div>{children}</div></div>;}
 function VBanner(){return <CtxHelp type="warn"><strong>Modo visualización.</strong> Solo lectura.</CtxHelp>;}
