@@ -45,10 +45,13 @@ const phaseIdx=(id,ext)=>(ext?EXT_PHASES:PHASES).findIndex(p=>p.id===id);
 
 const DEF_CONFIG={
   classifications:[
-    {id:"CRITICA",label:"Crítica",risk:"Riesgo moderado",deadline:6,color:"#DC2626",desc:"Riesgos inmediatos o futuros para la salud"},
-    {id:"GRAVE",label:"Grave",risk:"Riesgo significativo",deadline:3,color:"#B45309",desc:"Complicaciones para cumplir estándares"},
-    {id:"MENOR",label:"Menor",risk:"Riesgo menor",deadline:6,color:"#2563EB",desc:"Deficiencias en procedimientos internos"},
-    {id:"OTRA",label:"Otra Observación",risk:"Informativo",deadline:6,color:"#6D28D9",desc:"Desviaciones menores"},
+    /* Los plazos los fijó Claudia: crítica 3 meses, mayor 6, menor 12. El plazo
+       0 significa que no se le exige plan de acción al auditado. Se editan en
+       Configuración, acá sólo están los de fábrica. */
+    {id:"CRITICA",label:"Crítica",risk:"Riesgo alto",deadline:3,color:"#DC2626",desc:"Riesgos inmediatos o futuros para la salud"},
+    {id:"GRAVE",label:"Mayor",risk:"Riesgo significativo",deadline:6,color:"#B45309",desc:"Complicaciones para cumplir estándares"},
+    {id:"MENOR",label:"Menor",risk:"Riesgo menor",deadline:12,color:"#2563EB",desc:"Deficiencias en procedimientos internos"},
+    {id:"OTRA",label:"Otra Observación",risk:"Informativo",deadline:12,color:"#6D28D9",desc:"Desviaciones menores"},
     {id:"OBS",label:"Observación",risk:"Informativo",deadline:0,color:"#64748B",desc:"Puede llevar a incumplimiento"},
     {id:"OM",label:"Oportunidad de Mejora",risk:"N/A",deadline:0,color:"#059669",desc:"Mejora operativa"},
   ],
@@ -1643,10 +1646,19 @@ function ConfigMod({cfg,setCfg,setLogs,currentUser}){
   function LE({title,icon,items,onUpdate}){const[v,sV]=useState("");const add=()=>{if(v.trim()&&!items.includes(v.trim())){onUpdate([...items,v.trim()]);logC(`+ "${v.trim()}" en ${title}`);sV("");}};const rm=i=>{logC(`- "${items[i]}" de ${title}`);onUpdate(items.filter((_,j)=>j!==i));};
     return(<div className="cfg-section"><h3><span>{icon}</span>{title}</h3>{items.map((it,i)=><div key={i} className="cfg-item"><span style={{flex:1,fontSize:13}}>{it}</span><button style={{...sB("sm"),color:K.red}} onClick={()=>rm(i)}>✕</button></div>)}<div style={{display:"flex",gap:8,marginTop:8}}><input style={{...sI,flex:1}} value={v} onChange={e=>sV(e.target.value)} placeholder="Agregar..." onKeyDown={e=>e.key==="Enter"&&add()}/><button style={sB("pri")} onClick={add}>+</button></div></div>);}
   function ClassEd(){const[sh,sSh]=useState(false);const bl={id:"",label:"",risk:"",deadline:6,color:"#2563EB",desc:""};const[fm,sFm]=useState(bl);
-    const save=()=>{if(!fm.label)return;const id=fm.label.toUpperCase().replace(/\s+/g,"_").slice(0,12);setCfg(p=>({...p,classifications:[...p.classifications,{...fm,id}]}));logC(`+ clasificación "${fm.label}"`);sSh(false);sFm(bl);};
+    /* Se puede editar una clasificación, no sólo agregar y borrar: los plazos
+       y las etiquetas cambian -crítica 3 meses, mayor 6, menor 12- y borrarla
+       para volver a crearla le cambiaría el id, dejando sin clasificación a los
+       hallazgos que ya la usan. Al editar, el id no se toca. */
+    const[ed,sEd]=useState(null);
+    const abrir=(c,i)=>{sFm(c?{...c}:bl);sEd(c?i:null);sSh(true);};
+    const save=()=>{if(!fm.label)return;
+      if(ed!==null){setCfg(p=>({...p,classifications:p.classifications.map((c,j)=>j===ed?{...fm,id:c.id}:c)}));logC(`clasificación "${fm.label}": plazo ${fm.deadline||0} meses`);}
+      else{const id=fm.label.toUpperCase().replace(/\s+/g,"_").slice(0,12);setCfg(p=>({...p,classifications:[...p.classifications,{...fm,id}]}));logC(`+ clasificación "${fm.label}"`);}
+      sSh(false);sEd(null);sFm(bl);};
     const rm=i=>{logC(`- clasificación "${cfg.classifications[i].label}"`);setCfg(p=>({...p,classifications:p.classifications.filter((_,j)=>j!==i)}));};
-    return(<div className="cfg-section"><h3><span>⚠️</span>Clasificaciones<button style={{...sB("pri"),marginLeft:"auto",fontSize:11}} onClick={()=>sSh(true)}>+</button></h3>{cfg.classifications.map((c,i)=><div key={i} className="cfg-item"><div style={{width:10,height:10,borderRadius:"50%",background:c.color}}/><span style={{flex:1,fontSize:13,fontWeight:600}}>{c.label}</span><span style={{fontSize:11,color:K.txS}}>{c.risk} · {c.deadline>0?c.deadline+"m":"—"}</span><button style={{...sB("sm"),color:K.red}} onClick={()=>rm(i)}>✕</button></div>)}
-      {sh&&<Md title="Nueva clasificación" onClose={()=>sSh(false)}><G2><Fd l="Etiqueta"><input style={sI} value={fm.label} onChange={e=>sFm(p=>({...p,label:e.target.value}))}/></Fd><Fd l="Riesgo"><input style={sI} value={fm.risk} onChange={e=>sFm(p=>({...p,risk:e.target.value}))}/></Fd><Fd l="Plazo meses (0=sin)"><input type="number" min="0" style={sI} value={fm.deadline} onChange={e=>sFm(p=>({...p,deadline:parseInt(e.target.value)||0}))}/></Fd><Fd l="Color"><input type="color" value={fm.color} onChange={e=>sFm(p=>({...p,color:e.target.value}))}/></Fd></G2><Fd l="Descripción"><textarea style={{...sI,minHeight:40}} value={fm.desc} onChange={e=>sFm(p=>({...p,desc:e.target.value}))}/></Fd><div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:14}}><button style={sB("g")} onClick={()=>sSh(false)}>Cancelar</button><button style={sB("pri")} onClick={save} disabled={!fm.label}>Guardar</button></div></Md>}</div>);}
+    return(<div className="cfg-section"><h3><span>⚠️</span>Clasificaciones<button style={{...sB("pri"),marginLeft:"auto",fontSize:11}} onClick={()=>abrir(null)}>+</button></h3>{cfg.classifications.map((c,i)=><div key={i} className="cfg-item"><div style={{width:10,height:10,borderRadius:"50%",background:c.color}}/><span style={{flex:1,fontSize:13,fontWeight:600}}>{c.label}</span><span style={{fontSize:11,color:K.txS}}>{c.risk} · {c.deadline>0?c.deadline+" meses":"sin plan de acción"}</span><button style={sB("sm")} onClick={()=>abrir(c,i)}>Editar</button><button style={{...sB("sm"),color:K.red}} onClick={()=>rm(i)}>✕</button></div>)}
+      {sh&&<Md title={ed!==null?`Editar ${fm.label||"clasificación"}`:"Nueva clasificación"} onClose={()=>{sSh(false);sEd(null);}}><G2><Fd l="Etiqueta"><input style={sI} value={fm.label} onChange={e=>sFm(p=>({...p,label:e.target.value}))}/></Fd><Fd l="Riesgo"><input style={sI} value={fm.risk} onChange={e=>sFm(p=>({...p,risk:e.target.value}))}/></Fd><Fd l="Plazo en meses (0 = no lleva plan de acción)"><input type="number" min="0" style={sI} value={fm.deadline} onChange={e=>sFm(p=>({...p,deadline:parseInt(e.target.value)||0}))}/></Fd><Fd l="Color"><input type="color" value={fm.color} onChange={e=>sFm(p=>({...p,color:e.target.value}))}/></Fd></G2><Fd l="Descripción"><textarea style={{...sI,minHeight:40}} value={fm.desc} onChange={e=>sFm(p=>({...p,desc:e.target.value}))}/></Fd><div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:14}}><button style={sB("g")} onClick={()=>sSh(false)}>Cancelar</button><button style={sB("pri")} onClick={save} disabled={!fm.label}>Guardar</button></div></Md>}</div>);}
   return(<div><h1 style={{fontSize:20,fontWeight:800,marginBottom:14}}>Configuración del Sistema</h1>
     <CtxHelp type="warn"><strong>Solo administradores.</strong> Cambios aplican inmediatamente y se registran en Audit Trail.</CtxHelp>
     <ClassEd/>
