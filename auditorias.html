@@ -354,25 +354,27 @@ const areasDe=(tpl)=>[...new Set((tpl?.items||[]).map(i=>i.a))];
 function resumenChk(tpl,resp){
   const items=tpl?.items||[];const r=resp?.respuestas||{};
   const cuenta=(v)=>items.filter(i=>(r[i.n]||{}).r===v).length;
-  const c=cuenta("C"),nc=cuenta("NC"),na=cuenta("NA");
-  // El cumplimiento se mide sobre lo evaluado: los N.A. y lo que no se evaluó
-  // no cuentan ni a favor ni en contra, que es como se informa siempre.
+  const c=cuenta("C"),nc=cuenta("NC"),na=cuenta("NA"),obs=cuenta("OBS");
+  /* El cumplimiento se mide sobre lo evaluado y como no conformidad: los N.A.,
+     lo que no se evaluó y las observaciones no cuentan ni a favor ni en contra.
+     Una observación es un apartamiento que se informa, no un incumplimiento,
+     así que no baja el porcentaje. */
   const cumpl=(c+nc)?Math.round(c/(c+nc)*1000)/10:null;
-  return{total:items.length,c,nc,na,pend:items.length-c-nc-na,cumpl};
+  return{total:items.length,c,nc,na,obs,pend:items.length-c-nc-na-obs,cumpl};
 }
 /* La check list entera como texto: es lo que se manda a redactar el informe y
    lo que queda de respaldo de lo que se vio en planta. */
 function chkComoTexto(fm,tpl,resp){
   const r=resp?.respuestas||{};
   const res=resumenChk(tpl,resp);
-  const etiqueta={C:"C",NC:"NC",NA:"N.A."};
+  const etiqueta={C:"C",NC:"NC",OBS:"Obs.",NA:"N.A."};
   const lineas=[
     `AUDITORÍA ${fm.code} — ${fm.name||""}`,
     `Auditado: ${fm.location||fm.progSector||"—"} · Fecha: ${fm.execDate||fm.date||"—"}`,
     `Equipo: ${[fm.auditor,fm.team].filter(Boolean).join(" · ")}`,
     `Normas: ${partirNormas(fm.standard).join(" · ")||"—"}`,
     `Check list ${tpl.code} v${tpl.version} — ${tpl.nombre}`,
-    `Resultado: ${res.total} requisitos — ${res.c} conformes, ${res.nc} no conformes, ${res.na} no aplica, ${res.pend} sin responder`
+    `Resultado: ${res.total} requisitos — ${res.c} conformes, ${res.nc} no conformes, ${res.obs} observaciones, ${res.na} no aplica, ${res.pend} sin responder`
       +(res.cumpl!=null?` — cumplimiento ${String(res.cumpl).replace(".",",")} %`:""),
     ""];
   for(const area of areasDe(tpl)){
@@ -665,12 +667,13 @@ async function exportReport(fm,af,cfg,chkResp){
     const filasArea=areasDe(chkTpl).map(area=>{
       const propios=chkTpl.items.filter(i=>i.a===area);
       const cont=(v)=>propios.filter(i=>(rr[i.n]||{}).r===v).length;
-      return '<tr><td>'+area+'</td><td>'+propios.length+'</td><td>'+cont("C")+'</td><td>'+cont("NC")+'</td><td>'+cont("NA")+'</td></tr>';
+      return '<tr><td>'+area+'</td><td>'+propios.length+'</td><td>'+cont("C")+'</td><td>'+cont("NC")+'</td><td>'+cont("OBS")+'</td><td>'+cont("NA")+'</td></tr>';
     }).join('');
     chkHtml=`<h2>• CHECK LIST APLICADA</h2>
-<table><tr><th>Check list</th><th>Versión</th><th>Requisitos</th><th>Conformes</th><th>No conformes</th><th>N.A.</th><th>Cumplimiento</th></tr>
-<tr><td>${chkTpl.code} — ${chkTpl.nombre}</td><td>${chkTpl.version}</td><td>${resChk.total}</td><td>${resChk.c}</td><td>${resChk.nc}</td><td>${resChk.na}</td><td>${resChk.cumpl!=null?String(resChk.cumpl).replace(".",",")+" %":"—"}</td></tr></table>
-<table><tr><th>Área evaluada</th><th>Requisitos</th><th>C</th><th>NC</th><th>N.A.</th></tr>${filasArea}</table>
+<table><tr><th>Check list</th><th>Versión</th><th>Requisitos</th><th>Conformes</th><th>No conformes</th><th>Observaciones</th><th>N.A.</th><th>Cumplimiento</th></tr>
+<tr><td>${chkTpl.code} — ${chkTpl.nombre}</td><td>${chkTpl.version}</td><td>${resChk.total}</td><td>${resChk.c}</td><td>${resChk.nc}</td><td>${resChk.obs}</td><td>${resChk.na}</td><td>${resChk.cumpl!=null?String(resChk.cumpl).replace(".",",")+" %":"—"}</td></tr></table>
+<p style="font-size:9pt;color:#666;margin:2px 0 8px">El cumplimiento se calcula sobre los requisitos evaluados como conforme o no conforme; las observaciones y los no aplica no se computan.</p>
+<table><tr><th>Área evaluada</th><th>Requisitos</th><th>C</th><th>NC</th><th>Obs.</th><th>N.A.</th></tr>${filasArea}</table>
 ${resChk.pend?'<p><i>Quedaron '+resChk.pend+' requisito(s) sin responder al momento de emitir el informe.</i></p>':''}`;
   }
   const normasRows=normas.length
@@ -860,14 +863,15 @@ Observación | Revisión por la dirección: se realiza anualmente pero no hay pr
 /* Pegar las respuestas de una check list que ya se llenó afuera -en papel o en
    el Word-: una línea por requisito, "Nº | C/NC/NA | observación". */
 function leerRespuestasPegadas(texto,tpl){
-  const validos={C:"C",NC:"NC",NA:"NA","N.A.":"NA","N/A":"NA","-":"","":""};
+  const validos={C:"C",NC:"NC",OBS:"OBS","OBS.":"OBS","OBSERVACIÓN":"OBS","OBSERVACION":"OBS",
+    NA:"NA","N.A.":"NA","N/A":"NA","-":"","":""};
   return String(texto||"").split(/\r?\n/).map(l=>l.trim()).filter(Boolean).map(l=>{
     const p=l.split("|").map(x=>x.trim());
     const n=Number(p[0]);
     const clave=String(p[1]||"").toUpperCase();
     const item=(tpl.items||[]).find(i=>i.n===n);
     if(!item)return{n:p[0],error:`No existe el requisito ${p[0]} en ${tpl.code}`};
-    if(!(clave in validos))return{n,error:`"${p[1]}" no es C, NC ni N.A.`};
+    if(!(clave in validos))return{n,error:`"${p[1]}" no es C, NC, Obs. ni N.A.`};
     return{n,r:validos[clave],nota:p.slice(2).join(" | ").trim(),q:item.q};
   });
 }
@@ -876,7 +880,7 @@ function PegarRespuestas({tpl,onAplicar,onClose}){
   const filas=leerRespuestasPegadas(texto,tpl);
   const buenas=filas.filter(f=>!f.error);
   return(<Md title={`Pegar respuestas — ${tpl.code}`} onClose={onClose} wide>
-    <p style={{fontSize:12.5,color:K.txS,margin:"0 0 8px"}}>Una línea por requisito: <b>número | C, NC o N.A. | observación</b>. Los requisitos que no aparezcan quedan como están. Un guion en el resultado lo deja sin responder.</p>
+    <p style={{fontSize:12.5,color:K.txS,margin:"0 0 8px"}}>Una línea por requisito: <b>número | C, NC, Obs. o N.A. | observación</b>. Los requisitos que no aparezcan quedan como están. Un guion en el resultado lo deja sin responder.</p>
     {/* En JSX los saltos de línea del texto se pierden: el ejemplo va como
         texto de una plantilla para que se vea en tres renglones. */}
     <pre style={{fontSize:11.5,background:K.bg,border:`1px solid ${K.brd}`,borderRadius:6,padding:10,margin:"0 0 10px",whiteSpace:"pre-wrap"}}>{`1 | C | Certificados ISO 9001 desde 2025
@@ -925,7 +929,10 @@ function PanelChecklist({fm,u,data,cfg,canEdit}){
      vuelva a escribir de cero. */
   const nuevoHallazgo=(it,n)=>{
     const r=resp.respuestas[it.n]||{};
-    const cls=cfg.classifications.find(c=>c.id==="MENOR")||cfg.classifications[0];
+    // Lo marcado como observación en la check list nace como observación; lo no
+    // conforme nace como menor y se sube a mayor o crítica al revisarlo.
+    const idCls=r.r==="OBS"?"OBS":"MENOR";
+    const cls=cfg.classifications.find(c=>c.id===idCls)||cfg.classifications[0];
     return{id:gid(),code:`HAL-${String(n).padStart(4,"0")}`,year:fm.year||2026,auditId:fm.id,
       clauseRef:it.r||it.a,classification:cls.id,
       description:`${resp.code} Nº ${it.n}: ${it.q}${r.nota?" — "+r.nota:""}`,
@@ -939,11 +946,12 @@ function PanelChecklist({fm,u,data,cfg,canEdit}){
     alog(data.setLogs,"CREAR","Hallazgo",`${h.code} desde ${resp.code} Nº ${it.n}`,data.currentUser?.name);
   };
   const pendientesDeHallazgo=()=>tpl.items.filter(i=>{
-    const r=resp.respuestas[i.n]||{};return r.r==="NC"&&!r.hallazgoId;});
+    const r=resp.respuestas[i.n]||{};return (r.r==="NC"||r.r==="OBS")&&!r.hallazgoId;});
   const crearHallazgosDeNC=()=>{
     const faltan=pendientesDeHallazgo();
-    if(!faltan.length)return alert("Todas las no conformidades ya tienen su hallazgo.");
-    if(!confirm(`Se van a crear ${faltan.length} hallazgo(s), uno por cada requisito no conforme sin hallazgo.\n\nQuedan clasificados como "Menor" y con el texto del requisito y la observación, para que los edites.`))return;
+    if(!faltan.length)return alert("Todas las no conformidades y observaciones ya tienen su hallazgo.");
+    const cuantasNC=faltan.filter(i=>(resp.respuestas[i.n]||{}).r==="NC").length;
+    if(!confirm(`Se van a crear ${faltan.length} hallazgo(s): ${cuantasNC} de requisitos no conformes y ${faltan.length-cuantasNC} de observaciones.\n\nLos primeros quedan como "Menor" y los otros como "Observación", con el texto del requisito y lo anotado, para que los edites.`))return;
     let n=(data.findings||[]).length;
     const nuevos=faltan.map(it=>nuevoHallazgo(it,++n));
     data.setFindings(p=>[...p,...nuevos]);
@@ -981,9 +989,13 @@ function PanelChecklist({fm,u,data,cfg,canEdit}){
     const r=(resp.respuestas[i.n]||{}).r;
     if(filtro==="pend")return !r;
     if(filtro==="nc")return r==="NC";
+    if(filtro==="obs")return r==="OBS";
     return true;
   });
-  const BOT=[{v:"C",l:"C",t:"Conforme",col:K.grn,bg:K.grnL},{v:"NC",l:"NC",t:"No conforme",col:K.red,bg:K.redL},{v:"NA",l:"N.A.",t:"No aplica",col:K.txS,bg:K.bg}];
+  const BOT=[{v:"C",l:"C",t:"Conforme",col:K.grn,bg:K.grnL},
+             {v:"NC",l:"NC",t:"No conforme",col:K.red,bg:K.redL},
+             {v:"OBS",l:"Obs.",t:"Observación — no cuenta para el porcentaje",col:"#64748B",bg:"#64748B18"},
+             {v:"NA",l:"N.A.",t:"No aplica",col:K.txS,bg:K.bg}];
   return(<div>
     <div style={sC}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
@@ -1003,6 +1015,7 @@ function PanelChecklist({fm,u,data,cfg,canEdit}){
         <span><b>{res.total}</b> requisitos</span>
         <span style={{color:K.grn}}>Conformes <b>{res.c}</b></span>
         <span style={{color:K.red}}>No conformes <b>{res.nc}</b></span>
+        <span style={{color:"#64748B"}}>Observaciones <b>{res.obs}</b></span>
         <span style={{color:K.txS}}>N.A. <b>{res.na}</b></span>
         <span style={{color:K.txS}}>Sin responder <b style={{color:res.pend?K.wrn:K.txM}}>{res.pend}</b></span>
         {res.cumpl!=null&&<span style={{color:K.txt}}>Cumplimiento <b>{String(res.cumpl).replace(".",",")} %</b></span>}
@@ -1010,13 +1023,14 @@ function PanelChecklist({fm,u,data,cfg,canEdit}){
       <div style={{height:6,background:K.brdL,borderRadius:4,marginTop:8,overflow:"hidden",display:"flex"}}>
         <div style={{width:`${res.c/res.total*100}%`,background:K.grn}}/>
         <div style={{width:`${res.nc/res.total*100}%`,background:K.red}}/>
+        <div style={{width:`${res.obs/res.total*100}%`,background:"#64748B"}}/>
         <div style={{width:`${res.na/res.total*100}%`,background:K.txM}}/>
       </div>
       <div style={{display:"flex",gap:6,marginTop:12,flexWrap:"wrap"}}>
-        {[{k:"todos",l:`Todos (${res.total})`},{k:"pend",l:`Sin responder (${res.pend})`},{k:"nc",l:`No conformes (${res.nc})`}].map(f=>
+        {[{k:"todos",l:`Todos (${res.total})`},{k:"pend",l:`Sin responder (${res.pend})`},{k:"nc",l:`No conformes (${res.nc})`},{k:"obs",l:`Observaciones (${res.obs})`}].map(f=>
           <button key={f.k} style={{...sB("sm"),...(filtro===f.k?{background:K.priL,color:K.pri,borderColor:K.pri}:{})}} onClick={()=>sFiltro(f.k)}>{f.l}</button>)}
-        {canEdit&&!!res.nc&&<button style={{...sB("sm"),color:K.red,marginLeft:"auto"}} onClick={crearHallazgosDeNC}>
-          ⚠ Crear hallazgos de las NC ({pendientesDeHallazgo().length})</button>}
+        {canEdit&&!!(res.nc+res.obs)&&<button style={{...sB("sm"),color:K.red,marginLeft:"auto"}} onClick={crearHallazgosDeNC}>
+          ⚠ Crear hallazgos ({pendientesDeHallazgo().length})</button>}
       </div>
     </div>
     {areasDe(tpl).map(area=>{
@@ -1047,9 +1061,9 @@ function PanelChecklist({fm,u,data,cfg,canEdit}){
                   value={notas[it.n]!==undefined?notas[it.n]:(r.nota||"")}
                   onChange={e=>sNotas(p=>({...p,[it.n]:e.target.value}))}
                   onBlur={()=>{if(notas[it.n]!==undefined&&notas[it.n]!==(r.nota||""))cambiar(it.n,{nota:notas[it.n]});}}/>
-                {r.r==="NC"&&(r.hallazgoId
-                  ?<span style={{fontSize:11.5,fontWeight:700,color:K.red,whiteSpace:"nowrap"}}>{r.hallazgoId}</span>
-                  :canEdit&&<button style={{...sB("sm"),color:K.red,whiteSpace:"nowrap"}} onClick={()=>crearHallazgo(it)}>+ Hallazgo</button>)}
+                {(r.r==="NC"||r.r==="OBS")&&(r.hallazgoId
+                  ?<span style={{fontSize:11.5,fontWeight:700,color:r.r==="NC"?K.red:"#64748B",whiteSpace:"nowrap"}}>{r.hallazgoId}</span>
+                  :canEdit&&<button style={{...sB("sm"),color:r.r==="NC"?K.red:"#64748B",whiteSpace:"nowrap"}} onClick={()=>crearHallazgo(it)}>+ Hallazgo</button>)}
               </div>
             </div>;
           })}
@@ -1082,18 +1096,18 @@ async function imprimirChecklist(fm,tpl,resp){
   const firmas=resp?await firmasDelInforme(fm):[];
   const esc=(s)=>String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
   const r=resp?.respuestas||{};
-  const etiqueta={C:"Conforme",NC:"No conforme",NA:"N.A."};
+  const etiqueta={C:"Conforme",NC:"No conforme",OBS:"Observación",NA:"N.A."};
   const filas=areasDe(tpl).map(area=>
     '<tr class="area"><td colspan="4">'+esc(area)+'</td></tr>'+
     tpl.items.filter(i=>i.a===area).map(i=>{
       const v=(r[i.n]||{});
       return '<tr><td class="num">'+i.n+'</td><td>'+esc(i.q)+(i.r?'<div class="ref">'+esc(i.r)+'</div>':'')+'</td>'+
-        '<td class="res '+(v.r==="NC"?"nc":v.r==="C"?"ok":"")+'">'+(resp?(etiqueta[v.r]||"—"):'<span class="cajas">C &nbsp; NC &nbsp; N.A.</span>')+'</td>'+
+        '<td class="res '+(v.r==="NC"?"nc":v.r==="C"?"ok":"")+'">'+(resp?(etiqueta[v.r]||"—"):'<span class="cajas">C &nbsp; NC &nbsp; Obs. &nbsp; N.A.</span>')+'</td>'+
         '<td>'+esc(v.nota||"")+(v.hallazgoId?'<div class="ref">'+esc(v.hallazgoId)+'</div>':"")+'</td></tr>';
     }).join('')).join('');
   const res=resumenChk(tpl,resp);
-  const resumen=resp?`<table><tr><th>Requisitos</th><th>Conformes</th><th>No conformes</th><th>N.A.</th><th>Sin responder</th></tr>
-    <tr><td>${res.total}</td><td>${res.c}</td><td>${res.nc}</td><td>${res.na}</td><td>${res.pend}</td></tr></table>`:"";
+  const resumen=resp?`<table><tr><th>Requisitos</th><th>Conformes</th><th>No conformes</th><th>Observaciones</th><th>N.A.</th><th>Sin responder</th><th>Cumplimiento</th></tr>
+    <tr><td>${res.total}</td><td>${res.c}</td><td>${res.nc}</td><td>${res.obs}</td><td>${res.na}</td><td>${res.pend}</td><td>${res.cumpl!=null?String(res.cumpl).replace(".",",")+" %":"—"}</td></tr></table>`:"";
   const firmasHtml=firmas.length?('<table class="sign-table"><tr>'+firmas.map(f=>'<th>'+esc(f.nombre)+(f.cargo?'<div style="font-weight:400;font-size:9pt">'+esc(f.cargo)+'</div>':"")+'</th>').join('')+'</tr><tr>'+
     firmas.map(f=>'<td>'+(f.imagen?'<img src="'+f.imagen+'" style="max-height:52px">':'')+'</td>').join('')+'</tr></table>'):"";
   w.document.open();
