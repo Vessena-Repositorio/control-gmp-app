@@ -214,6 +214,99 @@ export async function revisarInformesPendientes({ forzar = false, soloPrevisuali
     });
 }
 
+/* ── Autoinspecciones del trimestre ──────────────────────────────────────────
+ *
+ * Las autoinspecciones se hacen cuatro veces al año -febrero, mayo, agosto y
+ * noviembre- y cada sector tiene su día dentro del mes ("1er lunes", "2do
+ * jueves"). El aviso sale el primer día hábil de esos meses con la lista
+ * completa, y vuelve a salir los lunes mientras queden sectores sin hacer, que
+ * es cuando sirve: a mitad de mes, para los que quedaron.
+ *
+ * Los meses y los sectores salen de la configuración de la app, no de acá, para
+ * que se cambien sin tocar código.
+ */
+const MES_NUMERO = {
+    enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6,
+    julio: 7, agosto: 8, septiembre: 9, setiembre: 9, octubre: 10, noviembre: 11, diciembre: 12,
+};
+const sinTildes = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+
+async function configApp() {
+    const { rows } = await consultar("SELECT datos FROM aud_colecciones WHERE nombre = 'config'");
+    const d = rows[0]?.datos;
+    return d && typeof d === 'object' && !Array.isArray(d) ? d : {};
+}
+
+export async function revisarAutoinspecciones({ forzar = false, soloPrevisualizar = false } = {}) {
+    if (!hayCorreo) return { estado: 'sin correo configurado' };
+    const activa = await estaActivo();
+    return correrUnaVezPorDia('avisos_auditorias_autoinsp', { hora: HORA, forzar, activa }, async () => {
+        const hoy = await hoyISO();
+        const anio = Number(hoy.slice(0, 4));
+        const mesNumero = Number(hoy.slice(5, 7));
+        const diaDelMes = Number(hoy.slice(8, 10));
+        const diaSemana = new Date(`${hoy}T12:00:00Z`).getUTCDay();
+
+        const cfg = await configApp();
+        const meses = (Array.isArray(cfg.aiMonths) && cfg.aiMonths.length ? cfg.aiMonths : ['Febrero', 'Mayo', 'Agosto', 'Noviembre'])
+            .map((m) => MES_NUMERO[sinTildes(m)]).filter(Boolean);
+        const cual = meses.indexOf(mesNumero);
+        if (cual < 0 && !forzar) return { correos: 0, detalle: 'este mes no toca autoinspección' };
+        const trimestre = `Q${(cual < 0 ? 0 : cual) + 1}`;
+
+        const sectores = Array.isArray(cfg.aiSectors) && cfg.aiSectors.length
+            ? cfg.aiSectors : [];
+        const hechas = (await coleccion('autoinspecciones')).filter((i) => i.year === anio && i.quarter === trimestre);
+        const estadoDe = (nombre) => {
+            const i = hechas.find((x) => sinTildes(x.sector) === sinTildes(nombre));
+            if (!i) return { hecha: false, estado: 'Sin empezar', fecha: '' };
+            const cerrada = /complet|cerrad|realiz/i.test(String(i.status || '')) || Boolean(i.date);
+            return { hecha: cerrada, estado: i.status || 'En proceso', fecha: i.date || '' };
+        };
+        const filas = sectores.map((s) => ({ sector: s.name || String(s), dia: s.day || '', ...estadoDe(s.name || String(s)) }));
+        const pendientes = filas.filter((f) => !f.hecha);
+
+        // Primer dia habil: la lista completa. Lunes: solo si falta alguna.
+        const esPrimerDiaHabil = diaDelMes === 1
+            || (diaDelMes === 2 && diaSemana === 1) || (diaDelMes === 3 && diaSemana === 1);
+        const esLunes = diaSemana === 1;
+        const motivo = esPrimerDiaHabil ? 'inicio' : (esLunes && pendientes.length ? 'recordatorio' : null);
+        if (!motivo && !forzar) return { correos: 0, detalle: 'no es el primer día hábil ni un lunes con pendientes' };
+
+        const para = await supervisoresDe(RECURSO, 'autoinspecciones');
+        const asunto = motivo === 'recordatorio'
+            ? `[Vessena · Autoinspecciones] ${pendientes.length} sector(es) sin autoinspeccionar este mes`
+            : `[Vessena · Autoinspecciones] ${filas.length} sector(es) a autoinspeccionar en ${MESES[mesNumero - 1]} ${anio}`;
+        if (soloPrevisualizar) {
+            return { modo: 'previsualizacion', para, asunto, correos: 0, trimestre, motivo: motivo || 'fuera de fecha',
+                sectores: filas.map((f) => `${f.sector} · ${f.dia || 'sin día'} · ${f.estado}`) };
+        }
+        if (!filas.length) return { correos: 0, detalle: 'sin sectores configurados' };
+        if (!para.length) return { correos: 0, detalle: 'sin destinatarios' };
+
+        const lista = motivo === 'recordatorio' ? pendientes : filas;
+        const intro = motivo === 'recordatorio'
+            ? `<p style="margin:0;font-size:14px">Estos sectores todavía no tienen la autoinspección de ${esc(MESES[mesNumero - 1])}:</p>`
+            : `<p style="margin:0;font-size:14px">Este mes toca la autoinspección del trimestre (${esc(trimestre)}). Cada sector tiene su día:</p>`;
+        const cuerpo = intro + tabla(['Sector', 'Día', 'Estado', 'Fecha'],
+            lista.map((f) => [`<b>${esc(f.sector)}</b>`, esc(f.dia || '—'),
+                f.hecha ? '✔ Hecha' : esc(f.estado), esc(f.fecha || '—')]));
+        try {
+            await enviar({
+                para, asunto,
+                html: marco(motivo === 'recordatorio' ? 'Autoinspecciones pendientes' : `Autoinspecciones de ${MESES[mesNumero - 1]}`,
+                    `${trimestre} ${anio} · SOP-AC-035`, cuerpo, motivo === 'recordatorio' ? '#B45309' : '#0891B2'),
+                texto: asunto,
+            });
+            return { correos: 1, motivo, sectores: lista.length, pendientes: pendientes.length };
+        } catch (err) {
+            console.error('[avisos:auditorias] autoinspecciones fallo:', err.message);
+            return { correos: 0, detalle: err.message };
+        }
+    });
+}
+
 export function configAuditorias() {
-    return { hora: HORA, diasSinInforme: DIAS_SIN_INFORME, acciones: 'lunes', mes: 'primer día hábil', informes: 'lunes' };
+    return { hora: HORA, diasSinInforme: DIAS_SIN_INFORME, acciones: 'lunes', mes: 'primer día hábil',
+        informes: 'lunes', autoinspecciones: 'primer día hábil de feb/may/ago/nov y los lunes con pendientes' };
 }
