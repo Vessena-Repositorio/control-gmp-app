@@ -497,6 +497,11 @@ function CBg({cls,cfg}){const c=cfg.classifications.find(x=>x.id===cls);return c
    decide la configuración, no el código: la clasificación con plazo 0 no lleva
    CAPA, así que si mañana se cambia el plazo, cambia sola. */
 const exigeCapa=(cls,cfg)=>{const c=cfg.classifications.find(x=>x.id===cls);return !!(c&&Number(c.deadline)>0);};
+/* Una observación nace en "No aplica": no hay plan de acción que seguir. Si el
+   auditado después ofrece una acción, se le cambia el estado a mano. */
+const estadoInicial=(cls,cfg)=>exigeCapa(cls,cfg)
+  ? (cfg.statuses?.[0]||"Abierto")
+  : ((cfg.statuses||[]).find(s=>/no\s*aplica/i.test(s))||"No aplica");
 function SBg({s}){const m={Abierto:[K.red,K.redL],"En proceso":[K.wrn,K.wrnL],Cerrado:[K.grn,K.grnL],Vencido:["#991B1B","#FEE2E2"],"No aplica":["#6B7280","#F3F4F6"],"Evaluada — No implementar":["#7C3AED","#F5F3FF"]};const[c,b]=m[s]||[K.txM,"#F1F5F9"];return <Bg color={c} bg={b}>{s}</Bg>;}
 function PhaseBg({phase,ext}){const p=phaseOf(phase,ext);return <span className="aud-phase" style={{color:p.color,background:p.bg}}>{p.icon} {p.label}</span>;}
 function Fd({l,children}){return <div style={{marginBottom:12}}><label style={sL}>{l}</label>{children}</div>;}
@@ -793,7 +798,10 @@ function FichaHallazgo({hallazgo,auditorias,cfg,onGuardar,onEliminar,onClose,aud
         ?<Fd l="Auditoría"><input style={{...sI,background:K.bg}} value={auditoriaFija} readOnly/></Fd>
         :<Fd l="Auditoría"><select style={sS} value={fm.auditId||""} onChange={e=>sFm(p=>({...p,auditId:e.target.value}))}><option value="">—</option>{(auditorias||[]).map(a=><option key={a.id} value={a.id}>{a.code} — {a.name} ({phaseOf(a.phase,isExternal(a)).label})</option>)}</select></Fd>}
       <Fd l="Cláusula / requisito"><input style={sI} value={fm.clauseRef||""} onChange={e=>sFm(p=>({...p,clauseRef:e.target.value}))}/></Fd>
-      <Fd l="Clasificación"><select style={sS} value={fm.classification||""} onChange={e=>sFm(p=>({...p,classification:e.target.value}))}>{cfg.classifications.map(c=><option key={c.id} value={c.id}>{c.label} — {c.risk}</option>)}</select></Fd>
+      {/* En un hallazgo nuevo, el estado sigue a la clasificación: la
+          observación arranca en "No aplica" porque no lleva plan de acción. */}
+      <Fd l="Clasificación"><select style={sS} value={fm.classification||""} onChange={e=>sFm(p=>({...p,classification:e.target.value,
+        status:esNuevo?estadoInicial(e.target.value,cfg):p.status}))}>{cfg.classifications.map(c=><option key={c.id} value={c.id}>{c.label} — {c.risk}</option>)}</select></Fd>
       {exigeCapa(fm.classification,cfg)
         ?<Fd l="Tipo CAPA"><select style={sS} value={fm.capaType||""} onChange={e=>sFm(p=>({...p,capaType:e.target.value}))}>{cfg.capaTypes.map(c=><option key={c}>{c}</option>)}</select></Fd>
         :<Fd l="Tipo CAPA"><input style={{...sI,background:K.bg,color:K.txM}} value="No requiere" readOnly/></Fd>}
@@ -842,7 +850,7 @@ function PegarHallazgos({fm,data,cfg,onClose}){
     let n=(data.findings||[]).length;
     const nuevos=buenas.map(f=>{n++;return{id:gid(),code:`HAL-${String(n).padStart(4,"0")}`,year:fm.year||2026,
       auditId:fm.id,clauseRef:"",classification:f.clasificacion,description:f.descripcion,
-      evidence:"",capaType:"Acción Correctiva",rootCause:"",status:"Abierto",createdAt:new Date().toISOString()};});
+      evidence:"",capaType:"Acción Correctiva",rootCause:"",status:estadoInicial(f.clasificacion,cfg),createdAt:new Date().toISOString()};});
     data.setFindings(p=>[...p,...nuevos]);
     alog(data.setLogs,"CREAR","Hallazgo",`${fm.code}: ${nuevos.length} hallazgos pegados del informe`,data.currentUser?.name);
     alert(`Se crearon ${nuevos.length} hallazgo(s): ${nuevos[0]?.code} a ${nuevos[nuevos.length-1]?.code}.\nRevisalos para completar evidencia y causa raíz.`);
@@ -954,7 +962,7 @@ function PanelChecklist({fm,u,data,cfg,canEdit}){
     return{id:gid(),code:`HAL-${String(n).padStart(4,"0")}`,year:fm.year||2026,auditId:fm.id,
       clauseRef:it.r||it.a,classification:cls.id,
       description:`${resp.code} Nº ${it.n}: ${it.q}${r.nota?" — "+r.nota:""}`,
-      evidence:r.nota||"",capaType:"Acción Correctiva",rootCause:"",status:"Abierto",
+      evidence:r.nota||"",capaType:"Acción Correctiva",rootCause:"",status:estadoInicial(cls.id,cfg),
       createdAt:new Date().toISOString()};
   };
   const crearHallazgo=(it)=>{
@@ -1259,6 +1267,18 @@ function AuditDetail({audit,data,cfg,canEdit,onClose,onSave,onDelete}){
       <div style={sC}><h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px",color:K.red}}>⚠ Hallazgos ({af.length})</h3>
         <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
           {canEdit&&<button style={{...sB("g"),color:K.red}} onClick={()=>sPegar(true)}>📋 Pegar hallazgos</button>}
+          {/* Las observaciones cargadas antes de esta regla quedaron abiertas:
+              un botón las pone en No aplica sin abrir diez fichas. */}
+          {canEdit&&(()=>{
+            const abiertas=af.filter(f=>!exigeCapa(f.classification,cfg)&&!/no\s*aplica/i.test(f.status||""));
+            if(!abiertas.length)return null;
+            return <button style={{...sB("g"),color:K.txS}} onClick={()=>{
+              if(!confirm(`Se pasan a "No aplica" ${abiertas.length} observación(es) y oportunidad(es) de mejora, que no llevan plan de acción.\n\nSi alguna tiene acción comprometida, cambiale el estado después.`))return;
+              const ids=new Set(abiertas.map(f=>f.id));
+              data.setFindings(p=>p.map(f=>ids.has(f.id)?{...f,status:estadoInicial(f.classification,cfg)}:f));
+              alog(data.setLogs,"CAMBIO ESTADO","Hallazgo",`${fm.code}: ${abiertas.length} observaciones a No aplica`,data.currentUser?.name);
+            }}>Observaciones → No aplica ({abiertas.length})</button>;
+          })()}
           {canEdit&&<button style={{...sB("g"),color:"#0891B2"}} onClick={()=>{const afCapa=af.filter(f=>exigeCapa(f.classification,cfg));const h="CODIGO;CLASIFICACION;DESCRIPCION;CAUSA_RAIZ;CORRECCION;CORRECCION_RESPONSABLE;CORRECCION_FECHA;ACCION_CORRECTIVA;AC_RESPONSABLE;AC_FECHA_IMPL;AC_FECHA_REALIZADO;AC_EVIDENCIA;AC_ESTADO;VERIF_EFICACIA_METODO;VERIF_EFICACIA_FECHA;VERIF_EFICACIA_RESPONSABLE;RESULTADO\n";const r=afCapa.length>0?afCapa.map(f=>{const cl=cfg.classifications.find(x=>x.id===f.classification);const existAcc=data.actions.find(a=>a.findingId===f.id);return`${f.code};${cl?.label||""};${f.description.replace(/;/g,",").replace(/\n/g," ")};${f.rootCause||""};${existAcc?"":""};;${existAcc?"":""};;${existAcc?.dueDate||""};;${existAcc?"":""};;${existAcc?.responsible||""};${existAcc?.status||""};;;;;`;}).join("\n"):";;;;;;;;;;;;;;;;";const b=new Blob(["\uFEFF"+h+r],{type:"text/csv;charset=utf-8"});const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=`Plantilla_CAPA_${fm.code}.csv`;a.click();}}>📥 Plantilla CAPA ({af.filter(f=>exigeCapa(f.classification,cfg)).length})</button>}
           {canEdit&&<label style={{...sB("g"),color:K.grn,cursor:"pointer"}}>📤 Importar CAPA<input type="file" accept=".csv,.txt" style={{display:"none"}} onChange={e=>{const file=e.target.files[0];if(!file)return;const rd=new FileReader();rd.onload=ev=>{try{const ls=ev.target.result.split("\n").filter(l=>l.trim());if(ls.length<2)return alert("Vacío");const hd=ls[0].split(";").map(h=>h.trim());
             const iC=hd.indexOf("CODIGO"),iCa=hd.indexOf("CAUSA_RAIZ"),iAC=hd.indexOf("ACCION_CORRECTIVA"),iAR=hd.indexOf("AC_RESPONSABLE"),iAF=hd.indexOf("AC_FECHA_IMPL"),iCo=hd.indexOf("CORRECCION"),iCR=hd.indexOf("CORRECCION_RESPONSABLE"),iVM=hd.indexOf("VERIF_EFICACIA_METODO"),iVF=hd.indexOf("VERIF_EFICACIA_FECHA"),iVR=hd.indexOf("VERIF_EFICACIA_RESPONSABLE"),iAFR=hd.indexOf("AC_FECHA_REALIZADO"),iAEV=hd.indexOf("AC_EVIDENCIA"),iAST=hd.indexOf("AC_ESTADO"),iRES=hd.indexOf("RESULTADO");
