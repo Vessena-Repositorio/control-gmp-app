@@ -1761,6 +1761,26 @@ function ConfigMod({cfg,setCfg,setLogs,currentUser}){
     <LE title="Tipos de Auditoría" icon="📋" items={cfg.auditTypes} onUpdate={v=>setCfg(p=>({...p,auditTypes:v}))}/>
     <LE title="Normas" icon="📖" items={cfg.standards||[]} onUpdate={v=>setCfg(p=>({...p,standards:v}))}/>
     <LE title="Tipos CAPA" icon="🔧" items={cfg.capaTypes} onUpdate={v=>setCfg(p=>({...p,capaTypes:v}))}/>
+    {/* Los sectores de autoinspección son otros que los de auditoría —no se
+        autoinspecciona Dirección Técnica ni Compras— y cada uno tiene su día
+        del mes. De acá salen la grilla de autoinspecciones y el aviso. */}
+    {(()=>{
+      const lista=(cfg.aiSectors||[]).map(s=>typeof s==="string"?{name:s,day:""}:s);
+      const guardar=(v)=>setCfg(p=>({...p,aiSectors:v}));
+      return <div className="cfg-section">
+        <h3><span>🔍</span>Sectores de autoinspección
+          <button style={{...sB("pri"),marginLeft:"auto",fontSize:11}} onClick={()=>{guardar([...lista,{name:"",day:""}]);logC("+ sector de autoinspección");}}>+</button></h3>
+        {lista.map((s,i)=><div key={i} className="cfg-item">
+          <input style={{...sI,flex:2}} placeholder="Sector" value={s.name||""}
+            onChange={e=>guardar(lista.map((x,j)=>j===i?{...x,name:e.target.value}:x))}/>
+          <input style={{...sI,flex:1}} placeholder="Día (ej. 2do jueves)" value={s.day||""}
+            onChange={e=>guardar(lista.map((x,j)=>j===i?{...x,day:e.target.value}:x))}/>
+          <button style={{...sB("sm"),color:K.red}} onClick={()=>{logC(`- sector de autoinspección "${s.name}"`);guardar(lista.filter((_,j)=>j!==i));}}>✕</button>
+        </div>)}
+        {!lista.length&&<p style={{fontSize:12,color:K.txS,margin:"6px 0 0"}}>Sin sectores propios: la grilla usa los sectores de auditoría.</p>}
+      </div>;
+    })()}
+    <LE title="Meses de autoinspección" icon="📆" items={cfg.aiMonths||[]} onUpdate={v=>setCfg(p=>({...p,aiMonths:v}))}/>
     <LE title="Estados" icon="🔄" items={cfg.statuses} onUpdate={v=>setCfg(p=>({...p,statuses:v}))}/>
     {/* Teams editor */}
     {(()=>{
@@ -1834,7 +1854,18 @@ function Autoinspecciones({data,cfg,canEdit}){
     sEd(null);
   };
 
-  const sectors=cfg.sectors.filter(s=>!s.includes("Proveedor"));
+  /* Los sectores de autoinspección son los suyos, con su día del mes: no son
+     los de las auditorías. Dirección Técnica, Aseguramiento y Compras se
+     auditan pero no se autoinspeccionan. Se editan en Configuración; si la
+     lista quedara vacía se cae a los sectores de auditoría, para no dejar la
+     pantalla en blanco. Y si hay autoinspecciones cargadas de un sector que ya
+     no está en la lista, igual se muestran, para no esconder lo que se hizo. */
+  const aiSectores=(cfg.aiSectors||[]).map(s=>typeof s==="string"?{name:s,day:""}:s).filter(s=>s&&s.name);
+  const base=aiSectores.length?aiSectores:cfg.sectors.filter(s=>!s.includes("Proveedor")).map(s=>({name:s,day:""}));
+  const huerfanos=[...new Set(yrInsp.map(i=>i.sector))].filter(s=>s&&!base.some(b=>b.name===s)).map(s=>({name:s,day:"",fuera:true}));
+  const sectoresAI=[...base,...huerfanos];
+  const diaDe=(nombre)=>(sectoresAI.find(s=>s.name===nombre)||{}).day||"";
+  const sectors=sectoresAI.map(s=>s.name);
 
   const findBl={sector:"",quarter:"",description:"",criteria:"",severity:"Observación",action:"",responsible:"",status:"Abierto"};
   const[findFm,sFindFm]=useState(findBl);
@@ -1883,7 +1914,8 @@ function Autoinspecciones({data,cfg,canEdit}){
       <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
         <thead><tr><th style={{...sTh,minWidth:160,position:"sticky",left:0,background:K.srf,zIndex:2}}>Sector</th>{AI_QUARTERS.map(q=><th key={q.q} style={{...sTh,textAlign:"center",minWidth:100}}>{q.q} — {q.label}</th>)}</tr></thead>
         <tbody>{sectors.map(s=><tr key={s}>
-          <td style={{...sTd,fontWeight:600,fontSize:12,position:"sticky",left:0,background:K.srf,zIndex:1}}>{s}</td>
+          <td style={{...sTd,fontWeight:600,fontSize:12,position:"sticky",left:0,background:K.srf,zIndex:1}}>{s}
+            {diaDe(s)&&<div style={{fontSize:10.5,fontWeight:400,color:K.txM,marginTop:2}}>{diaDe(s)}</div>}</td>
           {AI_QUARTERS.map(q=>{const insp=getInsp(q.q,s);const sc=insp?statusColor(insp.status):{c:K.txM,bg:"#F8FAFC"};return <td key={q.q} style={{...sTd,padding:4,textAlign:"center"}} onClick={()=>openInsp(q.q,s)}>
             <div style={{padding:"6px 4px",background:insp?sc.bg:"#F8FAFC",borderRadius:6,cursor:canEdit||insp?"pointer":"default",border:`1px solid ${insp?sc.c+"30":"transparent"}`}}>
               {insp?<div><div style={{fontSize:11,fontWeight:700,color:sc.c}}>{insp.status==="Realizada"?"✅":"🔶"} {insp.status}</div>{insp.date&&<div style={{fontSize:10,color:K.txS}}>{fd(insp.date)}</div>}</div>:<span style={{fontSize:16,opacity:.3}}>+</span>}
