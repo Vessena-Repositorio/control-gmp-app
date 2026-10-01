@@ -1427,6 +1427,9 @@ function AuditDetail({audit,data,cfg,canEdit,onClose,onSave,onDelete}){
       </div>
       <div style={sC}><h3 style={{fontSize:13,fontWeight:700,margin:"0 0 10px",color:K.red}}>⚠ Hallazgos del cliente ({af.length})</h3>
         <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+          {/* El mismo pegado que las internas: sirve para cargar lo que ya
+              estaba en las planillas de seguimiento de auditorías pasadas. */}
+          {canEdit&&<button style={{...sB("g"),color:K.red}} onClick={()=>sPegar(true)}>📋 Pegar hallazgos</button>}
           {canEdit&&<button style={{...sB("g"),color:"#0891B2"}} onClick={()=>{
             const h="CODIGO_CLIENTE;CLASIFICACION;DESCRIPCION;CLAUSULA;EVIDENCIA\n";
             const ex="NC-01;Mayor;Descripción del hallazgo encontrado por el cliente;Cap.4;Evidencia objetiva\nOBS-01;Observación;Descripción de la observación;Cap.7;\nOPM-01;Oportunidad de Mejora;Descripción de la oportunidad;;";
