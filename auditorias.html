@@ -352,7 +352,54 @@ function resumenChk(tpl,resp){
   const items=tpl?.items||[];const r=resp?.respuestas||{};
   const cuenta=(v)=>items.filter(i=>(r[i.n]||{}).r===v).length;
   const c=cuenta("C"),nc=cuenta("NC"),na=cuenta("NA");
-  return{total:items.length,c,nc,na,pend:items.length-c-nc-na};
+  // El cumplimiento se mide sobre lo evaluado: los N.A. y lo que no se evaluó
+  // no cuentan ni a favor ni en contra, que es como se informa siempre.
+  const cumpl=(c+nc)?Math.round(c/(c+nc)*1000)/10:null;
+  return{total:items.length,c,nc,na,pend:items.length-c-nc-na,cumpl};
+}
+/* La check list entera como texto: es lo que se manda a redactar el informe y
+   lo que queda de respaldo de lo que se vio en planta. */
+function chkComoTexto(fm,tpl,resp){
+  const r=resp?.respuestas||{};
+  const res=resumenChk(tpl,resp);
+  const etiqueta={C:"C",NC:"NC",NA:"N.A."};
+  const lineas=[
+    `AUDITORÍA ${fm.code} — ${fm.name||""}`,
+    `Auditado: ${fm.location||fm.progSector||"—"} · Fecha: ${fm.execDate||fm.date||"—"}`,
+    `Equipo: ${[fm.auditor,fm.team].filter(Boolean).join(" · ")}`,
+    `Normas: ${partirNormas(fm.standard).join(" · ")||"—"}`,
+    `Check list ${tpl.code} v${tpl.version} — ${tpl.nombre}`,
+    `Resultado: ${res.total} requisitos — ${res.c} conformes, ${res.nc} no conformes, ${res.na} no aplica, ${res.pend} sin responder`
+      +(res.cumpl!=null?` — cumplimiento ${String(res.cumpl).replace(".",",")} %`:""),
+    ""];
+  for(const area of areasDe(tpl)){
+    lineas.push(area.toUpperCase());
+    for(const it of tpl.items.filter(i=>i.a===area)){
+      const v=r[it.n]||{};
+      lineas.push(`  ${it.n} [${etiqueta[v.r]||"sin responder"}] ${it.q}${v.nota?`  → ${v.nota}`:""}`);
+    }
+    lineas.push("");
+  }
+  return lineas.join("\n");
+}
+/* Ventana con el texto para copiar. No se usa el portapapeles del navegador
+   porque el portal entra por http y ahí no está disponible: se muestra el
+   texto ya seleccionado y se copia con el botón o con Ctrl+C. */
+function VentanaTexto({titulo,texto,nota,onClose}){
+  const ref=useRef(null);
+  useEffect(()=>{if(ref.current){ref.current.focus();ref.current.select();}},[]);
+  const copiar=()=>{
+    if(ref.current){ref.current.select();
+      try{document.execCommand("copy");}catch(e){alert("Copialo con Ctrl+C, ya está seleccionado.");}}
+  };
+  return(<Md title={titulo} onClose={onClose} wide>
+    {nota&&<p style={{fontSize:12.5,color:K.txS,margin:"0 0 8px"}}>{nota}</p>}
+    <textarea ref={ref} readOnly style={{...sI,minHeight:300,resize:"vertical",fontFamily:"monospace",fontSize:11.5}} value={texto}/>
+    <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:12}}>
+      <button style={sB("g")} onClick={onClose}>Cerrar</button>
+      <button style={sB("pri")} onClick={copiar}>Copiar</button>
+    </div>
+  </Md>);
 }
 
 const ROLES={admin:{label:"Administrador",color:"#DC2626",bg:"#FEF2F2",icon:"🔑",canEdit:true,canAdmin:true},user:{label:"Usuario",color:"#1E40AF",bg:"#EFF6FF",icon:"👤",canEdit:true,canAdmin:false},viewer:{label:"Visualización",color:"#059669",bg:"#F0FDF4",icon:"👁",canEdit:false,canAdmin:false}};
@@ -613,8 +660,8 @@ async function exportReport(fm,af,cfg,chkResp){
       return '<tr><td>'+area+'</td><td>'+propios.length+'</td><td>'+cont("C")+'</td><td>'+cont("NC")+'</td><td>'+cont("NA")+'</td></tr>';
     }).join('');
     chkHtml=`<h2>• CHECK LIST APLICADA</h2>
-<table><tr><th>Check list</th><th>Versión</th><th>Requisitos</th><th>Conformes</th><th>No conformes</th><th>N.A.</th></tr>
-<tr><td>${chkTpl.code} — ${chkTpl.nombre}</td><td>${chkTpl.version}</td><td>${resChk.total}</td><td>${resChk.c}</td><td>${resChk.nc}</td><td>${resChk.na}</td></tr></table>
+<table><tr><th>Check list</th><th>Versión</th><th>Requisitos</th><th>Conformes</th><th>No conformes</th><th>N.A.</th><th>Cumplimiento</th></tr>
+<tr><td>${chkTpl.code} — ${chkTpl.nombre}</td><td>${chkTpl.version}</td><td>${resChk.total}</td><td>${resChk.c}</td><td>${resChk.nc}</td><td>${resChk.na}</td><td>${resChk.cumpl!=null?String(resChk.cumpl).replace(".",",")+" %":"—"}</td></tr></table>
 <table><tr><th>Área evaluada</th><th>Requisitos</th><th>C</th><th>NC</th><th>N.A.</th></tr>${filasArea}</table>
 ${resChk.pend?'<p><i>Quedaron '+resChk.pend+' requisito(s) sin responder al momento de emitir el informe.</i></p>':''}`;
   }
@@ -812,6 +859,7 @@ function PanelChecklist({fm,u,data,cfg,canEdit}){
   const[filtro,sFiltro]=useState("todos");
   const[notas,sNotas]=useState({});
   const[pegarR,sPegarR]=useState(false);
+  const[verTexto,sVerTexto]=useState(false);
   const res=resumenChk(tpl,resp);
   const marcadas=partirNormas(fm.standard);
   const sugeridas=DEF_CHECKLISTS.filter(c=>c.normas.some(n=>marcadas.includes(n)));
@@ -829,17 +877,41 @@ function PanelChecklist({fm,u,data,cfg,canEdit}){
     if(!confirm(`¿Quitar la ${resp.code} de esta auditoría? Se pierden las respuestas.`))return;
     data.setChkRes(p=>p.filter(r=>r.auditId!==fm.id));
   };
-  const crearHallazgo=(it)=>{
+  /* Un hallazgo a partir de un requisito no conforme: el texto sale del
+     requisito y de lo que anotó el auditor, para que después se edite y no se
+     vuelva a escribir de cero. */
+  const nuevoHallazgo=(it,n)=>{
     const r=resp.respuestas[it.n]||{};
-    const code=`HAL-${String((data.findings||[]).length+1).padStart(4,"0")}`;
     const cls=cfg.classifications.find(c=>c.id==="MENOR")||cfg.classifications[0];
-    data.setFindings(p=>[...p,{id:gid(),code,year:fm.year||2026,auditId:fm.id,
+    return{id:gid(),code:`HAL-${String(n).padStart(4,"0")}`,year:fm.year||2026,auditId:fm.id,
       clauseRef:it.r||it.a,classification:cls.id,
       description:`${resp.code} Nº ${it.n}: ${it.q}${r.nota?" — "+r.nota:""}`,
       evidence:r.nota||"",capaType:"Acción Correctiva",rootCause:"",status:"Abierto",
-      createdAt:new Date().toISOString()}]);
-    cambiar(it.n,{hallazgoId:code});
-    alog(data.setLogs,"CREAR","Hallazgo",`${code} desde ${resp.code} Nº ${it.n}`,data.currentUser?.name);
+      createdAt:new Date().toISOString()};
+  };
+  const crearHallazgo=(it)=>{
+    const h=nuevoHallazgo(it,(data.findings||[]).length+1);
+    data.setFindings(p=>[...p,h]);
+    cambiar(it.n,{hallazgoId:h.code});
+    alog(data.setLogs,"CREAR","Hallazgo",`${h.code} desde ${resp.code} Nº ${it.n}`,data.currentUser?.name);
+  };
+  const pendientesDeHallazgo=()=>tpl.items.filter(i=>{
+    const r=resp.respuestas[i.n]||{};return r.r==="NC"&&!r.hallazgoId;});
+  const crearHallazgosDeNC=()=>{
+    const faltan=pendientesDeHallazgo();
+    if(!faltan.length)return alert("Todas las no conformidades ya tienen su hallazgo.");
+    if(!confirm(`Se van a crear ${faltan.length} hallazgo(s), uno por cada requisito no conforme sin hallazgo.\n\nQuedan clasificados como "Menor" y con el texto del requisito y la observación, para que los edites.`))return;
+    let n=(data.findings||[]).length;
+    const nuevos=faltan.map(it=>nuevoHallazgo(it,++n));
+    data.setFindings(p=>[...p,...nuevos]);
+    data.setChkRes(p=>p.map(r=>{
+      if(r.auditId!==fm.id)return r;
+      const respuestas={...r.respuestas};
+      faltan.forEach((it,k)=>{respuestas[it.n]={...(respuestas[it.n]||{}),hallazgoId:nuevos[k].code};});
+      return{...r,respuestas};
+    }));
+    alog(data.setLogs,"CREAR","Hallazgo",`${fm.code}: ${nuevos.length} hallazgos desde las NC de ${resp.code}`,data.currentUser?.name);
+    alert(`Se crearon ${nuevos.length} hallazgo(s): ${nuevos[0].code} a ${nuevos[nuevos.length-1].code}.\nRevisalos en la pestaña Informe para ajustar la clasificación y la redacción.`);
   };
 
   if(!tpl)return(<div style={sC}>
@@ -879,6 +951,7 @@ function PanelChecklist({fm,u,data,cfg,canEdit}){
         </div>
         <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
           {canEdit&&<button style={sB("sm")} onClick={()=>sPegarR(true)}>📋 Pegar respuestas</button>}
+          <button style={sB("sm")} onClick={()=>sVerTexto(true)}>📝 Para redactar</button>
           <button style={sB("sm")} onClick={()=>imprimirChecklist(fm,tpl,resp)}>🖨 Imprimir</button>
           {canEdit&&<button style={{...sB("sm"),color:K.red}} onClick={quitar}>Quitar</button>}
         </div>
@@ -888,16 +961,19 @@ function PanelChecklist({fm,u,data,cfg,canEdit}){
         <span style={{color:K.grn}}>Conformes <b>{res.c}</b></span>
         <span style={{color:K.red}}>No conformes <b>{res.nc}</b></span>
         <span style={{color:K.txS}}>N.A. <b>{res.na}</b></span>
-        <span style={{color:res.pend?K.wrn:K.txM}}>Sin responder <b>{res.pend}</b></span>
+        <span style={{color:K.txS}}>Sin responder <b style={{color:res.pend?K.wrn:K.txM}}>{res.pend}</b></span>
+        {res.cumpl!=null&&<span style={{color:K.txt}}>Cumplimiento <b>{String(res.cumpl).replace(".",",")} %</b></span>}
       </div>
       <div style={{height:6,background:K.brdL,borderRadius:4,marginTop:8,overflow:"hidden",display:"flex"}}>
         <div style={{width:`${res.c/res.total*100}%`,background:K.grn}}/>
         <div style={{width:`${res.nc/res.total*100}%`,background:K.red}}/>
         <div style={{width:`${res.na/res.total*100}%`,background:K.txM}}/>
       </div>
-      <div style={{display:"flex",gap:6,marginTop:12}}>
+      <div style={{display:"flex",gap:6,marginTop:12,flexWrap:"wrap"}}>
         {[{k:"todos",l:`Todos (${res.total})`},{k:"pend",l:`Sin responder (${res.pend})`},{k:"nc",l:`No conformes (${res.nc})`}].map(f=>
           <button key={f.k} style={{...sB("sm"),...(filtro===f.k?{background:K.priL,color:K.pri,borderColor:K.pri}:{})}} onClick={()=>sFiltro(f.k)}>{f.l}</button>)}
+        {canEdit&&!!res.nc&&<button style={{...sB("sm"),color:K.red,marginLeft:"auto"}} onClick={crearHallazgosDeNC}>
+          ⚠ Crear hallazgos de las NC ({pendientesDeHallazgo().length})</button>}
       </div>
     </div>
     {areasDe(tpl).map(area=>{
@@ -947,6 +1023,9 @@ function PanelChecklist({fm,u,data,cfg,canEdit}){
       alog(data.setLogs,"CARGAR","Check list",`${fm.code}: ${filas.length} respuestas pegadas en ${tpl.code}`,data.currentUser?.name);
       sPegarR(false);
     }}/>}
+    {verTexto&&<VentanaTexto titulo={`${tpl.code} — ${fm.code}`} texto={chkComoTexto(fm,tpl,resp)}
+      nota="La check list completa, para pegarla en el chat y redactar el informe. El texto ya está seleccionado: copialo con el botón o con Ctrl+C."
+      onClose={()=>sVerTexto(false)}/>}
   </div>);
 }
 
