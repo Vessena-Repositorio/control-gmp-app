@@ -834,9 +834,43 @@ function clasificarTexto(t,cfg){
   for(const[re,id]of CLASIF_TEXTO)if(re.test(s)&&cfg.classifications.some(c=>c.id===id))return id;
   return null;
 }
+/* Estados como los escribe cada planilla -PENDIENTE, en curso, cerrado- a los
+   estados de la app. */
+function estadoTexto(t,cfg){
+  const s=String(t||"").trim();
+  if(!s)return null;
+  const busca=(re)=>(cfg.statuses||[]).find(x=>re.test(x));
+  if(/cerrad|cumplid|finaliz/i.test(s))return busca(/cerrad/i)||"Cerrado";
+  if(/curso|proceso|ejecuci/i.test(s))return busca(/proceso/i)||"En proceso";
+  if(/no\s*aplica|n\/a/i.test(s))return busca(/no\s*aplica/i)||"No aplica";
+  if(/vencid/i.test(s))return busca(/vencid/i)||"Vencido";
+  if(/pendiente|abiert/i.test(s))return busca(/abiert/i)||"Abierto";
+  return null;
+}
+const aISO=(f)=>{
+  const s=String(f||"").trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;
+  const m=s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+  if(m){const a=m[3].length===2?`20${m[3]}`:m[3];
+    return `${a}-${String(m[2]).padStart(2,"0")}-${String(m[1]).padStart(2,"0")}`;}
+  return "";
+};
+/* Una línea por hallazgo. Lo mínimo es "clasificación | descripción"; si siguen
+   más campos, se carga también el plan de acción, que es como vienen las
+   planillas de seguimiento:
+   clasificación | descripción | acción | responsable | fecha | estado | seguimiento */
 function leerHallazgosPegados(texto,cfg){
   return String(texto||"").split(/\r?\n/).map(l=>l.trim()).filter(Boolean).map(l=>{
-    const m=l.match(/^(.*?)\s*[|;]\s*(.+)$/);
+    if(l.includes("|")){
+      const p=l.split("|").map(x=>x.trim());
+      const cls=clasificarTexto(p[0],cfg);
+      if(!cls)return{clasificacion:null,descripcion:l,error:"No se entiende la clasificación al principio de la línea"};
+      if(!p[1])return{clasificacion:null,descripcion:l,error:"Falta la descripción del hallazgo"};
+      return{clasificacion:cls,descripcion:p[1],
+        accion:p[2]||"",responsable:p[3]||"",fecha:aISO(p[4]),
+        estado:estadoTexto(p[5],cfg),seguimiento:p.slice(6).filter(Boolean).join(" · ")};
+    }
+    const m=l.match(/^(.*?)\s*;\s*(.+)$/);
     const cls=m?clasificarTexto(m[1],cfg):null;
     return cls?{clasificacion:cls,descripcion:m[2].trim()}
                :{clasificacion:null,descripcion:l,error:"No se entiende la clasificación al principio de la línea"};
@@ -848,25 +882,50 @@ function PegarHallazgos({fm,data,cfg,onClose}){
   const buenas=filas.filter(f=>f.clasificacion);
   const crear=()=>{
     let n=(data.findings||[]).length;
-    const nuevos=buenas.map(f=>{n++;return{id:gid(),code:`HAL-${String(n).padStart(4,"0")}`,year:fm.year||2026,
-      auditId:fm.id,clauseRef:"",classification:f.clasificacion,description:f.descripcion,
-      evidence:"",capaType:"Acción Correctiva",rootCause:"",status:estadoInicial(f.clasificacion,cfg),createdAt:new Date().toISOString()};});
+    let m=(data.actions||[]).length;
+    const acciones=[];
+    const nuevos=buenas.map(f=>{
+      n++;
+      const id=gid();
+      const hallazgo={id,code:`HAL-${String(n).padStart(4,"0")}`,year:fm.year||2026,
+        auditId:fm.id,clauseRef:"",classification:f.clasificacion,description:f.descripcion,
+        evidence:"",capaType:"Acción Correctiva",rootCause:"",
+        status:f.estado||estadoInicial(f.clasificacion,cfg),createdAt:new Date().toISOString()};
+      /* Si la línea trae acción, se carga el plan junto con el hallazgo: así
+         entran de una las planillas de seguimiento, que es como se venían
+         llevando fuera de la app. El seguimiento va en la verificación. */
+      if(f.accion){
+        m++;
+        acciones.push({id:gid(),code:`ACC-${String(m).padStart(4,"0")}`,year:hallazgo.year,findingId:id,
+          description:f.accion,responsible:f.responsable||"",dueDate:f.fecha||"",
+          status:f.estado||(cfg.statuses?.[0]||"Abierto"),verification:f.seguimiento||"",
+          createdAt:new Date().toISOString()});
+      }
+      return hallazgo;
+    });
     data.setFindings(p=>[...p,...nuevos]);
-    alog(data.setLogs,"CREAR","Hallazgo",`${fm.code}: ${nuevos.length} hallazgos pegados del informe`,data.currentUser?.name);
-    alert(`Se crearon ${nuevos.length} hallazgo(s): ${nuevos[0]?.code} a ${nuevos[nuevos.length-1]?.code}.\nRevisalos para completar evidencia y causa raíz.`);
+    if(acciones.length&&data.setActions)data.setActions(p=>[...p,...acciones]);
+    alog(data.setLogs,"CREAR","Hallazgo",`${fm.code}: ${nuevos.length} hallazgos y ${acciones.length} plan(es) de acción pegados`,data.currentUser?.name);
+    alert(`Se crearon ${nuevos.length} hallazgo(s): ${nuevos[0]?.code} a ${nuevos[nuevos.length-1]?.code}`
+      +(acciones.length?`\ny ${acciones.length} plan(es) de acción.`:".")
+      +`\n\nRevisalos para completar evidencia y causa raíz.`);
     onClose();
   };
   return(<Md title={`Pegar hallazgos — ${fm.code}`} onClose={onClose} wide>
-    <p style={{fontSize:12.5,color:K.txS,margin:"0 0 8px"}}>Una línea por hallazgo, con la clasificación adelante separada por <b>|</b>. Se entienden crítica, mayor o grave, menor, otra, observación y oportunidad de mejora.</p>
+    <p style={{fontSize:12.5,color:K.txS,margin:"0 0 8px"}}>Una línea por hallazgo, con la clasificación adelante separada por <b>|</b>. Se entienden crítica, mayor o grave, menor, otra, observación y oportunidad de mejora. Si la línea sigue con <b>acción, responsable, fecha, estado y seguimiento</b>, se carga también el plan de acción.</p>
     <pre style={{fontSize:11.5,background:K.bg,border:`1px solid ${K.brd}`,borderRadius:6,padding:10,margin:"0 0 10px",whiteSpace:"pre-wrap"}}>{`Mayor | Aprobación de patrones: la orden cuenta con patrón pero sin firma ni fecha del responsable.
-Observación | Revisión por la dirección: se realiza anualmente pero no hay procedimiento que la describa.`}</pre>
+Observación | Revisión por la dirección: se realiza anualmente pero no hay procedimiento que la describa.
+Mayor | Falta mantenimiento de pisos | Plan de mantenimiento edilicio | Arnoldo Braggio | 2026-03-31 | En curso | 02/07 se repara el techo`}</pre>
     <textarea style={{...sI,minHeight:180,resize:"vertical",fontFamily:"inherit"}} value={texto} onChange={e=>sTexto(e.target.value)} placeholder="Pegá acá los hallazgos del informe"/>
     {!!filas.length&&<div style={{marginTop:10,maxHeight:220,overflowY:"auto",border:`1px solid ${K.brd}`,borderRadius:6}}>
       <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
         <tbody>{filas.map((f,i)=><tr key={i} style={{borderTop:i?`1px solid ${K.brdL}`:"none"}}>
           <td style={{padding:"6px 8px",width:110,verticalAlign:"top"}}>
             {f.clasificacion?<CBg cls={f.clasificacion} cfg={cfg}/>:<span style={{color:K.red,fontSize:11}}>revisar</span>}</td>
-          <td style={{padding:"6px 8px",color:f.clasificacion?K.txt:K.red}}>{f.descripcion}</td>
+          <td style={{padding:"6px 8px",color:f.clasificacion?K.txt:K.red}}>{f.descripcion}
+            {f.accion&&<div style={{fontSize:11,color:K.txS,marginTop:3}}>
+              ↳ {f.accion}{f.responsable?` · ${f.responsable}`:""}{f.fecha?` · ${f.fecha}`:""}{f.estado?` · ${f.estado}`:""}</div>}
+          </td>
         </tr>)}</tbody>
       </table>
     </div>}
@@ -1484,10 +1543,27 @@ function AuditList({data,cfg,canEdit,openAudit}){
     alog(setLogs,"CREAR","Auditoría Externa",`${code}`,currentUser.name);
     openAudit(newA);
   };
+  /* Una auditoría interna se creaba sólo desde la grilla del programa anual,
+     clickeando sector y mes. Para cargar las de años anteriores hace falta
+     poder crearla acá y completarle el sector después. */
+  const createInt=()=>{
+    const allA=data.allAudits||audits;
+    const code=`AUD-${String(allA.length+1).padStart(4,"0")}`;
+    const yr=data.year||2026;
+    const newA={id:gid(),code,year:yr,name:"",type:cfg.auditTypes?.[0]||"Interna",progSector:"",progMonth:"",
+      phase:"planificada",date:"",auditor:"",team:"",standard:"",scope:"",location:"",checklists:"",
+      execNotes:"",execDate:"",checklistApplied:"",methodology:"",distribution:"",generalImpression:"",
+      strengths:"",conclusions:"",result:"",nextAudit:"",expectations:"",closeNotes:"",closeDate:"",
+      createdAt:new Date().toISOString()};
+    setAudits(p=>[...p,newA]);
+    alog(setLogs,"CREAR","Auditoría",`${code} (${yr})`,currentUser.name);
+    openAudit(newA);
+  };
 
   return(<div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
       <div><h1 style={{fontSize:20,fontWeight:800}}>Auditorías</h1><p style={{color:K.txS,margin:"4px 0 0",fontSize:12.5}}>{audits.length} registros</p></div>
+      {canEdit&&<button style={sB("pri")} onClick={createInt}>+ Auditoría</button>}
       {canEdit&&<button style={{...sB("pri"),background:"#7C3AED"}} onClick={createExt}>📩 + Auditoría Externa</button>}
     </div>
     {!canEdit&&<VBanner/>}
