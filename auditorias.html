@@ -664,6 +664,13 @@ async function exportReport(fm,af,cfg,chkResp){
   if(chkTpl){
     const rr=chkResp.respuestas||{};
     const resChk=resumenChk(chkTpl,chkResp);
+    /* Los requisitos no conformes de la check list no son las no conformidades
+       del informe: varias se agrupan en una sola -los ítems 37 y 40 son la NC de
+       patrones-. Si no se dice, el que lee ve 17 acá y 9 más abajo y parece un
+       error. */
+    const agrupacion=(resChk.nc&&ncs.length)
+      ? ` Los ${resChk.nc} requisitos no conformes se agrupan en las ${ncs.length} no conformidad(es) que se detallan más adelante.`
+      : "";
     const filasArea=areasDe(chkTpl).map(area=>{
       const propios=chkTpl.items.filter(i=>i.a===area);
       const cont=(v)=>propios.filter(i=>(rr[i.n]||{}).r===v).length;
@@ -672,7 +679,7 @@ async function exportReport(fm,af,cfg,chkResp){
     chkHtml=`<h2>• CHECK LIST APLICADA</h2>
 <table><tr><th>Check list</th><th>Versión</th><th>Requisitos</th><th>Conformes</th><th>No conformes</th><th>Observaciones</th><th>N.A.</th><th>Cumplimiento</th></tr>
 <tr><td>${chkTpl.code} — ${chkTpl.nombre}</td><td>${chkTpl.version}</td><td>${resChk.total}</td><td>${resChk.c}</td><td>${resChk.nc}</td><td>${resChk.obs}</td><td>${resChk.na}</td><td>${resChk.cumpl!=null?String(resChk.cumpl).replace(".",",")+" %":"—"}</td></tr></table>
-<p style="font-size:9pt;color:#666;margin:2px 0 8px">El cumplimiento se calcula sobre los requisitos evaluados como conforme o no conforme; las observaciones y los no aplica no se computan.</p>
+<p style="font-size:9pt;color:#666;margin:2px 0 8px">El cumplimiento se calcula sobre los requisitos evaluados como conforme o no conforme; las observaciones y los no aplica no se computan.${agrupacion}</p>
 <table><tr><th>Área evaluada</th><th>Requisitos</th><th>C</th><th>NC</th><th>Obs.</th><th>N.A.</th></tr>${filasArea}</table>
 ${resChk.pend?'<p><i>Quedaron '+resChk.pend+' requisito(s) sin responder al momento de emitir el informe.</i></p>':''}`;
   }
