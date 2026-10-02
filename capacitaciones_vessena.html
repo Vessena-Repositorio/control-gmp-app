@@ -1344,6 +1344,11 @@ function limpiarCacheNombres(){ _cacheNombres = new Map(); }
 // funcion porque sv() lo pone en null, y sv() esta definida antes.
 let _habChips = null;
 
+/* El nombre de un registro puede venir vacio -una fila importada sin nombre-
+   y un solo registro asi tiraba abajo toda la pantalla de Personal, buscador
+   incluido, con "Cannot read properties of undefined". Se normaliza siempre
+   por aca. */
+function nomReg(r){ return String((r && r.nom != null ? r.nom : '')).toUpperCase().trim(); }
 function findPerson(recName){
   const _k = String(recName == null ? '' : recName);
   if (_cacheNombres.has(_k)) return _cacheNombres.get(_k);
@@ -1534,7 +1539,7 @@ function logAudit(tipo,detalle,usuario){
 function h(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
 function bg(t,c){return'<span class="bg bg-'+(c||'gray')+'">'+h(t)+'</span>'}
 function $(id){return document.getElementById(id)}
-function sess(rr){const mp=new Map();rr.forEach(r=>{const k=r.fecha+'||'+r.tema+'||'+r.desc;if(!mp.has(k))mp.set(k,{k,fecha:r.fecha,mes:r.mes,tema:r.tema,desc:r.desc,cod:r.cod,hrs:r.hrs,tipo:r.tipo,ev:r.ev,plan:r.plan,resp:r.resp,att:[]});mp.get(k).att.push({id:r.id,nom:r.nom,sec:r.sec})});return[...mp.values()].sort((a,b)=>b.fecha.localeCompare(a.fecha))}
+function sess(rr){const mp=new Map();rr.forEach(r=>{const k=(r.fecha||'')+'||'+(r.tema||'')+'||'+(r.desc||'');if(!mp.has(k))mp.set(k,{k,fecha:r.fecha,mes:r.mes,tema:r.tema,desc:r.desc,cod:r.cod,hrs:r.hrs,tipo:r.tipo,ev:r.ev,plan:r.plan,resp:r.resp,att:[]});mp.get(k).att.push({id:r.id,nom:r.nom,sec:r.sec})});return[...mp.values()].sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')))}
 function sByM(rr){const b={};sess(rr).forEach(s=>{b[s.mes]=(b[s.mes]||0)+1});return b}
 
 // ══════════ NAV ══════════
@@ -1792,7 +1797,7 @@ function kpiByTraining(target,year){
     linked.forEach(r=>{
       const sec=r.sec?r.sec.toUpperCase().trim():'';
       const fp=findPerson(r.nom);
-      const persName=r.nom.toUpperCase().trim();
+      const persName=nomReg(r);
       if(fp){
         // 1º intentar con el sector del registro (histórico), 2º con el actual
         if(sec && bySec[sec]) bySec[sec].attended.add(persName);
@@ -1806,7 +1811,7 @@ function kpiByTraining(target,year){
       }
     });
     
-    const totalAtt=new Set(linked.map(r=>r.nom.toUpperCase().trim())).size;
+    const totalAtt=new Set(linked.map(r=>nomReg(r))).size;
     const autoTarget=targetPeopleCount(p.d,p.year||2026);
     const totalTarget=p.persEst>0?p.persEst:autoTarget;
     const totalPct=totalTarget>0?Math.round((totalAtt/totalTarget)*100):0;
@@ -1845,7 +1850,7 @@ function kpiUnplanned(target,year){
   unplanned.forEach(r=>{
     const key=r.fecha+'||'+r.tema+'||'+r.desc;
     if(!sessions[key])sessions[key]={fecha:r.fecha,tema:r.tema,desc:r.desc,dirigido:r.dirigido,att:new Set()};
-    sessions[key].att.add(r.nom.toUpperCase().trim());
+    sessions[key].att.add(nomReg(r));
   });
   const items=Object.values(sessions);
   if(!items.length){$(target).innerHTML='<div style="font-size:11px;color:var(--g400)">Sin capacitaciones no planificadas con sector objetivo registradas</div>';return}
@@ -1855,7 +1860,7 @@ function kpiUnplanned(target,year){
     // Also count external people for these sectors
     const extInSec=new Set();
     unplanned.filter(r=>r.fecha===s.fecha&&r.tema===s.tema&&r.desc===s.desc).forEach(r=>{
-      if(!findPerson(r.nom)&&tgtSecs.includes(r.sec))extInSec.add(r.nom.toUpperCase().trim());
+      if(!findPerson(r.nom)&&tgtSecs.includes(r.sec))extInSec.add(nomReg(r));
     });
     const autoTarget=tgtPE+extInSec.size;
     const firstRec=unplanned.find(r=>r.fecha===s.fecha&&r.tema===s.tema&&r.desc===s.desc);
@@ -2050,7 +2055,7 @@ V.dash=function(){
   
   // Capacitaciones KPIs
   const capH=capSs.reduce((s,se)=>s+horasDeTexto(se.hrs),0);
-  const capUq=new Set(capR.map(r=>r.nom.toUpperCase().trim()));
+  const capUq=new Set(capR.map(r=>nomReg(r)));
   $('st-row').innerHTML=
     '<div class="stat"><div class="lbl">🎓 Sesiones</div><div class="val" style="color:var(--navy)">'+capSs.length+'</div><div class="sub">únicas dictadas</div></div>'+
     '<div class="stat"><div class="lbl">📝 Asistencias</div><div class="val" style="color:var(--teal)">'+capR.length+'</div><div class="sub">registros</div></div>'+
@@ -2063,7 +2068,7 @@ V.dash=function(){
   const indByPerson={};
   indR.forEach(r=>{
     const fp=findPerson(r.nom);
-    const nm=fp?fp.n:r.nom.toUpperCase().trim();
+    const nm=fp?fp.n:nomReg(r);
     if(!indByPerson[nm])indByPerson[nm]={temas:new Set(),fecha:r.fecha};
     indByPerson[nm].temas.add(r.tema);
     if(r.fecha<indByPerson[nm].fecha)indByPerson[nm].fecha=r.fecha;
@@ -2094,7 +2099,7 @@ V.dash=function(){
   $('ch-m').innerHTML=MS.map((m,i)=>{const s=sM[m]||0;const hS=s>0?Math.max((s/mxS)*100,8):2;const cur=i===cM,past=i<cM;return'<div class="chart-col"><div style="font-size:9px;font-weight:800;color:'+(cur?'var(--amber)':s?'var(--navy)':'var(--g300)')+'">'+( s||'')+'</div><div class="chart-bar-g"><div class="chart-bar" style="width:70%;height:'+hS+'px;background:'+(cur?'var(--amber)':past?'var(--navy-light)':'var(--g200)')+'"></div></div><span class="chart-lbl" style="'+(cur?'color:var(--amber);font-weight:700':'')+'">'+m.slice(0,3)+'</span></div>'}).join('');
   // Inductions by month chart
   const indByMonth={};indR.forEach(r=>{indByMonth[r.mes]=(indByMonth[r.mes]||0)+1});
-  const indPersonsByMonth={};indR.forEach(r=>{if(!indPersonsByMonth[r.mes])indPersonsByMonth[r.mes]=new Set();const fp=findPerson(r.nom);indPersonsByMonth[r.mes].add(fp?fp.n:r.nom.toUpperCase().trim())});
+  const indPersonsByMonth={};indR.forEach(r=>{if(!indPersonsByMonth[r.mes])indPersonsByMonth[r.mes]=new Set();const fp=findPerson(r.nom);indPersonsByMonth[r.mes].add(fp?fp.n:nomReg(r))});
   const mxI=Math.max(...MS.map(m=>(indPersonsByMonth[m]?indPersonsByMonth[m].size:0)),1);
   $('ch-ind-m').innerHTML=MS.map((m,i)=>{const p=indPersonsByMonth[m]?indPersonsByMonth[m].size:0;const hI=p>0?Math.max((p/mxI)*100,8):2;const cur=i===cM,past=i<cM;return'<div class="chart-col"><div style="font-size:9px;font-weight:800;color:'+(cur?'var(--amber)':p?'#d97706':'var(--g300)')+'">'+(p||'')+'</div><div class="chart-bar-g"><div class="chart-bar" style="width:70%;height:'+hI+'px;background:'+(cur?'var(--amber)':past?'#f59e0b':'var(--g200)')+'"></div></div><span class="chart-lbl" style="'+(cur?'color:var(--amber);font-weight:700':'')+'">'+m.slice(0,3)+'</span></div>'}).join('');
   // Sectors — only capacitaciones
@@ -2735,7 +2740,7 @@ function renderDot(){
 
 // ══════════ REGISTRO ══════════
 let tempParts=[]; // participantes temporales para la sesión nueva
-function filt(){const sm=$('rs').value.toLowerCase(),fm=$('rmf').value,fs=$('rxf').value,ft=$('rtf').value,gy=parseInt($('global-year').value)||new Date().getFullYear();return R.filter(r=>{const ry=r.year||parseInt((r.fecha||'').slice(0,4))||2026;if(ry!==gy)return false;if(fm&&r.mes!==fm)return false;if(fs&&r.sec!==fs)return false;if(ft&&r.tema!==ft)return false;if(sm)return r.nom.toLowerCase().includes(sm)||r.desc.toLowerCase().includes(sm)||(r.cod||'').toLowerCase().includes(sm)||r.resp.toLowerCase().includes(sm);return true})}
+function filt(){const sm=$('rs').value.toLowerCase(),fm=$('rmf').value,fs=$('rxf').value,ft=$('rtf').value,gy=parseInt($('global-year').value)||new Date().getFullYear();return R.filter(r=>{const ry=r.year||parseInt((r.fecha||'').slice(0,4))||2026;if(ry!==gy)return false;if(fm&&r.mes!==fm)return false;if(fs&&r.sec!==fs)return false;if(ft&&r.tema!==ft)return false;if(sm)return nomReg(r).toLowerCase().includes(sm)||String(r.desc||'').toLowerCase().includes(sm)||String(r.cod||'').toLowerCase().includes(sm)||String(r.resp||'').toLowerCase().includes(sm);return true})}
 V.reg=function(){
   const f=filt(),ss=sess(f);
   $('rcnt').textContent=ss.length+' sesión'+(ss.length!==1?'es':'')+' · '+f.length+' asistencia'+(f.length!==1?'s':'');
@@ -2762,9 +2767,9 @@ V.reg=function(){
       if(!indByDate[g.fecha])indByDate[g.fecha]={fecha:g.fecha,mes:g.mes,personas:[],resp:g.resp};
       indByDate[g.fecha].personas.push(g);
     });
-    const indCards=Object.values(indByDate).sort((a,b)=>b.fecha.localeCompare(a.fecha));
+    const indCards=Object.values(indByDate).sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')));
     // Render regular sessions
-    let html=regSs.map(s=>'<div class="sess-g"><div class="sess-h" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'none\'?\'block\':\'none\'"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'+bg(s.mes.slice(0,3),'blue')+'<b style="font-size:12px">'+h(s.fecha)+'</b>'+bg(s.tema,TC[s.tema])+'<span style="font-size:11px;color:var(--g600)">'+h(s.desc)+'</span></div><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'+bg(s.att.length+'p','teal')+bg(s.hrs+'h','purple')+(s.plan==='SI'?bg('Plan','green'):'')+'<span style="font-size:10px;color:var(--g400)">▼</span></div></div><div class="att-list" style="display:none"><div style="font-size:10px;color:var(--g400);margin-bottom:3px">Resp: '+h(s.resp)+' · '+h(s.tipo)+' · '+h(s.ev)+'</div>'+s.att.map(a=>'<div class="att-row"><b style="min-width:160px">'+h(a.nom)+'</b><span style="color:var(--g500)">'+h(a.sec)+'</span>'+(a.nota?'<span style="font-weight:700;margin-left:8px">'+a.nota+'</span>':'')+'<span style="margin-left:auto"><button class="btn-i" onclick="eR(\''+a.id+'\')">✏️</button><button class="btn-i" onclick="dR(\''+a.id+'\')">🗑️</button></span></div>').join('')+'</div></div>').join('');
+    let html=regSs.map(s=>'<div class="sess-g"><div class="sess-h" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'none\'?\'block\':\'none\'"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'+bg(String(s.mes||"").slice(0,3),'blue')+'<b style="font-size:12px">'+h(s.fecha)+'</b>'+bg(s.tema,TC[s.tema])+'<span style="font-size:11px;color:var(--g600)">'+h(s.desc)+'</span></div><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">'+bg(s.att.length+'p','teal')+bg(s.hrs+'h','purple')+(s.plan==='SI'?bg('Plan','green'):'')+'<span style="font-size:10px;color:var(--g400)">▼</span></div></div><div class="att-list" style="display:none"><div style="font-size:10px;color:var(--g400);margin-bottom:3px">Resp: '+h(s.resp)+' · '+h(s.tipo)+' · '+h(s.ev)+'</div>'+s.att.map(a=>'<div class="att-row"><b style="min-width:160px">'+h(a.nom)+'</b><span style="color:var(--g500)">'+h(a.sec)+'</span>'+(a.nota?'<span style="font-weight:700;margin-left:8px">'+a.nota+'</span>':'')+'<span style="margin-left:auto"><button class="btn-i" onclick="eR(\''+a.id+'\')">✏️</button><button class="btn-i" onclick="dR(\''+a.id+'\')">🗑️</button></span></div>').join('')+'</div></div>').join('');
     // Render induction groups
     if(indCards.length){
       html+='<div style="margin-top:16px;margin-bottom:8px;font-size:12px;font-weight:700;color:var(--amber);border-bottom:2px solid var(--amber);padding-bottom:4px">🆕 INDUCCIONES</div>';
@@ -2791,7 +2796,7 @@ V.reg=function(){
     }
     $('vss').innerHTML=html;
   }else{$('vss').style.display='none';$('vtb').style.display='block';
-    $('rtb').innerHTML=f.map((r,i)=>'<tr style="background:'+(i%2?'var(--g50)':'#fff')+'"><td>'+bg(r.mes.slice(0,3),'blue')+'</td><td>'+h(r.fecha)+'</td><td>'+bg(r.tema,TC[r.tema])+'</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+h(r.desc)+'</td><td><b>'+h(r.nom)+'</b></td><td>'+h(r.sec)+'</td><td>'+r.hrs+'</td><td>'+h(r.tipo)+'</td><td>'+h(r.ev)+'</td><td>'+(r.plan==='SI'?bg('SI','green'):'NO')+'</td><td>'+h(r.resp)+'</td><td>'+(r.nota?'<span style="font-weight:700;color:'+(r.puntajeMin&&parseFloat(r.nota)>=r.puntajeMin?'var(--green)':r.puntajeMin&&parseFloat(r.nota)<r.puntajeMin?'var(--red)':'var(--navy)')+'">'+r.nota+'</span>':'—')+'</td><td><button class="btn-i" onclick="eR(\''+r.id+'\')">✏️</button><button class="btn-i" onclick="dR(\''+r.id+'\')">🗑️</button></td></tr>').join('')}
+    $('rtb').innerHTML=f.map((r,i)=>'<tr style="background:'+(i%2?'var(--g50)':'#fff')+'"><td>'+bg(String(r.mes||'').slice(0,3),'blue')+'</td><td>'+h(r.fecha)+'</td><td>'+bg(r.tema,TC[r.tema])+'</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+h(r.desc)+'</td><td><b>'+h(r.nom)+'</b></td><td>'+h(r.sec)+'</td><td>'+r.hrs+'</td><td>'+h(r.tipo)+'</td><td>'+h(r.ev)+'</td><td>'+(r.plan==='SI'?bg('SI','green'):'NO')+'</td><td>'+h(r.resp)+'</td><td>'+(r.nota?'<span style="font-weight:700;color:'+(r.puntajeMin&&parseFloat(r.nota)>=r.puntajeMin?'var(--green)':r.puntajeMin&&parseFloat(r.nota)<r.puntajeMin?'var(--red)':'var(--navy)')+'">'+r.nota+'</span>':'—')+'</td><td><button class="btn-i" onclick="eR(\''+r.id+'\')">✏️</button><button class="btn-i" onclick="dR(\''+r.id+'\')">🗑️</button></td></tr>').join('')}
 };
 
 // Agregar participante a la lista temporal
@@ -2867,7 +2872,7 @@ function sub(){
       if(isInduction){
         const found=findPerson(p.nom);
         if(!found){
-          const nm=p.nom.toUpperCase().trim();
+          const nm=nomReg(p);
           if(!newHires.includes(nm)){
             PE.push({n:nm,s:p.sec,a:true,fechaAlta:f,tipo:'MANPOWER'});
             newHires.push(nm);
@@ -2895,7 +2900,7 @@ function sub(){
       const tgtTotal=planItem.persEst>0?planItem.persEst:targetPeopleCount(planItem.d);
       // Count unique attendees from all records linked to this plan item
       const linkedRecs=R.filter(r=>vinculadoA(r,linkedPlanId));
-      const attended=new Set(linkedRecs.map(r=>r.nom.toUpperCase().trim()));
+      const attended=new Set(linkedRecs.map(r=>nomReg(r)));
       const pct=tgtTotal>0?Math.round((attended.size/tgtTotal)*100):0;
       if(pct>=80)planItem.e='cumplida';
       else if(attended.size>0)planItem.e='parcial';
@@ -3555,7 +3560,7 @@ function targetPeopleCount(d,year){
         // External sector - count unique people from records
         R.forEach(r=>{
           if(r.sec&&r.sec.toUpperCase()===sec&&!findPerson(r.nom)){
-            people.add(r.nom.toUpperCase().trim());
+            people.add(nomReg(r));
           }
         });
       }
@@ -3580,7 +3585,7 @@ function targetPeopleCount(d,year){
       if(r.sec!=='TODOS'&&(!secCount(year)[r.sec]||secCount(year)[r.sec]===0)){
         R.forEach(rec=>{
           if(rec.sec&&rec.sec.toUpperCase()===r.sec&&!findPerson(rec.nom)){
-            allPeople.add(rec.nom.toUpperCase().trim());
+            allPeople.add(nomReg(rec));
           }
         });
       }
@@ -3925,7 +3930,7 @@ V.pers=function(){
   R.filter(r=>!IND_T.includes(r.tema)).forEach(r=>{
     const key=r.fecha+'||'+r.tema+'||'+r.desc;
     if(!sesMap[key])sesMap[key]={tema:r.tema,desc:r.desc,fecha:r.fecha,dirigido:r.dirigido||'',att:new Set()};
-    sesMap[key].att.add(r.nom.toUpperCase().trim());
+    sesMap[key].att.add(nomReg(r));
   });
   /* Por TEMA, juntando todas las sesiones de todos los años.
      Una capacitación se dicta varias veces -rondas, reemplazos, gente que
@@ -3937,7 +3942,7 @@ V.pers=function(){
     const k=normTxt(r.tema).trim();
     if(!k)return;
     if(!temaMap[k])temaMap[k]={tema:r.tema,att:new Set(),fechas:[],dirigidos:new Set()};
-    temaMap[k].att.add(r.nom.toUpperCase().trim());
+    temaMap[k].att.add(nomReg(r));
     if(r.fecha)temaMap[k].fechas.push(r.fecha);
     if(r.dirigido)temaMap[k].dirigidos.add(r.dirigido);
   });
@@ -5341,7 +5346,7 @@ function init(){
       const recs=R.filter(r=>{
         const fp=findPerson(r.nom);
         return fp&&fp.n===p.n&&indTopics.includes(r.tema);
-      }).sort((a,b)=>a.fecha.localeCompare(b.fecha));
+      }).sort((a,b)=>String(a.fecha||'').localeCompare(String(b.fecha||'')));
       if(recs.length)p.fechaAlta=recs[0].fecha;
     });
     sv();
@@ -5722,7 +5727,7 @@ $('ri-confirm').addEventListener('click',function(){
       planItem.fr=d.fecha;
       const tgtTotal=planItem.persEst>0?planItem.persEst:targetPeopleCount(planItem.d,planItem.year||2026);
       const linkedRecs=R.filter(r=>vinculadoA(r,planId));
-      const attended=new Set(linkedRecs.map(r=>r.nom.toUpperCase().trim()));
+      const attended=new Set(linkedRecs.map(r=>nomReg(r)));
       const pct=tgtTotal>0?Math.round((attended.size/tgtTotal)*100):0;
       if(pct>=80)planItem.e='cumplida';
       else if(attended.size>0)planItem.e='parcial';
@@ -5752,7 +5757,7 @@ $('btn-exp-ppt').addEventListener('click',function(){
   const capR=yearR.filter(r=>!IND_T.includes(r.tema));
   const indR=yearR.filter(r=>IND_T.includes(r.tema));
   const capSs=sess(capR);
-  const capUq=new Set(capR.map(r=>r.nom.toUpperCase().trim()));
+  const capUq=new Set(capR.map(r=>nomReg(r)));
   const capH=capSs.reduce((s,se)=>s+horasDeTexto(se.hrs),0);
   const actPE=PE.filter(p=>wasActive(p,yr)).length;
   const yearPL=PL.filter(p=>(p.year||2026)===yr);
@@ -5788,7 +5793,7 @@ $('btn-exp-ppt').addEventListener('click',function(){
   }
   
   // ── Slide 3: Inducciones
-  const indByP={};indR.forEach(r=>{const fp=findPerson(r.nom);const nm=fp?fp.n:r.nom.toUpperCase().trim();const sec=fp?fp.s:r.sec;if(!indByP[nm])indByP[nm]={temas:new Set(),sec:sec};indByP[nm].temas.add(r.tema)});
+  const indByP={};indR.forEach(r=>{const fp=findPerson(r.nom);const nm=fp?fp.n:nomReg(r);const sec=fp?fp.s:r.sec;if(!indByP[nm])indByP[nm]={temas:new Set(),sec:sec};indByP[nm].temas.add(r.tema)});
   if(Object.keys(indByP).length){
     s=pres.addSlide();
     s.addText('Nuevos ingresos '+moLabel+' '+yr+' \u2014 '+Object.keys(indByP).length+' personas',{x:0.3,y:0.15,w:12,h:0.5,fontSize:20,bold:true,color:AMBER,fontFace:'Arial'});
@@ -5833,10 +5838,10 @@ $('btn-exp-ppt').addEventListener('click',function(){
     const tgtSecs=targetSectors(p.d);
     const sc=secCount(yr);
     const bySec={};tgtSecs.forEach(sec=>{bySec[sec]={total:sc[sec]||0,att:new Set()}});
-    linked.forEach(r=>{const fp=findPerson(r.nom);const sec=fp?fp.s:(r.sec||'');if(bySec[sec])bySec[sec].att.add(r.nom.toUpperCase().trim());else if(!findPerson(r.nom)&&r.sec){if(!bySec[r.sec])bySec[r.sec]={total:0,att:new Set()};bySec[r.sec].att.add(r.nom.toUpperCase().trim());bySec[r.sec].total=Math.max(bySec[r.sec].total,bySec[r.sec].att.size)}});
+    linked.forEach(r=>{const fp=findPerson(r.nom);const sec=fp?fp.s:(r.sec||'');if(bySec[sec])bySec[sec].att.add(nomReg(r));else if(!findPerson(r.nom)&&r.sec){if(!bySec[r.sec])bySec[r.sec]={total:0,att:new Set()};bySec[r.sec].att.add(nomReg(r));bySec[r.sec].total=Math.max(bySec[r.sec].total,bySec[r.sec].att.size)}});
     
     const totalTarget=p.persEst>0?p.persEst:targetPeopleCount(p.d,yr);
-    const totalAtt=new Set(linked.map(r=>r.nom.toUpperCase().trim())).size;
+    const totalAtt=new Set(linked.map(r=>nomReg(r))).size;
     const totalPct=totalTarget>0?Math.round(totalAtt/totalTarget*100):0;
     const pCol=totalPct>=80?GREEN:totalPct>=50?AMBER:RED;
     
@@ -6442,7 +6447,7 @@ function ocrApply() {
   const toAdd = ocrDetected.filter(d => d.useIt && d.editedName.trim());
   if (!toAdd.length) { alert('No hay asistentes seleccionados.'); return; }
   // Deduplicar contra los que ya están en tempParts
-  const existing = new Set(tempParts.map(p => p.nom.toUpperCase().trim()));
+  const existing = new Set(tempParts.map(p => nomReg(p)));
   let added = 0, skipped = 0;
   toAdd.forEach(d => {
     const nm = d.editedName.toUpperCase().trim();
@@ -6883,7 +6888,7 @@ function bulkApply() {
         const tgtTotal = planItem.persEst > 0 ? planItem.persEst : targetPeopleCount(planItem.d, regYear);
         // Contar todos los asistentes únicos entre TODOS los registros vinculados a este plan item
         const linkedRecs = R.filter(r => vinculadoA(r, planId));
-        const attended = new Set(linkedRecs.map(r => r.nom.toUpperCase().trim()));
+        const attended = new Set(linkedRecs.map(r => nomReg(r)));
         const pct = tgtTotal > 0 ? Math.round((attended.size / tgtTotal) * 100) : 0;
         const prevEstado = planItem.e;
         if (pct >= 80) planItem.e = 'cumplida';
