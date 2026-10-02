@@ -3935,6 +3935,27 @@ V.pers=function(){
     if(!sesMap[key])sesMap[key]={tema:r.tema,desc:r.desc,fecha:r.fecha,dirigido:r.dirigido||'',att:new Set()};
     sesMap[key].att.add(nomReg(r));
   });
+  /* Las inducciones continuas, por módulo y no por el texto del registro.
+     "Reglamento Interno", "RI", "Manual de inducción", "Concepctos GMP": en los
+     registros están escritas de todas las formas posibles, así que buscarlas por
+     tema exacto deja afuera a gente que sí la tiene. modulosDeRegistro() ya sabe
+     reconocer las variantes -las usa el control de inducciones-, así que se
+     pregunta por ahí. */
+  const MODULOS_IND=[
+    {id:'REGLAMENTO',label:'Reglamento Interno'},
+    {id:'INDUCCION GMP',label:'Inducción GMP'},
+    {id:'INDUCCION SEGURIDAD/SALUD',label:'Inducción Seguridad / Salud'}];
+  MODULOS_IND.forEach(m=>{
+    const att=new Set();let ultima='';
+    R.forEach(r=>{
+      if(!modulosDeRegistro(r).includes(m.id))return;
+      att.add(nomReg(r));
+      const f=String(r.fecha||'');if(f>ultima)ultima=f;
+    });
+    allTrainings.set('ind-'+m.id,{label:`🪪 ${m.label} — escrito de cualquier forma (${att.size} persona(s)${ultima?' · último '+ultima:''})`,
+      modulo:m.id,dirigido:'',type:'induccion'});
+  });
+
   /* Por TEMA DEL PLAN, juntando todas las rondas y todos los años.
      Una misma capacitación es una partida distinta en cada año del plan, así
      que preguntando por la partida de 2026 vuelven a aparecer como faltantes
@@ -4011,7 +4032,10 @@ V.pers=function(){
     if(training){
       // Find who attended
       let attendedNames=new Set();
-      if(training.type==='tema'){
+      if(training.type==='induccion'){
+        R.filter(r=>modulosDeRegistro(r).includes(training.modulo)&&enRango(r))
+         .forEach(r=>{const fp=findPerson(r.nom);if(fp)attendedNames.add(fp.n);});
+      } else if(training.type==='tema'){
         R.filter(r=>normTxt(r.tema).trim()===training.temaKey&&enRango(r))
          .forEach(r=>{const fp=findPerson(r.nom);if(fp)attendedNames.add(fp.n);});
       } else if(training.type==='planTema'){
