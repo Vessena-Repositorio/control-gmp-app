@@ -3935,6 +3935,16 @@ V.pers=function(){
     if(!sesMap[key])sesMap[key]={tema:r.tema,desc:r.desc,fecha:r.fecha,dirigido:r.dirigido||'',att:new Set()};
     sesMap[key].att.add(nomReg(r));
   });
+  /* Sin ninguna capacitación registrada. Es el caso que no aparecía en ningún
+     lado: la persona no figura como faltante de nada en particular porque no
+     tiene un solo registro, y el aviso semanal de inducciones tampoco la miraba
+     si no tenía fecha de alta o si hacía más de un año que estaba. */
+  const conAlgo=new Set();
+  R.forEach(r=>{const fp=findPerson(r.nom);if(fp)conAlgo.add(fp.n);});
+  const sinNada=PE.filter(p=>p.a!==false&&!conAlgo.has(p.n));
+  allTrainings.set('sin-nada',{label:`⚠ Sin ninguna capacitación registrada (${sinNada.length} persona(s))`,
+    type:'sinNada',dirigido:''});
+
   /* Las inducciones continuas, por módulo y no por el texto del registro.
      "Reglamento Interno", "RI", "Manual de inducción", "Concepctos GMP": en los
      registros están escritas de todas las formas posibles, así que buscarlas por
@@ -4032,7 +4042,9 @@ V.pers=function(){
     if(training){
       // Find who attended
       let attendedNames=new Set();
-      if(training.type==='induccion'){
+      if(training.type==='sinNada'){
+        R.forEach(r=>{if(!enRango(r))return;const fp=findPerson(r.nom);if(fp)attendedNames.add(fp.n);});
+      } else if(training.type==='induccion'){
         R.filter(r=>modulosDeRegistro(r).includes(training.modulo)&&enRango(r))
          .forEach(r=>{const fp=findPerson(r.nom);if(fp)attendedNames.add(fp.n);});
       } else if(training.type==='tema'){

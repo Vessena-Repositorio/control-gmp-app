@@ -324,7 +324,7 @@ export async function revisarRecordatoriosPlan({ forzar = false, soloPrevisualiz
 // 12 — inducciones pendientes, los lunes
 // ---------------------------------------------------------------------------
 
-function cuerpoInducciones(pendientes) {
+function cuerpoInducciones(pendientes, sinNinguna = []) {
     const filas = pendientes.map((p) => {
         const fondo = p.dias >= 60 ? '#fef2f2' : p.dias >= 45 ? '#fffbeb' : '#fff';
         const color = p.dias >= 60 ? '#dc2626' : p.dias >= 45 ? '#d97706' : '#92400e';
@@ -345,6 +345,29 @@ function cuerpoInducciones(pendientes) {
     const th = (t, al) => `<th style="padding:8px 10px;text-align:${al};border:1px solid ${NAV}">${t}</th>`;
     const plural = pendientes.length === 1 ? '' : 's';
 
+    /* Gente activa sin una sola inducción cargada. No son ingresos recientes
+       -o no tienen fecha de alta-, así que no entran en la tabla de arriba, pero
+       tampoco pueden quedar como un número al pie: es la persona que no aparece
+       en ningún control porque nunca se le cargó nada. */
+    const celdaS = 'padding:8px 10px;border:1px solid #e5e7eb';
+    const bloqueSinNinguna = sinNinguna.length
+        ? `<h3 style="font-size:14px;margin:22px 0 6px;color:#92400e">` +
+          `Sin ninguna inducción registrada (${sinNinguna.length})</h3>` +
+          `<p style="margin:0 0 8px 0;font-size:12.5px;color:#444">Personas activas que no tienen ` +
+          `ningún módulo cargado y que este control no mira como ingresos recientes. Hay que ` +
+          `revisar si la inducción se hizo y no se cargó, o si está pendiente:</p>` +
+          `<table style="width:100%;border-collapse:collapse;font-size:12px;margin:0 0 12px 0">` +
+            `<thead style="background:#92400e;color:#fff"><tr>` +
+              th('Nombre', 'left') + th('Sector', 'left') + th('Por qué no se controlaba', 'left') +
+            `</tr></thead><tbody>` +
+            sinNinguna.map((p) => `<tr>` +
+              `<td style="${celdaS}"><b>${esc(p.nombre)}</b></td>` +
+              `<td style="${celdaS}">${esc(p.sector)}</td>` +
+              `<td style="${celdaS};color:#92400e">${esc(p.motivo)}</td>` +
+            `</tr>`).join('') +
+          `</tbody></table>`
+        : '';
+
     return `<div style="font-family:Arial,Helvetica,sans-serif;background:#f5f5f5;padding:20px">` +
       `<div style="max-width:800px;margin:auto">` +
         `<div style="background:${NAV};color:#fff;padding:22px 24px;border-radius:8px 8px 0 0">` +
@@ -353,17 +376,22 @@ function cuerpoInducciones(pendientes) {
         `</div>` +
         `<div style="background:#fff;padding:24px;border-radius:0 0 8px 8px">` +
           `<p style="margin:0 0 12px 0">Hola,</p>` +
-          `<p style="margin:0 0 12px 0">Detectamos <b style="color:#dc2626">${pendientes.length} ` +
-          `persona${plural}</b> activa${plural} con más de 30 días de antigüedad que todavía no ` +
-          `completaron todos los módulos de inducción (Reglamento + Inducción GMP + Inducción ` +
-          `Seguridad/Salud):</p>` +
-          `<table style="width:100%;border-collapse:collapse;font-size:12px;margin:12px 0">` +
-            `<thead style="background:${NAV};color:#fff"><tr>` +
-              th('Nombre','left') + th('Sector','left') + th('Alta','left') +
-              th('Días','center') + th('Tiene','left') + th('Falta','left') +
-            `</tr></thead><tbody>${filas}</tbody></table>` +
-          `<p style="font-size:12px;color:#666;margin-top:16px"><b>Código de colores por ` +
-          `antigüedad:</b> naranja 30-45 días · amarillo 45-60 días · rojo +60 días.</p>` +
+          /* Con cero ingresos recientes la tabla no se arma: el correo sale igual
+             por la gente sin ninguna induccion, y un "Detectamos 0 personas"
+             seguido de una tabla vacia se lee como un error del sistema. */
+          (pendientes.length
+            ? `<p style="margin:0 0 12px 0">Detectamos <b style="color:#dc2626">${pendientes.length} ` +
+              `persona${plural}</b> activa${plural} con más de 30 días de antigüedad que todavía no ` +
+              `completaron todos los módulos de inducción (Reglamento + Inducción GMP + Inducción ` +
+              `Seguridad/Salud):</p>` +
+              `<table style="width:100%;border-collapse:collapse;font-size:12px;margin:12px 0">` +
+                `<thead style="background:${NAV};color:#fff"><tr>` +
+                  th('Nombre','left') + th('Sector','left') + th('Alta','left') +
+                  th('Días','center') + th('Tiene','left') + th('Falta','left') +
+                `</tr></thead><tbody>${filas}</tbody></table>`
+            : '') + bloqueSinNinguna +
+          (pendientes.length ? `<p style="font-size:12px;color:#666;margin-top:16px"><b>Código de colores por ` +
+          `antigüedad:</b> naranja 30-45 días · amarillo 45-60 días · rojo +60 días.</p>` : '') +
           `<p style="margin:12px 0;font-size:13px">Coordinar las inducciones faltantes y cargarlas ` +
           `en el sistema.</p>` +
           `<p style="margin:12px 0 0 0;font-size:11px;color:#666;border-top:1px solid #e5e7eb;padding-top:12px">` +
@@ -429,6 +457,11 @@ export async function revisarInduccionesPendientes({ forzar = false, soloPrevisu
             const ANTES_DEL_SISTEMA = '2020-01-01';
 
             const pendientes = [];
+            /* Gente activa sin ningun modulo de induccion que este control no
+               mira -porque no tiene fecha de alta o porque hace mas de un año
+               que esta-. Antes solo se contaban, asi que una persona sin una
+               sola capacitacion no aparecia en ningun lado. */
+            const sinNingunaInduccion = [];
             let sinFechaAlta = 0;
             let veteranosSinInduccion = 0;
             let antesDelSistema = 0;
@@ -439,7 +472,15 @@ export async function revisarInduccionesPendientes({ forzar = false, soloPrevisu
                 // Sin fecha de alta no se puede saber si es un ingreso reciente.
                 // Se cuentan aparte: son gente que este control NO esta mirando,
                 // y conviene que eso se vea en vez de desaparecer.
-                if (!p.fechaAlta) { sinFechaAlta++; continue; }
+                if (!p.fechaAlta) {
+                    sinFechaAlta++;
+                    // Sin fecha de alta el control no puede opinar, pero si
+                    // ademas no tiene NINGUN modulo de induccion hay que
+                    // nombrarla: contarla y no decir quien es la deja invisible.
+                    const suyos = hechos.get(String(p.n)) || new Set();
+                    if (!suyos.size) sinNingunaInduccion.push({ nombre: p.n, sector: p.s || '(sin sector)', motivo: 'sin fecha de alta' });
+                    continue;
+                }
 
                 const nom = String(p.n);
                 const alta = String(comoDia(p.fechaAlta) || '').slice(0, 10);
@@ -465,7 +506,11 @@ export async function revisarInduccionesPendientes({ forzar = false, soloPrevisu
                 // Le falta induccion pero no es un ingreso: es una brecha
                 // historica, y mezclarla con los ingresos recientes hace que el
                 // aviso pierda el sentido de urgencia que tiene.
-                if (dias > DIAS_MAXIMO) { veteranosSinInduccion++; continue; }
+                if (dias > DIAS_MAXIMO) {
+                    veteranosSinInduccion++;
+                    if (!tiene.size) sinNingunaInduccion.push({ nombre: p.n, sector: p.s || '(sin sector)', motivo: `${Math.round(dias / 365)} año(s) en la empresa` });
+                    continue;
+                }
 
                 pendientes.push({
                     nombre: p.n, sector: p.s || '(sin sector)',
@@ -480,22 +525,33 @@ export async function revisarInduccionesPendientes({ forzar = false, soloPrevisu
             // nadie tiene fecha de alta cargada, y no habria forma de saberlo.
             const noEvaluados = { sinFechaAlta, veteranosSinInduccion, antesDelSistema };
 
-            // Sin pendientes no manda nada: no tiene sentido un correo semanal
-            // que diga que todo esta bien.
-            if (!pendientes.length) {
+            sinNingunaInduccion.sort((a, b) => String(a.nombre).localeCompare(String(b.nombre)));
+
+            // Sin nada que reportar no manda nada: no tiene sentido un correo
+            // semanal que diga que todo esta bien. Pero alguien activo sin una
+            // sola induccion SI es algo que reportar, aunque no sea un ingreso
+            // reciente: antes se contaba y no se nombraba, y asi nadie se
+            // enteraba de que esa persona existia.
+            if (!pendientes.length && !sinNingunaInduccion.length) {
                 return { revisados: personal.length, pendientes: 0, correos: 0,
                          noEvaluados, detalle: 'sin ingresos recientes con induccion pendiente' };
             }
 
             const para = await supervisoresDe(RECURSO, 'inducciones-pendientes');
             const plural = pendientes.length === 1 ? '' : 's';
-            const asunto = `⚠️ ${pendientes.length} nuevo${plural} ingreso${plural} con inducción pendiente`;
+            // El asunto dice lo que de verdad hay: puede no haber ingresos
+            // recientes y si gente sin ninguna induccion.
+            const asunto = pendientes.length
+                ? `⚠️ ${pendientes.length} nuevo${plural} ingreso${plural} con inducción pendiente`
+                : `⚠️ ${sinNingunaInduccion.length} persona(s) activa(s) sin ninguna inducción registrada`;
 
             if (soloPrevisualizar) {
                 return {
                     modo: 'previsualizacion', revisados: personal.length,
                     pendientes: pendientes.length, correos: 0, noEvaluados,
-                    saldrian: [{ asunto, para, personas: pendientes.map((x) => `${x.nombre} (${x.dias}d)`) }],
+                    sinNingunaInduccion,
+                    saldrian: [{ asunto, para, personas: pendientes.map((x) => `${x.nombre} (${x.dias}d)`)
+                        .concat(sinNingunaInduccion.map((x) => `${x.nombre} — sin ninguna (${x.motivo})`)) }],
                 };
             }
             if (!para.length) {
@@ -505,7 +561,7 @@ export async function revisarInduccionesPendientes({ forzar = false, soloPrevisu
 
             let enviados = 0;
             try {
-                await enviar({ para, asunto, html: cuerpoInducciones(pendientes), texto: asunto });
+                await enviar({ para, asunto, html: cuerpoInducciones(pendientes, sinNingunaInduccion), texto: asunto });
                 enviados = 1;
             } catch (err) {
                 console.error('[avisos:capacitaciones] inducciones fallo:', err.message);
