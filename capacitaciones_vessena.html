@@ -1348,6 +1348,21 @@ let _habChips = null;
    y un solo registro asi tiraba abajo toda la pantalla de Personal, buscador
    incluido, con "Cannot read properties of undefined". Se normaliza siempre
    por aca. */
+/* Las inducciones continuas -RI, GMP, Reglamento- no se planifican por mes:
+   se dictan cuando entra alguien. Varias pantallas necesitan reconocerlas,
+   asi que esto vive aca y no dentro de una sola vista. */
+function isInductionPlanItem(p) {
+  if (!p || !p.t) return false;
+  const t = p.t.toUpperCase();
+  return (
+    t.includes('INDUCCION') ||
+    t.includes('INDUCCIÓN') ||
+    t.startsWith('RI ') ||
+    t === 'RI' ||
+    t.includes('COMPORTAMIENTO GMP') ||
+    t.includes('REGLAMENTO')
+  );
+}
 function nomReg(r){ return String((r && r.nom != null ? r.nom : '')).toUpperCase().trim(); }
 function findPerson(recName){
   const _k = String(recName == null ? '' : recName);
@@ -2128,18 +2143,6 @@ V.gerencia = function(){
   // Helper: identificar items del plan que son inducciones "continuas" (se dan cada
   // vez que ingresa alguien nuevo, no calendarizadas). Estos NO cuentan en el % de
   // cumplimiento del plan anual porque siempre están "en curso".
-  function isInductionPlanItem(p) {
-    if (!p || !p.t) return false;
-    const t = p.t.toUpperCase();
-    return (
-      t.includes('INDUCCION') ||
-      t.includes('INDUCCIÓN') ||
-      t.startsWith('RI ') ||
-      t === 'RI' ||
-      t.includes('COMPORTAMIENTO GMP') ||
-      t.includes('REGLAMENTO')
-    );
-  }
 
   // Filtrar por año
   const yearR = R.filter(r => {
@@ -3932,6 +3935,28 @@ V.pers=function(){
     if(!sesMap[key])sesMap[key]={tema:r.tema,desc:r.desc,fecha:r.fecha,dirigido:r.dirigido||'',att:new Set()};
     sesMap[key].att.add(nomReg(r));
   });
+  /* Por TEMA DEL PLAN, juntando todas las rondas y todos los años.
+     Una misma capacitación es una partida distinta en cada año del plan, así
+     que preguntando por la partida de 2026 vuelven a aparecer como faltantes
+     los que la hicieron en la del 2024. Para armar el plan del año que viene
+     lo que importa es el tema, no la partida. */
+  const planTema={};
+  PL.forEach(p=>{
+    if(p.e==='suspendida'||isInductionPlanItem(p))return;
+    const k=normTxt(p.t).trim();
+    if(!k)return;
+    if(!planTema[k])planTema[k]={t:p.t,ids:[],años:new Set(),dirigidos:new Set()};
+    planTema[k].ids.push(p.id);
+    if(p.year)planTema[k].años.add(p.year);
+    if(p.d)planTema[k].dirigidos.add(p.d);
+  });
+  Object.entries(planTema).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([k,t])=>{
+    if(t.ids.length<1)return;
+    const años=[...t.años].sort();
+    allTrainings.set('plantema-'+k,{label:`📋 ${t.t} — todo el plan (${t.ids.length} partida(s)${años.length?' · '+años.join(', '):''})`,
+      planIds:t.ids,temaPlan:k,dirigido:[...t.dirigidos].join(','),type:'planTema'});
+  });
+
   /* Por TEMA, juntando todas las sesiones de todos los años.
      Una capacitación se dicta varias veces -rondas, reemplazos, gente que
      faltó-: preguntando por una sesión suelta aparecen como faltantes los que
@@ -3989,6 +4014,15 @@ V.pers=function(){
       if(training.type==='tema'){
         R.filter(r=>normTxt(r.tema).trim()===training.temaKey&&enRango(r))
          .forEach(r=>{const fp=findPerson(r.nom);if(fp)attendedNames.add(fp.n);});
+      } else if(training.type==='planTema'){
+        // Los registros de cualquiera de las partidas de ese tema, de cualquier
+        // año; si ninguna quedó vinculada, se cae a buscar por el título.
+        let ligados=R.filter(r=>training.planIds.some(id=>vinculadoA(r,id)));
+        if(!ligados.length){
+          const kw=normTxt(training.temaPlan).toLowerCase().split(/[\s\-\/]+/).filter(w=>w.length>3);
+          ligados=R.filter(r=>!IND_T.includes(r.tema)&&kw.some(k=>normTxt(r.desc+' '+r.tema).toLowerCase().includes(k)));
+        }
+        ligados.filter(enRango).forEach(r=>{const fp=findPerson(r.nom);if(fp)attendedNames.add(fp.n);});
       } else if(training.type==='plan'){
         // Records linked to plan item or keyword match
         let linked=R.filter(r=>vinculadoA(r,training.planId));
