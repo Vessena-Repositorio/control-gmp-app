@@ -61,17 +61,25 @@ function normTxt(s) {
         .replace(/[ÓÒÖÔ]/g, 'O').replace(/[ÚÙÜÛ]/g, 'U').replace(/Ñ/g, 'N');
 }
 
+/* El texto se busca en el tema Y en la descripcion juntos: antes las variantes
+   se buscaban solo en la descripcion y el tema tenia que coincidir exacto, asi
+   que un registro con "INDUCCION SEGURIDAD" en el tema no contaba y la persona
+   figuraba como faltante teniendola. Se pide siempre algo que identifique al
+   modulo -"induccion" junto a "seguridad", o SYSO- y no la palabra suelta. */
 function modulosDeRegistro(r) {
     if (!r) return [];
     const t = normTxt(r.tema).trim();
     const d = normTxt(r.desc);
+    const txt = (t + ' ' + d).replace(/\s+/g, ' ').trim();
     const m = [];
-    if (t === 'REGLAMENTO' || /REGLAMENTO/.test(d)) m.push('REGLAMENTO');
-    if (t === 'INDUCCION GMP' || t === 'MANUAL INDUCION'
-        || /INDUCCION GMP|MANUAL DE INDUCCION|MANUAK DE INDUCCION|CONCEPTOS GMP|GMP MANTENIMIENTO|INDUCCINON GMP/.test(d))
+    if (/REGLAMENTO/.test(txt)) m.push('REGLAMENTO');
+    if (/INDUCCION\s*GMP|MANUAL\s*(DE\s*)?INDUC|MANUAK\s*(DE\s*)?INDUC|CONCEPTOS\s*GMP|GMP\s*MANTENIMIENTO|INDUCCINON\s*GMP|INDUCCION\s*BPM/.test(txt))
         m.push('INDUCCION GMP');
-    if (t === 'INDUCCION SEGURIDAD/SALUD'
-        || /INDUCCION SEGURIDAD|INDUCCION DE SEGURIDAD|INDUCCION SYSO|SYSO/.test(d))
+    // "Seguridad/Salud" a secas agrupa charlas corrientes -extintores, simulacros,
+    // ergonomia- que no son la induccion de ingreso: se pide que en algun lado
+    // diga induccion, o que sea SYSO / salud ocupacional.
+    if ((/INDUCCION/.test(txt) && /SEGURIDAD|SYSO|SALUD\s*OCUPACIONAL/.test(txt))
+        || /SYSO|SALUD\s*OCUPACIONAL/.test(txt))
         m.push('INDUCCION SEGURIDAD/SALUD');
     return m;
 }
