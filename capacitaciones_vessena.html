@@ -582,6 +582,7 @@ summary.leg-y:hover{background:var(--g50)!important}
   </div>
   <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:flex-end">
     <div class="fg" style="flex:1;min-width:250px"><label>🔍 Ver faltantes de capacitación</label><select id="pers-faltante"><option value="">— Sin filtro —</option></select></div>
+    <div class="fg" style="min-width:150px"><label>Desde</label><select id="pers-faltante-desde"><option value="">Cualquier año</option></select></div>
     <div id="pers-faltante-info" style="font-size:10px;color:var(--g500);margin-bottom:8px"></div>
   </div>
   <div style="font-size:13px;font-weight:700;margin-bottom:8px" id="pers-cnt"></div>
@@ -3926,6 +3927,25 @@ V.pers=function(){
     if(!sesMap[key])sesMap[key]={tema:r.tema,desc:r.desc,fecha:r.fecha,dirigido:r.dirigido||'',att:new Set()};
     sesMap[key].att.add(r.nom.toUpperCase().trim());
   });
+  /* Por TEMA, juntando todas las sesiones de todos los años.
+     Una capacitación se dicta varias veces -rondas, reemplazos, gente que
+     faltó-: preguntando por una sesión suelta aparecen como faltantes los que
+     la hicieron en otra fecha. Lo que hace falta para armar el plan del año que
+     viene es quién no la tiene en ningún registro. */
+  const temaMap={};
+  R.filter(r=>!IND_T.includes(r.tema)&&r.tema).forEach(r=>{
+    const k=normTxt(r.tema).trim();
+    if(!k)return;
+    if(!temaMap[k])temaMap[k]={tema:r.tema,att:new Set(),fechas:[],dirigidos:new Set()};
+    temaMap[k].att.add(r.nom.toUpperCase().trim());
+    if(r.fecha)temaMap[k].fechas.push(r.fecha);
+    if(r.dirigido)temaMap[k].dirigidos.add(r.dirigido);
+  });
+  Object.entries(temaMap).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([k,t])=>{
+    const n=t.att.size,ses=t.fechas.length?` · último ${t.fechas.sort().slice(-1)[0]}`:'';
+    allTrainings.set('tema-'+k,{label:`🎓 ${t.tema} — todas las fechas (${n} persona(s)${ses})`,
+      temaKey:k,dirigido:[...t.dirigidos].join(','),type:'tema'});
+  });
   Object.entries(sesMap).forEach(([key,s])=>{
     if(!allTrainings.has('ses-'+key)){
       allTrainings.set('ses-'+key,{label:'📝 '+s.desc+' ('+s.fecha+')',sesKey:key,dirigido:s.dirigido,att:s.att,type:'session'});
@@ -3938,6 +3958,20 @@ V.pers=function(){
     faltSel.value=curFaltVal||'';
   }
   
+  /* Desde qué año se mira. "Cualquier año" es lo habitual -quién no la tuvo
+     nunca-; acotarlo sirve cuando la capacitación se repite por norma, por
+     ejemplo cada dos años. */
+  const desdeSel=$('pers-faltante-desde');
+  const añosReg=[...new Set(R.map(r=>String(r.fecha||'').slice(0,4)).filter(a=>/^\d{4}$/.test(a)))].sort().reverse();
+  if(desdeSel.options.length!==añosReg.length+1){
+    const sv=desdeSel.value;
+    desdeSel.innerHTML='<option value="">Cualquier año</option>';
+    añosReg.forEach(a=>desdeSel.add(new Option('Desde '+a,a)));
+    desdeSel.value=sv||'';
+  }
+  const desdeAño=desdeSel.value?parseInt(desdeSel.value):0;
+  const enRango=(r)=>!desdeAño||parseInt(String(r.fecha||'').slice(0,4))>=desdeAño;
+
   // Apply faltante filter
   const faltVal=faltSel.value;
   let faltanteNames=null;
@@ -3947,14 +3981,17 @@ V.pers=function(){
     if(training){
       // Find who attended
       let attendedNames=new Set();
-      if(training.type==='plan'){
+      if(training.type==='tema'){
+        R.filter(r=>normTxt(r.tema).trim()===training.temaKey&&enRango(r))
+         .forEach(r=>{const fp=findPerson(r.nom);if(fp)attendedNames.add(fp.n);});
+      } else if(training.type==='plan'){
         // Records linked to plan item or keyword match
         let linked=R.filter(r=>vinculadoA(r,training.planId));
         if(!linked.length){
           const kw=training.label.replace('📋 ','').toLowerCase().split(/[\s\-\/]+/).filter(w=>w.length>3);
           linked=R.filter(r=>!IND_T.includes(r.tema)&&kw.some(k=>(r.desc+' '+r.tema).toLowerCase().includes(k)));
         }
-        linked.forEach(r=>{const fp=findPerson(r.nom);if(fp)attendedNames.add(fp.n)});
+        linked.filter(enRango).forEach(r=>{const fp=findPerson(r.nom);if(fp)attendedNames.add(fp.n)});
       } else {
         (training.att||new Set()).forEach(nom=>{const fp=findPerson(nom);if(fp)attendedNames.add(fp.n)});
       }
@@ -3966,12 +4003,12 @@ V.pers=function(){
         stats.forEach(x=>{
           if(tgtSecs.includes(x.p.s)&&!attendedNames.has(x.p.n))faltanteNames.add(x.p.n);
         });
-        faltanteInfo='Dirigido a: '+tgtSecs.join(', ')+' · Asistieron: '+attendedNames.size+' · Faltan: '+faltanteNames.size;
+        faltanteInfo='Dirigido a: '+tgtSecs.join(', ')+' · Con registro: '+attendedNames.size+' · Sin registro: '+faltanteNames.size+(desdeAño?' (contando desde '+desdeAño+')':'');
       } else {
         // No specific sectors - show everyone who didn't attend
         faltanteNames=new Set();
         stats.forEach(x=>{if(!attendedNames.has(x.p.n))faltanteNames.add(x.p.n)});
-        faltanteInfo='Asistieron: '+attendedNames.size+' · Faltan: '+faltanteNames.size;
+        faltanteInfo='Con registro: '+attendedNames.size+' · Sin registro: '+faltanteNames.size+(desdeAño?' (contando desde '+desdeAño+')':'');
       }
     }
   }
@@ -5439,6 +5476,7 @@ function init(){
   $('pers-tipo-flt').addEventListener('change',V.pers);
   $('pers-tag-flt').addEventListener('change',V.pers);
   $('pers-faltante').addEventListener('change',V.pers);
+  $('pers-faltante-desde').addEventListener('change',V.pers);
   $('pers-sort').addEventListener('change',V.pers);
   $('hab-q').addEventListener('input',V.hab);
   $('hab-sec').addEventListener('change',V.hab);
