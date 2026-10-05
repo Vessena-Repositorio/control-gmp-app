@@ -4361,30 +4361,50 @@ window.editFechaAlta=function(idx){
    Se pega "Nombre <tab o |> fecha" —como sale de la planilla de RRHH— y antes
    de tocar nada se muestra a quién se le cambia qué, y qué nombres no están en
    el padrón. Cada cambio queda en la bitácora. */
+/* La cédula es el dato inequívoco: el nombre se escribe de mil formas -con dos
+   apellidos, invertido, con la tilde puesta o no- y la CI no. Si la línea la
+   trae, se busca por ahí y el nombre queda sólo para leerlo; si no, se cae al
+   nombre, que es como veníamos. */
+function aISOFecha(cruda){
+  const s=String(cruda||'').trim();
+  const m=s.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/);
+  if(m){const a=m[3].length===2?'20'+m[3]:m[3];return a+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[1]).padStart(2,'0');}
+  return /^\d{4}-\d{2}-\d{2}$/.test(s)?s:'';
+}
+function personaPorCI(ci){
+  const d=numeroLimpio(ci);
+  if(d.length<6)return null;
+  return PE.find(p=>numeroLimpio(p.ci)===d)||PE.find(p=>numeroLimpio(p.nro)===d)||null;
+}
 function leerFechasPegadas(texto){
   return String(texto||'').split(/\r?\n/).map(l=>l.trim()).filter(Boolean).map(l=>{
-    const p=l.split(/\t|\s*\|\s*|\s*;\s*/).map(x=>x.trim()).filter(Boolean);
-    if(p.length<2)return{linea:l,error:'Falta la fecha'};
-    const nom=p[0];
-    const cruda=p[1];
-    let iso='';
-    let m=cruda.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/);
-    if(m){const a=m[3].length===2?'20'+m[3]:m[3];iso=a+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[1]).padStart(2,'0');}
-    else if(/^\d{4}-\d{2}-\d{2}$/.test(cruda))iso=cruda;
-    if(!iso)return{linea:l,error:'No se entiende la fecha "'+cruda+'"'};
-    const fp=findPerson(nom);
-    if(!fp)return{linea:l,nom,iso,error:'No está en el padrón'};
+    const campos=l.split(/\t|\s*\|\s*|\s*;\s*/).map(x=>x.trim()).filter(Boolean);
+    if(campos.length<2)return{linea:l,error:'Falta la fecha'};
+    // La fecha es el campo que se entiende como fecha; la CI, un número de 6 a 9
+    // dígitos que no sea esa fecha; el resto, el nombre.
+    let iso='',ci='',nombre=[];
+    campos.forEach(c=>{
+      const f=aISOFecha(c);
+      if(f&&!iso){iso=f;return;}
+      if(!ci&&/^[\d.\- ]{6,12}$/.test(c)&&numeroLimpio(c).length>=6&&numeroLimpio(c).length<=9){ci=numeroLimpio(c);return;}
+      nombre.push(c);
+    });
+    const nom=nombre.join(' ').trim();
+    if(!iso)return{linea:l,error:'No se entiende la fecha'};
+    const fp=personaPorCI(ci)||(nom?findPerson(nom):null);
+    if(!fp)return{linea:l,nom:nom||('CI '+ci),iso,error:ci?'No hay nadie con esa cédula ni con ese nombre':'No está en el padrón'};
+    const porCI=!!personaPorCI(ci);
     /* Si está activa o no lo decide la planilla de Administración, no esta
        carga: acá solo se corrige la fecha. Se marca en la vista previa para
        que se vea a quién se le está tocando el dato. */
-    return{nom:fp.n,iso,actual:fp.fechaAlta||'',persona:fp,inactivo:fp.a===false};
+    return{nom:fp.n,iso,actual:fp.fechaAlta||'',persona:fp,inactivo:fp.a===false,porCI};
   });
 }
 window.abrirCargaAltas=function(){
   if(!canDo('manage_pers')){alert('Solo administradores pueden cargar fechas de ingreso.');return}
   $('ind-modal-title').textContent='📅 Cargar fechas de ingreso';
   $('ind-modal-body').innerHTML=
-    '<p style="font-size:12px;color:var(--g600);margin:0 0 8px">Una línea por persona: <b>nombre</b> y <b>fecha de ingreso</b>, separados por tabulador o por |. '+
+    '<p style="font-size:12px;color:var(--g600);margin:0 0 8px">Una línea por persona: <b>cédula</b> (si la tenés), <b>nombre</b> y <b>fecha de ingreso</b>, separados por tabulador o por |. La cédula manda: el nombre se usa solo si no viene o no está en la ficha. '+
     'Se entiende 19.01.2012, 19/01/2012 y 2012-01-19. Podés pegar directo de la planilla de RRHH.</p>'+
     '<textarea id="altas-texto" style="width:100%;min-height:160px;font-family:inherit;font-size:12px" placeholder="Morales Rodriguez Carlos	19.01.2012"></textarea>'+
     '<div id="altas-previa" style="margin-top:10px;font-size:11px;max-height:260px;overflow:auto"></div>'+
@@ -4403,7 +4423,7 @@ window.abrirCargaAltas=function(){
       html+='<div style="margin-bottom:6px"><b>'+cambian.length+'</b> fecha(s) a cambiar · '+iguales+' ya estaban bien'+(cambian.filter(f=>f.inactivo).length?' · '+cambian.filter(f=>f.inactivo).length+' de personas inactivas':'')+
             (malas.length?' · <span style="color:var(--red)"><b>'+malas.length+'</b> sin cargar</span>':'')+'</div>';
       if(cambian.length)html+='<table style="width:100%;font-size:11px"><tbody>'+cambian.slice(0,200).map(f=>
-        '<tr><td style="padding:2px 6px">'+h(f.nom)+(f.inactivo?' <span style="font-size:9px;background:#f3f4f6;color:#6b7280;padding:1px 4px;border-radius:3px">inactivo</span>':'')+'</td><td style="padding:2px 6px;color:var(--g500)">'+(f.actual||'(sin fecha)')+'</td>'+
+        '<tr><td style="padding:2px 6px">'+h(f.nom)+(f.inactivo?' <span style="font-size:9px;background:#f3f4f6;color:#6b7280;padding:1px 4px;border-radius:3px">inactivo</span>':'')+(f.porCI?'':' <span style="font-size:9px;background:#fef3c7;color:#92400e;padding:1px 4px;border-radius:3px" title="No vino la cédula o no está en su ficha: se buscó por nombre">por nombre</span>')+'</td><td style="padding:2px 6px;color:var(--g500)">'+(f.actual||'(sin fecha)')+'</td>'+
         '<td style="padding:2px 6px">→</td><td style="padding:2px 6px;font-weight:700;color:var(--navy)">'+f.iso+'</td></tr>').join('')+'</tbody></table>';
       if(malas.length)html+='<div style="margin-top:8px;color:var(--red)">'+malas.slice(0,30).map(f=>'• '+h(f.linea)+' — '+f.error).join('<br>')+'</div>';
     }
