@@ -2041,7 +2041,7 @@ window.showIndDetail=function(filter){
     title='⚠️ Inducción parcial ('+filtered.length+' personas)';
   } else {
     filtered=entries;
-    title='👤 Todas las inducciones ('+filtered.length+' personas)';
+    title='👤 Ingresos del año ('+filtered.length+' personas)';
   }
   filtered.sort((a,b)=>a.nom.localeCompare(b.nom));
   
@@ -2116,27 +2116,32 @@ V.dash=function(){
   const indH=indSs.reduce((s,se)=>s+horasDeTexto(se.hrs),0);
   // Group induction records by person
   const indByPerson={};
-  /* Lo que se guarda son los MÓDULOS que cubre cada registro, no el texto del
-     campo Tema. Antes se guardaba el tema crudo y "completa" era tener tres
-     temas distintos, cualesquiera fueran: una persona con tres charlas de
-     seguridad figuraba completa, y otra con los tres módulos cargados bajo dos
-     temas figuraba parcial. Además la ventana que se abre al hacer clic ya
-     preguntaba por los módulos, así que mostraba cruces donde el número decía
-     que estaba completa. */
-  indR.forEach(r=>{
-    const fp=findPerson(r.nom);
-    const nm=fp?fp.n:nomReg(r);
-    if(!indByPerson[nm])indByPerson[nm]={temas:new Set(),fecha:r.fecha};
-    modulosDeRegistro(r).forEach(m=>indByPerson[nm].temas.add(m));
-    if(r.fecha<indByPerson[nm].fecha)indByPerson[nm].fecha=r.fecha;
+  /* Estos tres cuadros son sobre LOS INGRESOS DEL AÑO: responden si todos los
+     que entraron ese año recibieron la inducción completa. Antes el universo
+     era "quién tiene algún registro de inducción en el año", que mezclaba a
+     gente de hace años que vino a una actualización, y por eso el número de
+     parciales no bajaba nunca.
+
+     Los módulos se miran en TODOS los registros de la persona, no solo los del
+     año: la inducción de quien entró en diciembre se termina de dictar en
+     enero y sigue siendo la inducción de ese ingreso.
+
+     Y se guardan los MÓDULOS que cubre cada registro, no el texto del campo
+     Tema: antes "completa" era tener tres temas distintos, cualesquiera
+     fueran, así que tres charlas de seguridad daban inducción completa. */
+  const resumenInd=indResumenPorPersona();
+  const ingresosDelAño=PE.filter(p=>String(p.fechaAlta||'').slice(0,4)===String(dashYear));
+  ingresosDelAño.forEach(p=>{
+    const r=resumenInd.get(p.n);
+    indByPerson[p.n]={temas:new Set(r?r.modulos:[]),fecha:(r&&r.primero)||p.fechaAlta||''};
   });
-  const totalInducidos=Object.keys(indByPerson).length;
+  const totalInducidos=ingresosDelAño.length;
   const completos=Object.values(indByPerson).filter(p=>p.temas.size>=3).length;
   const parciales=totalInducidos-completos;
   $('st-ind').innerHTML=
-    '<div class="stat"><div class="lbl">👤 Personas inducidas</div><div class="val" style="color:var(--amber)">'+totalInducidos+'</div><div class="sub">recibieron al menos 1 inducción</div></div>'+
-    '<div class="stat"><div class="lbl">✅ Inducción completa</div><div class="val" style="color:var(--green)">'+completos+'</div><div class="sub">Reglamento + GMP + Seguridad</div></div>'+
-    '<div class="stat"><div class="lbl">⚠️ Inducción parcial</div><div class="val" style="color:var(--red)">'+(parciales>0?parciales:'0')+'</div><div class="sub">falta algún módulo</div></div>';
+    '<div class="stat"><div class="lbl">👤 Ingresos del año</div><div class="val" style="color:var(--amber)">'+totalInducidos+'</div><div class="sub">personas con alta en '+dashYear+'</div></div>'+
+    '<div class="stat"><div class="lbl">✅ Inducción completa</div><div class="val" style="color:var(--green)">'+completos+'</div><div class="sub">tienen los 3 módulos</div></div>'+
+    '<div class="stat"><div class="lbl">⚠️ Inducción parcial</div><div class="val" style="color:var(--red)">'+(parciales>0?parciales:'0')+'</div><div class="sub">les falta algún módulo</div></div>';
   
   // Make KPI cards clickable
   const indCards=$('st-ind').querySelectorAll('.stat');
