@@ -1377,6 +1377,17 @@ function isInductionPlanItem(p) {
   );
 }
 function nomReg(r){ return String((r && r.nom != null ? r.nom : '')).toUpperCase().trim(); }
+
+/* Qué módulo de inducción es una partida del plan, mirando su título. Devuelve
+   null si la partida no es una inducción. */
+function moduloDePlan(p){
+  if(!p||!isInductionPlanItem(p))return null;
+  const s=normTxt(p.t);
+  if(/SEGURIDAD|SYSO|SALUD/.test(s))return 'INDUCCION SEGURIDAD/SALUD';
+  if(/GMP|BPM/.test(s))return 'INDUCCION GMP';
+  if(/REGLAMENTO|\bRI\b/.test(s))return 'REGLAMENTO';
+  return null;
+}
 function findPerson(recName){
   const _k = String(recName == null ? '' : recName);
   if (_cacheNombres.has(_k)) return _cacheNombres.get(_k);
@@ -3939,7 +3950,9 @@ V.pers=function(){
   // From plan
   PL.forEach(p=>{
     if(p.e==='suspendida')return;
-    allTrainings.set('plan-'+p.id,{label:'📋 '+p.t+(p.ronda?' (R'+p.ronda+')':''),planId:p.id,dirigido:p.d,type:'plan'});
+    // La partida que es una inducción lo dice en la etiqueta, para que se vea
+    // que no se mira el vínculo con la partida sino el módulo.
+    allTrainings.set('plan-'+p.id,{label:'📋 '+p.t+(p.ronda?' (R'+p.ronda+')':'')+(p.year?' · '+p.year:'')+(moduloDePlan(p)?' — por módulo':''),planId:p.id,dirigido:p.d,type:'plan'});
   });
   // From unique sessions (non-induction)
   const sesMap={};
@@ -4072,6 +4085,17 @@ V.pers=function(){
           ligados=R.filter(r=>!IND_T.includes(r.tema)&&kw.some(k=>normTxt(r.desc+' '+r.tema).toLowerCase().includes(k)));
         }
         ligados.filter(enRango).forEach(r=>{const fp=findPerson(r.nom);if(fp)attendedNames.add(fp.n);});
+      } else if(training.type==='plan'&&moduloDePlan(PL.find(p=>p.id===training.planId))){
+        /* Una partida del plan que ES una inducción se resuelve por módulo y no
+           por el vínculo con la partida: la inducción se dicta cuando entra
+           alguien, casi nunca queda enganchada a la partida del año, y está
+           escrita de mil formas. Preguntando por la partida aparecía como
+           faltante gente que la tiene en el legajo —le pasó a Melani
+           Pampillón— y la misma pregunta daba distinto según qué entrada del
+           desplegable se eligiera. */
+        const mod=moduloDePlan(PL.find(p=>p.id===training.planId));
+        R.filter(r=>modulosDeRegistro(r).includes(mod)&&enRango(r))
+         .forEach(r=>{const fp=findPerson(r.nom);if(fp)attendedNames.add(fp.n);});
       } else if(training.type==='plan'){
         // Records linked to plan item or keyword match
         let linked=R.filter(r=>vinculadoA(r,training.planId));
