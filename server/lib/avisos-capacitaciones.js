@@ -72,8 +72,10 @@ function modulosDeRegistro(r) {
     const d = normTxt(r.desc);
     const txt = (t + ' ' + d).replace(/\s+/g, ' ').trim();
     const m = [];
-    if (/REGLAMENTO/.test(txt)) m.push('REGLAMENTO');
-    if (/INDUCCION\s*GMP|MANUAL\s*(DE\s*)?INDUC|MANUAK\s*(DE\s*)?INDUC|CONCEPTOS\s*GMP|GMP\s*MANTENIMIENTO|INDUCCINON\s*GMP|INDUCCION\s*BPM/.test(txt))
+    // "Normas de comportamiento interno" es como figura el reglamento en muchos
+    // registros: es el mismo contenido con otro nombre.
+    if (/REGLAMENTO|NORMAS\s*DE\s*COMPORTAMIENTO/.test(txt)) m.push('REGLAMENTO');
+    if (/INDUCCION\s*GMP|MANUAL\s*(DE\s*)?INDUC|MANUAK\s*(DE\s*)?INDUC|CONCEPTOS\s*GMP|GMP\s*MANTENIMIENTO|INDUCCINON\s*GMP|COMPORTAMIENTO\s*GMP|BUENAS\s*PRACTICAS|\bBPM\b/.test(txt))
         m.push('INDUCCION GMP');
     // "Seguridad/Salud" a secas agrupa charlas corrientes -extintores, simulacros,
     // ergonomia- que no son la induccion de ingreso: se pide que en algun lado
