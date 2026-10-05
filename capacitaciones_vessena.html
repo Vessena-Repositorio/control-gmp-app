@@ -1382,16 +1382,20 @@ function isInductionPlanItem(p) {
 }
 function nomReg(r){ return String((r && r.nom != null ? r.nom : '')).toUpperCase().trim(); }
 
-/* Qué módulo de inducción es una partida del plan, mirando su título. Devuelve
-   null si la partida no es una inducción. */
-function moduloDePlan(p){
-  if(!p||!isInductionPlanItem(p))return null;
+/* Qué módulos de inducción cubre una partida del plan, mirando su título.
+   Son varios y no uno: "RI y Comportamiento GMP" es una sola partida que dicta
+   dos módulos, y hay gente que hizo uno solo. Tratarla como un módulo único
+   dejaba a esa persona marcada como faltante sin decir de qué. */
+function modulosDePlan(p){
+  if(!p||!isInductionPlanItem(p))return [];
   const s=normTxt(p.t);
-  if(/SEGURIDAD|SYSO|SALUD/.test(s))return 'INDUCCION SEGURIDAD/SALUD';
-  if(/GMP|BPM/.test(s))return 'INDUCCION GMP';
-  if(/REGLAMENTO|NORMAS\s*DE\s*COMPORTAMIENTO|\bRI\b/.test(s))return 'REGLAMENTO';
-  return null;
+  const m=[];
+  if(/REGLAMENTO|NORMAS\s*DE\s*COMPORTAMIENTO|\bRI\b/.test(s))m.push('REGLAMENTO');
+  if(/GMP|BPM/.test(s))m.push('INDUCCION GMP');
+  if(/SEGURIDAD|SYSO|SALUD/.test(s))m.push('INDUCCION SEGURIDAD/SALUD');
+  return m;
 }
+const ETIQUETA_MODULO={'REGLAMENTO':'Reglamento','INDUCCION GMP':'GMP','INDUCCION SEGURIDAD/SALUD':'Seguridad'};
 function findPerson(recName){
   const _k = String(recName == null ? '' : recName);
   if (_cacheNombres.has(_k)) return _cacheNombres.get(_k);
@@ -3961,7 +3965,9 @@ V.pers=function(){
     // que no se mira el vínculo con la partida sino el módulo. El año no va:
     // el legajo de una persona es toda su vida laboral, no un año, y para
     // mirar un año está el selector de arriba.
-    allTrainings.set('plan-'+p.id,{label:'📋 '+p.t+(p.ronda?' (R'+p.ronda+')':'')+(moduloDePlan(p)?' — por módulo':''),planId:p.id,dirigido:p.d,type:'plan'});
+    const modsPartida=modulosDePlan(p);
+    allTrainings.set('plan-'+p.id,{label:'📋 '+p.t+(p.ronda?' (R'+p.ronda+')':'')+(modsPartida.length?' — por módulo':''),
+      planId:p.id,dirigido:p.d,type:'plan',modulos:modsPartida});
   });
   // From unique sessions (non-induction)
   const sesMap={};
@@ -4071,6 +4077,8 @@ V.pers=function(){
   // Apply faltante filter
   const faltVal=faltSel.value;
   let faltanteNames=null;
+  // Qué módulo le falta a cada uno, cuando la pregunta es por inducciones.
+  let faltaMods=null;
   let faltanteInfo='';
   if(faltVal){
     const training=allTrainings.get(faltVal);
@@ -4079,9 +4087,31 @@ V.pers=function(){
       let attendedNames=new Set();
       if(training.type==='sinNada'){
         R.forEach(r=>{if(!enRango(r))return;const fp=findPerson(r.nom);if(fp)attendedNames.add(fp.n);});
-      } else if(training.type==='induccion'){
-        R.filter(r=>modulosDeRegistro(r).includes(training.modulo)&&enRango(r))
-         .forEach(r=>{const fp=findPerson(r.nom);if(fp)attendedNames.add(fp.n);});
+      } else if(training.type==='induccion'||(training.type==='plan'&&training.modulos&&training.modulos.length)){
+        /* Por módulo, y con varios módulos a la vez cuando la partida los
+           junta -"RI y Comportamiento GMP"-. Tiene la partida quien tiene
+           TODOS sus módulos; de los demás se guarda cuál les falta, porque
+           "falta" a secas no dice si hay que darle el reglamento, la GMP o
+           las dos. */
+        const mods=training.modulos&&training.modulos.length?training.modulos:[training.modulo];
+        const tieneCadaUno=new Map();
+        R.forEach(r=>{
+          if(!enRango(r))return;
+          const ms=modulosDeRegistro(r);
+          if(!ms.length)return;
+          const fp=findPerson(r.nom);
+          if(!fp)return;
+          const s=tieneCadaUno.get(fp.n)||new Set();
+          ms.forEach(m=>s.add(m));
+          tieneCadaUno.set(fp.n,s);
+        });
+        faltaMods=new Map();
+        stats.forEach(x=>{
+          const s=tieneCadaUno.get(x.p.n)||new Set();
+          const falta=mods.filter(m=>!s.has(m));
+          if(falta.length)faltaMods.set(x.p.n,falta);
+          else attendedNames.add(x.p.n);
+        });
       } else if(training.type==='tema'){
         R.filter(r=>normTxt(r.tema).trim()===training.temaKey&&enRango(r))
          .forEach(r=>{const fp=findPerson(r.nom);if(fp)attendedNames.add(fp.n);});
@@ -4094,17 +4124,6 @@ V.pers=function(){
           ligados=R.filter(r=>!IND_T.includes(r.tema)&&kw.some(k=>normTxt(r.desc+' '+r.tema).toLowerCase().includes(k)));
         }
         ligados.filter(enRango).forEach(r=>{const fp=findPerson(r.nom);if(fp)attendedNames.add(fp.n);});
-      } else if(training.type==='plan'&&moduloDePlan(PL.find(p=>p.id===training.planId))){
-        /* Una partida del plan que ES una inducción se resuelve por módulo y no
-           por el vínculo con la partida: la inducción se dicta cuando entra
-           alguien, casi nunca queda enganchada a la partida del año, y está
-           escrita de mil formas. Preguntando por la partida aparecía como
-           faltante gente que la tiene en el legajo —le pasó a Melani
-           Pampillón— y la misma pregunta daba distinto según qué entrada del
-           desplegable se eligiera. */
-        const mod=moduloDePlan(PL.find(p=>p.id===training.planId));
-        R.filter(r=>modulosDeRegistro(r).includes(mod)&&enRango(r))
-         .forEach(r=>{const fp=findPerson(r.nom);if(fp)attendedNames.add(fp.n);});
       } else if(training.type==='plan'){
         // Records linked to plan item or keyword match
         let linked=R.filter(r=>vinculadoA(r,training.planId));
@@ -4130,6 +4149,15 @@ V.pers=function(){
         faltanteNames=new Set();
         stats.forEach(x=>{if(!attendedNames.has(x.p.n))faltanteNames.add(x.p.n)});
         faltanteInfo='Con registro: '+attendedNames.size+' · Sin registro: '+faltanteNames.size+(desdeAño?' (contando desde '+desdeAño+')':'');
+      }
+      /* Desglose por módulo: con una partida que junta dos -"RI y
+         Comportamiento GMP"- saber que faltan 30 no sirve; lo que se necesita
+         para armar la capacitación es cuántos necesitan cada uno. */
+      if(faltaMods&&faltanteNames){
+        const cuenta={};
+        faltanteNames.forEach(n=>{(faltaMods.get(n)||[]).forEach(m=>{cuenta[m]=(cuenta[m]||0)+1;});});
+        const partes=Object.keys(cuenta).map(m=>(ETIQUETA_MODULO[m]||m)+' '+cuenta[m]);
+        if(partes.length>1)faltanteInfo+=' · Les falta: '+partes.join(' · ');
       }
     }
   }
@@ -4237,7 +4265,7 @@ V.pers=function(){
       +'<div style="display:flex;align-items:center;gap:10px">'
       +'<div class="p-av" style="background:'+(ok?'#dbeafe':'#f3f4f6')+';color:'+(ok?'#1e40af':'#9ca3af')+'">'+p.n.charAt(0)+'</div>'
       +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+h(p.n)+(isAct?'':' <span style="font-size:9px;color:var(--red);font-weight:700">INACTIVO</span>')+'</div>'
-      +'<div style="font-size:10px;color:var(--g500)">'+h(p.s)+(p.tipo==='MANPOWER'?' <span style="font-size:8px;background:#fef3c7;color:#92400e;padding:1px 4px;border-radius:3px;font-weight:700">MP</span>':'')+(p.tags&&p.tags.length?' '+p.tags.map(t=>'<span style="font-size:7px;background:#e0e7ff;color:#3730a3;padding:1px 3px;border-radius:2px">'+t+'</span>').join(' '):'')+'</div></div>'
+      +'<div style="font-size:10px;color:var(--g500)">'+h(p.s)+(p.tipo==='MANPOWER'?' <span style="font-size:8px;background:#fef3c7;color:#92400e;padding:1px 4px;border-radius:3px;font-weight:700">MP</span>':'')+(p.tags&&p.tags.length?' '+p.tags.map(t=>'<span style="font-size:7px;background:#e0e7ff;color:#3730a3;padding:1px 3px;border-radius:2px">'+t+'</span>').join(' '):'')+(faltaMods&&faltaMods.get(p.n)&&faltaMods.get(p.n).length?' <span style="font-size:8px;background:#fee2e2;color:#991b1b;padding:1px 5px;border-radius:3px;font-weight:700">falta '+faltaMods.get(p.n).map(m=>ETIQUETA_MODULO[m]||m).join(' + ')+'</span>':'')+'</div></div>'
       +'<div style="text-align:right;display:flex;align-items:center;gap:8px">'
       +'<div title="Capacitaciones"><div style="font-size:15px;font-weight:800;color:'+(ok?'var(--navy)':'var(--g300)')+'">'+x.sesCount+'</div><div style="font-size:9px;color:var(--g400)">'+x.hrs.toFixed(1)+'h</div></div>'
       +'<button class="btn-i" title="'+toggleTitle+'" onclick="event.stopPropagation();toggleActivo('+idx+')">'+toggleLbl+'</button>'
