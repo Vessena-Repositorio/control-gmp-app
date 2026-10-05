@@ -1576,7 +1576,10 @@ function logAudit(tipo,detalle,usuario){
   sv();
 }
 function h(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
-function bg(t,c){return'<span class="bg bg-'+(c||'gray')+'">'+h(t)+'</span>'}
+/* `est` es para los casos donde el cartelito tiene que achicarse o partirse en
+   dos renglones: en el legajo, un tema largo como "TRANSFERENCIA TECNOLOGICA"
+   se salía de su columna y se montaba sobre la descripción. */
+function bg(t,c,est){return'<span class="bg bg-'+(c||'gray')+'"'+(est?' style="'+est+'"':'')+'>'+h(t)+'</span>'}
 function $(id){return document.getElementById(id)}
 function sess(rr){const mp=new Map();rr.forEach(r=>{const k=(r.fecha||'')+'||'+(r.tema||'')+'||'+(r.desc||'');if(!mp.has(k))mp.set(k,{k,fecha:r.fecha,mes:r.mes,tema:r.tema,desc:r.desc,cod:r.cod,hrs:r.hrs,tipo:r.tipo,ev:r.ev,plan:r.plan,resp:r.resp,att:[]});mp.get(k).att.push({id:r.id,nom:r.nom,sec:r.sec})});return[...mp.values()].sort((a,b)=>String(b.fecha||'').localeCompare(String(a.fecha||'')))}
 function sByM(rr){const b={};sess(rr).forEach(s=>{b[s.mes]=(b[s.mes]||0)+1});return b}
@@ -4209,11 +4212,11 @@ V.pers=function(){
           detail+='<summary class="leg-y" style="cursor:pointer;font-size:11px;font-weight:700;color:var(--navy);padding:5px 8px;background:#fff;border:1px solid var(--g200);border-radius:6px;list-style:none">'+a+' — '+ss.length+' capacitación'+(ss.length===1?'':'es')+' · '+hs.toFixed(1)+' h</summary>';
           detail+='<div style="padding:6px 4px 2px 4px">';
           detail+='<div style="display:flex;gap:6px;padding:4px 0;font-size:9px;font-weight:700;color:var(--g500);border-bottom:2px solid var(--g200)">';
-          detail+='<span style="min-width:85px;flex:0 0 85px">FECHA</span><span style="min-width:95px;flex:0 0 95px">TEMA</span><span style="flex:1 1 auto;min-width:0">DESCRIPCIÓN</span><span style="min-width:48px;flex:0 0 48px;text-align:right">HS</span></div>';
+          detail+='<span style="min-width:85px;flex:0 0 85px">FECHA</span><span style="min-width:130px;flex:0 0 130px">TEMA</span><span style="flex:1 1 auto;min-width:0">DESCRIPCIÓN</span><span style="min-width:48px;flex:0 0 48px;text-align:right">HS</span></div>';
           ss.forEach(s=>{
             detail+='<div style="display:flex;gap:6px;padding:5px 0;border-bottom:1px solid var(--g200);font-size:10px;align-items:center">';
             detail+='<span style="color:var(--g500);min-width:85px;flex:0 0 85px;font-weight:600">'+h(s.fecha||'—')+'</span>';
-            detail+='<span style="min-width:95px;flex:0 0 95px">'+bg(s.tema,'blue')+'</span>';
+            detail+='<span style="min-width:130px;flex:0 0 130px;overflow:hidden">'+bg(s.tema,'blue','white-space:normal;line-height:1.25;max-width:100%')+'</span>';
             detail+='<span style="flex:1 1 auto;min-width:0;color:var(--g700)">'+h(s.desc)+'</span>';
             detail+='<span style="color:var(--navy);font-weight:800;min-width:48px;flex:0 0 48px;text-align:right">'+s.hrs.toFixed(1)+'h</span>';
             detail+='</div>';
