@@ -3951,8 +3951,10 @@ V.pers=function(){
   PL.forEach(p=>{
     if(p.e==='suspendida')return;
     // La partida que es una inducción lo dice en la etiqueta, para que se vea
-    // que no se mira el vínculo con la partida sino el módulo.
-    allTrainings.set('plan-'+p.id,{label:'📋 '+p.t+(p.ronda?' (R'+p.ronda+')':'')+(p.year?' · '+p.year:'')+(moduloDePlan(p)?' — por módulo':''),planId:p.id,dirigido:p.d,type:'plan'});
+    // que no se mira el vínculo con la partida sino el módulo. El año no va:
+    // el legajo de una persona es toda su vida laboral, no un año, y para
+    // mirar un año está el selector de arriba.
+    allTrainings.set('plan-'+p.id,{label:'📋 '+p.t+(p.ronda?' (R'+p.ronda+')':'')+(moduloDePlan(p)?' — por módulo':''),planId:p.id,dirigido:p.d,type:'plan'});
   });
   // From unique sessions (non-induction)
   const sesMap={};
