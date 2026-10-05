@@ -560,6 +560,7 @@ summary.leg-y:hover{background:var(--g50)!important}
     <div style="font-size:17px;font-weight:800">Personal de Planta</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
       <button class="btn btn-s" onclick="document.getElementById('xlsx-admin').click()" data-role="admin">📊 Importar planilla Administración</button>
+      <button class="btn btn-o" id="btn-altas" data-role="admin">📅 Cargar fechas de ingreso</button>
       <button class="btn btn-o" id="btn-exp-pers">📥 Exportar</button>
     </div>
   </div>
@@ -4323,6 +4324,77 @@ window.editFechaAlta=function(idx){
   sv();V.pers();V.dash();
 };
 
+/* ── Cargar fechas de ingreso ─────────────────────────────────────────────────
+   La fecha de alta de la ficha no siempre es el ingreso real: la planilla de
+   Administración que se importa no trae esa columna, así que la fecha queda en
+   la del alta en el sistema o la del cambio de sector. De eso dependen el
+   control de inducciones, los avisos de los 30 días y los cuadros del
+   dashboard, así que tiene que poder corregirse en lote y no de a una.
+
+   Se pega "Nombre <tab o |> fecha" —como sale de la planilla de RRHH— y antes
+   de tocar nada se muestra a quién se le cambia qué, y qué nombres no están en
+   el padrón. Cada cambio queda en la bitácora. */
+function leerFechasPegadas(texto){
+  return String(texto||'').split(/\r?\n/).map(l=>l.trim()).filter(Boolean).map(l=>{
+    const p=l.split(/\t|\s*\|\s*|\s*;\s*/).map(x=>x.trim()).filter(Boolean);
+    if(p.length<2)return{linea:l,error:'Falta la fecha'};
+    const nom=p[0];
+    const cruda=p[1];
+    let iso='';
+    let m=cruda.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/);
+    if(m){const a=m[3].length===2?'20'+m[3]:m[3];iso=a+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[1]).padStart(2,'0');}
+    else if(/^\d{4}-\d{2}-\d{2}$/.test(cruda))iso=cruda;
+    if(!iso)return{linea:l,error:'No se entiende la fecha "'+cruda+'"'};
+    const fp=findPerson(nom);
+    if(!fp)return{linea:l,nom,iso,error:'No está en el padrón'};
+    return{nom:fp.n,iso,actual:fp.fechaAlta||'',persona:fp};
+  });
+}
+window.abrirCargaAltas=function(){
+  if(!canDo('manage_pers')){alert('Solo administradores pueden cargar fechas de ingreso.');return}
+  $('ind-modal-title').textContent='📅 Cargar fechas de ingreso';
+  $('ind-modal-body').innerHTML=
+    '<p style="font-size:12px;color:var(--g600);margin:0 0 8px">Una línea por persona: <b>nombre</b> y <b>fecha de ingreso</b>, separados por tabulador o por |. '+
+    'Se entiende 19.01.2012, 19/01/2012 y 2012-01-19. Podés pegar directo de la planilla de RRHH.</p>'+
+    '<textarea id="altas-texto" style="width:100%;min-height:160px;font-family:inherit;font-size:12px" placeholder="Morales Rodriguez Carlos	19.01.2012"></textarea>'+
+    '<div id="altas-previa" style="margin-top:10px;font-size:11px;max-height:260px;overflow:auto"></div>'+
+    '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">'+
+      '<button class="btn btn-o" onclick="document.getElementById(\'ind-modal\').classList.remove(\'show\')">Cancelar</button>'+
+      '<button class="btn btn-p" id="altas-aplicar" disabled>Aplicar</button>'+
+    '</div>';
+  $('ind-modal').classList.add('show');
+  const pintar=()=>{
+    const filas=leerFechasPegadas($('altas-texto').value);
+    const cambian=filas.filter(f=>!f.error&&f.actual!==f.iso);
+    const iguales=filas.filter(f=>!f.error&&f.actual===f.iso).length;
+    const malas=filas.filter(f=>f.error);
+    let html='';
+    if(filas.length){
+      html+='<div style="margin-bottom:6px"><b>'+cambian.length+'</b> fecha(s) a cambiar · '+iguales+' ya estaban bien'+
+            (malas.length?' · <span style="color:var(--red)"><b>'+malas.length+'</b> sin cargar</span>':'')+'</div>';
+      if(cambian.length)html+='<table style="width:100%;font-size:11px"><tbody>'+cambian.slice(0,200).map(f=>
+        '<tr><td style="padding:2px 6px">'+h(f.nom)+'</td><td style="padding:2px 6px;color:var(--g500)">'+(f.actual||'(sin fecha)')+'</td>'+
+        '<td style="padding:2px 6px">→</td><td style="padding:2px 6px;font-weight:700;color:var(--navy)">'+f.iso+'</td></tr>').join('')+'</tbody></table>';
+      if(malas.length)html+='<div style="margin-top:8px;color:var(--red)">'+malas.slice(0,30).map(f=>'• '+h(f.linea)+' — '+f.error).join('<br>')+'</div>';
+    }
+    $('altas-previa').innerHTML=html;
+    $('altas-aplicar').disabled=!cambian.length;
+    $('altas-aplicar').onclick=()=>{
+      if(!confirm('Se cambian '+cambian.length+' fecha(s) de ingreso.\n\nQueda registrado en la bitácora.'))return;
+      cambian.forEach(f=>{
+        const prev=f.persona.fechaAlta||'(sin fecha)';
+        f.persona.fechaAlta=f.iso;
+        logAudit('PERSONAL','Fecha de alta cargada: '+f.nom+' — de '+prev+' → '+f.iso);
+      });
+      sv();V.pers();V.dash();
+      $('ind-modal').classList.remove('show');
+      alert('Listo: '+cambian.length+' fecha(s) actualizada(s).');
+    };
+  };
+  $('altas-texto').addEventListener('input',pintar);
+  pintar();
+};
+
 window.transferSector=function(idx){
   if(!canDo('transfer')){alert('No tenés permisos para transferir personal.');return}
   const p=PE[idx];if(!p)return;
@@ -5177,6 +5249,7 @@ $('import-confirm').addEventListener('click',function(){
 });
 
 // Export personnel
+$('btn-altas').addEventListener('click',abrirCargaAltas);
 $('btn-exp-pers').addEventListener('click',function(){
   let csv='NOMBRE,SECTOR,ESTADO,TIPO\n';
   PE.forEach(p=>{csv+='"'+p.n+'","'+p.s+'","'+(p.a!==false?'ACTIVO':'INACTIVO')+'","'+(p.tipo||'VESSENA')+'"\n'});
