@@ -2281,19 +2281,27 @@ V.gerencia = function(){
     '<div class="gr-bar"><div class="gr-bar-fill" style="width:' + Math.min(cobPct,100) + '%;background:' + kpiCobBar + '"></div></div>' +
     sinCapNote;
 
-  // ═══ KPI 3: INDUCCIONES COMPLETAS (vista de gerencia — solo activos actuales) ═══
-  // Base = personas ACTIVAS con match en Personal que tienen 1+ registro de inducción
-  //        en el año seleccionado.
-  // Diferencia con Dashboard: excluye bajas y externos porque el KPI de gerencia mide
-  // compliance REAL del equipo actual, no productividad de dictado.
+  /* ═══ KPI 3: INDUCCIONES COMPLETAS — los ingresos del año ═══
+     Mismo criterio que el Dashboard, para que los dos tableros digan lo mismo
+     del mismo dato: base = personas con fecha de alta en el año elegido, y los
+     módulos se miran en TODOS sus registros, no solo en los del año.
+
+     Antes la base era "personas activas con algún registro de inducción en el
+     año", que medía lo dictado y no el cumplimiento: quien hizo la inducción
+     completa en 2022 y este año vino a una charla de GMP figuraba en
+     infracción con 1 de 3, y quien se indujo hace años y este año no tuvo
+     ninguna no aparecía.
+
+     Quedan fuera las bajas y aquellas cuya alta es posterior a sus propios
+     registros: esa fecha no es el ingreso real. */
+  const resumenGer = indResumenPorPersona();
   const modulosPorPersona = {};
-  yearR.forEach(r => {
-    if (!esInduccion(r)) return;
-    const fp = findPerson(r.nom);
-    if (!fp) return;               // sin match en Personal → probablemente externo
-    if (fp.a === false) return;    // dado de baja → no es equipo actual
-    if (!modulosPorPersona[fp.n]) modulosPorPersona[fp.n] = new Set();
-    modulosDeRegistro(r).forEach(m => modulosPorPersona[fp.n].add(m));
+  PE.forEach(p => {
+    if (p.a === false) return;
+    if (String(p.fechaAlta || '').slice(0, 4) !== String(year)) return;
+    if (indFueraDeAlcance(p, resumenGer.get(p.n))) return;
+    const r = resumenGer.get(p.n);
+    modulosPorPersona[p.n] = new Set(r ? r.modulos : []);
   });
   const totInd = Object.keys(modulosPorPersona).length;
   const compInd = Object.values(modulosPorPersona).filter(t => t.size >= 3).length;
@@ -2327,7 +2335,7 @@ V.gerencia = function(){
   $('gr-induccion').innerHTML =
     '<div class="gr-label">' + kpiIndIcon + ' Inducciones completas</div>' +
     '<div class="gr-value">' + indPct + '%</div>' +
-    '<div class="gr-sub"><b>' + compInd + '</b> de <b>' + totInd + '</b> personas activas con al menos 1 inducción tienen los 3 módulos <span style="color:var(--g400);font-size:10px" title="Excluye bajas y externos. El Dashboard incluye todos.">(vista compliance)</span></div>' +
+    '<div class="gr-sub"><b>' + compInd + '</b> de <b>' + totInd + '</b> ingresos de ' + year + ' tienen los 3 módulos <span style="color:var(--g400);font-size:10px" title="Personas con fecha de alta en el año. A diferencia del Dashboard, acá no se cuentan las bajas: el KPI mira al equipo actual. Se excluyen las que tienen registros anteriores a su alta, porque esa fecha no es el ingreso real.">(ingresos del año, sin bajas)</span></div>' +
     '<div class="gr-bar"><div class="gr-bar-fill" style="width:' + Math.min(indPct,100) + '%;background:' + kpiIndBar + '"></div></div>' +
     infracNote;
 
