@@ -4210,6 +4210,14 @@ V.pers=function(){
     (persFlt==='todos'?' <span style="color:var(--g400);font-weight:400">('+actCount+' activos, '+inactCount+' inactivos)</span>':'')+
     ' &nbsp;·&nbsp; '+capacitados+' capacitados &nbsp;·&nbsp; '+totalAsist+' asistencias'+
     ' &nbsp;·&nbsp; <span style="color:var(--navy)">V:'+veCount+'</span> <span style="color:#92400e">MP:'+mpCount+'</span>';
+  /* Lo que se está viendo, para que el botón Exportar baje esto y no el padrón
+     entero: el sentido de filtrar es llevarse la lista filtrada. */
+  window._persFiltrado={
+    filtro:(faltSel.options[faltSel.selectedIndex]||{}).text||'',
+    desde:desdeAño||'',
+    personas:stats.map(x=>({p:x.p,sesiones:x.sesCount,horas:x.hrs,
+      falta:(faltaMods&&faltaMods.get(x.p.n)||[]).map(m=>ETIQUETA_MODULO[m]||m).join(' + ')})),
+  };
   $('prlist').innerHTML=stats.map(x=>{
     const p=x.p;const idx=x.idx;
     const ok=x.sesCount>0;
@@ -5244,11 +5252,33 @@ $('import-confirm').addEventListener('click',function(){
 
 // Export personnel
 $('btn-altas').addEventListener('click',abrirCargaAltas);
+/* Exporta LO QUE SE ESTÁ VIENDO en Personal: los filtros de sector, tipo,
+   búsqueda y faltantes ya hicieron el trabajo, no tiene sentido bajar el padrón
+   entero y volver a filtrar en Excel.
+
+   Separador punto y coma y marca BOM: así Excel en español abre el archivo con
+   las columnas separadas y con los acentos bien, sin pasar por el asistente de
+   importación. */
 $('btn-exp-pers').addEventListener('click',function(){
-  let csv='NOMBRE,SECTOR,ESTADO,TIPO\n';
-  PE.forEach(p=>{csv+='"'+p.n+'","'+p.s+'","'+(p.a!==false?'ACTIVO':'INACTIVO')+'","'+(p.tipo||'VESSENA')+'"\n'});
-  const blob=new Blob([csv],{type:'text/csv'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='personal_vessena.csv';a.click();
+  const datos=window._persFiltrado;
+  const lista=datos?datos.personas:PE.map(p=>({p,sesiones:0,horas:0,falta:''}));
+  if(!lista.length){alert('No hay personas en la lista para exportar.');return}
+  const hayFalta=lista.some(x=>x.falta);
+  const esc=(v)=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  let csv='﻿'+['NOMBRE','SECTOR','TIPO','ESTADO','FECHA DE ALTA','CAPACITACIONES','HORAS']
+    .concat(hayFalta?['LE FALTA']:[]).join(';')+'\n';
+  lista.forEach(x=>{
+    const p=x.p;
+    csv+=[esc(p.n),esc(p.s),esc(p.tipo||'VESSENA'),esc(p.a!==false?'ACTIVO':'INACTIVO'),
+      esc(p.fechaAlta||''),esc(x.sesiones||0),esc((x.horas||0).toFixed(1))]
+      .concat(hayFalta?[esc(x.falta)]:[]).join(';')+'\n';
+  });
+  const sufijo=(datos&&datos.filtro&&!/sin filtro/i.test(datos.filtro))
+    ? '_'+normTxt(datos.filtro).replace(/[^A-Z0-9]+/g,'_').replace(/^_|_$/g,'').slice(0,40).toLowerCase()
+    : '';
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='personal'+sufijo+'_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
 });
 
 // ══════════ AUDITORIA ══════════
