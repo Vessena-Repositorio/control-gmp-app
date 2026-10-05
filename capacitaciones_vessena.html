@@ -1375,6 +1375,8 @@ function isInductionPlanItem(p) {
     t.startsWith('RI ') ||
     t === 'RI' ||
     t.includes('COMPORTAMIENTO GMP') ||
+    // "Normas de comportamiento interno" es el reglamento con otro nombre.
+    t.includes('NORMAS DE COMPORTAMIENTO') ||
     t.includes('REGLAMENTO')
   );
 }
@@ -1387,7 +1389,7 @@ function moduloDePlan(p){
   const s=normTxt(p.t);
   if(/SEGURIDAD|SYSO|SALUD/.test(s))return 'INDUCCION SEGURIDAD/SALUD';
   if(/GMP|BPM/.test(s))return 'INDUCCION GMP';
-  if(/REGLAMENTO|\bRI\b/.test(s))return 'REGLAMENTO';
+  if(/REGLAMENTO|NORMAS\s*DE\s*COMPORTAMIENTO|\bRI\b/.test(s))return 'REGLAMENTO';
   return null;
 }
 function findPerson(recName){
