@@ -229,15 +229,6 @@ summary.leg-y:hover{background:var(--g50)!important}
 </div>
 
 <!-- Modal detalle inducciones -->
-<div class="modal-bg" id="ind-modal">
-  <div class="modal" style="max-width:650px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <div id="ind-modal-title" style="font-size:15px;font-weight:800;color:var(--navy)"></div>
-      <button class="btn-i" onclick="document.getElementById('ind-modal').classList.remove('show')" style="font-size:20px">✕</button>
-    </div>
-    <div id="ind-modal-body"></div>
-  </div>
-</div>
   <div class="card" id="alerts-card" style="display:none">
     <div style="font-size:13px;font-weight:700;margin-bottom:10px">⚠️ Alertas — Capacitaciones próximas</div>
     <div id="alerts-list"></div>
@@ -7240,5 +7231,17 @@ document.addEventListener('DOMContentLoaded',function(){
   window.addEventListener('scroll', ocultar, true);
 })();
 </script>
+<!-- Esta ventana vive fuera de las secciones: estaba dentro de la del
+     Dashboard y, al abrirla desde Personal, se le ponia la clase pero no se
+     veia, porque la seccion que la contenia estaba oculta. -->
+<div class="modal-bg" id="ind-modal">
+  <div class="modal" style="max-width:650px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div id="ind-modal-title" style="font-size:15px;font-weight:800;color:var(--navy)"></div>
+      <button class="btn-i" onclick="document.getElementById('ind-modal').classList.remove('show')" style="font-size:20px">✕</button>
+    </div>
+    <div id="ind-modal-body"></div>
+  </div>
+</div>
 </body>
 </html>
