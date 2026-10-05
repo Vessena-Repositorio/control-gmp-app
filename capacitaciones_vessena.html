@@ -2116,11 +2116,18 @@ V.dash=function(){
   const indH=indSs.reduce((s,se)=>s+horasDeTexto(se.hrs),0);
   // Group induction records by person
   const indByPerson={};
+  /* Lo que se guarda son los MÓDULOS que cubre cada registro, no el texto del
+     campo Tema. Antes se guardaba el tema crudo y "completa" era tener tres
+     temas distintos, cualesquiera fueran: una persona con tres charlas de
+     seguridad figuraba completa, y otra con los tres módulos cargados bajo dos
+     temas figuraba parcial. Además la ventana que se abre al hacer clic ya
+     preguntaba por los módulos, así que mostraba cruces donde el número decía
+     que estaba completa. */
   indR.forEach(r=>{
     const fp=findPerson(r.nom);
     const nm=fp?fp.n:nomReg(r);
     if(!indByPerson[nm])indByPerson[nm]={temas:new Set(),fecha:r.fecha};
-    indByPerson[nm].temas.add(r.tema);
+    modulosDeRegistro(r).forEach(m=>indByPerson[nm].temas.add(m));
     if(r.fecha<indByPerson[nm].fecha)indByPerson[nm].fecha=r.fecha;
   });
   const totalInducidos=Object.keys(indByPerson).length;
