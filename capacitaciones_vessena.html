@@ -2362,7 +2362,21 @@ V.gerencia = function(){
   // Quién queda fuera de este control. Un indicador que dice "todo bien" sin
   // aclarar a cuánta gente no está mirando es peor que no tenerlo: se lee como
   // cobertura completa cuando es cobertura parcial.
-  const _ap = nuevosPendientes.aparte || { antesDelSistema: [], sinFechaAlta: [] };
+  const _ap = nuevosPendientes.aparte || { antesDelSistema: [], sinFechaAlta: [], veteranos: [] };
+  const _vet = _ap.veteranos || [];
+  /* Los de más de un año sin la inducción completa van acá, con nombre: no son
+     un ingreso reciente, pero son una brecha real y antes no aparecían en
+     ninguna pantalla. */
+  const bloqueVeteranos = _vet.length
+    ? '<div style="margin-top:8px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:8px 12px;font-size:11px">' +
+      '<b style="color:#92400e">Con más de un año y sin la inducción completa (' + _vet.length + '):</b>' +
+      '<div style="margin-top:4px;color:var(--g700)">' +
+      _vet.slice(0, 40).map(x => '• <b>' + h(x.persona.n) + '</b> <span style="color:var(--g500)">' +
+        h(x.persona.s || 'sin sector') + ' · alta ' + h(x.persona.fechaAlta || '?') + '</span> — le falta <b style="color:#92400e">' +
+        h(x.falta.map(m => m.replace('INDUCCION ', '').replace('SEGURIDAD/SALUD', 'Seg/Salud')).join(' + ')) + '</b>').join('<br>') +
+      (_vet.length > 40 ? '<br><i>… y ' + (_vet.length - 40) + ' más</i>' : '') +
+      '</div></div>'
+    : '';
   const notaAlcance = (_ap.antesDelSistema.length || _ap.sinFechaAlta.length)
     ? '<div style="margin-top:8px;background:var(--g50);border:1px solid var(--g200);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--g600)">' +
       '<b style="color:var(--navy)">Fuera de este control:</b> ' +
@@ -2371,13 +2385,13 @@ V.gerencia = function(){
         : '') +
       (_ap.antesDelSistema.length && _ap.sinFechaAlta.length ? '· ' : '') +
       (_ap.sinFechaAlta.length
-        ? '<b>' + _ap.sinFechaAlta.length + '</b> sin fecha de alta cargada'
+        ? '<b title="' + h(_ap.sinFechaAlta.map(p => p.n).join(', ')) + '">' + _ap.sinFechaAlta.length + '</b> sin fecha de alta cargada'
         : '') +
       '<div style="font-size:10px;color:var(--g500);margin-top:3px">De ellos la app no sabe si hicieron la inducción: sabe que no puede saberlo. ' +
-      'Las fechas de alta se corrigen en Personal, con “✏️ Editar alta”.</div></div>'
+      'Las fechas de alta se corrigen en Personal, con “📅 Cargar fechas de ingreso” o “✏️ Editar alta”.</div></div>'
     : '';
   if (nuevosPendientes.length === 0) {
-    $('gr-nuevos').innerHTML = '<div style="padding:12px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;color:#166534;font-size:13px;font-weight:600;text-align:center">✓ Todos los ingresos del último año tienen inducción completa</div>' + notaAlcance;
+    $('gr-nuevos').innerHTML = '<div style="padding:12px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;color:#166534;font-size:13px;font-weight:600;text-align:center">✓ Todos los ingresos del último año tienen inducción completa</div>' + bloqueVeteranos + notaAlcance;
   } else {
     const infracciones = nuevosPendientes.filter(x => x.categoria === 'infraccion');
     const proximos = nuevosPendientes.filter(x => x.categoria === 'proximo');
@@ -2418,7 +2432,7 @@ V.gerencia = function(){
       : '';
     $('gr-nuevos').innerHTML = summaryHtml +
       '<div style="border:1px solid var(--g200);border-radius:8px;overflow:hidden">' + rowsHtml + extra + '</div>' +
-      mailNote + notaAlcance;
+      mailNote + bloqueVeteranos + notaAlcance;
   }
 
   // ═══ FOCO DE ESTE MES ═══
@@ -2601,7 +2615,7 @@ function grComputeNuevosPendientes(year) {
   const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const result = [];
   const resumen = indResumenPorPersona();
-  const aparte = { antesDelSistema: [], sinFechaAlta: [] };
+  const aparte = { antesDelSistema: [], sinFechaAlta: [], veteranos: [] };
 
   PE.forEach(p => {
     if (p.a === false) return;
@@ -2614,13 +2628,19 @@ function grComputeNuevosPendientes(year) {
 
     const altaOnly = new Date(alta.getFullYear(), alta.getMonth(), alta.getDate());
     const dias = Math.floor((todayOnly - altaOnly) / 86400000);
-    // Solo excluir bajas o muy antiguos (más de 1 año), para no llenar de gente vieja
-    if (dias > 365) return;
     if (dias < 0) return;
 
     const modulos = r ? r.modulos : new Set();
     const falta = IND_MODULOS.filter(t => !modulos.has(t));
     if (falta.length === 0) return;
+
+    /* Más de un año en la empresa y sin la inducción completa no es un ingreso
+       reciente, así que no va en la lista de urgencias —mezclarlo le saca el
+       sentido de "esto vence"—, pero tampoco puede desaparecer: antes se
+       descartaba en silencio y gente sin ninguna inducción no figuraba en
+       ningún lado (Ivana Martínez, Javier Gatto). Se guarda aparte, con nombre
+       y con lo que le falta. */
+    if (dias > 365) { aparte.veteranos.push({ persona: p, dias: dias, falta: falta, tiene: [...modulos] }); return; }
 
     // Categorizar urgencia
     let categoria, orden;
