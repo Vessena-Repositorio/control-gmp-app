@@ -2130,7 +2130,17 @@ V.dash=function(){
      Tema: antes "completa" era tener tres temas distintos, cualesquiera
      fueran, así que tres charlas de seguridad daban inducción completa. */
   const resumenInd=indResumenPorPersona();
-  const ingresosDelAño=PE.filter(p=>String(p.fechaAlta||'').slice(0,4)===String(dashYear));
+  /* La fecha de alta sale de la ficha de Personal, y no siempre es el ingreso
+     real: cuando alguien se carga a la app años después, o cambia de sector, la
+     ficha toma esa fecha. La señal de que no es el ingreso es que la persona
+     tenga registros ANTERIORES a su propia alta —o que el alta sea previa a que
+     existieran los registros—. Esos quedan fuera del cuadro: a Federico
+     Ramírez, que entró hace años, no le corresponde una inducción de 2026.
+     Se cuentan aparte para que "no lo estamos mirando" no se lea como "está
+     todo bien". */
+  const delAño=PE.filter(p=>String(p.fechaAlta||'').slice(0,4)===String(dashYear));
+  const altaNoEsIngreso=delAño.filter(p=>indFueraDeAlcance(p,resumenInd.get(p.n)));
+  const ingresosDelAño=delAño.filter(p=>!indFueraDeAlcance(p,resumenInd.get(p.n)));
   ingresosDelAño.forEach(p=>{
     const r=resumenInd.get(p.n);
     indByPerson[p.n]={temas:new Set(r?r.modulos:[]),fecha:(r&&r.primero)||p.fechaAlta||''};
@@ -2141,7 +2151,10 @@ V.dash=function(){
   $('st-ind').innerHTML=
     '<div class="stat"><div class="lbl">👤 Ingresos del año</div><div class="val" style="color:var(--amber)">'+totalInducidos+'</div><div class="sub">personas con alta en '+dashYear+'</div></div>'+
     '<div class="stat"><div class="lbl">✅ Inducción completa</div><div class="val" style="color:var(--green)">'+completos+'</div><div class="sub">tienen los 3 módulos</div></div>'+
-    '<div class="stat"><div class="lbl">⚠️ Inducción parcial</div><div class="val" style="color:var(--red)">'+(parciales>0?parciales:'0')+'</div><div class="sub">les falta algún módulo</div></div>';
+    '<div class="stat"><div class="lbl">⚠️ Inducción parcial</div><div class="val" style="color:var(--red)">'+(parciales>0?parciales:'0')+'</div><div class="sub">les falta algún módulo</div></div>'+
+    /* Lo que este cuadro NO esta mirando, a la vista: gente con el alta de este
+       año en la ficha pero con registros anteriores, o sea que entro antes. */
+    (altaNoEsIngreso.length?'<div class="stat" title="'+altaNoEsIngreso.map(p=>p.n).join(', ')+'"><div class="lbl">ℹ️ Alta posterior al ingreso</div><div class="val" style="color:var(--g400)">'+altaNoEsIngreso.length+'</div><div class="sub">tienen registros anteriores a su alta: no son ingresos del año</div></div>':'');
   
   // Make KPI cards clickable
   const indCards=$('st-ind').querySelectorAll('.stat');
