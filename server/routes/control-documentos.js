@@ -24,8 +24,9 @@ import { firmar, firmasDe, SIGNIFICADOS } from '../lib/firma-electronica.js';
 import { analizarListado, escalonarAvisos } from '../lib/importar-listado.js';
 import { guardar, abrir, leer as leerArchivo, extension, hayAlmacen, MAX_BYTES } from '../lib/almacen-documentos.js';
 import { marcarCopiaNoControlada } from '../lib/marca-agua.js';
-import { nuevaVersion, enviarARevision, firmarTarea, anularBorrador } from '../lib/ciclo-documentos.js';
-import { avisarCiclo } from '../lib/avisos-documentos.js';
+import { nuevaVersion, enviarARevision, firmarTarea, anularBorrador, vigenteAhora } from '../lib/ciclo-documentos.js';
+import { avance, datosPadron, sectoresDelPadron } from '../lib/entrenamiento-documentos.js';
+import { avisarCiclo, avisarLectura } from '../lib/avisos-documentos.js';
 
 export const rutasControlDocumentos = Router();
 
@@ -69,7 +70,9 @@ function estadosVisibles(rol) {
     const p = PERMISOS_POR_ROL[rol] || [];
     if (p.includes('administrar')) return null; // todos
     if (p.some((x) => ['cargar', 'revisar', 'aprobar'].includes(x))) return ['vigente', ...EN_CURSO];
-    return ['vigente'];
+    // en_entrenamiento: aprobada que espera su fecha; el personal la tiene que
+    // poder leer antes, que es justamente para lo que se espera.
+    return ['vigente', 'en_entrenamiento'];
 }
 
 /**
@@ -142,7 +145,7 @@ rutasControlDocumentos.get('/documentos/:id', leer, async (req, res, next) => {
             `SELECT v.id, v.numero, v.estado, v.formato, v.resumen_cambios, v.cc_codigo,
                     v.requiere_evaluacion, v.fecha_aprobacion, v.fecha_vigencia, v.fecha_obsoleto,
                     v.contenido_sha256, v.archivo_nombre, v.creado_en, u.nombre AS creado_por,
-                    v.elaborado_por_nombre, v.revisado_por_nombre, v.aprobado_por_nombre, v.ronda,
+                    v.elaborado_por_nombre, v.revisado_por_nombre, v.aprobado_por_nombre, v.ronda, v.modo_capacitacion,
                     v.archivo_sha256 IS NOT NULL AS tiene_word, v.pdf_sha256 IS NOT NULL AS tiene_pdf
              FROM dc_versiones v LEFT JOIN usuarios u ON u.id = v.creado_por_id
              WHERE v.documento_id = $1
@@ -305,8 +308,15 @@ rutasControlDocumentos.post('/versiones/:id/firmar', leer, async (req, res, next
             );
             const visibles = estadosVisibles(req.rol);
             if (!v || (visibles && !visibles.includes(v.estado))) throw fallo(404, 'version inexistente');
-            if (['obsoleto', 'anulado'].includes(v.estado)) throw fallo(409, `la versión está ${v.estado}`);
+            if (!['vigente', 'en_entrenamiento'].includes(v.estado)) {
+                throw fallo(409, 'solo se firma la lectura de una versión aprobada');
+            }
             if (!v.huella) throw fallo(409, 'la versión no tiene contenido para firmar');
+            const { rows: ya } = await c.query(
+                `SELECT 1 FROM firmas_electronicas WHERE tabla = 'dc_versiones' AND registro_id = $1
+                   AND significado = $2 AND usuario_id = $3`,
+                [String(v.id), significado, req.usuario.id]);
+            if (ya.length) throw fallo(409, 'ya firmaste la lectura de esta versión');
 
             return firmar(c, req, {
                 usuario: b.usuario, clave: b.clave, significado,
@@ -675,7 +685,7 @@ rutasControlDocumentos.get('/mis-tareas', leer, async (req, res, next) => {
                  ORDER BY t.cerrada_en DESC`,
                 [req.usuario.id]),
         ]);
-        res.json({ ok: true, tareas: rows, devueltos });
+        res.json({ ok: true, tareas: rows, devueltos, lecturas: await lecturasPendientes(req) });
     } catch (err) { next(err); }
 });
 
@@ -716,6 +726,10 @@ rutasControlDocumentos.post('/tareas/:id/firmar', leer, async (req, res, next) =
             b.decision === 'rechazar' ? 'rechazo en el ciclo de revisión' : 'firma en el ciclo de revisión',
             (c) => firmarTarea(c, req, req.params.id, b));
         await avisarCiclo(r);
+        // Aprobada: a quien la tiene que leer y tiene usuario, le llega ahora.
+        if (r.resultado === 'vigente' || r.resultado === 'aprobada') {
+            await avisarLectura(r.doc.versionId).catch((err) => console.error('[documentos] aviso de lectura:', err.message));
+        }
         res.json({ ok: true, resultado: r.resultado, firma: r.firma });
     } catch (err) { responder(err, res, next); }
 });
@@ -728,5 +742,91 @@ rutasControlDocumentos.post('/versiones/:id/anular', cargar, async (req, res, ne
         const r = await enTransaccionAuditada(req, `anulación de borrador: ${motivo}`,
             (c) => anularBorrador(c, req.params.id));
         res.json({ ok: true, ...r });
+    } catch (err) { responder(err, res, next); }
+});
+
+// ---------------------------------------------------------------------------
+// Entrenamiento (migracion 057, lib/entrenamiento-documentos.js)
+// ---------------------------------------------------------------------------
+
+/**
+ * Versiones que esta persona tiene que leer y firmar: aprobadas en el sistema
+ * (las importadas no generan lectura para todo el padron), por lectura, de un
+ * sector donde la persona esta en el padron, y sin su firma todavia.
+ */
+async function lecturasPendientes(req) {
+    const { rows } = await consultar(
+        `SELECT v.id AS version_id, v.numero, v.estado, v.fecha_vigencia, d.id AS documento_id,
+                d.codigo, d.titulo, d.capacitar_sectores
+         FROM dc_versiones v JOIN dc_documentos d ON d.id = v.documento_id
+         WHERE v.modo_capacitacion = 'lectura' AND v.fecha_aprobacion IS NOT NULL
+           AND v.estado IN ('en_entrenamiento', 'vigente')
+           AND NOT EXISTS (SELECT 1 FROM firmas_electronicas f
+                           WHERE f.tabla = 'dc_versiones' AND f.registro_id = v.id::text
+                             AND f.significado = 'lectura' AND f.usuario_id = $1)`,
+        [req.usuario.id]);
+    if (!rows.length) return [];
+    const datos = await datosPadron();
+    const yo = datos.persona(req.usuario.nombre || '');
+    if (!yo) return [];
+    const sector = String(yo.s || '').toUpperCase().replace(/\s+/g, ' ').trim();
+    return rows.filter((r) => (r.capacitar_sectores || []).includes(sector))
+        .map(({ capacitar_sectores: _s, ...r }) => r);
+}
+
+/** GET /api/control-documentos/sectores — sectores del padron de Capacitaciones. */
+rutasControlDocumentos.get('/sectores', cargar, async (_req, res, next) => {
+    try {
+        res.json({ ok: true, sectores: await sectoresDelPadron() });
+    } catch (err) { next(err); }
+});
+
+/**
+ * GET /api/control-documentos/versiones/:id/entrenamiento
+ * Quien tiene que capacitarse en esta version, quien ya y quien falta.
+ */
+rutasControlDocumentos.get('/versiones/:id/entrenamiento', leer, async (req, res, next) => {
+    try {
+        const { rows: [v] } = await consultar(
+            `SELECT v.id, v.estado, v.modo_capacitacion, v.fecha_aprobacion, d.codigo, d.capacitar_sectores
+             FROM dc_versiones v JOIN dc_documentos d ON d.id = v.documento_id WHERE v.id = $1`,
+            [req.params.id]);
+        if (!(await puedeVer(req, v))) throw fallo(404, 'version inexistente');
+        const a = await avance(v, v);
+        const { rows: yaFirme } = await consultar(
+            `SELECT 1 FROM firmas_electronicas WHERE tabla = 'dc_versiones' AND registro_id = $1
+               AND significado = 'lectura' AND usuario_id = $2`, [String(v.id), req.usuario.id]);
+        res.json({ ok: true, modo: v.modo_capacitacion, sectores: v.capacitar_sectores, yaFirme: yaFirme.length > 0, ...a });
+    } catch (err) { responder(err, res, next); }
+});
+
+/**
+ * PUT /api/control-documentos/documentos/:id/matriz { sectores, motivo }
+ * Calidad corrige que sectores se capacitan en el documento.
+ */
+rutasControlDocumentos.put('/documentos/:id/matriz', administrar, async (req, res, next) => {
+    const b = req.body || {};
+    try {
+        const motivo = texto(b.motivo) || 'actualización de la matriz de capacitación';
+        const sectores = [...new Set((Array.isArray(b.sectores) ? b.sectores : [])
+            .map((s) => String(s).toUpperCase().replace(/\s+/g, ' ').trim()).filter(Boolean))];
+        await enTransaccionAuditada(req, motivo, async (c) => {
+            const { rowCount } = await c.query(
+                'UPDATE dc_documentos SET capacitar_sectores = $2 WHERE id = $1', [req.params.id, sectores]);
+            if (!rowCount) throw fallo(404, 'documento inexistente');
+        });
+        res.json({ ok: true, sectores });
+    } catch (err) { responder(err, res, next); }
+});
+
+/**
+ * POST /api/control-documentos/versiones/:id/vigente-ahora { motivo }
+ * Calidad pone vigente hoy una version aprobada que esperaba su fecha.
+ */
+rutasControlDocumentos.post('/versiones/:id/vigente-ahora', administrar, async (req, res, next) => {
+    try {
+        const motivo = texto((req.body || {}).motivo) || 'entrenamiento completo: vigente antes de la fecha prevista';
+        await enTransaccionAuditada(req, motivo, (c) => vigenteAhora(c, req.params.id));
+        res.json({ ok: true });
     } catch (err) { responder(err, res, next); }
 });

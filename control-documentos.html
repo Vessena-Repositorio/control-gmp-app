@@ -160,16 +160,21 @@ async function cargar(){
 async function cargarTareas(){
   const box=document.getElementById('tareas');
   try{
-    const {tareas,devueltos=[]}=await api('/mis-tareas');S.tareas=tareas;
+    const {tareas,devueltos=[],lecturas=[]}=await api('/mis-tareas');S.tareas=tareas;S.lecturas=lecturas;
     const pend=tareas.filter(t=>t.estado==='pendiente');
-    const n=document.getElementById('nTareas');n.textContent=pend.length+devueltos.length;n.style.display=pend.length+devueltos.length?'':'none';
+    const cuenta=pend.length+devueltos.length+lecturas.length;
+    const n=document.getElementById('nTareas');n.textContent=cuenta;n.style.display=cuenta?'':'none';
     const dev=devueltos.length?`<h3 style="color:var(--crit)">Devueltos para corregir (${devueltos.length})</h3>
       <table style="margin-bottom:18px"><thead><tr><th>Documento</th><th>Rechazó</th><th>Qué hay que cambiar</th></tr></thead><tbody>`
       +devueltos.map(r=>`<tr class="click" onclick="verTab(0);abrir(${r.documento_id})"><td class="cod">${esc(r.codigo)} v${ver(r.numero)}<br><span class="muted" style="font-family:var(--f)">${esc(r.titulo)}</span></td>
         <td>${esc(r.rechazado_por)}<br><span class="muted">${r.tipo==='revision'?'en la revisión':'en la aprobación'} · ${dmaHora(r.cerrada_en)}</span></td>
         <td><div class="aviso crit" style="margin:0">${esc(r.comentario)}</div></td></tr>`).join('')+'</tbody></table>':'';
-    if(!tareas.length){box.innerHTML=dev||'<div class="muted">No tenés documentos para revisar ni aprobar.</div>';return}
-    box.innerHTML=dev+(dev?'<h3>Para revisar o aprobar</h3>':'')+`<table><thead><tr><th>Documento</th><th>Tarea</th><th>Qué cambia</th><th>Elaboró</th><th>Vence</th></tr></thead><tbody>`
+    const lee=lecturas.length?`<h3>Para leer (${lecturas.length})</h3>
+      <table style="margin-bottom:18px"><thead><tr><th>Documento</th><th>Vigencia</th></tr></thead><tbody>`
+      +lecturas.map(l=>`<tr class="click" onclick="verTab(0);abrir(${l.documento_id})"><td class="cod">${esc(l.codigo)} v${ver(l.numero)}<br><span class="muted" style="font-family:var(--f)">${esc(l.titulo)}</span></td>
+        <td>${l.estado==='vigente'?'<span class="chip ok">vigente</span>':`<span class="chip info">desde ${dma(l.fecha_vigencia)}</span>`}</td></tr>`).join('')+'</tbody></table>':'';
+    if(!tareas.length){box.innerHTML=(dev+lee)||'<div class="muted">No tenés documentos para revisar, aprobar ni leer.</div>';return}
+    box.innerHTML=dev+lee+(dev||lee?'<h3>Para revisar o aprobar</h3>':'')+`<table><thead><tr><th>Documento</th><th>Tarea</th><th>Qué cambia</th><th>Elaboró</th><th>Vence</th></tr></thead><tbody>`
       +tareas.map(t=>{const atr=t.vence_el&&String(t.vence_el).slice(0,10)<hoyISO();
         return `<tr class="click" onclick="verTab(0);abrir(${t.documento_id})"><td class="cod">${esc(t.codigo)} v${ver(t.numero)}<br><span class="muted" style="font-family:var(--f)">${esc(t.titulo)}</span></td>
         <td>${t.tipo==='revision'?'Revisar':'Aprobar'}${t.estado==='en_espera'?' <span class="chip mut">espera las revisiones</span>':''}</td>
@@ -269,12 +274,78 @@ async function abrir(id){
       <div class="fila" style="margin-top:10px"><button class="b ok" onclick="renovar(${d.id})">Firmar: revisado sin cambios</button>
         <span class="muted">Usuario y clave son tu firma electrónica (21 CFR Part 11).</span></div>`;
     }
+    // Entrenamiento: de la aprobada que espera su fecha o, si no, de la vigente.
+    const entV=versiones.find(v=>v.estado==='en_entrenamiento')||vig;
+    if(entV)h+=`<div id="entren"></div>`;
     h+=`<div class="fila" style="margin-top:16px"><button class="b sm" onclick="verAudit(${d.id})">Ver audit trail</button></div><div id="audit"></div></div>`;
     box.innerHTML=h;box.scrollIntoView({behavior:'smooth'});
+    if(entV)cargarEntrenamiento(entV,d);
   }catch(e){box.innerHTML=`<div class="card aviso crit">${esc(e.message)}</div>`}
 }
 
 function descargar(id,que){location.href=`${API}/versiones/${id}/descargar?que=${que}`}
+
+// ---------------------------------------------------------------- entrenamiento
+const MODOS={lectura:'Lectura con firma (quien no tiene usuario: registro en Capacitaciones)',presencial:'Capacitación presencial (registrada en Capacitaciones con el código del documento)',no_requiere:'No requiere (cambio menor que no cambia la tarea)'};
+
+async function sectores(){
+  if(!S.sectores){try{S.sectores=(await api('/sectores')).sectores}catch(e){S.sectores=[]}}
+  return S.sectores;
+}
+
+async function cargarEntrenamiento(v,d){
+  const box=document.getElementById('entren');if(!box)return;
+  try{
+    const e=await api(`/versiones/${v.id}/entrenamiento`);
+    let h=`<h3 style="margin-top:18px">Entrenamiento · versión ${ver(v.numero)}</h3>
+      <dl class="det"><dt>Cómo</dt><dd>${e.modo?esc(MODOS[e.modo]):'<span class="muted">sin definir (versión importada)</span>'}</dd>
+      <dt>Sectores</dt><dd>${(e.sectores||[]).length?e.sectores.map(s=>`<span class="chip mut">${esc(s)}</span>`).join(' '):'<span class="muted">sin matriz</span>'}</dd></dl>`;
+    if(!e.sinMatriz){
+      const pct=e.total?Math.round(e.capacitados.length*100/e.total):100;
+      h+=`<div class="fila" style="margin-top:8px"><b>${e.capacitados.length} de ${e.total} capacitados</b><span class="muted">(${pct}%${e.desde?` · cuenta desde la aprobación, ${dma(e.desde)}`:' · cuenta cualquier registro del documento'})</span></div>
+        <div class="barra"><div style="width:${pct}%;background:${pct===100?'var(--ok)':'var(--pri)'}"></div></div>`;
+      if(e.pendientes.length)h+=`<details><summary><b>Faltan (${e.pendientes.length})</b></summary><div class="tabla"><table><tbody>${e.pendientes.map(p=>`<tr><td>${esc(p.nombre)}</td><td class="muted">${esc(p.sector)}</td></tr>`).join('')}</tbody></table></div>
+        <p class="muted">Se registran en Capacitaciones con el código <b>${esc(d.codigo)}</b> en "Código Doc.", o firmando la lectura acá quien tiene usuario.</p></details>`;
+      if(e.capacitados.length)h+=`<details><summary>Capacitados (${e.capacitados.length})</summary><div class="tabla"><table><tbody>${e.capacitados.map(p=>`<tr><td>${esc(p.nombre)}</td><td class="muted">${esc(p.sector)}</td><td class="muted">${esc(p.como)} · ${dma(p.fecha)}</td></tr>`).join('')}</tbody></table></div></details>`;
+    }
+    // La lectura con firma es para las versiones aprobadas en el sistema por
+    // lectura; en las importadas el entrenamiento se registra en Capacitaciones.
+    if(!e.yaFirme&&e.modo==='lectura'&&(v.tiene_pdf||v.tiene_word)){
+      h+=`<div class="card" style="margin-top:10px"><h3>Leí y comprendí</h3><p class="muted">Bajá el PDF, leelo y firmá. Queda como tu constancia de capacitación en esta versión.</p>
+        ${firmaCampos('l')}<div class="fila" style="margin-top:10px"><button class="b ok" onclick="firmarLectura(${v.id})">Firmar: leído y comprendido</button></div></div>`;
+    }else if(e.yaFirme)h+=`<div class="aviso ok" style="margin-top:10px">Ya firmaste la lectura de esta versión.</div>`;
+    if(puede('administrar')){
+      if(v.estado==='en_entrenamiento')h+=`<div class="fila" style="margin-top:10px"><button class="b pri" onclick="vigenteAhora(${v.id})">Poner vigente hoy</button>
+        <span class="muted">Si el entrenamiento ya está completo, no hace falta esperar al ${dma(v.fecha_vigencia)}.</span></div>`;
+      const ss=await sectores();
+      h+=`<details style="margin-top:10px"><summary>Editar matriz de capacitación</summary>
+        <select id="mSec" multiple size="8" style="margin-top:6px">${ss.map(s=>`<option value="${esc(s.sector)}" ${(d.capacitar_sectores||[]).includes(s.sector)?'selected':''}>${esc(s.sector)} (${s.personas})</option>`).join('')}</select>
+        <div class="fila" style="margin-top:6px"><button class="b sm" onclick="guardarMatriz(${d.id})">Guardar matriz</button><span class="muted">Ctrl+clic para elegir varios.</span></div></details>`;
+    }
+    box.innerHTML=h;
+  }catch(err){box.innerHTML=`<div class="aviso crit">${esc(err.message)}</div>`}
+}
+
+async function firmarLectura(vid){
+  const usuario=document.getElementById('lUsr').value.trim(),clave=document.getElementById('lClave').value;
+  if(!usuario||!clave)return toast('Para firmar escribí usuario y clave',true);
+  try{await api(`/versiones/${vid}/firmar`,{method:'POST',body:JSON.stringify({significado:'lectura',usuario,clave})});
+    toast('Lectura firmada');await cargar();abrir(S.sel.id)}
+  catch(e){document.getElementById('lClave').value='';toast(e.message,true)}
+}
+
+async function vigenteAhora(vid){
+  const motivo=prompt('Motivo (por ejemplo: entrenamiento completo):','entrenamiento completo');if(!motivo)return;
+  try{await api(`/versiones/${vid}/vigente-ahora`,{method:'POST',body:JSON.stringify({motivo})});toast('Vigente desde hoy; la versión anterior pasó a obsoleta');await cargar();abrir(S.sel.id)}
+  catch(e){toast(e.message,true)}
+}
+
+async function guardarMatriz(docId){
+  const sel=[...document.getElementById('mSec').selectedOptions].map(o=>o.value);
+  const motivo=prompt('Motivo del cambio de matriz:','actualización de la matriz de capacitación');if(!motivo)return;
+  try{await api(`/documentos/${docId}/matriz`,{method:'PUT',body:JSON.stringify({sectores:sel,motivo})});toast('Matriz guardada');abrir(docId)}
+  catch(e){toast(e.message,true)}
+}
 
 // ---------------------------------------------------------------- ciclo
 const firmaCampos=(p)=>`<div class="grid3"><div><label class="lb">Usuario</label><input id="${p}Usr" autocomplete="username" value="${esc(S.usuario)}"></div>
@@ -303,6 +374,8 @@ async function panelBorrador(v){
       <input type="file" accept=".pdf" style="max-width:300px" onchange="subirArchivo(${v.id},this.files[0])"></div>`:''}
     <label class="lb">Qué cambia en esta versión</label><textarea id="bRes" rows="2">${esc(v.resumen_cambios||'')}</textarea>
     <label class="lb">Control de cambios (opcional)</label><input id="bCC" value="${esc(v.cc_codigo||'')}" placeholder="CC-0xx" style="max-width:220px">
+    <div class="grid3" style="grid-template-columns:1fr 1fr"><div><label class="lb">Cómo se capacita al personal</label><select id="bModo"><option value="">— elegir —</option>${Object.entries(MODOS).map(([k,t])=>`<option value="${k}" ${v.modo_capacitacion===k?'selected':''}>${esc(t)}</option>`).join('')}</select></div>
+      <div><label class="lb">Sectores que se capacitan (Ctrl+clic para varios)</label><select id="bSec" multiple size="5">${(await sectores()).map(s=>`<option value="${esc(s.sector)}" ${(S.sel.capacitar_sectores||[]).includes(s.sector)?'selected':''}>${esc(s.sector)} (${s.personas})</option>`).join('')}</select></div></div>
     <div class="grid3"><div><label class="lb">Revisores (Ctrl+clic para varios; puede quedar vacío)</label><select id="bRev" multiple size="6">${ops}</select></div>
       <div><label class="lb">Aprobadores</label><select id="bApr" multiple size="6">${ops}</select></div>
       <div><label class="lb">Plazo para revisar (días)</label><input id="bPR" type="number" min="1" max="90" value="7">
@@ -333,7 +406,10 @@ async function subirArchivo(vid,f){
 async function enviarVersion(vid){
   const body={resumenCambios:document.getElementById('bRes').value,ccCodigo:document.getElementById('bCC').value,
     revisores:elegidos('bRev'),aprobadores:elegidos('bApr'),plazoRevision:document.getElementById('bPR').value,
-    plazoAprobacion:document.getElementById('bPA').value,usuario:document.getElementById('bUsr').value.trim(),clave:document.getElementById('bClave').value};
+    plazoAprobacion:document.getElementById('bPA').value,usuario:document.getElementById('bUsr').value.trim(),clave:document.getElementById('bClave').value,
+    modoCapacitacion:document.getElementById('bModo').value,sectores:[...document.getElementById('bSec').selectedOptions].map(o=>o.value)};
+  if(!body.modoCapacitacion)return toast('Elegí cómo se capacita al personal',true);
+  if(body.modoCapacitacion!=='no_requiere'&&!body.sectores.length)return toast('Elegí qué sectores se capacitan',true);
   if(!body.aprobadores.length)return toast('Elegí al menos un aprobador',true);
   if(!body.usuario||!body.clave)return toast('Para firmar escribí usuario y clave',true);
   try{const r=await api(`/versiones/${vid}/enviar`,{method:'POST',body:JSON.stringify(body)});

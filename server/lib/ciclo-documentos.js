@@ -102,6 +102,16 @@ export async function enviarARevision(c, req, versionId, b) {
     if (revisores.includes(req.usuario.id) || aprobadores.includes(req.usuario.id)) {
         throw fallo(400, 'quien elabora no puede revisar ni aprobar su propio documento');
     }
+    // Entrenamiento (057): como se capacita en esta version y que sectores.
+    const modo = String(b.modoCapacitacion || '');
+    if (!['lectura', 'presencial', 'no_requiere'].includes(modo)) {
+        throw fallo(400, 'elegí cómo se capacita al personal en esta versión');
+    }
+    const sectores = [...new Set((Array.isArray(b.sectores) ? b.sectores : [])
+        .map((s) => String(s).toUpperCase().replace(/\s+/g, ' ').trim()).filter(Boolean))];
+    if (modo !== 'no_requiere' && !sectores.length) {
+        throw fallo(400, 'elegí qué sectores tienen que capacitarse');
+    }
     const plazoRev = Number(b.plazoRevision) || PLAZO_DIAS;
     const plazoApr = Number(b.plazoAprobacion) || PLAZO_DIAS;
     if (plazoRev < 1 || plazoApr < 1 || plazoRev > 90 || plazoApr > 90) throw fallo(400, 'los plazos van de 1 a 90 días');
@@ -124,10 +134,14 @@ export async function enviarARevision(c, req, versionId, b) {
     const estado = revisores.length ? 'en_revision' : 'en_aprobacion';
     await c.query(
         `UPDATE dc_versiones SET estado = $2, ronda = $3, resumen_cambios = $4,
-                elaborado_por_nombre = $5, cc_codigo = coalesce($6, cc_codigo)
+                elaborado_por_nombre = $5, cc_codigo = coalesce($6, cc_codigo), modo_capacitacion = $7
          WHERE id = $1`,
         [v.id, estado, ronda, resumen, req.usuario.nombre || req.usuario.usuario,
-         String(b.ccCodigo || '').trim() || null]);
+         String(b.ccCodigo || '').trim() || null, modo]);
+    // La matriz es del documento: la ultima version que se envia la actualiza.
+    if (sectores.length) {
+        await c.query('UPDATE dc_documentos SET capacitar_sectores = $2 WHERE id = $1', [v.doc_id, sectores]);
+    }
 
     const crear = async (tipo, usuarioId, activa, plazo) => c.query(
         `INSERT INTO dc_tareas (version_id, ronda, tipo, usuario_id, plazo_dias, vence_el, estado, creada_por_id)
@@ -261,6 +275,18 @@ export async function ponerVigente(c, versionId) {
 function isoLocal(f) {
     const p = (n) => String(n).padStart(2, '0');
     return `${f.getFullYear()}-${p(f.getMonth() + 1)}-${p(f.getDate())}`;
+}
+
+/**
+ * Calidad pone vigente hoy una version aprobada que esperaba su fecha, porque
+ * el entrenamiento ya esta completo (o porque no hace falta esperar).
+ */
+export async function vigenteAhora(c, versionId) {
+    const v = await versionBloqueada(c, versionId);
+    if (v.estado !== 'en_entrenamiento') throw fallo(409, 'solo una versión aprobada que espera su vigencia');
+    await c.query('UPDATE dc_versiones SET fecha_vigencia = $2 WHERE id = $1', [v.id, await hoy(c)]);
+    await ponerVigente(c, v.id);
+    return { codigo: v.codigo, titulo: v.titulo, numero: v.numero, versionId: v.id };
 }
 
 /** Anula un borrador que no va a seguir. */

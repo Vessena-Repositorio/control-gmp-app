@@ -20,6 +20,7 @@ import { supervisoresDe } from './destinatarios.js';
 import { correrUnaVezPorDia, ZONA } from './tareas.js';
 import { enTransaccionSistema } from './audit-trail.js';
 import { activarVigencias } from './ciclo-documentos.js';
+import { avance, datosPadron } from './entrenamiento-documentos.js';
 
 const RECURSO = 'control-documentos';
 const HORA = Number(process.env.AVISOS_DOCUMENTOS_HORA ?? 8);
@@ -106,6 +107,44 @@ export async function avisarCiclo(r) {
                     '#1A7F3F'));
         }
     }
+}
+
+/**
+ * Version aprobada por lectura: a cada persona del alcance que tiene usuario
+ * le llega que la tiene que leer y firmar. Quien no tiene usuario se capacita
+ * con un registro en Capacitaciones; eso lo coordina Calidad con el avance.
+ */
+export async function avisarLectura(versionId) {
+    const { rows: [v] } = await consultar(
+        `SELECT v.id, v.numero, v.estado, v.fecha_vigencia, v.modo_capacitacion,
+                d.codigo, d.titulo, d.capacitar_sectores
+         FROM dc_versiones v JOIN dc_documentos d ON d.id = v.documento_id WHERE v.id = $1`, [versionId]);
+    if (!v || v.modo_capacitacion !== 'lectura' || !(v.capacitar_sectores || []).length) return { correos: 0 };
+
+    const datos = await datosPadron();
+    const sectores = new Set(v.capacitar_sectores);
+    const { rows: usuarios } = await consultar(
+        `SELECT nombre, coalesce(email, usuario) AS correo FROM usuarios
+         WHERE activo AND origen = 'vessena' AND nombre IS NOT NULL`);
+    const para = usuarios.filter((u) => {
+        const p = datos.persona(u.nombre);
+        return p && p.a !== false && sectores.has(String(p.s || '').toUpperCase().replace(/\s+/g, ' ').trim());
+    }).map((u) => u.correo);
+
+    const ref = `${esc(v.codigo)} v${ver(v.numero)} · ${esc(v.titulo)}`;
+    const cuando = v.estado === 'vigente'
+        ? 'Ya está vigente.'
+        : `Entra en vigencia el <b>${dma(v.fecha_vigencia)}</b>: leelo antes de esa fecha.`;
+    let correos = 0;
+    for (const correo of para) {
+        const ok = await mandar(correo, `[Vessena · Documentos] Para leer: ${v.codigo} v${ver(v.numero)}`,
+            marco('Documento para leer', ref,
+                `<p style="font-size:14px;margin:0 0 8px">Se aprobó una versión nueva de <b>${ref}</b> que aplica a tu sector. ${cuando}</p>
+                 <p style="font-size:13px;color:#475467;margin:0">Entrá a <b>Mis tareas → Para leer</b>, bajá el PDF y firmá "Leído y comprendido" con tu usuario y clave.</p>`,
+                AZUL, 'Ir a Mis tareas'));
+        if (ok) correos++;
+    }
+    return { correos };
 }
 
 /* ── Cada 10 minutos: vigencias ─────────────────────────────────────────── */
@@ -220,7 +259,25 @@ export async function revisarResumenDocumentos({ forzar = false } = {}) {
              WHERE avisar_desde > (now() AT TIME ZONE $1)::date`, [ZONA]);
         const vencidos = docs.filter((d) => d.faltan < 0);
         const porVencer = docs.filter((d) => d.faltan >= 0);
-        if (!docs.length && !tareas.length) return { correos: 0, detalle: 'nada para informar' };
+
+        // Entrenamiento: las aprobadas que esperan su fecha, y las que
+        // quedaron vigentes en los ultimos 90 dias, con gente sin capacitar.
+        const { rows: recientes } = await consultar(
+            `SELECT v.id, v.numero, v.estado, v.fecha_aprobacion, v.fecha_vigencia, d.codigo, d.capacitar_sectores
+             FROM dc_versiones v JOIN dc_documentos d ON d.id = v.documento_id
+             WHERE v.modo_capacitacion IN ('lectura', 'presencial')
+               AND (v.estado = 'en_entrenamiento'
+                    OR (v.estado = 'vigente' AND v.fecha_aprobacion > now() - interval '90 days'))
+             ORDER BY v.fecha_vigencia`);
+        const entrenamiento = [];
+        if (recientes.length) {
+            const datos = await datosPadron();
+            for (const v of recientes) {
+                const a = await avance(v, v, datos);
+                if (a.pendientes.length) entrenamiento.push({ ...v, total: a.total, faltan: a.pendientes.length });
+            }
+        }
+        if (!docs.length && !tareas.length && !entrenamiento.length) return { correos: 0, detalle: 'nada para informar' };
 
         const filaDoc = (d) => [`<b>${esc(d.codigo)}</b> · ${esc(d.titulo)}`, dma(d.proxima_revision),
             d.faltan < 0 ? `<b style="color:#B91C1C">${-d.faltan} d</b>` : `en ${d.faltan} d`];
@@ -229,6 +286,10 @@ export async function revisarResumenDocumentos({ forzar = false } = {}) {
                 tabla(['Documento', 'Tarea', 'Quién', 'Venció', 'Atraso'], tareas.map((t) => [
                     `<b>${esc(t.codigo)}</b> v${ver(t.numero)}`, t.tipo === 'revision' ? 'Revisar' : 'Aprobar',
                     esc(t.nombre), dma(t.vence_el), `<b>${t.atraso} d</b>`])) : '') +
+            (entrenamiento.length ? `<h3 style="margin:16px 0 4px;color:#1F5FB0;font-size:15px">Capacitación pendiente (${entrenamiento.length})</h3>` +
+                tabla(['Documento', 'Estado', 'Vigencia', 'Capacitados'], entrenamiento.map((v) => [
+                    `<b>${esc(v.codigo)}</b> v${ver(v.numero)}`, v.estado === 'vigente' ? 'vigente' : 'espera su vigencia',
+                    dma(v.fecha_vigencia), `${v.total - v.faltan} de ${v.total} (faltan ${v.faltan})`])) : '') +
             (vencidos.length ? `<h3 style="margin:16px 0 4px;color:#B91C1C;font-size:15px">Vencidos (${vencidos.length})</h3>` +
                 tabla(['Documento', 'Venció', 'Atraso'], vencidos.map(filaDoc)) : '') +
             (porVencer.length ? `<h3 style="margin:16px 0 4px;color:#B45309;font-size:15px">Vencen en los próximos 60 días (${porVencer.length})</h3>` +
