@@ -52,6 +52,7 @@ export const RECURSOS = [
     'auditorias',
     'aprobacion-graneles',
     'sao001-carga',
+    'control-documentos',
 ];
 
 /** Que archivo sirve cada recurso, para que el servidor pueda protegerlos. */
@@ -72,6 +73,7 @@ export const ARCHIVO_POR_RECURSO = {
     'panel-supervision-tapas': 'panel-supervision-tapas.html',
     'aprobacion-graneles': 'aprobacion-graneles.html',
     'sao001-carga': 'sao001-carga.html',
+    'control-documentos': 'control-documentos.html',
 };
 
 /** true si el rol habilita esa accion sobre el recurso. */

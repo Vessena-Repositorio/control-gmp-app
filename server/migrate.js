@@ -16,8 +16,11 @@ const CLAVE_LOCK = 4210771;
 // queremos. Para los que destruyen datos, no: en un sistema GMP el historico es
 // el activo. Estas se bloquean salvo que se declare la intencion con
 // MIGRACIONES_DESTRUCTIVAS=true en el entorno.
+//
+// `BEFORE TRUNCATE` no cuenta: es un trigger que IMPIDE truncar (migracion 054,
+// audit trail), justo lo contrario de lo que este control busca frenar.
 const PATRONES_DESTRUCTIVOS =
-    /\b(DROP\s+(TABLE|COLUMN|DATABASE|SCHEMA)|TRUNCATE|DELETE\s+FROM|ALTER\s+COLUMN\s+\w+\s+TYPE)\b/i;
+    /\b(DROP\s+(TABLE|COLUMN|DATABASE|SCHEMA)|(?<!BEFORE\s+)TRUNCATE|DELETE\s+FROM|ALTER\s+COLUMN\s+\w+\s+TYPE)\b/i;
 
 /** Quita comentarios para no marcar una migracion por lo que dice su texto. */
 function sinComentarios(sql) {

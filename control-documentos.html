@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control de Documentos · Vessena</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📄</text></svg>">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--border:#e3e6ec;--text:#1c2331;--t2:#475467;--t3:#6b7382;
+--pri:#1f5fb0;--pri-d:#164a89;--pri-g:rgba(31,95,176,.08);--ok:#1a7f3f;--ok-g:#e8f5ec;
+--warn:#b8730b;--warn-g:#fff4dc;--crit:#b23636;--crit-g:#fbe9e9;--r:10px;
+--f:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:var(--f);font-size:15px}
+.hdr{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--border);padding:10px 16px;display:flex;align-items:center;gap:10px}
+.hdr .ico{width:36px;height:36px;border-radius:10px;background:linear-gradient(140deg,#2f7ad6,var(--pri-d));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800}
+.hdr h1{font-size:17px;margin:0}.hdr small{color:var(--t3);font-size:13px}
+.hdr .der{margin-left:auto;display:flex;gap:8px;align-items:center;font-size:14px;color:var(--t2)}
+.hdr a,.hdr button{font-size:13px;border:1px solid var(--border);background:#fff;border-radius:6px;padding:5px 9px;color:var(--t2);text-decoration:none;cursor:pointer}
+.tabs{display:flex;background:#fff;border-bottom:1px solid var(--border);position:sticky;top:57px;z-index:19;overflow-x:auto}
+.tab{flex:1;min-width:130px;padding:12px;text-align:center;font-weight:600;color:var(--t3);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+.tab.on{color:var(--pri);border-bottom-color:var(--pri);background:var(--pri-g)}
+.wrap{max-width:1150px;margin:0 auto;padding:14px 14px 80px}
+.page{display:none}.page.on{display:block}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:16px 18px;margin-bottom:12px;box-shadow:0 1px 3px rgba(20,30,50,.06)}
+.card h3{margin:0 0 10px;font-size:15px}
+.fila{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.muted{color:var(--t3);font-size:13px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px}
+.kpi{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;cursor:pointer}
+.kpi.sel{outline:2px solid var(--pri)}
+.kpi .lbl{color:var(--t3);font-size:11px;text-transform:uppercase;letter-spacing:.4px}
+.kpi .val{font-size:25px;font-weight:700;margin-top:2px}
+.kpi.ok .val{color:var(--ok)}.kpi.warn .val{color:var(--warn)}.kpi.crit .val{color:var(--crit)}
+.tabla{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:8px 9px;border-bottom:1px solid var(--border);vertical-align:top}
+th{background:#f0f2f6;font-size:12px;text-transform:uppercase;letter-spacing:.3px;color:#34405b}
+tr.click{cursor:pointer}tr.click:hover td{background:#eef3fa}
+td.cod{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;white-space:nowrap}
+.chip{display:inline-block;padding:2px 9px;border-radius:50px;font-size:12px;font-weight:600;white-space:nowrap}
+.chip.ok{background:var(--ok-g);color:#155c2b}.chip.warn{background:var(--warn-g);color:#7a4b0e}
+.chip.crit{background:var(--crit-g);color:#7c2323}.chip.mut{background:#eceef2;color:#5f6a80}.chip.info{background:var(--pri-g);color:var(--pri-d)}
+button.b{padding:9px 15px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:#fff;color:var(--text)}
+button.b.pri{background:var(--pri);border-color:var(--pri);color:#fff}
+button.b.ok{background:var(--ok);border-color:var(--ok);color:#fff}
+button.b:disabled{opacity:.6;cursor:default}
+button.b.sm{padding:5px 10px;font-size:12.5px}
+input,select,textarea{font-family:var(--f);font-size:14px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text);width:100%}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--pri);box-shadow:0 0 0 3px var(--pri-g)}
+label.lb{display:block;font-size:12.5px;font-weight:600;color:var(--t2);margin:10px 0 3px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.aviso{padding:10px 12px;border-radius:8px;font-size:13.5px;margin-bottom:10px}
+.aviso.info{background:var(--pri-g);color:var(--pri-d)}.aviso.warn{background:var(--warn-g);color:#7a4b0e}
+.aviso.crit{background:var(--crit-g);color:#7c2323}.aviso.ok{background:var(--ok-g);color:#155c2b}
+dl.det{display:grid;grid-template-columns:190px 1fr;gap:6px 16px;font-size:13.5px;margin:0}
+dl.det dt{color:var(--t3);font-weight:600}dl.det dd{margin:0}
+ul.lst{margin:4px 0 0;padding-left:18px;font-size:13px}
+.barra{height:8px;background:#eceef2;border-radius:6px;overflow:hidden;margin:8px 0}
+.barra>div{height:100%;background:var(--pri);width:0}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#101828;color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;display:none;z-index:50;max-width:90vw}
+.toast.on{display:block}.toast.err{background:var(--crit)}
+@media(max-width:700px){.grid3{grid-template-columns:1fr}dl.det{grid-template-columns:1fr}.hdr small{display:none}}
+</style>
+</head>
+<body>
+<div class="hdr"><div class="ico">📄</div><div><h1>Control de Documentos</h1><small>SOP-DOC-001 · Vessena S.A.</small></div>
+  <div class="der"><span id="quien"></span><a href="/">Portal</a><button onclick="salir()">Salir</button></div></div>
+<div class="tabs">
+  <div class="tab on" onclick="verTab(0)">📚 Listado maestro</div>
+  <div class="tab" id="tabImp" style="display:none" onclick="verTab(1)">📥 Importar</div>
+</div>
+<div class="wrap">
+  <div class="page on" id="p0">
+    <div class="kpis" id="kpis"></div>
+    <div class="card">
+      <div class="fila">
+        <input id="buscar" placeholder="Buscar por código o título" style="flex:2;min-width:200px" oninput="pintarListado()">
+        <select id="fArea" style="flex:1;min-width:120px" onchange="pintarListado()"></select>
+        <select id="fTipo" style="flex:1;min-width:120px" onchange="pintarListado()"></select>
+      </div>
+    </div>
+    <div class="card tabla" id="listado"><div class="muted">Cargando…</div></div>
+    <div id="detalle"></div>
+  </div>
+
+  <div class="page" id="p1">
+    <div class="card">
+      <h3>1 · Listado maestro (LIS-SOP-DOC-001-E)</h3>
+      <p class="muted">Elegí la planilla. Primero se simula: se ve qué entra, qué no y por qué, sin guardar nada.
+        Los documentos con errores no entran; corregí la planilla y volvé a importarla: los ya cargados no se tocan.</p>
+      <input type="file" id="xlsx" accept=".xlsx,.xls" onchange="leerListado(this.files[0])">
+      <div id="simulacion"></div>
+    </div>
+    <div class="card">
+      <h3>2 · Archivos de la red</h3>
+      <p class="muted">Elegí la carpeta de procedimientos (por ejemplo <code>Z:\17-Documentacion Vessena\14- Procedimientos</code>)
+        y después la de especificaciones. Se asocian solos los archivos cuyo nombre trae el código y la versión;
+        los dudosos se eligen a mano. El navegador lee la carpeta, no la modifica.</p>
+      <input type="file" id="carpeta" webkitdirectory directory multiple onchange="leerCarpeta(this.files)">
+      <div id="asociacion"></div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const API='/api/control-documentos';
+const S={docs:[],permisos:[],filtro:'todos',sel:null,usuario:''};
+
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function toast(m,err){const t=document.getElementById('toast');t.textContent=m;t.className='toast on'+(err?' err':'');clearTimeout(t._t);t._t=setTimeout(()=>t.className='toast',5000)}
+function dma(f){return f?String(f).slice(8,10)+'/'+String(f).slice(5,7)+'/'+String(f).slice(0,4):'—'}
+function dmaHora(v){if(!v)return'—';const d=new Date(v);if(isNaN(d))return String(v);const p=n=>String(n).padStart(2,'0');
+  return p(d.getDate())+'/'+p(d.getMonth()+1)+'/'+d.getFullYear()+' '+p(d.getHours())+':'+p(d.getMinutes())}
+function ver(n){n=Number(n);return Number.isInteger(n)?n.toFixed(1):String(n)}
+function hoyISO(){return new Date().toLocaleDateString('sv-SE')}
+function enDias(n){const d=new Date();d.setDate(d.getDate()+n);return d.toLocaleDateString('sv-SE')}
+function puede(p){return S.permisos.includes(p)}
+async function api(ruta,op){
+  const r=await fetch(API+ruta,Object.assign({credentials:'same-origin',headers:{'Content-Type':'application/json'}},op||{}));
+  if(r.status===401){location.href='/?volver='+encodeURIComponent(location.pathname);throw new Error('sesión')}
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok||d.ok===false)throw new Error(d.error||('error '+r.status));
+  return d;
+}
+async function salir(){try{await fetch('/api/auth/logout',{method:'POST',credentials:'same-origin'})}catch(e){}location.href='/'}
+function verTab(n){document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('on',i===n));
+  document.querySelectorAll('.page').forEach((p,i)=>p.classList.toggle('on',i===n))}
+
+// ---------------------------------------------------------------- listado
+function situacion(d){
+  if(!d.vigente_id) return d.en_curso_id?'nuevo':'baja';
+  const p=String(d.proxima_revision||'').slice(0,10);
+  if(p&&p<hoyISO()) return 'vencido';
+  if(p&&p<=enDias(90)) return 'porvencer';
+  return 'vigente';
+}
+const SIT={vigente:['ok','Vigente'],porvencer:['warn','Vence pronto'],vencido:['crit','Vencido'],nuevo:['info','Nuevo, en curso'],baja:['mut','Dado de baja']};
+
+async function cargar(){
+  try{
+    const [yo,d]=await Promise.all([fetch('/api/auth/yo',{credentials:'same-origin'}).then(r=>r.json()).catch(()=>({})),api('/documentos')]);
+    S.usuario=yo.usuario||'';
+    document.getElementById('quien').textContent=yo.nombre||yo.usuario||'';
+    S.docs=d.documentos;S.permisos=d.permisos||[];
+    document.getElementById('tabImp').style.display=puede('administrar')?'':'none';
+    const areas=[...new Set(S.docs.map(x=>x.area).filter(Boolean))].sort();
+    const tipos=[...new Set(S.docs.map(x=>x.tipo))].sort();
+    document.getElementById('fArea').innerHTML='<option value="">Todas las áreas</option>'+areas.map(a=>`<option>${esc(a)}</option>`).join('');
+    document.getElementById('fTipo').innerHTML='<option value="">Todos los tipos</option>'+tipos.map(a=>`<option>${esc(a)}</option>`).join('');
+    pintarListado();
+  }catch(e){document.getElementById('listado').innerHTML=`<div class="aviso crit">${esc(e.message)}</div>`}
+}
+
+function pintarListado(){
+  const c={vigente:0,porvencer:0,vencido:0,curso:0,sinarch:0};
+  for(const d of S.docs){const s=situacion(d);if(s==='vigente'||s==='porvencer'||s==='vencido')c.vigente++;
+    if(s==='porvencer')c.porvencer++;if(s==='vencido')c.vencido++;if(d.en_curso_id)c.curso++;
+    if(d.vigente_id&&!d.vigente_con_archivo)c.sinarch++}
+  const k=(id,cls,lbl,val)=>`<div class="kpi ${cls} ${S.filtro===id?'sel':''}" onclick="S.filtro='${id}';pintarListado()"><div class="lbl">${lbl}</div><div class="val">${val}</div></div>`;
+  document.getElementById('kpis').innerHTML=k('todos','','Todos',S.docs.length)+k('vigentes','ok','Vigentes',c.vigente)
+    +k('porvencer','warn','Vencen en 90 días',c.porvencer)+k('vencidos','crit','Vencidos',c.vencido)
+    +k('curso','','En curso',c.curso)+(puede('administrar')?k('sinarch','','Vigentes sin archivo',c.sinarch):'');
+
+  const q=document.getElementById('buscar').value.trim().toLowerCase();
+  const area=document.getElementById('fArea').value,tipo=document.getElementById('fTipo').value;
+  const lista=S.docs.filter(d=>{
+    const s=situacion(d);
+    if(S.filtro==='vigentes'&&!['vigente','porvencer','vencido'].includes(s))return false;
+    if(S.filtro==='porvencer'&&s!=='porvencer')return false;
+    if(S.filtro==='vencidos'&&s!=='vencido')return false;
+    if(S.filtro==='curso'&&!d.en_curso_id)return false;
+    if(S.filtro==='sinarch'&&!(d.vigente_id&&!d.vigente_con_archivo))return false;
+    if(area&&d.area!==area)return false;if(tipo&&d.tipo!==tipo)return false;
+    return !q||d.codigo.toLowerCase().includes(q)||d.titulo.toLowerCase().includes(q);
+  });
+  document.getElementById('listado').innerHTML=lista.length?`<table><thead><tr><th>Código</th><th>Título</th><th>Versión</th><th>Vigencia</th><th>Vence</th><th>Situación</th></tr></thead><tbody>`
+    +lista.map(d=>{const s=SIT[situacion(d)];return `<tr class="click" onclick="abrir(${d.id})"><td class="cod">${esc(d.codigo)}</td><td>${esc(d.titulo)}</td>
+      <td>${d.vigente_numero!=null?ver(d.vigente_numero):'—'}${d.en_curso_id?` <span class="chip info">v${ver(d.en_curso_numero)} en curso</span>`:''}</td>
+      <td>${dma(d.fecha_vigencia)}</td><td>${dma(d.proxima_revision)}</td><td><span class="chip ${s[0]}">${s[1]}</span>${d.vigente_id&&!d.vigente_con_archivo&&puede('administrar')?' <span class="chip mut">sin archivo</span>':''}</td></tr>`}).join('')
+    +'</tbody></table>':'<div class="muted">No hay documentos con ese filtro.</div>';
+}
+
+async function abrir(id){
+  const box=document.getElementById('detalle');box.innerHTML='<div class="card muted">Cargando…</div>';
+  try{
+    const {documento:d,versiones}=await api('/documentos/'+id);S.sel=d;
+    const vig=versiones.find(v=>v.estado==='vigente');
+    const ESTV={vigente:'ok',borrador:'info',obsoleto:'mut',anulado:'mut'};
+    let h=`<div class="card"><div class="fila" style="justify-content:space-between"><h3 style="margin:0">${esc(d.codigo)} · ${esc(d.titulo)}</h3>
+      <button class="b sm" onclick="document.getElementById('detalle').innerHTML=''">Cerrar</button></div>
+      <dl class="det" style="margin-top:10px"><dt>Tipo / área</dt><dd>${esc(d.tipo)} · ${esc(d.area||'—')}</dd>
+      <dt>Próxima revisión</dt><dd>${dma(d.proxima_revision)}${d.avisar_desde?` <span class="muted">(avisos desde ${dma(d.avisar_desde)})</span>`:''}</dd></dl>
+      <h3 style="margin-top:16px">Versiones</h3><div class="tabla"><table><thead><tr><th>Versión</th><th>Estado</th><th>Vigencia</th><th>Elaboró / revisó / aprobó</th><th>Firmas</th><th></th></tr></thead><tbody>`;
+    for(const v of versiones){
+      const bajar=[];
+      bajar.push(`<button class="b sm" onclick="descargar(${v.id},'pdf')">PDF</button>`);
+      if(puede('cargar'))bajar.push(`<button class="b sm" onclick="descargar(${v.id},'archivo')">Word</button>`);
+      h+=`<tr><td>${ver(v.numero)}</td><td><span class="chip ${ESTV[v.estado]||'warn'}">${esc(v.estado.replace('_',' '))}</span></td><td>${dma(v.fecha_vigencia)}</td>
+        <td class="muted">${esc([v.elaborado_por_nombre,v.revisado_por_nombre,v.aprobado_por_nombre].map(x=>x||'—').join(' / '))}</td>
+        <td>${(v.firmas||[]).map(f=>`<div>${esc(f.leyenda)} <b>${esc(f.nombre)}</b> <span class="muted">${dmaHora(f.firmadoEn)}</span></div>`).join('')||'<span class="muted">—</span>'}</td>
+        <td style="white-space:nowrap">${bajar.join(' ')}</td></tr>`;
+    }
+    h+='</tbody></table></div>';
+    if(vig){
+      h+=`<h3 style="margin-top:16px">Revisión periódica sin cambios</h3>
+      <p class="muted">Si revisaste el documento y no necesita cambios, firmá para renovarlo por 3 años desde hoy.
+        No genera versión nueva ni reentrenamiento. Firma quien lo aprobó, o Calidad.</p>
+      <div class="grid3"><div><label class="lb">Usuario</label><input id="fUsr" autocomplete="username" value="${esc(S.usuario)}"></div>
+        <div><label class="lb">Clave</label><input id="fClave" type="password" autocomplete="current-password"></div>
+        <div><label class="lb">Comentario (opcional)</label><input id="fCom"></div></div>
+      <div class="fila" style="margin-top:10px"><button class="b ok" onclick="renovar(${d.id})">Firmar: revisado sin cambios</button>
+        <span class="muted">Usuario y clave son tu firma electrónica (21 CFR Part 11).</span></div>`;
+    }
+    h+=`<div class="fila" style="margin-top:16px"><button class="b sm" onclick="verAudit(${d.id})">Ver audit trail</button></div><div id="audit"></div></div>`;
+    box.innerHTML=h;box.scrollIntoView({behavior:'smooth'});
+  }catch(e){box.innerHTML=`<div class="card aviso crit">${esc(e.message)}</div>`}
+}
+
+function descargar(id,que){location.href=`${API}/versiones/${id}/descargar?que=${que}`}
+
+async function renovar(id){
+  const usuario=document.getElementById('fUsr').value.trim(),clave=document.getElementById('fClave').value;
+  if(!usuario||!clave)return toast('Para firmar escribí usuario y clave',true);
+  try{
+    const r=await api(`/documentos/${id}/renovar`,{method:'POST',body:JSON.stringify({usuario,clave,comentario:document.getElementById('fCom').value})});
+    toast('Renovado. Próxima revisión: '+dma(r.proximaRevision));await cargar();abrir(id);
+  }catch(e){document.getElementById('fClave').value='';toast(e.message,true)}
+}
+
+async function verAudit(id){
+  const box=document.getElementById('audit');
+  try{
+    const {registros}=await api(`/documentos/${id}/audit`);
+    box.innerHTML=`<div class="tabla" style="margin-top:10px"><table><thead><tr><th>Fecha</th><th>Quién</th><th>Qué</th><th>Cambios</th><th>Motivo</th></tr></thead><tbody>`
+      +registros.map(r=>`<tr><td style="white-space:nowrap">${dmaHora(r.ts)}</td><td>${esc(r.usuario_nombre)}</td><td>${esc(r.accion)} · ${esc(r.tabla)}</td>
+        <td class="muted">${r.cambios?Object.entries(r.cambios).map(([k,v])=>`${esc(k)}: ${esc(JSON.stringify(v.antes))} → ${esc(JSON.stringify(v.despues))}`).join('<br>'):(r.accion==='firma'?esc((r.despues||{}).significado):'alta')}</td>
+        <td>${esc(r.motivo||'')}</td></tr>`).join('')+'</tbody></table></div>';
+  }catch(e){box.innerHTML=`<div class="aviso crit">${esc(e.message)}</div>`}
+}
+
+// ---------------------------------------------------------------- importar listado
+// Encabezados de la hoja, comparados sin tildes ni mayusculas: un "Codigo" o
+// un "Título" escrito distinto no tiene que dejar la columna afuera.
+const COLS={tipo:'tipo',prefijo:'prefijo',sufijo:'sufijo',codigo:'codigo',ver:'ver',titulo:'titulo',status:'status',
+  redacta:'redacta',revisa:'revisa',aprueba:'aprueba','fecha entrada en vigencia':'vigencia','fecha proxima revision':'proxima',observaciones:'observaciones'};
+const clave=h=>String(h).normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim().toLowerCase();
+let IMP=null;
+
+async function sha256(buf){const h=await crypto.subtle.digest('SHA-256',buf);return [...new Uint8Array(h)].map(b=>b.toString(16).padStart(2,'0')).join('')}
+function celda(v){if(v instanceof Date&&!isNaN(v)){const p=n=>String(n).padStart(2,'0');return `${v.getFullYear()}-${p(v.getMonth()+1)}-${p(v.getDate())}`}return v==null?'':String(v)}
+
+async function leerListado(file){
+  if(!file)return;const box=document.getElementById('simulacion');box.innerHTML='<p class="muted">Leyendo la planilla…</p>';
+  try{
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array',cellDates:true});
+    const hoja=wb.SheetNames.find(n=>n.trim().toLowerCase()==='listado de documentos');
+    if(!hoja)throw new Error('la planilla no tiene la hoja "Listado de documentos"');
+    const filas=XLSX.utils.sheet_to_json(wb.Sheets[hoja],{header:1,raw:true,defval:''});
+    const enc=filas[0].map(h=>COLS[clave(h)]||null);
+    if(!enc.includes('codigo')||!enc.includes('status'))throw new Error('no encontré las columnas Código y Status en la primera fila');
+    const datos=filas.slice(1).map((f,i)=>{const o={fila:i+2};enc.forEach((k,j)=>{if(k)o[k]=celda(f[j])});return o}).filter(o=>o.codigo);
+    IMP={archivoNombre:file.name,archivoSha256:await sha256(buf),filas:datos};
+    const r=await api('/importar/listado',{method:'POST',body:JSON.stringify(IMP)});
+    pintarSimulacion(r);
+  }catch(e){box.innerHTML=`<div class="aviso crit">${esc(e.message)}</div>`}
+}
+
+function pintarSimulacion(r){
+  const s=r.resumen,box=document.getElementById('simulacion');
+  const err=r.documentos.filter(d=>d.errores.length),av=r.documentos.filter(d=>!d.errores.length&&!d.existe&&d.avisos.length);
+  box.innerHTML=`<div class="kpis" style="margin-top:12px">
+    <div class="kpi ok"><div class="lbl">Entran</div><div class="val">${s.aImportar}</div></div>
+    <div class="kpi"><div class="lbl">Vigentes</div><div class="val">${s.vigentes}</div></div>
+    <div class="kpi"><div class="lbl">En curso</div><div class="val">${s.enCurso}</div></div>
+    <div class="kpi crit"><div class="lbl">Vencidos</div><div class="val">${s.vencidos}</div></div>
+    <div class="kpi warn"><div class="lbl">No entran (errores)</div><div class="val">${s.conErrores}</div></div>
+    <div class="kpi"><div class="lbl">Ya cargados</div><div class="val">${s.yaCargados}</div></div></div>
+    ${s.vencidos?`<div class="aviso info">Los ${s.vencidos} vencidos se ven como vencidos desde hoy, pero sus avisos se escalonan en los próximos 6 meses.</div>`:''}
+    ${err.length?`<h3>No entran: corregir en la planilla</h3><div class="tabla"><table><tbody>${err.map(d=>`<tr><td class="cod">${esc(d.codigo)}</td><td><ul class="lst">${d.errores.map(e=>`<li>${esc(e)}</li>`).join('')}</ul></td></tr>`).join('')}</tbody></table></div>`:''}
+    ${av.length?`<details style="margin-top:10px"><summary><b>Entran con observaciones (${av.length})</b></summary><div class="tabla"><table><tbody>${av.map(d=>`<tr><td class="cod">${esc(d.codigo)}</td><td><ul class="lst">${d.avisos.map(e=>`<li>${esc(e)}</li>`).join('')}</ul></td></tr>`).join('')}</tbody></table></div></details>`:''}
+    <div class="fila" style="margin-top:12px">${s.aImportar?`<button class="b pri" onclick="confirmarImportacion()">Importar ${s.aImportar} documentos</button>`:''}
+      <span class="muted">Archivo: ${esc(IMP.archivoNombre)}</span></div>`;
+}
+
+async function confirmarImportacion(){
+  if(!confirm(`Se van a cargar ${document.querySelector('#simulacion .kpi.ok .val').textContent} documentos. ¿Seguimos?`))return;
+  try{
+    const r=await api('/importar/listado',{method:'POST',body:JSON.stringify({...IMP,confirmar:true})});
+    document.getElementById('simulacion').innerHTML=`<div class="aviso ok">Listo: se importaron ${r.resumen.aImportar} documentos (importación nº ${r.importacionId}). Ahora asociá los archivos de la red.</div>`;
+    cargar();
+  }catch(e){toast(e.message,true)}
+}
+
+// ---------------------------------------------------------------- archivos de la red
+const RE_COD=/^((?:AX|REG|LIS|PL)-)?[A-Z]{2,4}-[A-Z0-9]+-\d{2,3}(-[A-Z][0-9.]*)?/i;
+const RE_FUERA=/[\\/](obsolet[oa]s?|borrador(es)?|redacci[oó]n)[\\/]/i;
+const RE_BORR=/[\\/](borrador(es)?|redacci[oó]n)[\\/]/i;
+const EXT_OK=/\.(pdf|docx?|xlsx?)$/i;
+let ASOC=[];
+
+async function leerCarpeta(files){
+  const box=document.getElementById('asociacion');box.innerHTML='<p class="muted">Leyendo la carpeta…</p>';
+  try{
+    const {versiones,hayAlmacen}=await api('/importar/sin-archivo');
+    if(!hayAlmacen){box.innerHTML='<div class="aviso crit">El servidor todavía no tiene el volumen de documentos (DOC_DIR). Sin eso no se pueden guardar archivos.</div>';return}
+    const idx=new Map();
+    for(const f of files){
+      if(!EXT_OK.test(f.name)||f.name.startsWith('~$'))continue;
+      const m=f.name.match(RE_COD);if(!m)continue;
+      const k=m[0].toUpperCase();(idx.get(k)||idx.set(k,[]).get(k)).push(f);
+    }
+    ASOC=versiones.map(v=>{
+      const vs=ver(v.numero).replace('.','\\.');
+      const reVer=new RegExp('V\\s*'+vs+'(?![\\d])','i');
+      let c=(idx.get(v.codigo.toUpperCase())||[]);
+      const ruta=f=>'/'+(f.webkitRelativePath||f.name);
+      if(v.estado==='vigente')c=c.filter(f=>!RE_FUERA.test(ruta(f)));
+      if(v.estado==='borrador')c=c.filter(f=>RE_BORR.test(ruta(f))||reVer.test(f.name));
+      const conVer=c.filter(f=>reVer.test(f.name));
+      const usar=conVer.length?conVer:c;
+      const pdfs=usar.filter(f=>/\.pdf$/i.test(f.name)),words=usar.filter(f=>!/\.pdf$/i.test(f.name));
+      // Claro: el nombre trae la version y hay a lo sumo un Word y un PDF.
+      const claro=conVer.length>0&&pdfs.length<=1&&words.length<=1;
+      return {...v,pdfs,words,claro,pdf:claro?pdfs[0]:null,word:claro?words[0]:null};
+    });
+    pintarAsociacion();
+  }catch(e){box.innerHTML=`<div class="aviso crit">${esc(e.message)}</div>`}
+}
+
+function pintarAsociacion(){
+  const box=document.getElementById('asociacion');
+  const pend=ASOC.filter(a=>!(a.tiene_word&&a.tiene_pdf));
+  const claros=pend.filter(a=>a.claro&&((a.word&&!a.tiene_word)||(a.pdf&&!a.tiene_pdf)));
+  const dudosos=pend.filter(a=>!a.claro&&(a.pdfs.length||a.words.length));
+  const nada=pend.filter(a=>!a.pdfs.length&&!a.words.length);
+  const opc=(lista,i,tipo)=>`<select onchange="ASOC[${i}].${tipo}=ASOC[${i}].${tipo}s[this.value]||null"><option value="">— ninguno —</option>${lista.map((f,j)=>`<option value="${j}">${esc(f.webkitRelativePath||f.name)}</option>`).join('')}</select>`;
+  box.innerHTML=`<div class="kpis" style="margin-top:12px"><div class="kpi ok"><div class="lbl">Se asocian solos</div><div class="val">${claros.length}</div></div>
+    <div class="kpi warn"><div class="lbl">Elegir a mano</div><div class="val">${dudosos.length}</div></div>
+    <div class="kpi"><div class="lbl">Sin archivo en esta carpeta</div><div class="val">${nada.length}</div></div></div>
+    ${claros.length?`<div class="fila"><button class="b pri" id="bSubir" onclick="subir(ASOC.filter(a=>a.claro))">Subir los ${claros.length} claros</button></div><div class="barra"><div id="prog"></div></div><div id="progTxt" class="muted"></div>`:''}
+    ${dudosos.length?`<details style="margin-top:10px"><summary><b>Elegir a mano (${dudosos.length})</b></summary><div class="tabla"><table><thead><tr><th>Documento</th><th>Word</th><th>PDF</th></tr></thead><tbody>
+      ${dudosos.map(a=>{const i=ASOC.indexOf(a);return `<tr><td class="cod">${esc(a.codigo)} v${ver(a.numero)}<br><span class="muted">${esc(a.estado)}</span></td>
+        <td>${a.tiene_word?'<span class="chip ok">cargado</span>':opc(a.words,i,'word')}</td><td>${a.tiene_pdf?'<span class="chip ok">cargado</span>':opc(a.pdfs,i,'pdf')}</td></tr>`}).join('')}
+      </tbody></table></div><button class="b pri" style="margin-top:10px" onclick="subir(ASOC.filter(a=>!a.claro&&(a.word||a.pdf)))">Subir lo elegido</button></details>`:''}
+    ${nada.length?`<details style="margin-top:10px"><summary><b>Sin archivo en esta carpeta (${nada.length})</b></summary><p class="muted">${nada.map(a=>esc(a.codigo)+' v'+ver(a.numero)).join(' · ')}</p></details>`:''}`;
+}
+
+async function subir(lista){
+  const tareas=[];
+  for(const a of lista){if(a.word&&!a.tiene_word)tareas.push([a,a.word,'word']);if(a.pdf&&!a.tiene_pdf)tareas.push([a,a.pdf,'pdf'])}
+  if(!tareas.length)return toast('No hay nada para subir',true);
+  const b=document.getElementById('bSubir');if(b)b.disabled=true;
+  let ok=0;const fallos=[];
+  for(const [i,[a,f,tipo]] of tareas.entries()){
+    try{
+      const r=await fetch(`${API}/versiones/${a.id}/archivo?nombre=${encodeURIComponent(f.name)}&origen=${encodeURIComponent(f.webkitRelativePath||f.name)}`,
+        {method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/octet-stream'},body:f});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok||d.ok===false)throw new Error(d.error||('error '+r.status));
+      ok++;a[tipo==='pdf'?'tiene_pdf':'tiene_word']=true;
+    }catch(e){fallos.push(`${a.codigo} (${f.name}): ${e.message}`)}
+    const p=document.getElementById('prog');if(p)p.style.width=Math.round((i+1)*100/tareas.length)+'%';
+    const t=document.getElementById('progTxt');if(t)t.textContent=`${i+1} de ${tareas.length}`;
+  }
+  toast(`Subidos ${ok} de ${tareas.length}`+(fallos.length?` · ${fallos.length} con error`:''),fallos.length>0);
+  if(fallos.length)document.getElementById('asociacion').insertAdjacentHTML('beforeend',`<div class="aviso crit" style="margin-top:10px"><ul class="lst">${fallos.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`);
+  else pintarAsociacion();
+  cargar();
+}
+
+cargar();
+</script>
+</body>
+</html>

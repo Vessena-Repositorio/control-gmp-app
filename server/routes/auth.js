@@ -197,9 +197,12 @@ rutasAuth.post('/clave', exigirSesion, async (req, res) => {
             return res.status(401).json({ error: 'la clave actual no es correcta' });
         }
 
+        // politica_desde solo se fija aca, donde se exige el largo minimo: es lo
+        // que habilita a firmar (lib/firma-electronica.js). El rehash del login
+        // no la toca, porque ahi la clave puede ser un PIN viejo.
         await consultar(
             `UPDATE credenciales SET esquema = 'scrypt', valor = $2,
-                    migrado_en = now(), actualizado_en = now()
+                    migrado_en = now(), actualizado_en = now(), politica_desde = now()
              WHERE usuario_id = $1`,
             [req.usuario.id, await hashear(nueva)]
         );
