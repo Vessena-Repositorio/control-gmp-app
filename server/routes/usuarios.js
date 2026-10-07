@@ -113,11 +113,13 @@ rutasUsuarios.post('/clave', exigirTokenSync, async (req, res) => {
         const hash = await hashear(generada);
 
         await consultar(
-            `INSERT INTO credenciales (usuario_id, esquema, valor, migrado_en)
-             VALUES ($1, 'scrypt', $2, now())
+            // politica_desde: esta clave tiene 12+ caracteres (o la genero el
+            // servidor), asi que sirve para firmar (lib/firma-electronica.js).
+            `INSERT INTO credenciales (usuario_id, esquema, valor, migrado_en, politica_desde)
+             VALUES ($1, 'scrypt', $2, now(), now())
              ON CONFLICT (usuario_id) DO UPDATE SET
                 esquema = 'scrypt', valor = EXCLUDED.valor,
-                migrado_en = now(), actualizado_en = now()`,
+                migrado_en = now(), actualizado_en = now(), politica_desde = now()`,
             [rows[0].id, hash]
         );
 
