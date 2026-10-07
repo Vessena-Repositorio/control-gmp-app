@@ -109,7 +109,12 @@ rutasControlDocumentos.get('/documentos', leer, async (req, res, next) => {
                     v.id AS vigente_id, v.numero AS vigente_numero, v.fecha_vigencia,
                     CASE WHEN $1 THEN c.id END     AS en_curso_id,
                     CASE WHEN $1 THEN c.numero END AS en_curso_numero,
-                    CASE WHEN $1 THEN c.estado END AS en_curso_estado
+                    CASE WHEN $1 THEN c.estado END AS en_curso_estado,
+                    -- Devuelto: borrador cuya ultima ronda termino en un rechazo.
+                    CASE WHEN $1 THEN EXISTS (
+                        SELECT 1 FROM dc_tareas t WHERE c.estado = 'borrador'
+                          AND t.version_id = c.id AND t.ronda = c.ronda AND t.estado = 'rechazada')
+                    END AS en_curso_rechazado
              FROM dc_documentos d
              LEFT JOIN usuarios du ON du.id = d.dueno_id
              LEFT JOIN dc_versiones v ON v.documento_id = d.id AND v.estado = 'vigente'
@@ -150,7 +155,7 @@ rutasControlDocumentos.get('/documentos/:id', leer, async (req, res, next) => {
             v.firmas = await firmasDe('dc_versiones', v.id);
             // Las tareas de la ronda en curso: quien falta y para cuando.
             const { rows: tareas } = await consultar(
-                `SELECT t.id, t.tipo, t.estado, t.vence_el, t.comentario, t.usuario_id, u.nombre
+                `SELECT t.id, t.tipo, t.estado, t.vence_el, t.comentario, t.cerrada_en, t.usuario_id, u.nombre
                  FROM dc_tareas t JOIN usuarios u ON u.id = t.usuario_id
                  WHERE t.version_id = $1 AND t.ronda = $2 ORDER BY t.tipo DESC, t.id`,
                 [v.id, v.ronda]);
@@ -640,20 +645,37 @@ rutasControlDocumentos.get('/usuarios', cargar, async (_req, res, next) => {
 
 /**
  * GET /api/control-documentos/mis-tareas
- * Lo que la persona tiene para revisar o aprobar, y lo que espera su turno.
+ * Lo que la persona tiene para revisar o aprobar, lo que espera su turno, y
+ * (`devueltos`) sus documentos rechazados que tiene que corregir: el correo
+ * del rechazo se pierde entre otros, la tarea de corregir no.
  */
 rutasControlDocumentos.get('/mis-tareas', leer, async (req, res, next) => {
     try {
-        const { rows } = await consultar(
-            `SELECT t.id, t.tipo, t.estado, t.vence_el, t.version_id, v.numero, v.resumen_cambios,
-                    v.elaborado_por_nombre, d.id AS documento_id, d.codigo, d.titulo
-             FROM dc_tareas t
-             JOIN dc_versiones v ON v.id = t.version_id
-             JOIN dc_documentos d ON d.id = v.documento_id
-             WHERE t.usuario_id = $1 AND t.estado IN ('pendiente', 'en_espera')
-             ORDER BY t.estado DESC, t.vence_el NULLS LAST, d.codigo`,
-            [req.usuario.id]);
-        res.json({ ok: true, tareas: rows });
+        const [{ rows }, { rows: devueltos }] = await Promise.all([
+            consultar(
+                `SELECT t.id, t.tipo, t.estado, t.vence_el, t.version_id, v.numero, v.resumen_cambios,
+                        v.elaborado_por_nombre, d.id AS documento_id, d.codigo, d.titulo
+                 FROM dc_tareas t
+                 JOIN dc_versiones v ON v.id = t.version_id
+                 JOIN dc_documentos d ON d.id = v.documento_id
+                 WHERE t.usuario_id = $1 AND t.estado IN ('pendiente', 'en_espera')
+                 ORDER BY t.estado DESC, t.vence_el NULLS LAST, d.codigo`,
+                [req.usuario.id]),
+            consultar(
+                `SELECT v.id AS version_id, v.numero, d.id AS documento_id, d.codigo, d.titulo,
+                        t.tipo, t.comentario, t.cerrada_en, u.nombre AS rechazado_por
+                 FROM dc_versiones v
+                 JOIN dc_documentos d ON d.id = v.documento_id
+                 JOIN dc_tareas t ON t.version_id = v.id AND t.ronda = v.ronda AND t.estado = 'rechazada'
+                 JOIN usuarios u ON u.id = t.usuario_id
+                 WHERE v.estado = 'borrador'
+                   AND EXISTS (SELECT 1 FROM firmas_electronicas f
+                               WHERE f.tabla = 'dc_versiones' AND f.registro_id = v.id::text
+                                 AND f.significado = 'autor' AND f.usuario_id = $1)
+                 ORDER BY t.cerrada_en DESC`,
+                [req.usuario.id]),
+        ]);
+        res.json({ ok: true, tareas: rows, devueltos });
     } catch (err) { next(err); }
 });
 

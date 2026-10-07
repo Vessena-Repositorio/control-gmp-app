@@ -160,16 +160,21 @@ async function cargar(){
 async function cargarTareas(){
   const box=document.getElementById('tareas');
   try{
-    const {tareas}=await api('/mis-tareas');S.tareas=tareas;
+    const {tareas,devueltos=[]}=await api('/mis-tareas');S.tareas=tareas;
     const pend=tareas.filter(t=>t.estado==='pendiente');
-    const n=document.getElementById('nTareas');n.textContent=pend.length;n.style.display=pend.length?'':'none';
-    box.innerHTML=tareas.length?`<table><thead><tr><th>Documento</th><th>Tarea</th><th>Qué cambia</th><th>Elaboró</th><th>Vence</th></tr></thead><tbody>`
+    const n=document.getElementById('nTareas');n.textContent=pend.length+devueltos.length;n.style.display=pend.length+devueltos.length?'':'none';
+    const dev=devueltos.length?`<h3 style="color:var(--crit)">Devueltos para corregir (${devueltos.length})</h3>
+      <table style="margin-bottom:18px"><thead><tr><th>Documento</th><th>Rechazó</th><th>Qué hay que cambiar</th></tr></thead><tbody>`
+      +devueltos.map(r=>`<tr class="click" onclick="verTab(0);abrir(${r.documento_id})"><td class="cod">${esc(r.codigo)} v${ver(r.numero)}<br><span class="muted" style="font-family:var(--f)">${esc(r.titulo)}</span></td>
+        <td>${esc(r.rechazado_por)}<br><span class="muted">${r.tipo==='revision'?'en la revisión':'en la aprobación'} · ${dmaHora(r.cerrada_en)}</span></td>
+        <td><div class="aviso crit" style="margin:0">${esc(r.comentario)}</div></td></tr>`).join('')+'</tbody></table>':'';
+    if(!tareas.length){box.innerHTML=dev||'<div class="muted">No tenés documentos para revisar ni aprobar.</div>';return}
+    box.innerHTML=dev+(dev?'<h3>Para revisar o aprobar</h3>':'')+`<table><thead><tr><th>Documento</th><th>Tarea</th><th>Qué cambia</th><th>Elaboró</th><th>Vence</th></tr></thead><tbody>`
       +tareas.map(t=>{const atr=t.vence_el&&String(t.vence_el).slice(0,10)<hoyISO();
         return `<tr class="click" onclick="verTab(0);abrir(${t.documento_id})"><td class="cod">${esc(t.codigo)} v${ver(t.numero)}<br><span class="muted" style="font-family:var(--f)">${esc(t.titulo)}</span></td>
         <td>${t.tipo==='revision'?'Revisar':'Aprobar'}${t.estado==='en_espera'?' <span class="chip mut">espera las revisiones</span>':''}</td>
         <td class="muted">${esc(t.resumen_cambios||'')}</td><td>${esc(t.elaborado_por_nombre||'—')}</td>
-        <td>${t.vence_el?`<span class="chip ${atr?'crit':'info'}">${dma(t.vence_el)}</span>`:'—'}</td></tr>`}).join('')+'</tbody></table>'
-      :'<div class="muted">No tenés documentos para revisar ni aprobar.</div>';
+        <td>${t.vence_el?`<span class="chip ${atr?'crit':'info'}">${dma(t.vence_el)}</span>`:'—'}</td></tr>`}).join('')+'</tbody></table>';
   }catch(e){box.innerHTML=`<div class="aviso crit">${esc(e.message)}</div>`}
 }
 
@@ -202,7 +207,7 @@ function pintarListado(){
   });
   document.getElementById('listado').innerHTML=lista.length?`<table><thead><tr><th>Código</th><th>Título</th><th>Versión</th><th>Vigencia</th><th>Vence</th><th>Situación</th></tr></thead><tbody>`
     +lista.map(d=>{const s=SIT[situacion(d)];return `<tr class="click" onclick="abrir(${d.id})"><td class="cod">${esc(d.codigo)}</td><td>${esc(d.titulo)}</td>
-      <td>${d.vigente_numero!=null?ver(d.vigente_numero):'—'}${d.en_curso_id?` <span class="chip info">v${ver(d.en_curso_numero)} en curso</span>`:''}</td>
+      <td>${d.vigente_numero!=null?ver(d.vigente_numero):'—'}${d.en_curso_id?(d.en_curso_rechazado?` <span class="chip crit">v${ver(d.en_curso_numero)} rechazada</span>`:` <span class="chip info">v${ver(d.en_curso_numero)} en curso</span>`):''}</td>
       <td>${dma(d.fecha_vigencia)}</td><td>${dma(d.proxima_revision)}</td><td><span class="chip ${s[0]}">${s[1]}</span>${d.vigente_id&&!d.vigente_con_archivo&&puede('administrar')?' <span class="chip mut">sin archivo</span>':''}</td></tr>`}).join('')
     +'</tbody></table>':'<div class="muted">No hay documentos con ese filtro.</div>';
 }
@@ -233,6 +238,10 @@ async function abrir(id){
     const cur=versiones.find(v=>['borrador','en_revision','en_aprobacion','aprobado','en_entrenamiento'].includes(v.estado));
     if(cur){
       h+=`<h3 style="margin-top:16px">Versión ${ver(cur.numero)} · ${esc(cur.estado.replace('_',' '))}</h3>`;
+      const rech=cur.estado==='borrador'&&(cur.tareas||[]).find(t=>t.estado==='rechazada');
+      if(rech)h+=`<div class="aviso crit"><b>Rechazado por ${esc(rech.nombre)}</b> ${rech.tipo==='revision'?'en la revisión':'en la aprobación'} el ${dmaHora(rech.cerrada_en)}:
+        <div style="margin:6px 0;padding:8px 10px;background:#fff;border-radius:6px;color:var(--text)">${esc(rech.comentario)}</div>
+        Corregí el documento (subí el Word y el PDF nuevos) y volvé a enviarlo: empieza una ronda nueva.</div>`;
       if(cur.resumen_cambios)h+=`<p class="muted" style="margin:0 0 8px"><b>Qué cambia:</b> ${esc(cur.resumen_cambios)}</p>`;
       if(cur.estado==='en_entrenamiento')h+=`<div class="aviso info">Aprobada. Entra en vigencia el ${dma(cur.fecha_vigencia)}; hasta entonces rige la versión anterior.</div>`;
       if((cur.tareas||[]).length){
