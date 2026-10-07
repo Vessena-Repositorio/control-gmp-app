@@ -35,7 +35,9 @@ export const SIGNIFICADOS = {
 const INTENTOS_MAX = 3;
 const VENTANA_MIN = 15;
 // Cada cuanto hay que renovar la clave para poder seguir firmando.
-const DIAS_CLAVE = Number(process.env.FIRMA_CLAVE_DIAS ?? 180);
+// Un año (Claudia, 07/10/2026). Con `||` y no `??`: una variable cargada
+// vacia en Coolify daria 0 dias y nadie podria firmar.
+const DIAS_CLAVE = Number(process.env.FIRMA_CLAVE_DIAS) || 365;
 
 /** Error con status HTTP, para que la ruta lo devuelva tal cual. */
 function fallo(status, mensaje) {
