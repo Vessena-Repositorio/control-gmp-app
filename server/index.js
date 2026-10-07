@@ -32,6 +32,7 @@ import { cargarSesion } from './lib/sesiones.js';
 import { permitirArchivo } from './lib/acceso.js';
 import { REPLICAS } from './lib/dominios.js';
 import { revisarAvisosCapa } from './lib/avisos.js';
+import { revisarVigenciasDocumentos, revisarTareasDocumentos, revisarVencimientosDocumentos, revisarResumenDocumentos } from './lib/avisos-documentos.js';
 import { revisarAvisosEstabilidad } from './lib/avisos-estabilidad.js';
 import { revisarAvisosControlCambios } from './lib/avisos-control-cambios.js';
 import { revisarRecordatoriosPlan, revisarInduccionesPendientes } from './lib/avisos-capacitaciones.js';
@@ -272,6 +273,10 @@ function arrancar() {
                 ['auditorias:mes', revisarAuditoriasDelMes],
                 ['auditorias:informes', revisarInformesPendientes],
                 ['auditorias:autoinspecciones', revisarAutoinspecciones],
+                ['documentos:vigencias', revisarVigenciasDocumentos],
+                ['documentos:tareas', revisarTareasDocumentos],
+                ['documentos:vencimientos', revisarVencimientosDocumentos],
+                ['documentos:resumen', revisarResumenDocumentos],
             ];
             const revisarAvisos = () => {
                 // Cada una falla por separado: que una se caiga no puede dejar

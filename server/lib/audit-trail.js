@@ -41,6 +41,24 @@ export function enTransaccionAuditada(req, motivo, fn) {
     });
 }
 
+/**
+ * Para las tareas programadas, que no tienen persona detras: quedan en el
+ * audit trail como "Sistema (<que>)", sin usuario_id. La decision que las
+ * origina (la aprobacion con su fecha de vigencia) ya tiene su firma.
+ */
+export function enTransaccionSistema(que, motivo, fn) {
+    return enTransaccion(async (c) => {
+        await c.query(
+            `SELECT set_config('app.usuario_id', '', true),
+                    set_config('app.usuario_nombre', $1, true),
+                    set_config('app.motivo', $2, true),
+                    set_config('app.ip', '', true)`,
+            [`Sistema (${que})`, motivo]
+        );
+        return fn(c);
+    });
+}
+
 /** Historia de un registro, de la mas vieja a la mas nueva. */
 export async function historial(tabla, registroId) {
     const { rows } = await consultar(

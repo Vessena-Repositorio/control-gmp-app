@@ -22,7 +22,10 @@ import { PERMISOS_POR_ROL, puede } from '../lib/permisos.js';
 import { enTransaccionAuditada, historial, verificarIntegridad } from '../lib/audit-trail.js';
 import { firmar, firmasDe, SIGNIFICADOS } from '../lib/firma-electronica.js';
 import { analizarListado, escalonarAvisos } from '../lib/importar-listado.js';
-import { guardar, abrir, extension, hayAlmacen, MAX_BYTES } from '../lib/almacen-documentos.js';
+import { guardar, abrir, leer as leerArchivo, extension, hayAlmacen, MAX_BYTES } from '../lib/almacen-documentos.js';
+import { marcarCopiaNoControlada } from '../lib/marca-agua.js';
+import { nuevaVersion, enviarARevision, firmarTarea, anularBorrador } from '../lib/ciclo-documentos.js';
+import { avisarCiclo } from '../lib/avisos-documentos.js';
 
 export const rutasControlDocumentos = Router();
 
@@ -31,24 +34,20 @@ const leer = exigirPermiso(RECURSO, 'ver');
 const cargar = exigirPermiso(RECURSO, 'cargar');
 const administrar = exigirPermiso(RECURSO, 'administrar');
 
-// Que permiso hace falta para firmar con cada significado. `lectura` la firma
-// cualquiera que pueda ver: es la constancia de entrenamiento.
+// Firma suelta sobre una version, fuera del ciclo. Solo `lectura`, la
+// constancia de entrenamiento. Autor, revisor, aprobador y rechazo se firman
+// en el ciclo (/versiones/:id/enviar y /tareas/:id/firmar), que controla quien
+// firma en que paso; la revision periodica, en /renovar.
 const PERMISO_FIRMA = {
-    autor: 'cargar',
-    revisor: 'revisar',
-    aprobador: 'aprobar',
-    aprobador_calidad: 'aprobar',
-    rechazo: 'revisar',
     lectura: 'ver',
-    obsolescencia: 'administrar',
-    // revision_periodica no va por /firmar: se firma en /renovar, que ademas
-    // corre el vencimiento. Firmarla suelta dejaria una renovacion sin efecto.
 };
 
 const EN_CURSO = ['borrador', 'en_revision', 'en_aprobacion', 'aprobado', 'en_entrenamiento'];
 
 const sha256 = (txt) => createHash('sha256').update(txt, 'utf8').digest('hex');
 const texto = (v) => (v == null ? '' : String(v).trim());
+// 6 → '6.0', 1.02 → '1.02': como se escriben las versiones en el listado.
+const verTxt = (n) => (Number.isInteger(Number(n)) ? Number(n).toFixed(1) : String(Number(n)));
 
 function fallo(status, mensaje) {
     const e = new Error(mensaje);
@@ -71,6 +70,20 @@ function estadosVisibles(rol) {
     if (p.includes('administrar')) return null; // todos
     if (p.some((x) => ['cargar', 'revisar', 'aprobar'].includes(x))) return ['vigente', ...EN_CURSO];
     return ['vigente'];
+}
+
+/**
+ * Si esta persona puede ver esta version: por su rol, o porque tiene (o tuvo)
+ * una tarea sobre ella. Un revisor con rol `vista` tiene que poder leer el
+ * borrador que se le pidio revisar.
+ */
+async function puedeVer(req, v) {
+    if (!v) return false;
+    const visibles = estadosVisibles(req.rol);
+    if (!visibles || visibles.includes(v.estado)) return true;
+    const { rows } = await consultar(
+        'SELECT 1 FROM dc_tareas WHERE version_id = $1 AND usuario_id = $2 LIMIT 1', [v.id, req.usuario.id]);
+    return rows.length > 0;
 }
 
 /** GET /api/control-documentos/tipos */
@@ -123,13 +136,26 @@ rutasControlDocumentos.get('/documentos/:id', leer, async (req, res, next) => {
         const { rows: versiones } = await consultar(
             `SELECT v.id, v.numero, v.estado, v.formato, v.resumen_cambios, v.cc_codigo,
                     v.requiere_evaluacion, v.fecha_aprobacion, v.fecha_vigencia, v.fecha_obsoleto,
-                    v.contenido_sha256, v.archivo_nombre, v.creado_en, u.nombre AS creado_por
+                    v.contenido_sha256, v.archivo_nombre, v.creado_en, u.nombre AS creado_por,
+                    v.elaborado_por_nombre, v.revisado_por_nombre, v.aprobado_por_nombre, v.ronda,
+                    v.archivo_sha256 IS NOT NULL AS tiene_word, v.pdf_sha256 IS NOT NULL AS tiene_pdf
              FROM dc_versiones v LEFT JOIN usuarios u ON u.id = v.creado_por_id
-             WHERE v.documento_id = $1 AND ($2::text[] IS NULL OR v.estado = ANY($2))
+             WHERE v.documento_id = $1
+               AND ($2::text[] IS NULL OR v.estado = ANY($2)
+                    OR EXISTS (SELECT 1 FROM dc_tareas t WHERE t.version_id = v.id AND t.usuario_id = $3))
              ORDER BY v.numero DESC`,
-            [doc.id, visibles]
+            [doc.id, visibles, req.usuario.id]
         );
-        for (const v of versiones) v.firmas = await firmasDe('dc_versiones', v.id);
+        for (const v of versiones) {
+            v.firmas = await firmasDe('dc_versiones', v.id);
+            // Las tareas de la ronda en curso: quien falta y para cuando.
+            const { rows: tareas } = await consultar(
+                `SELECT t.id, t.tipo, t.estado, t.vence_el, t.comentario, t.usuario_id, u.nombre
+                 FROM dc_tareas t JOIN usuarios u ON u.id = t.usuario_id
+                 WHERE t.version_id = $1 AND t.ronda = $2 ORDER BY t.tipo DESC, t.id`,
+                [v.id, v.ronda]);
+            v.tareas = tareas;
+        }
 
         res.json({ ok: true, documento: doc, versiones });
     } catch (err) { responder(err, res, next); }
@@ -139,10 +165,9 @@ rutasControlDocumentos.get('/documentos/:id', leer, async (req, res, next) => {
 rutasControlDocumentos.get('/versiones/:id', leer, async (req, res, next) => {
     try {
         const { rows: [v] } = await consultar('SELECT * FROM dc_versiones WHERE id = $1', [req.params.id]);
-        const visibles = estadosVisibles(req.rol);
         // Mismo 404 exista o no: a quien no puede ver borradores no se le
         // confirma que hay uno.
-        if (!v || (visibles && !visibles.includes(v.estado))) throw fallo(404, 'version inexistente');
+        if (!(await puedeVer(req, v))) throw fallo(404, 'version inexistente');
         v.firmas = await firmasDe('dc_versiones', v.id);
         res.json({ ok: true, version: v });
     } catch (err) { responder(err, res, next); }
@@ -200,7 +225,11 @@ rutasControlDocumentos.put('/versiones/:id', cargar, async (req, res, next) => {
                 'SELECT estado, formato FROM dc_versiones WHERE id = $1 FOR UPDATE', [req.params.id]);
             if (!v) throw fallo(404, 'version inexistente');
             if (v.estado !== 'borrador') throw fallo(409, 'solo se edita una versión en borrador');
-            if (v.formato !== 'editor') throw fallo(409, 'esta versión es un archivo: se reemplaza subiendo otro');
+            // En una version de archivo solo se editan el resumen y el CC; el
+            // contenido es el Word/PDF, que se reemplaza subiendo otro.
+            if (v.formato !== 'editor' && b.contenidoHtml != null) {
+                throw fallo(409, 'esta versión es un archivo: se reemplaza subiendo otro');
+            }
 
             const html = b.contenidoHtml == null ? null : String(b.contenidoHtml);
             const { rows: [n] } = await c.query(
@@ -541,8 +570,8 @@ rutasControlDocumentos.get('/versiones/:id/descargar', leer, async (req, res, ne
         const { rows: [v] } = await consultar(
             `SELECT v.*, d.codigo FROM dc_versiones v JOIN dc_documentos d ON d.id = v.documento_id WHERE v.id = $1`,
             [req.params.id]);
-        const visibles = estadosVisibles(req.rol);
-        if (!v || (visibles && !visibles.includes(v.estado))) throw fallo(404, 'version inexistente');
+        // Quien tiene una tarea sobre la version la puede bajar aunque su rol no la vea.
+        if (!(await puedeVer(req, v))) throw fallo(404, 'version inexistente');
 
         // El editable es para quien trabaja el documento; el resto baja el PDF.
         const trabaja = puede(req.rol, 'cargar');
@@ -553,16 +582,129 @@ rutasControlDocumentos.get('/versiones/:id/descargar', leer, async (req, res, ne
 
         const esPdf = ruta === v.pdf_ruta;
         const nombre = esPdf
-            ? `${v.codigo}_V${Number(v.numero).toFixed(1)}.pdf`
+            ? `${v.codigo}_V${verTxt(v.numero)}.pdf`
             : (v.archivo_nombre || `${v.codigo}${extension(ruta)}`);
-        const { stream, bytes } = await abrir(ruta);
         await auditar(req, {
             usuarioId: req.usuario.id, usuarioTxt: req.usuario.usuario, accion: 'descarga_documento',
             recurso: RECURSO, detalle: `${v.codigo} v${v.numero} (${nombre})`,
         });
-        res.setHeader('Content-Type', esPdf ? 'application/pdf' : (v.archivo_mime || 'application/octet-stream'));
-        res.setHeader('Content-Length', bytes);
+
+        if (esPdf) {
+            // Todo PDF sale marcado como copia no controlada. El editable
+            // (Word) es la copia de trabajo de quien elabora y sale como esta.
+            const cuando = new Date().toLocaleString('es-UY', {
+                timeZone: process.env.ZONA_HORARIA || 'America/Montevideo',
+                day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+            });
+            let marcado;
+            try {
+                marcado = await marcarCopiaNoControlada(await leerArchivo(ruta), {
+                    codigo: v.codigo, version: verTxt(v.numero),
+                    quien: req.usuario.nombre || req.usuario.usuario, cuando,
+                });
+            } catch (err) {
+                console.error('[documentos] no se pudo marcar', v.codigo, err.message);
+                throw fallo(500, 'no se pudo marcar el PDF como copia no controlada; avisá a Calidad');
+            }
+            res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(nombre)}`);
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Length', marcado.length);
+            return res.end(marcado);
+        }
+
+        const { stream, bytes } = await abrir(ruta);
         res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(nombre)}`);
+        res.setHeader('Content-Type', v.archivo_mime || 'application/octet-stream');
+        res.setHeader('Content-Length', bytes);
         stream.pipe(res);
+    } catch (err) { responder(err, res, next); }
+});
+
+// ---------------------------------------------------------------------------
+// Ciclo de revision y aprobacion (migracion 056, lib/ciclo-documentos.js)
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/control-documentos/usuarios
+ * Personas que se pueden elegir como revisores o aprobadores.
+ */
+rutasControlDocumentos.get('/usuarios', cargar, async (_req, res, next) => {
+    try {
+        const { rows } = await consultar(
+            `SELECT id, nombre, usuario FROM usuarios
+             WHERE activo AND origen = 'vessena' AND nombre IS NOT NULL
+             ORDER BY nombre`);
+        res.json({ ok: true, usuarios: rows });
+    } catch (err) { next(err); }
+});
+
+/**
+ * GET /api/control-documentos/mis-tareas
+ * Lo que la persona tiene para revisar o aprobar, y lo que espera su turno.
+ */
+rutasControlDocumentos.get('/mis-tareas', leer, async (req, res, next) => {
+    try {
+        const { rows } = await consultar(
+            `SELECT t.id, t.tipo, t.estado, t.vence_el, t.version_id, v.numero, v.resumen_cambios,
+                    v.elaborado_por_nombre, d.id AS documento_id, d.codigo, d.titulo
+             FROM dc_tareas t
+             JOIN dc_versiones v ON v.id = t.version_id
+             JOIN dc_documentos d ON d.id = v.documento_id
+             WHERE t.usuario_id = $1 AND t.estado IN ('pendiente', 'en_espera')
+             ORDER BY t.estado DESC, t.vence_el NULLS LAST, d.codigo`,
+            [req.usuario.id]);
+        res.json({ ok: true, tareas: rows });
+    } catch (err) { next(err); }
+});
+
+/** POST /api/control-documentos/documentos/:id/nueva-version — borrador para revisar el documento. */
+rutasControlDocumentos.post('/documentos/:id/nueva-version', cargar, async (req, res, next) => {
+    try {
+        const v = await enTransaccionAuditada(req, 'nueva versión en borrador',
+            (c) => nuevaVersion(c, req, req.params.id));
+        res.status(201).json({ ok: true, versionId: v.id, numero: v.numero });
+    } catch (err) { responder(err, res, next); }
+});
+
+/**
+ * POST /api/control-documentos/versiones/:id/enviar
+ * { revisores: [id], aprobadores: [id], plazoRevision, plazoAprobacion,
+ *   resumenCambios, ccCodigo, usuario, clave }
+ * El autor firma y la version pasa a revision (o directo a aprobacion si no
+ * hay revisores).
+ */
+rutasControlDocumentos.post('/versiones/:id/enviar', cargar, async (req, res, next) => {
+    try {
+        const r = await enTransaccionAuditada(req, 'envío a revisión',
+            (c) => enviarARevision(c, req, req.params.id, req.body || {}));
+        await avisarCiclo(r);
+        res.json({ ok: true, estado: r.estado, ronda: r.ronda, firma: r.firma });
+    } catch (err) { responder(err, res, next); }
+});
+
+/**
+ * POST /api/control-documentos/tareas/:id/firmar
+ * { decision: 'aprobar'|'rechazar', usuario, clave, comentario, fechaVigencia }
+ * La firma quien tiene la tarea; el rol no importa.
+ */
+rutasControlDocumentos.post('/tareas/:id/firmar', leer, async (req, res, next) => {
+    const b = req.body || {};
+    try {
+        const r = await enTransaccionAuditada(req,
+            b.decision === 'rechazar' ? 'rechazo en el ciclo de revisión' : 'firma en el ciclo de revisión',
+            (c) => firmarTarea(c, req, req.params.id, b));
+        await avisarCiclo(r);
+        res.json({ ok: true, resultado: r.resultado, firma: r.firma });
+    } catch (err) { responder(err, res, next); }
+});
+
+/** POST /api/control-documentos/versiones/:id/anular { motivo } — borrador que no sigue. */
+rutasControlDocumentos.post('/versiones/:id/anular', cargar, async (req, res, next) => {
+    try {
+        const motivo = texto((req.body || {}).motivo);
+        if (!motivo) throw fallo(400, 'indicá por qué se anula');
+        const r = await enTransaccionAuditada(req, `anulación de borrador: ${motivo}`,
+            (c) => anularBorrador(c, req.params.id));
+        res.json({ ok: true, ...r });
     } catch (err) { responder(err, res, next); }
 });

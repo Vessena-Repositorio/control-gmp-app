@@ -68,7 +68,8 @@ ul.lst{margin:4px 0 0;padding-left:18px;font-size:13px}
   <div class="der"><span id="quien"></span><a href="/">Portal</a><button onclick="salir()">Salir</button></div></div>
 <div class="tabs">
   <div class="tab on" onclick="verTab(0)">📚 Listado maestro</div>
-  <div class="tab" id="tabImp" style="display:none" onclick="verTab(1)">📥 Importar</div>
+  <div class="tab" onclick="verTab(1)">✍️ Mis tareas <span class="chip warn" id="nTareas" style="display:none"></span></div>
+  <div class="tab" id="tabImp" style="display:none" onclick="verTab(2)">📥 Importar</div>
 </div>
 <div class="wrap">
   <div class="page on" id="p0">
@@ -84,7 +85,9 @@ ul.lst{margin:4px 0 0;padding-left:18px;font-size:13px}
     <div id="detalle"></div>
   </div>
 
-  <div class="page" id="p1">
+  <div class="page" id="p1"><div class="card tabla" id="tareas"><div class="muted">Cargando…</div></div></div>
+
+  <div class="page" id="p2">
     <div class="card">
       <h3>1 · Listado maestro (LIS-SOP-DOC-001-E)</h3>
       <p class="muted">Elegí la planilla. Primero se simula: se ve qué entra, qué no y por qué, sin guardar nada.
@@ -150,6 +153,29 @@ async function cargar(){
     document.getElementById('fTipo').innerHTML='<option value="">Todos los tipos</option>'+tipos.map(a=>`<option>${esc(a)}</option>`).join('');
     pintarListado();
   }catch(e){document.getElementById('listado').innerHTML=`<div class="aviso crit">${esc(e.message)}</div>`}
+  await cargarTareas();
+}
+
+// ---------------------------------------------------------------- mis tareas
+async function cargarTareas(){
+  const box=document.getElementById('tareas');
+  try{
+    const {tareas}=await api('/mis-tareas');S.tareas=tareas;
+    const pend=tareas.filter(t=>t.estado==='pendiente');
+    const n=document.getElementById('nTareas');n.textContent=pend.length;n.style.display=pend.length?'':'none';
+    box.innerHTML=tareas.length?`<table><thead><tr><th>Documento</th><th>Tarea</th><th>Qué cambia</th><th>Elaboró</th><th>Vence</th></tr></thead><tbody>`
+      +tareas.map(t=>{const atr=t.vence_el&&String(t.vence_el).slice(0,10)<hoyISO();
+        return `<tr class="click" onclick="verTab(0);abrir(${t.documento_id})"><td class="cod">${esc(t.codigo)} v${ver(t.numero)}<br><span class="muted" style="font-family:var(--f)">${esc(t.titulo)}</span></td>
+        <td>${t.tipo==='revision'?'Revisar':'Aprobar'}${t.estado==='en_espera'?' <span class="chip mut">espera las revisiones</span>':''}</td>
+        <td class="muted">${esc(t.resumen_cambios||'')}</td><td>${esc(t.elaborado_por_nombre||'—')}</td>
+        <td>${t.vence_el?`<span class="chip ${atr?'crit':'info'}">${dma(t.vence_el)}</span>`:'—'}</td></tr>`}).join('')+'</tbody></table>'
+      :'<div class="muted">No tenés documentos para revisar ni aprobar.</div>';
+  }catch(e){box.innerHTML=`<div class="aviso crit">${esc(e.message)}</div>`}
+}
+
+async function usuarios(){
+  if(!S.usuarios){try{S.usuarios=(await api('/usuarios')).usuarios}catch(e){S.usuarios=[]}}
+  return S.usuarios;
 }
 
 function pintarListado(){
@@ -198,10 +224,32 @@ async function abrir(id){
       if(puede('cargar'))bajar.push(`<button class="b sm" onclick="descargar(${v.id},'archivo')">Word</button>`);
       h+=`<tr><td>${ver(v.numero)}</td><td><span class="chip ${ESTV[v.estado]||'warn'}">${esc(v.estado.replace('_',' '))}</span></td><td>${dma(v.fecha_vigencia)}</td>
         <td class="muted">${esc([v.elaborado_por_nombre,v.revisado_por_nombre,v.aprobado_por_nombre].map(x=>x||'—').join(' / '))}</td>
-        <td>${(v.firmas||[]).map(f=>`<div>${esc(f.leyenda)} <b>${esc(f.nombre)}</b> <span class="muted">${dmaHora(f.firmadoEn)}</span></div>`).join('')||'<span class="muted">—</span>'}</td>
+        <td>${(v.firmas||[]).map(f=>`<div>${esc(f.leyenda)} <b>${esc(f.nombre)}</b> <span class="muted">${dmaHora(f.firmadoEn)}</span>${f.comentario&&f.leyenda.startsWith('Rechazado')?`<br><span class="muted">“${esc(f.comentario)}”</span>`:''}</div>`).join('')||'<span class="muted">—</span>'}</td>
         <td style="white-space:nowrap">${bajar.join(' ')}</td></tr>`;
     }
     h+='</tbody></table></div>';
+
+    // Version en curso: circuito, tareas y lo que puede hacer quien mira.
+    const cur=versiones.find(v=>['borrador','en_revision','en_aprobacion','aprobado','en_entrenamiento'].includes(v.estado));
+    if(cur){
+      h+=`<h3 style="margin-top:16px">Versión ${ver(cur.numero)} · ${esc(cur.estado.replace('_',' '))}</h3>`;
+      if(cur.resumen_cambios)h+=`<p class="muted" style="margin:0 0 8px"><b>Qué cambia:</b> ${esc(cur.resumen_cambios)}</p>`;
+      if(cur.estado==='en_entrenamiento')h+=`<div class="aviso info">Aprobada. Entra en vigencia el ${dma(cur.fecha_vigencia)}; hasta entonces rige la versión anterior.</div>`;
+      if((cur.tareas||[]).length){
+        const EST={pendiente:['warn','pendiente'],en_espera:['mut','espera las revisiones'],firmada:['ok','firmó'],rechazada:['crit','rechazó'],cancelada:['mut','cancelada']};
+        h+=`<div class="tabla"><table><thead><tr><th>Paso</th><th>Quién</th><th>Estado</th><th>Vence</th></tr></thead><tbody>`
+          +cur.tareas.map(t=>`<tr><td>${t.tipo==='revision'?'Revisión':'Aprobación'}</td><td>${esc(t.nombre)}</td>
+            <td><span class="chip ${EST[t.estado][0]}">${EST[t.estado][1]}</span>${t.comentario?`<br><span class="muted">“${esc(t.comentario)}”</span>`:''}</td><td>${dma(t.vence_el)}</td></tr>`).join('')
+          +'</tbody></table></div>';
+      }
+      const mia=(S.tareas||[]).find(t=>t.version_id===cur.id&&t.estado==='pendiente');
+      if(mia)h+=panelTarea(mia);
+      if(cur.estado==='borrador'&&puede('cargar'))h+=await panelBorrador(cur);
+    }else if(vig&&puede('cargar')){
+      h+=`<div class="fila" style="margin-top:14px"><button class="b pri" onclick="nuevaVersion(${d.id})">Iniciar nueva versión</button>
+        <span class="muted">Crea la versión ${ver(Math.floor(Number(vig.numero))+1)} en borrador para modificar el documento.</span></div>`;
+    }
+
     if(vig){
       h+=`<h3 style="margin-top:16px">Revisión periódica sin cambios</h3>
       <p class="muted">Si revisaste el documento y no necesita cambios, firmá para renovarlo por 3 años desde hoy.
@@ -218,6 +266,89 @@ async function abrir(id){
 }
 
 function descargar(id,que){location.href=`${API}/versiones/${id}/descargar?que=${que}`}
+
+// ---------------------------------------------------------------- ciclo
+const firmaCampos=(p)=>`<div class="grid3"><div><label class="lb">Usuario</label><input id="${p}Usr" autocomplete="username" value="${esc(S.usuario)}"></div>
+  <div><label class="lb">Clave</label><input id="${p}Clave" type="password" autocomplete="current-password"></div><div></div></div>`;
+
+function panelTarea(t){
+  const apr=t.tipo==='aprobacion';
+  return `<div class="card" style="border-color:var(--pri);margin-top:12px"><h3>Tu tarea: ${apr?'aprobar':'revisar'}</h3>
+    <p class="muted">Bajá el PDF, leelo y firmá. Si hay que cambiar algo, rechazá con un comentario: vuelve a borrador y se le avisa a quien lo elaboró.</p>
+    <label class="lb">Comentario ${apr?'':'(obligatorio para rechazar)'}</label><textarea id="tCom" rows="2"></textarea>
+    ${apr?`<label class="lb">Fecha de entrada en vigencia</label><input id="tVig" type="date" value="${hoyISO()}" min="${hoyISO()}" style="max-width:220px">
+      <div class="muted">Si es posterior a hoy, hasta esa fecha sigue la versión anterior (tiempo para entrenar al personal).</div>`:''}
+    ${firmaCampos('t')}
+    <div class="fila" style="margin-top:10px"><button class="b ok" onclick="firmarTarea(${t.id},'aprobar')">Firmar: ${apr?'apruebo':'revisado'}</button>
+      <button class="b" style="color:var(--crit)" onclick="firmarTarea(${t.id},'rechazar')">Rechazar</button></div></div>`;
+}
+
+async function panelBorrador(v){
+  const us=await usuarios();
+  const ops=us.map(u=>`<option value="${u.id}">${esc(u.nombre)}</option>`).join('');
+  const arch=v.formato==='archivo';
+  return `<div class="card" style="margin-top:12px"><h3>Borrador</h3>
+    ${arch?`<div class="fila"><span>Word (editable): ${v.tiene_word?'<span class="chip ok">cargado</span>':'<span class="chip warn">falta</span>'}</span>
+      <input type="file" accept=".doc,.docx,.xls,.xlsx" style="max-width:300px" onchange="subirArchivo(${v.id},this.files[0])"></div>
+      <div class="fila" style="margin-top:6px"><span>PDF (oficial): ${v.tiene_pdf?'<span class="chip ok">cargado</span>':'<span class="chip warn">falta</span>'}</span>
+      <input type="file" accept=".pdf" style="max-width:300px" onchange="subirArchivo(${v.id},this.files[0])"></div>`:''}
+    <label class="lb">Qué cambia en esta versión</label><textarea id="bRes" rows="2">${esc(v.resumen_cambios||'')}</textarea>
+    <label class="lb">Control de cambios (opcional)</label><input id="bCC" value="${esc(v.cc_codigo||'')}" placeholder="CC-0xx" style="max-width:220px">
+    <div class="grid3"><div><label class="lb">Revisores (Ctrl+clic para varios; puede quedar vacío)</label><select id="bRev" multiple size="6">${ops}</select></div>
+      <div><label class="lb">Aprobadores</label><select id="bApr" multiple size="6">${ops}</select></div>
+      <div><label class="lb">Plazo para revisar (días)</label><input id="bPR" type="number" min="1" max="90" value="7">
+        <label class="lb">Plazo para aprobar (días)</label><input id="bPA" type="number" min="1" max="90" value="7"></div></div>
+    <p class="muted">Al enviar firmás como autor/a. Quien elabora no puede revisar ni aprobar su propio documento.</p>
+    ${firmaCampos('b')}
+    <div class="fila" style="margin-top:10px"><button class="b pri" onclick="enviarVersion(${v.id})">Firmar y enviar a revisión</button>
+      <button class="b sm" onclick="anularVersion(${v.id})">Anular borrador</button></div></div>`;
+}
+
+const elegidos=id=>[...document.getElementById(id).selectedOptions].map(o=>Number(o.value));
+
+async function nuevaVersion(docId){
+  if(!confirm('¿Crear una versión nueva en borrador?'))return;
+  try{const r=await api(`/documentos/${docId}/nueva-version`,{method:'POST',body:'{}'});toast('Versión '+ver(r.numero)+' creada en borrador');await cargar();abrir(docId)}
+  catch(e){toast(e.message,true)}
+}
+
+async function subirArchivo(vid,f){
+  if(!f)return;
+  try{
+    const r=await fetch(`${API}/versiones/${vid}/archivo?nombre=${encodeURIComponent(f.name)}`,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/octet-stream'},body:f});
+    const d=await r.json().catch(()=>({}));if(!r.ok||d.ok===false)throw new Error(d.error||('error '+r.status));
+    toast('Archivo cargado');abrir(S.sel.id);
+  }catch(e){toast(e.message,true)}
+}
+
+async function enviarVersion(vid){
+  const body={resumenCambios:document.getElementById('bRes').value,ccCodigo:document.getElementById('bCC').value,
+    revisores:elegidos('bRev'),aprobadores:elegidos('bApr'),plazoRevision:document.getElementById('bPR').value,
+    plazoAprobacion:document.getElementById('bPA').value,usuario:document.getElementById('bUsr').value.trim(),clave:document.getElementById('bClave').value};
+  if(!body.aprobadores.length)return toast('Elegí al menos un aprobador',true);
+  if(!body.usuario||!body.clave)return toast('Para firmar escribí usuario y clave',true);
+  try{const r=await api(`/versiones/${vid}/enviar`,{method:'POST',body:JSON.stringify(body)});
+    toast(r.estado==='en_revision'?'Enviado a revisión: se avisó por correo a los revisores':'Enviado a aprobación');await cargar();abrir(S.sel.id)}
+  catch(e){document.getElementById('bClave').value='';toast(e.message,true)}
+}
+
+async function firmarTarea(tid,decision){
+  const body={decision,comentario:document.getElementById('tCom').value,usuario:document.getElementById('tUsr').value.trim(),
+    clave:document.getElementById('tClave').value,fechaVigencia:document.getElementById('tVig')?.value};
+  if(decision==='rechazar'&&!body.comentario.trim())return toast('Para rechazar explicá qué hay que cambiar',true);
+  if(!body.usuario||!body.clave)return toast('Para firmar escribí usuario y clave',true);
+  try{const r=await api(`/tareas/${tid}/firmar`,{method:'POST',body:JSON.stringify(body)});
+    const M={rechazada:'Rechazado: volvió a borrador y se avisó a quien lo elaboró',firmada:'Firmado. Faltan otras firmas de este paso',
+      revisada:'Revisión completa: pasó a aprobación',vigente:'Aprobado y vigente desde hoy',aprobada:'Aprobado: entra en vigencia en la fecha elegida'};
+    toast(M[r.resultado]||'Firmado');await cargar();abrir(S.sel.id)}
+  catch(e){document.getElementById('tClave').value='';toast(e.message,true)}
+}
+
+async function anularVersion(vid){
+  const motivo=prompt('¿Por qué se anula este borrador?');if(!motivo)return;
+  try{await api(`/versiones/${vid}/anular`,{method:'POST',body:JSON.stringify({motivo})});toast('Borrador anulado');await cargar();abrir(S.sel.id)}
+  catch(e){toast(e.message,true)}
+}
 
 async function renovar(id){
   const usuario=document.getElementById('fUsr').value.trim(),clave=document.getElementById('fClave').value;

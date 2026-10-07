@@ -11,7 +11,7 @@
  * el contenido cambia, el hash cambia y es otro archivo.
  */
 import { createHash } from 'node:crypto';
-import { mkdir, writeFile, access, stat } from 'node:fs/promises';
+import { mkdir, writeFile, access, stat, readFile } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { join, extname, resolve, sep } from 'node:path';
 
@@ -56,6 +56,14 @@ export async function guardar(buffer, nombre) {
         });
     }
     return { ruta, sha256, bytes: buffer.length, mime };
+}
+
+/** Contenido completo de un archivo guardado (para marcar un PDF). */
+export async function leer(ruta) {
+    if (!DIR) throw Object.assign(new Error('DOC_DIR no configurado'), { status: 503 });
+    const completo = resolve(DIR, ruta);
+    if (!completo.startsWith(DIR + sep)) throw Object.assign(new Error('ruta inválida'), { status: 400 });
+    return readFile(completo);
 }
 
 /** Stream de lectura de un archivo guardado, con su tamaño. */

@@ -119,7 +119,9 @@ export async function firmar(c, req, {
             await avisarBloqueo(req, recurso);
             throw fallo(423, 'clave incorrecta por tercera vez: se cerró la sesión por seguridad');
         }
-        throw fallo(401, 'usuario o clave incorrectos');
+        // 403 y no 401: la pantalla trata un 401 como sesion vencida y
+        // mandaria al login a quien solo se equivoco de clave al firmar.
+        throw fallo(403, 'usuario o clave incorrectos');
     }
 
     if (cred.esquema !== 'scrypt' || !cred.politica_desde) {
