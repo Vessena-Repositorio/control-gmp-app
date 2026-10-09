@@ -638,11 +638,14 @@ rutasControlEnProceso.get('/ordenes', leer, async (req, res, next) => {
    el analista son la identidad del control y su firma, y la orden lo movería de
    registro. */
 const CAMPOS_CORREGIBLES = {
+    // El producto va primero: es lo que mas se corrige (Claudia, orden
+    // 1069122: el producto no era el del codigo de producto ni el de la foto).
+    presentacion: { etiqueta: 'Producto (presentación)', columna: 'presentacion', max: 120, cabecera: true },
+    maquina: { etiqueta: 'Máquina (línea)', columna: 'maquina', max: 60, cabecera: true },
+    codPT: { etiqueta: 'Código PT (producto)', columna: 'cod_pt', max: 60, cabecera: true },
     lote: { etiqueta: 'Lote', columna: 'lote', max: 60, cabecera: true },
     vence: { etiqueta: 'Vencimiento', columna: 'vence', fecha: true, max: 30, cabecera: true },
-    presentacion: { etiqueta: 'Presentación', columna: 'presentacion', max: 120, cabecera: true },
     granel: { etiqueta: 'Código de granel', columna: 'granel', max: 60, cabecera: true },
-    codPT: { etiqueta: 'Código PT', columna: 'cod_pt', max: 60, cabecera: true },
     spec: { etiqueta: 'Especificación', columna: 'spec', max: 300, vacio: true, cabecera: true },
     ph: { etiqueta: 'pH', columna: 'ph', numero: [0, 14], vacio: true },
     peso: { etiqueta: 'Peso', peso: true, numero: [0, 100000], vacio: true },

@@ -1168,6 +1168,14 @@ function htmlRegistro(d,orden,imprimir){
     const l=grupos.map((g,i)=>[g,i]).filter(([g])=>g.campo===campo);
     return l.length?corregido(l[0][0].anterior,u[campo],l.map(([,i])=>i+1)):esc(vac(u[campo]));
   };
+  // El EAN sigue al código PT: si se corrigió el código, se ve el EAN de antes
+  const valEAN=()=>{
+    const ean=cod=>((eanDe(cod)||{}).ean14||'');
+    const l=grupos.map((g,i)=>[g,i]).filter(([g])=>g.campo==='codPT');
+    const antes=l.length?ean(l[0][0].anterior):'',ahora=ean(u.codPT);
+    // Si ninguno de los dos códigos tenía EAN no hay nada que tachar
+    return (l.length&&(antes||ahora))?corregido(antes,ahora,l.map(([,i])=>i+1)):esc(vac(ahora));
+  };
   const fila=(x,i)=>{
     const fotos=(x.fotos||x.photoLinks||[]).filter(Boolean);
     const img=fotos.map((f,j)=>String(f).startsWith('/api/')
@@ -1226,10 +1234,11 @@ function htmlRegistro(d,orden,imprimir){
     '<div><h1>Vessena S.A. — Control en proceso de envasado</h1><div class="sub">'+esc(d.registro)+'</div></div>'+
     '<div class="sello">'+(d.aprobada?'APROBADA':'PENDIENTE')+'</div></div>'+
     '<div class="meta"><div><b>Orden de envasado:</b> '+esc(orden)+'</div><div><b>Lote:</b> '+valU('lote')+'</div>'+
-    '<div><b>Producto:</b> '+esc(u.maquina||'—')+' · '+valU('presentacion')+'</div>'+
+    '<div><b>Producto:</b> '+valU('maquina')+' · '+valU('presentacion')+'</div>'+
     '<div><b>Cód. PT:</b> '+valU('codPT')+'</div><div><b>Cód. granel:</b> '+valU('granel')+'</div>'+
-    /* El EAN 14 va en el registro: quien aprueba lo revisa contra la caja. */
-    '<div><b>EAN 14 (caja):</b> '+esc((eanDe(u.codPT)||{}).ean14||'—')+'</div>'+
+    /* El EAN 14 va en el registro: quien aprueba lo revisa contra la caja.
+       Sale del código PT, así que si el código se corrigió, el EAN también. */
+    '<div><b>EAN 14 (caja):</b> '+valEAN()+'</div>'+
     '<div><b>Vencimiento:</b> '+valU('vence')+'</div>'+
     '<div><b>Controles:</b> '+c.length+'</div><div><b>Especificación:</b> '+valU('spec')+'</div>'+
     (d.aprobada?'<div><b>Aprobada:</b> '+esc(new Date(d.aprobadaEn).toLocaleString('es-UY'))+'</div>':'<div></div>')+
