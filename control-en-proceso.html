@@ -749,7 +749,7 @@ function mostrarEan(){
       '📦 <b>'+esc(p.nombre||'')+'</b>'+
       (p.ean14?'<div><b>EAN 14 de la caja:</b> <span style="font-family:var(--m);font-size:16px;letter-spacing:1px">'+
         esc(p.ean14)+'</span> · '+esc(p.unidad||'')+'</div><div style="font-size:12px;opacity:.8">Verificá que sea el de la caja.</div>'
-        :'<div style="font-size:12px;opacity:.8">Este producto todavía no tiene EAN 14 cargado en el ERP.</div>')+'</div>');
+        :'<div style="font-size:12px;opacity:.8">Este producto no lleva EAN 14 de caja.</div>')+'</div>');
   if(!avisos.length){el.style.display='none';el.innerHTML='';return}
   el.className='';el.style.display='';el.style.background='';el.style.color='';
   el.style.margin='8px 0';el.style.fontSize='14px';

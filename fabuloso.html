@@ -603,7 +603,7 @@ window.APP_CONFIG = {
     }
     caja.innerHTML = `<b>${esc(p.nombre || '')}</b><br>` + (p.ean14
       ? `📦 <b>EAN 14 de la caja:</b> <span style="font-family:ui-monospace,Consolas,monospace;font-size:15px;letter-spacing:1px">${esc(p.ean14)}</span> · ${esc(p.unidad || '')} — verificá que sea el de la caja`
-      : 'Este producto todavía no tiene EAN 14 cargado en el ERP.');
+      : 'Este producto no lleva EAN 14 de caja.');
   };
 
   // ---------- ÓRDENES (lo que hay para aprobar) ----------
