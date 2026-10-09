@@ -640,9 +640,9 @@ rutasControlEnProceso.get('/ordenes', leer, async (req, res, next) => {
 const CAMPOS_CORREGIBLES = {
     // El producto va primero: es lo que mas se corrige (Claudia, orden
     // 1069122: el producto no era el del codigo de producto ni el de la foto).
-    presentacion: { etiqueta: 'Producto (presentación)', columna: 'presentacion', max: 120, cabecera: true },
+    presentacion: { etiqueta: 'Presentación (tamaño)', columna: 'presentacion', max: 120, cabecera: true },
     maquina: { etiqueta: 'Máquina (línea)', columna: 'maquina', max: 60, cabecera: true },
-    codPT: { etiqueta: 'Código PT (producto)', columna: 'cod_pt', max: 60, cabecera: true },
+    codPT: { etiqueta: 'Código PT (define el producto)', columna: 'cod_pt', max: 60, cabecera: true },
     lote: { etiqueta: 'Lote', columna: 'lote', max: 60, cabecera: true },
     vence: { etiqueta: 'Vencimiento', columna: 'vence', fecha: true, max: 30, cabecera: true },
     granel: { etiqueta: 'Código de granel', columna: 'granel', max: 60, cabecera: true },

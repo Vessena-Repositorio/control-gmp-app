@@ -1168,13 +1168,23 @@ function htmlRegistro(d,orden,imprimir){
     const l=grupos.map((g,i)=>[g,i]).filter(([g])=>g.campo===campo);
     return l.length?corregido(l[0][0].anterior,u[campo],l.map(([,i])=>i+1)):esc(vac(u[campo]));
   };
-  // El EAN sigue al código PT: si se corrigió el código, se ve el EAN de antes
-  const valEAN=()=>{
-    const ean=cod=>((eanDe(cod)||{}).ean14||'');
+  /* El producto y el EAN salen del código PT, o sea del ERP: la línea y el
+     tamaño se escriben a mano y pueden no ser los del producto (Claudia,
+     09/10/2026, orden 1069122: decía "Alcoholes 600 ml" y no era ese producto).
+     Si el código se corrigió, se ve tachado lo que mostraba el código viejo. */
+  const delERP=(dato,cod)=>((eanDe(cod)||{})[dato]||'');
+  const valERP=dato=>{
     const l=grupos.map((g,i)=>[g,i]).filter(([g])=>g.campo==='codPT');
-    const antes=l.length?ean(l[0][0].anterior):'',ahora=ean(u.codPT);
-    // Si ninguno de los dos códigos tenía EAN no hay nada que tachar
+    const antes=l.length?delERP(dato,l[0][0].anterior):'',ahora=delERP(dato,u.codPT);
+    // Si ninguno de los dos códigos traía el dato no hay nada que tachar
     return (l.length&&(antes||ahora))?corregido(antes,ahora,l.map(([,i])=>i+1)):esc(vac(ahora));
+  };
+  const valProducto=()=>{
+    const hayERP=Object.keys(EANS||{}).length>0;
+    if(delERP('nombre',u.codPT))return valERP('nombre');
+    // Sin nombre en el ERP queda lo que se cargó a mano, y se dice por qué
+    return esc(vac([u.maquina,u.presentacion].filter(Boolean).join(' · ')))+
+      (hayERP&&u.codPT?' <i class="rojo">(el código PT no figura en el ERP)</i>':'');
   };
   const fila=(x,i)=>{
     const fotos=(x.fotos||x.photoLinks||[]).filter(Boolean);
@@ -1234,11 +1244,13 @@ function htmlRegistro(d,orden,imprimir){
     '<div><h1>Vessena S.A. — Control en proceso de envasado</h1><div class="sub">'+esc(d.registro)+'</div></div>'+
     '<div class="sello">'+(d.aprobada?'APROBADA':'PENDIENTE')+'</div></div>'+
     '<div class="meta"><div><b>Orden de envasado:</b> '+esc(orden)+'</div><div><b>Lote:</b> '+valU('lote')+'</div>'+
-    '<div><b>Producto:</b> '+valU('maquina')+' · '+valU('presentacion')+'</div>'+
+    '<div><b>Producto:</b> '+valProducto()+'</div>'+
+    '<div><b>Máquina:</b> '+valU('maquina')+'</div>'+
+    '<div><b>Presentación:</b> '+valU('presentacion')+'</div>'+
     '<div><b>Cód. PT:</b> '+valU('codPT')+'</div><div><b>Cód. granel:</b> '+valU('granel')+'</div>'+
     /* El EAN 14 va en el registro: quien aprueba lo revisa contra la caja.
        Sale del código PT, así que si el código se corrigió, el EAN también. */
-    '<div><b>EAN 14 (caja):</b> '+valEAN()+'</div>'+
+    '<div><b>EAN 14 (caja):</b> '+valERP('ean14')+'</div>'+
     '<div><b>Vencimiento:</b> '+valU('vence')+'</div>'+
     '<div><b>Controles:</b> '+c.length+'</div><div><b>Especificación:</b> '+valU('spec')+'</div>'+
     (d.aprobada?'<div><b>Aprobada:</b> '+esc(new Date(d.aprobadaEn).toLocaleString('es-UY'))+'</div>':'<div></div>')+
@@ -1351,7 +1363,15 @@ function corActual(){
   const p=sel.split(':'),campo=p[0],ind=p[1];
   const v=x?(ind?(x.pesos||[])[Number(ind)-1]:x[campo]):'';
   const hay=!(v===''||v==null);
-  document.getElementById('corHoy').innerHTML='Lo que está cargado: <b>'+esc(hay?String(v):'(vacío)')+'</b>';
+  // El nombre del producto y el EAN salen del código PT: al corregirlo se ve
+  // cuál es el producto de ese código en el ERP
+  let delErp='';
+  if(campo==='codPT'&&Object.keys(EANS||{}).length){
+    const p=hay?eanDe(v):null;
+    delErp=p?' — en el ERP es <b>'+esc(p.nombre||'')+'</b>'
+      :(hay?' — <span style="color:var(--red)">ese código no está en el ERP</span>':'');
+  }
+  document.getElementById('corHoy').innerHTML='Lo que está cargado: <b>'+esc(hay?String(v):'(vacío)')+'</b>'+delErp;
   const inp=document.getElementById('corValor');if(inp)inp.value=hay?String(v):'';
   const def=((REV_DATOS||{}).campos||[]).find(f=>f.clave===campo)||{};
   const l=document.getElementById('corTodosL');if(l)l.style.display=def.cabecera?'block':'none';
