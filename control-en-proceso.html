@@ -1137,18 +1137,77 @@ function htmlRegistro(d,orden,imprimir){
   // Cada dato del encabezado sale del último control que lo tenga cargado: los
   // controles viejos de la planilla no traen granel ni especificación.
   const u={};c.forEach(x=>{Object.keys(x||{}).forEach(k=>{if(x[k]!==''&&x[k]!=null)u[k]=x[k]})});
+  /* Correcciones (migración 058): un valor mal cargado se corrige, pero el que
+     se había puesto no se borra — queda tachado y legible, con el número de la
+     corrección que lo explica en la tabla del pie. Es lo que pide BPF. */
+  const cors=d.correcciones||[];
+  // Una misma corrección puede haber tocado varios controles: un lote mal
+  // escrito está mal en todos. Se lista una vez, con los controles que tocó.
+  const grupos=[],deGrupo={};
+  cors.forEach(k=>{
+    const cl=[k.campo,k.indice||0,k.anterior,k.nuevo,k.motivo,k.usuario,k.ts].join('|');
+    if(!deGrupo[cl]){deGrupo[cl]=Object.assign({},k,{controles:[]});grupos.push(deGrupo[cl])}
+    deGrupo[cl].controles.push(k.controlId);
+  });
+  const porClave={};
+  grupos.forEach((g,i)=>g.controles.forEach(id=>{const cl=id+'|'+g.campo+'|'+(g.indice||0);(porClave[cl]=porClave[cl]||[]).push(i)}));
+  const vac=v=>(v===''||v==null?'—':v);
+  const fh=t=>(t?new Date(t).toLocaleString('es-UY',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'');
+  const notas=ns=>'<sup class="corr-num">C'+ns.join(', C')+'</sup>';
+  const corrDe=(id,campo,indice)=>{const l=porClave[id+'|'+campo+'|'+(indice||0)];return l?{primera:grupos[l[0]],nums:l.map(i=>i+1)}:null};
+  const corregido=(antes,ahora,ns)=>'<s class="corr-vieja">'+esc(vac(antes))+'</s> <b>'+esc(vac(ahora))+'</b>'+notas(ns);
+  // Un dato de un control: corregido si tiene corrección, tal cual si no.
+  const val=(x,campo,indice)=>{
+    const v=indice?(x.pesos||[])[indice-1]:x[campo];
+    const k=x._id?corrDe(x._id,campo,indice):null;
+    return k?corregido(k.primera.anterior,v,k.nums):esc(vac(v));
+  };
+  // Un dato del encabezado: no se sabe de qué control salió, así que se marca
+  // con todas las correcciones de ese dato en la orden.
+  const valU=campo=>{
+    const l=grupos.map((g,i)=>[g,i]).filter(([g])=>g.campo===campo);
+    return l.length?corregido(l[0][0].anterior,u[campo],l.map(([,i])=>i+1)):esc(vac(u[campo]));
+  };
   const fila=(x,i)=>{
     const fotos=(x.fotos||x.photoLinks||[]).filter(Boolean);
     const img=fotos.map((f,j)=>String(f).startsWith('/api/')
       ?'<img class="foto" src="'+esc(f)+'"/>'
       :'<a href="'+esc(f)+'" target="_blank">Foto '+(j+1)+' (Drive)</a>').join(' ');
-    const pesos=(x.pesos||[]).map(p=>p===''||p==null?'—':p).join(' · ');
+    const pesos=(x.pesos||[]).map((p,j)=>val(x,'peso',j+1)).join(' · ');
+    // El promedio se recalcula con el peso corregido: se marca con la misma nota.
+    const nsProm=[];for(let j=1;j<=5;j++){const k=x._id?corrDe(x._id,'peso',j):null;if(k)nsProm.push(...k.nums)}
     return '<tr><td>'+(i+1)+'</td><td>'+esc(x.hora||'')+'</td><td>'+esc(x.analista||'')+'</td>'+
-      '<td>'+esc(x.lote||'')+'</td><td>'+esc(pesos)+'</td><td><b>'+esc(x.promedio||'—')+'</b></td>'+
-      '<td>'+esc(x.ph||'—')+'</td><td>'+esc((x.checks||[]).join(', ')||(x.limpDefects||[]).join(', ')||'—')+'</td>'+
-      '<td>'+(x.hasDev?'<b class="rojo">SÍ</b> '+esc(x.devDesc||'')+' ('+esc(x.devQty||'?')+' u)'+(x.isRep?' · reproceso':''):'No')+'</td>'+
+      '<td>'+val(x,'lote')+'</td><td>'+pesos+'</td><td><b>'+esc(vac(x.promedio))+'</b>'+(nsProm.length?notas(nsProm):'')+'</td>'+
+      '<td>'+val(x,'ph')+'</td><td>'+esc((x.checks||[]).join(', ')||(x.limpDefects||[]).join(', ')||'—')+'</td>'+
+      '<td>'+(x.hasDev?'<b class="rojo">SÍ</b> '+val(x,'devDesc')+' ('+val(x,'devQty')+' u)'+(x.isRep?' · reproceso':''):'No')+'</td>'+
       '<td>'+(img||'—')+'</td></tr>';
   };
+  // Las correcciones se citan por el número de fila de la tabla de controles
+  const filaDe={};c.forEach((x,i)=>{if(x._id)filaDe[x._id]=i+1});
+  /* La verificación de rótulo es parte del registro de la orden: si supervisión
+     pidió corregir el rótulo, el pedido y lo que se hizo después quedan acá
+     (Claudia, 09/10/2026). */
+  const ROT_TXT={primer_control:'Primer control: se mandaron las fotos del rótulo a supervisión',ok:'OK: rótulo correcto',correccion:'Pidió corregir el rótulo',corregido:'Subió las fotos del rótulo corregido',solicitud:'Pidió la aprobación del rótulo'};
+  const r=d.rotulo;
+  const secRotulo=r?('<h2>Verificación de rótulo — segundo control de supervisión</h2>'+
+    '<div style="font-size:11px;margin:0 0 6px">Estado: '+(r.estado==='ok'
+      ?'<b>OK de '+esc(r.revisado_por||'')+'</b> · '+esc(fh(r.revisado_en))
+      :r.estado==='correccion'?'<b class="rojo">corrección de rótulo pedida</b>':'<b class="rojo">pendiente del OK</b>')+
+    (r.estado!=='ok'&&r.comentario?' · <b class="rojo">'+esc(r.comentario)+'</b>':'')+'</div>'+
+    '<table><thead><tr><th style="width:110px">Fecha y hora</th><th style="width:150px">Quién</th><th>Qué pasó</th><th>Qué dijo</th></tr></thead><tbody>'+
+    ((r.eventos||[]).length
+      ?(r.eventos||[]).map(e=>'<tr><td>'+esc(fh(e.ts))+'</td><td>'+esc(e.usuario||'')+'</td><td>'+
+        (e.accion==='correccion'?'<b class="rojo">'+esc(ROT_TXT.correccion)+'</b>':esc(ROT_TXT[e.accion]||e.accion))+
+        (e.reproceso?' <b class="rojo">· requiere reproceso</b>':'')+'</td><td>'+esc(e.comentario||'—')+'</td></tr>').join('')
+      :'<tr><td colspan="4">Sin movimientos registrados.</td></tr>')+'</tbody></table>'):'';
+  const secCorr=grupos.length?('<h2>Correcciones al registro</h2>'+
+    '<div style="font-size:11px;margin:0 0 6px">El valor que se había cargado no se borra: queda tachado arriba, con el número de la corrección que lo explica. Cada corrección es de quien la hizo, con fecha y hora.</div>'+
+    '<table><thead><tr><th style="width:28px">Nº</th><th style="width:42px">Control</th><th>Dato</th><th>Valor cargado</th><th>Valor corregido</th><th>Motivo</th><th>Corrigió</th><th style="width:100px">Fecha y hora</th></tr></thead><tbody>'+
+    grupos.map((k,i)=>'<tr><td><b>C'+(i+1)+'</b></td><td>'+esc(k.controles.map(id=>filaDe[id]).filter(Boolean).join(', ')||'')+'</td><td>'+esc(k.etiqueta)+'</td>'+
+      '<td><s class="corr-vieja">'+esc(vac(k.anterior))+'</s></td><td><b>'+esc(vac(k.nuevo))+'</b></td><td>'+esc(k.motivo)+'</td>'+
+      '<td>'+esc(k.usuario)+'</td><td>'+esc(fh(k.ts))+
+      (d.aprobadaEn&&new Date(k.ts)>new Date(d.aprobadaEn)?'<br><i>posterior a la aprobación</i>':'')+'</td></tr>').join('')+
+    '</tbody></table>'):'';
   return '<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>'+esc(d.registro)+' — orden '+esc(orden)+'</title><style>'+
     'body{font-family:system-ui,Arial,sans-serif;color:#111;padding:20px;max-width:1000px;margin:0 auto}'+
     'h1{margin:0 0 4px;font-size:19px}h2{margin:16px 0 6px;font-size:14px;border-bottom:1px solid #ccc;padding-bottom:2px}'+
@@ -1156,6 +1215,8 @@ function htmlRegistro(d,orden,imprimir){
     'table{width:100%;border-collapse:collapse;font-size:11px}th,td{border:1px solid #999;padding:4px 6px;text-align:left;vertical-align:top}th{background:#eee}'+
     '.sello{border:2px solid '+(d.aprobada?'#12b76a':'#f79009')+';color:'+(d.aprobada?'#12b76a':'#f79009')+';padding:6px 12px;font-weight:bold;border-radius:6px;text-transform:uppercase;letter-spacing:1px}'+
     '.foto{max-width:90px;max-height:90px;object-fit:cover;margin:1px}.rojo{color:#b42318}'+
+    /* El valor que se había cargado: tachado pero legible, con su número de corrección */
+    '.corr-vieja{color:#b42318}.corr-num{color:#b42318;font-weight:700;font-size:9px;margin-left:1px}'+
     '.firmas{margin-top:22px;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:18px;page-break-inside:avoid}'+
     '.firma-box{text-align:center}.firma-slot{border-bottom:1px solid #444;height:70px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:2px}'+
     '.firma-slot img{max-height:65px;max-width:210px;object-fit:contain}.firma-vacia{font-size:10px;color:#999;font-style:italic;align-self:center;padding-bottom:6px}'+
@@ -1164,19 +1225,20 @@ function htmlRegistro(d,orden,imprimir){
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px">'+
     '<div><h1>Vessena S.A. — Control en proceso de envasado</h1><div class="sub">'+esc(d.registro)+'</div></div>'+
     '<div class="sello">'+(d.aprobada?'APROBADA':'PENDIENTE')+'</div></div>'+
-    '<div class="meta"><div><b>Orden de envasado:</b> '+esc(orden)+'</div><div><b>Lote:</b> '+esc(u.lote||'—')+'</div>'+
-    '<div><b>Producto:</b> '+esc(u.maquina||'—')+' · '+esc(u.presentacion||'')+'</div>'+
-    '<div><b>Cód. PT:</b> '+esc(u.codPT||'—')+'</div><div><b>Cód. granel:</b> '+esc(u.granel||'—')+'</div>'+
+    '<div class="meta"><div><b>Orden de envasado:</b> '+esc(orden)+'</div><div><b>Lote:</b> '+valU('lote')+'</div>'+
+    '<div><b>Producto:</b> '+esc(u.maquina||'—')+' · '+valU('presentacion')+'</div>'+
+    '<div><b>Cód. PT:</b> '+valU('codPT')+'</div><div><b>Cód. granel:</b> '+valU('granel')+'</div>'+
     /* El EAN 14 va en el registro: quien aprueba lo revisa contra la caja. */
     '<div><b>EAN 14 (caja):</b> '+esc((eanDe(u.codPT)||{}).ean14||'—')+'</div>'+
-    '<div><b>Vencimiento:</b> '+esc(u.vence||'—')+'</div>'+
-    '<div><b>Controles:</b> '+c.length+'</div><div><b>Especificación:</b> '+esc(u.spec||'—')+'</div>'+
+    '<div><b>Vencimiento:</b> '+valU('vence')+'</div>'+
+    '<div><b>Controles:</b> '+c.length+'</div><div><b>Especificación:</b> '+valU('spec')+'</div>'+
     (d.aprobada?'<div><b>Aprobada:</b> '+esc(new Date(d.aprobadaEn).toLocaleString('es-UY'))+'</div>':'<div></div>')+
     (d.rotulo?'<div><b>Verificación de rótulo:</b> '+(d.rotulo.estado==='ok'?'OK por '+esc(d.rotulo.revisado_por||'')+' · '+esc(new Date(d.rotulo.revisado_en).toLocaleString('es-UY')):d.rotulo.estado==='correccion'?'<b class="rojo">corrección pedida</b>':'<b class="rojo">pendiente</b>')+'</div>':'')+
     '</div>'+
     (d.notas?'<div style="font-size:12px"><b>Notas de la aprobación:</b> '+esc(d.notas)+'</div>':'')+
     '<h2>Controles</h2><table><thead><tr><th>#</th><th>Hora</th><th>Analista</th><th>Lote</th><th>Pesos (g)</th><th>Prom.</th><th>pH</th><th>Controles / defectos</th><th>Desvío</th><th>Fotos</th></tr></thead><tbody>'+
     c.map(fila).join('')+'</tbody></table>'+
+    secRotulo+secCorr+
     '<h2>Firmas</h2><div class="firmas">'+(d.firmas||[]).map(bloqueFirma).join('')+
     (d.aprobada?'':'<div class="firma-box"><div class="firma-slot"><span class="firma-vacia">Pendiente de aprobación</span></div><div class="firma-caption"><b>Aprobado por:</b> —</div></div>')+
     '</div>'+
@@ -1210,16 +1272,19 @@ function pintarRevision(){
   escribirFrame(htmlRegistro(d,orden,false));
   const pie=document.getElementById('revPie');
   const arg='\''+orden.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\'';
+  // Corregir un valor: lo pueden las supervisoras, aprobada o no la orden
+  const corregir=PERMISOS.includes('aprobar')
+    ?'<button class="ord-btn sec" onclick="formCorregirValor()">✏️ Corregir un valor</button>':'';
   if(d.aprobada){
     pie.innerHTML='<div class="ord-recien" style="margin:0 0 10px">✅ Aprobada por '+esc(d.aprobadaPor)+'. Ya podés imprimir el registro.</div>'+
       '<div class="ord-botones" style="margin:0"><button class="ord-btn sec" onclick="cerrarRevision()">Cerrar</button>'+
-      '<button class="ord-btn pri" onclick="imprimirOrden('+arg+')">🖨️ Imprimir registro</button></div>';
+      corregir+'<button class="ord-btn pri" onclick="imprimirOrden('+arg+')">🖨️ Imprimir registro</button></div>';
   }else if(PERMISOS.includes('aprobar')){
     pie.innerHTML='<label style="font-size:14px;font-weight:600;color:var(--text2)">Notas de la aprobación (opcional)</label>'+
       '<textarea id="revNotas" rows="2" style="width:100%;margin:6px 0 10px;padding:10px;border:1px solid var(--border);border-radius:var(--rs);font-size:15px;font-family:var(--f);resize:vertical"></textarea>'+
       '<div style="font-size:13px;color:var(--text3);margin-bottom:10px">Al firmar, la orden queda aprobada con tu firma electrónica (nombre, fecha y hora) y no se puede deshacer.</div>'+
       '<div class="ord-botones" style="margin:0"><button class="ord-btn sec" onclick="cerrarRevision()">Cancelar</button>'+
-      '<button class="ord-btn pri" id="revFirmar" onclick="firmarRevision()">✍️ Firmar y aprobar</button></div>';
+      corregir+'<button class="ord-btn pri" id="revFirmar" onclick="firmarRevision()">✍️ Firmar y aprobar</button></div>';
   }else{
     pie.innerHTML='<div class="ord-botones" style="margin:0"><button class="ord-btn sec" onclick="cerrarRevision()">Cerrar</button></div>';
   }
@@ -1238,6 +1303,65 @@ async function firmarRevision(){
   loadOrdenes();
 }
 function cerrarRevision(){document.getElementById('revMo').classList.remove('open');document.body.style.overflow='';REV_ORDEN=null;REV_DATOS=null}
+
+/* CORREGIR UN VALOR MAL CARGADO (migración 058)
+   Claudia, 09/10/2026: al imprimir el registro completo las supervisoras tienen
+   que poder corregir un valor mal cargado dejando a la vista el que se había
+   puesto. El valor anterior queda tachado en el registro, con el motivo, el
+   nombre y la hora: el dato no se borra nunca. */
+const CORR_EST='width:100%;padding:9px;border:1px solid var(--border);border-radius:var(--rs);font-size:15px;font-family:var(--f);margin-top:4px';
+function formCorregirValor(){
+  const d=REV_DATOS;if(!d)return;
+  const opsCtrl=(d.controles||[]).map((x,i)=>'<option value="'+esc(x._id)+'">Control '+(i+1)+' · '+esc(x.hora||'')+' · '+esc(x.analista||'')+'</option>').join('');
+  const opsCampo=(d.campos||[]).map(f=>f.peso
+    ?[1,2,3,4,5].map(n=>'<option value="'+esc(f.clave)+':'+n+'">'+esc(f.etiqueta)+' '+n+'</option>').join('')
+    :'<option value="'+esc(f.clave)+'">'+esc(f.etiqueta)+'</option>').join('');
+  document.getElementById('revPie').innerHTML=
+    '<div style="font-size:15px;font-weight:700">✏️ Corregir un valor del registro</div>'+
+    '<div style="font-size:13px;color:var(--text3);margin:2px 0 8px">El valor que está cargado no se borra: queda tachado en el registro, con tu nombre, la fecha y el motivo de la corrección.</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+
+    '<label style="font-size:13px;font-weight:600;color:var(--text2)">Control<select id="corCtrl" style="'+CORR_EST+'" onchange="corActual()">'+opsCtrl+'</select></label>'+
+    '<label style="font-size:13px;font-weight:600;color:var(--text2)">Dato<select id="corCampo" style="'+CORR_EST+'" onchange="corActual()">'+opsCampo+'</select></label></div>'+
+    '<div id="corHoy" style="font-size:13px;color:var(--text2);margin:10px 0 0"></div>'+
+    '<input id="corValor" placeholder="Valor correcto" style="'+CORR_EST+'">'+
+    // Un lote o un vencimiento mal escrito está mal en todos los controles
+    '<label id="corTodosL" style="display:none;font-size:13px;color:var(--text2);margin-top:8px">'+
+    '<input type="checkbox" id="corTodos" checked> Corregirlo en todos los controles de la orden que tengan ese mismo valor</label>'+
+    '<textarea id="corMotivo" rows="2" placeholder="Por qué se corrige: queda en el registro impreso" style="'+CORR_EST+';resize:vertical"></textarea>'+
+    '<div class="ord-botones" style="margin:10px 0 0"><button class="ord-btn sec" onclick="pintarRevision()">Cancelar</button>'+
+    '<button class="ord-btn pri" id="corGuardar" onclick="guardarCorreccion()">💾 Guardar la corrección</button></div>';
+  corActual();
+}
+function corControl(){
+  const id=(document.getElementById('corCtrl')||{}).value;
+  return ((REV_DATOS||{}).controles||[]).find(x=>String(x._id)===String(id))||null;
+}
+/** Lo que hoy tiene cargado el control, para verlo antes de cambiarlo. */
+function corActual(){
+  const x=corControl(),sel=(document.getElementById('corCampo')||{}).value||'';
+  const p=sel.split(':'),campo=p[0],ind=p[1];
+  const v=x?(ind?(x.pesos||[])[Number(ind)-1]:x[campo]):'';
+  const hay=!(v===''||v==null);
+  document.getElementById('corHoy').innerHTML='Lo que está cargado: <b>'+esc(hay?String(v):'(vacío)')+'</b>';
+  const inp=document.getElementById('corValor');if(inp)inp.value=hay?String(v):'';
+  const def=((REV_DATOS||{}).campos||[]).find(f=>f.clave===campo)||{};
+  const l=document.getElementById('corTodosL');if(l)l.style.display=def.cabecera?'block':'none';
+}
+async function guardarCorreccion(){
+  const orden=REV_ORDEN,x=corControl();if(!orden||!x)return;
+  const sel=document.getElementById('corCampo').value||'';
+  const p=sel.split(':'),campo=p[0],ind=p[1];
+  const valor=document.getElementById('corValor').value;
+  const motivo=document.getElementById('corMotivo').value;
+  if(String(motivo).trim().length<5){toast('⚠️ Escribí por qué se corrige: queda en el registro',true);return}
+  const b=document.getElementById('corGuardar');if(b){b.disabled=true;b.textContent='⏳ Guardando…'}
+  try{REV_DATOS=await api('/ordenes/'+encodeURIComponent(orden)+'/correcciones',
+    {method:'POST',body:JSON.stringify({controlId:x._id,campo,indice:ind?Number(ind):null,valor,motivo,
+      todos:((document.getElementById('corTodosL')||{}).style||{}).display==='block'&&document.getElementById('corTodos').checked})})}
+  catch(e){toast('⚠️ '+e.message,true);if(b){b.disabled=false;b.textContent='💾 Guardar la corrección'}return}
+  toast('✅ Corregido en '+(REV_DATOS.corregidos||1)+' control(es). El valor anterior queda en el registro');
+  pintarRevision();loadOrdenes();
+}
 
 async function imprimirOrden(orden){
   // La ventana se abre antes de pedir los datos: si se abre despues de esperar

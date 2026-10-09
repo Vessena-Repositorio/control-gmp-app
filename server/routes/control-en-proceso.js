@@ -624,6 +624,170 @@ rutasControlEnProceso.get('/ordenes', leer, async (req, res, next) => {
     }
 });
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   Correccion de un valor mal cargado (migracion 058)
+   ═══════════════════════════════════════════════════════════════════════════
+   Claudia, 09/10/2026: al imprimir el registro completo las supervisoras tienen
+   que poder corregir un valor mal cargado, pero dejando a la vista el que se
+   habia puesto. El valor corregido se escribe en el control -asi el dashboard y
+   el informe gerencial usan el dato bueno- y el anterior queda en
+   proceso_correcciones, que es lo que la hoja impresa muestra tachado.
+
+   `columna` es la columna propia de proceso_controles, que acompana a raw. La
+   hora, la fecha, el analista, la orden y las fotos no se corrigen: la hora y
+   el analista son la identidad del control y su firma, y la orden lo movería de
+   registro. */
+const CAMPOS_CORREGIBLES = {
+    lote: { etiqueta: 'Lote', columna: 'lote', max: 60, cabecera: true },
+    vence: { etiqueta: 'Vencimiento', columna: 'vence', fecha: true, max: 30, cabecera: true },
+    presentacion: { etiqueta: 'Presentación', columna: 'presentacion', max: 120, cabecera: true },
+    granel: { etiqueta: 'Código de granel', columna: 'granel', max: 60, cabecera: true },
+    codPT: { etiqueta: 'Código PT', columna: 'cod_pt', max: 60, cabecera: true },
+    spec: { etiqueta: 'Especificación', columna: 'spec', max: 300, vacio: true, cabecera: true },
+    ph: { etiqueta: 'pH', columna: 'ph', numero: [0, 14], vacio: true },
+    peso: { etiqueta: 'Peso', peso: true, numero: [0, 100000], vacio: true },
+    obs: { etiqueta: 'Observaciones', columna: 'obs', max: 1000, vacio: true },
+    devDesc: { etiqueta: 'Descripción del desvío', columna: 'dev_desc', max: 500, vacio: true },
+    devQty: { etiqueta: 'Unidades con desvío', columna: 'dev_qty', max: 30, vacio: true },
+};
+
+/** El valor que hoy tiene el control, como texto. */
+function valorActual(raw, campo, indice) {
+    if (campo === 'peso') {
+        const v = (Array.isArray(raw.pesos) ? raw.pesos : [])[indice - 1];
+        return v === null || v === undefined ? '' : String(v);
+    }
+    const v = raw[campo];
+    return v === null || v === undefined ? '' : String(v);
+}
+
+async function corregirValor(c, req, orden, d) {
+    const campo = texto(d.campo, 40);
+    const def = CAMPOS_CORREGIBLES[campo];
+    if (!def) throw fallo(400, 'Ese dato no se puede corregir desde el registro');
+    const indice = def.peso ? Number(d.indice) : null;
+    if (def.peso && !(Number.isInteger(indice) && indice >= 1 && indice <= 5)) {
+        throw fallo(400, 'Decí qué peso (1 a 5) se corrige');
+    }
+    const motivo = texto(d.motivo, 500);
+    if (motivo.length < 5) throw fallo(400, 'Escribí por qué se corrige: queda en el registro');
+
+    const { rows } = await c.query(
+        `SELECT id, raw, control_num, analista FROM proceso_controles
+         WHERE id = $1 AND orden = $2 AND duplicado_de IS NULL FOR UPDATE`,
+        [Number(d.controlId) || 0, orden]
+    );
+    if (!rows.length) throw fallo(404, 'Ese control no es de esta orden');
+    const fila = rows[0];
+
+    let valor = texto(d.valor, def.max || 500);
+    if (def.numero) {
+        if (valor === '') {
+            if (!def.vacio) throw fallo(400, `${def.etiqueta} no puede quedar vacío`);
+        } else {
+            const n = numero(valor);
+            if (n === null || n < def.numero[0] || n > def.numero[1]) {
+                throw fallo(400, `${def.etiqueta} tiene que ser un número entre ${def.numero[0]} y ${def.numero[1]}`);
+            }
+            valor = String(n);
+        }
+    } else if (valor === '' && !def.vacio) {
+        throw fallo(400, `${def.etiqueta} no puede quedar vacío`);
+    }
+    if (def.fecha && valor !== '' && !venceAFecha(valor)) {
+        throw fallo(400, 'El vencimiento no se entiende: escribilo como dd/mm/aaaa, mm/aaaa o aaaa-mm-dd');
+    }
+
+    const anterior = valorActual(fila.raw, campo, indice);
+    if (anterior === valor) throw fallo(400, 'Ese valor es el que ya está cargado');
+
+    /* Un lote o un vencimiento mal escrito esta igual de mal en todos los
+       controles de la orden: se escriben una vez por control. Con `todos` se
+       corrigen de una, y cada control recibe igual su propia correccion, que es
+       lo que hace falta para que el registro se entienda. */
+    const filas = [fila];
+    if (def.cabecera && d.todos === true) {
+        const { rows: hermanos } = await c.query(
+            `SELECT id, raw, control_num FROM proceso_controles
+             WHERE orden = $1 AND duplicado_de IS NULL AND id <> $2
+             ORDER BY fecha, control_num, id FOR UPDATE`,
+            [orden, fila.id]
+        );
+        for (const h of hermanos) {
+            if (valorActual(h.raw, campo, null) === anterior) filas.push(h);
+        }
+    }
+    for (const f of filas) await aplicar(c, f, { def, campo, indice, valor, motivo, orden, req });
+
+    const nombreCampo = def.etiqueta + (def.peso ? ` ${indice}` : '');
+    await registrar(c, req, 'valor_corregido', 'control', fila.id,
+        `Orden ${orden} · ${filas.length > 1 ? `${filas.length} controles` : `control #${fila.control_num ?? ''}`} · ${nombreCampo}: ` +
+        `"${anterior || '(vacío)'}" → "${valor || '(vacío)'}" · ${motivo}`);
+    return { campo: nombreCampo, anterior, valor, corregidos: filas.length };
+}
+
+/** Escribe el valor corregido en un control y deja el anterior en el rastro. */
+async function aplicar(c, fila, { def, campo, indice, valor, motivo, orden, req }) {
+    const raw = { ...fila.raw };
+    // El control queda con el valor bueno; el anterior va al rastro.
+    if (def.peso) {
+        const pesos = (Array.isArray(raw.pesos) ? raw.pesos : []).slice(0, 5);
+        while (pesos.length < 5) pesos.push('');
+        pesos[indice - 1] = valor === '' ? '' : numero(valor);
+        raw.pesos = pesos;
+        raw.promedio = promedioDe(pesos);
+        await c.query(
+            `INSERT INTO proceso_pesos (control_id, muestra, valor_num, valor_texto)
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT (control_id, muestra) DO UPDATE
+                SET valor_num = EXCLUDED.valor_num, valor_texto = EXCLUDED.valor_texto`,
+            [fila.id, indice, valor === '' ? null : numero(valor), valor === '' ? null : valor]
+        );
+        await c.query('UPDATE proceso_controles SET promedio = $2, raw = $3 WHERE id = $1',
+            [fila.id, raw.promedio === '' ? null : raw.promedio, JSON.stringify(raw)]);
+    } else {
+        raw[campo] = def.numero && valor !== '' ? numero(valor) : valor;
+        const valorColumna = def.fecha ? venceAFecha(valor)
+            : def.numero ? (valor === '' ? null : numero(valor))
+                : (valor === '' ? null : valor);
+        await c.query(
+            `UPDATE proceso_controles SET ${def.columna} = $2, raw = $3 WHERE id = $1`,
+            [fila.id, valorColumna, JSON.stringify(raw)]
+        );
+    }
+
+    await c.query(
+        `INSERT INTO proceso_correcciones
+            (control_id, orden, campo, indice, valor_anterior, valor_nuevo, motivo, usuario, usuario_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [fila.id, orden, campo, indice, valorActual(fila.raw, campo, indice), valor, motivo,
+            req.usuario.nombre || req.usuario.usuario, req.usuario.id]
+    );
+}
+
+/** Las correcciones de una orden, para la hoja impresa. */
+async function correccionesDe(orden) {
+    const { rows } = await consultar(
+        `SELECT k.*, c.control_num FROM proceso_correcciones k
+         JOIN proceso_controles c ON c.id = k.control_id
+         WHERE k.orden = $1 ORDER BY k.ts, k.id`,
+        [orden]
+    );
+    return rows.map((k) => ({
+        id: k.id,
+        controlId: k.control_id,
+        controlNum: k.control_num,
+        campo: k.campo,
+        etiqueta: (CAMPOS_CORREGIBLES[k.campo]?.etiqueta || k.campo) + (k.indice ? ` ${k.indice}` : ''),
+        indice: k.indice,
+        anterior: k.valor_anterior || '',
+        nuevo: k.valor_nuevo || '',
+        motivo: k.motivo,
+        usuario: k.usuario,
+        ts: k.ts,
+    }));
+}
+
 /** Los controles de una orden y su aprobacion, con las firmas para la hoja. */
 async function armarOrden(orden) {
     const { rows } = await consultar(
@@ -643,9 +807,16 @@ async function armarOrden(orden) {
         aprobadaPor: cierre?.aprobada_por || '',
         aprobadaEn: cierre?.aprobada_en || null,
         notas: cierre?.notas || '',
-        controles: rows.map((f) => f.raw),
+        // El id va con cada control: es con lo que la pantalla pide una
+        // correccion y con lo que la hoja ubica el valor corregido.
+        controles: rows.map((f) => ({ ...f.raw, _id: f.id })),
         firmas: await firmasDeOrden(rows, cierre),
         rotulo: await rotuloDe('proceso', orden),
+        correcciones: await correccionesDe(orden),
+        // Los datos que la pantalla ofrece corregir, con su etiqueta.
+        campos: Object.entries(CAMPOS_CORREGIBLES).map(([clave, def]) => ({
+            clave, etiqueta: def.etiqueta, peso: Boolean(def.peso), cabecera: Boolean(def.cabecera),
+        })),
     };
 }
 
@@ -711,6 +882,27 @@ rutasControlEnProceso.post('/ordenes/:orden/aprobar', aprobar, async (req, res, 
             return { controles: hay[0].n };
         });
         res.json({ ok: true, orden, ...resultado });
+    } catch (err) {
+        responder(err, res, next);
+    }
+});
+
+/**
+ * POST /api/control-en-proceso/ordenes/:orden/correcciones
+ *   { controlId, campo, indice, valor, motivo }
+ * Corrige un valor mal cargado dejando el anterior a la vista en el registro.
+ * Corrigen quienes aprueban (Antonella, Gloria, Claudia), antes o despues de la
+ * aprobacion: una orden ya firmada tambien puede tener un dato mal, y lo que
+ * pide BPF es que la correccion quede trazada, no que no se pueda hacer.
+ */
+rutasControlEnProceso.post('/ordenes/:orden/correcciones', aprobar, async (req, res, next) => {
+    const orden = texto(req.params.orden, 60);
+    try {
+        const hecho = await enTransaccion(async (c) => {
+            await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['proceso-orden:' + orden]);
+            return corregirValor(c, req, orden, req.body || {});
+        });
+        res.json({ ok: true, orden, ...hecho, ...(await armarOrden(orden)) });
     } catch (err) {
         responder(err, res, next);
     }

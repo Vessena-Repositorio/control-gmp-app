@@ -129,15 +129,26 @@ export async function registrarControl(c, app, d) {
     return rows[0].id;
 }
 
-/** El estado del rotulo de una orden, para la hoja impresa y la aprobacion. */
+/**
+ * El estado del rotulo de una orden, para la hoja impresa y la aprobacion.
+ * Trae tambien sus eventos: el pedido de correccion de supervision y lo que
+ * hizo la analista despues forman parte del registro de la orden (Claudia,
+ * 09/10/2026), asi que la hoja impresa los lista.
+ */
 export async function rotuloDe(app, orden, c = null) {
     const q = c ? (s, p) => c.query(s, p) : consultar;
     const { rows } = await q(
-        `SELECT estado, revisado_por, revisado_en, comentario, reproceso
-         FROM rotulo_verificaciones WHERE app = $1 AND orden = $2`,
+        `SELECT v.estado, v.revisado_por, v.revisado_en, v.comentario, v.reproceso,
+                v.lote, v.vence, v.analista, v.creado_en,
+                (SELECT json_agg(json_build_object('ts', e.ts, 'usuario', e.usuario, 'accion', e.accion,
+                                                   'comentario', e.comentario, 'reproceso', e.reproceso)
+                                 ORDER BY e.ts, e.id)
+                 FROM rotulo_eventos e WHERE e.verificacion_id = v.id) AS eventos
+         FROM rotulo_verificaciones v WHERE v.app = $1 AND v.orden = $2`,
         [app, orden]
     );
-    return rows[0] || null;
+    if (!rows.length) return null;
+    return { ...rows[0], eventos: rows[0].eventos || [] };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
