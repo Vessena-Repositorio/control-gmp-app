@@ -101,8 +101,8 @@ ul.lst{margin:4px 0 0;padding-left:18px;font-size:13px}
     <div class="card">
       <h3>2 · Archivos de la red</h3>
       <p class="muted">Elegí la carpeta de procedimientos (por ejemplo <code>Z:\17-Documentacion Vessena\14- Procedimientos</code>)
-        y después la de especificaciones. Se asocian solos los archivos cuyo nombre trae el código y la versión;
-        los dudosos se eligen a mano. El navegador lee la carpeta, no la modifica.</p>
+        y después la de especificaciones. Solo se suben las versiones vigentes, desde la subcarpeta VIGENTE de cada documento (o los archivos sueltos si no tiene); OBSOLETO, REVISION y REDACCION se ignoran.
+        Se asocian solos los que traen el código y la versión del listado; los dudosos se eligen a mano. El navegador lee la carpeta, no la modifica.</p>
       <input type="file" id="carpeta" webkitdirectory directory multiple onchange="leerCarpeta(this.files)">
       <div id="asociacion"></div>
     </div>
@@ -973,6 +973,11 @@ async function confirmarImportacion(){
 const RE_COD=/^((?:AX|REG|LIS|PL)-)?[A-Z]{2,4}-[A-Z0-9]+-\d{2,3}(-[A-Z][0-9.]*)?/i;
 const RE_FUERA=/[\\/](obsolet[oa]s?|borrador(es)?|redacci[oó]n)[\\/]/i;
 const RE_BORR=/[\\/](borrador(es)?|redacci[oó]n)[\\/]/i;
+// Por el comienzo del nombre: tambien "Revisión_CB", "OBSOLETOS 2023", etc.
+// Las carpetas de documento empiezan con el codigo, asi que no caen aca.
+const RE_EXCLUIDA=/^(obsolet|revisi[oó]n|redacci[oó]n|borrador)/i;
+// La version que dice el nombre del archivo (la ultima "V<numero>"), o null.
+function versionDe(nombre){const m=[...String(nombre).matchAll(/V\s*(\d+(?:[.,]\d+)?)/gi)].pop();return m?Number(m[1].replace(',','.')):null}
 const EXT_OK=/\.(pdf|docx?|xlsx?)$/i;
 let ASOC=[];
 
@@ -987,19 +992,32 @@ async function leerCarpeta(files){
       const m=f.name.match(RE_COD);if(!m)continue;
       const k=m[0].toUpperCase();(idx.get(k)||idx.set(k,[]).get(k)).push(f);
     }
-    ASOC=versiones.map(v=>{
-      const vs=ver(v.numero).replace('.','\\.');
-      const reVer=new RegExp('V\\s*'+vs+'(?![\\d])','i');
-      let c=(idx.get(v.codigo.toUpperCase())||[]);
-      const ruta=f=>'/'+(f.webkitRelativePath||f.name);
-      if(v.estado==='vigente')c=c.filter(f=>!RE_FUERA.test(ruta(f)));
-      if(v.estado==='borrador')c=c.filter(f=>RE_BORR.test(ruta(f))||reVer.test(f.name));
-      const conVer=c.filter(f=>reVer.test(f.name));
+    // Regla de Claudia (13/10/2026): solo versiones vigentes, y de cada
+    // carpeta de documento solo lo que esta en su subcarpeta VIGENTE. Si la
+    // carpeta no tiene VIGENTE (117 documentos), los archivos sueltos en ella.
+    // Lo de OBSOLETO, REVISION, REDACCION o borradores no se sube nunca.
+    const carpeta=f=>(f.webkitRelativePath||f.name).split('/').slice(0,-1);
+    const conVigente=new Set();
+    for(const f of files){const p=carpeta(f),i=p.findIndex(s=>/^vigentes?$/i.test(s));if(i>0)conVigente.add(p.slice(0,i).join('/'))}
+    const sirve=f=>{const p=carpeta(f);
+      if(p.some(s=>RE_EXCLUIDA.test(s)))return false;
+      if(p.some(s=>/^vigentes?$/i.test(s)))return true;
+      return !conVigente.has(p.join('/'))};
+    ASOC=versiones.filter(v=>v.estado==='vigente').map(v=>{
+      // La version se compara como numero: "V3.00" del archivo es la 3.0 del listado.
+      const n=Number(v.numero);
+      const c=(idx.get(v.codigo.toUpperCase())||[]).filter(sirve);
+      const conVer=c.filter(f=>versionDe(f.name)===n);
+      const conOtraVer=c.filter(f=>{const x=versionDe(f.name);return x!=null&&x!==n});
       const usar=conVer.length?conVer:c;
       const pdfs=usar.filter(f=>/\.pdf$/i.test(f.name)),words=usar.filter(f=>!/\.pdf$/i.test(f.name));
-      // Claro: el nombre trae la version y hay a lo sumo un Word y un PDF.
-      const claro=conVer.length>0&&pdfs.length<=1&&words.length<=1;
-      return {...v,pdfs,words,claro,pdf:claro?pdfs[0]:null,word:claro?words[0]:null};
+      // Claro: a lo sumo un Word y un PDF, y el nombre trae la version del
+      // listado o, si ninguno trae version, son los unicos de VIGENTE. Si en
+      // VIGENTE hay otra version que la del listado, se revisa a mano.
+      const unico=pdfs.length<=1&&words.length<=1&&(pdfs.length+words.length)>0;
+      const claro=unico&&(conVer.length>0||!conOtraVer.length);
+      return {...v,pdfs,words,claro,sinVersion:claro&&!conVer.length,otraVersion:!conVer.length&&conOtraVer.length>0,
+        pdf:claro?pdfs[0]:null,word:claro?words[0]:null};
     });
     pintarAsociacion();
   }catch(e){box.innerHTML=`<div class="aviso crit">${esc(e.message)}</div>`}
@@ -1014,13 +1032,14 @@ function pintarAsociacion(){
   const opc=(lista,i,tipo)=>`<select onchange="ASOC[${i}].${tipo}=ASOC[${i}].${tipo}s[this.value]||null"><option value="">— ninguno —</option>${lista.map((f,j)=>`<option value="${j}">${esc(f.webkitRelativePath||f.name)}</option>`).join('')}</select>`;
   box.innerHTML=`<div class="kpis" style="margin-top:12px"><div class="kpi ok"><div class="lbl">Se asocian solos</div><div class="val">${claros.length}</div></div>
     <div class="kpi warn"><div class="lbl">Elegir a mano</div><div class="val">${dudosos.length}</div></div>
-    <div class="kpi"><div class="lbl">Sin archivo en esta carpeta</div><div class="val">${nada.length}</div></div></div>
+    <div class="kpi"><div class="lbl">Sin archivo vigente</div><div class="val">${nada.length}</div></div></div>
+    <p class="muted">Se toman los archivos de la subcarpeta VIGENTE de cada documento; si no tiene, los sueltos en su carpeta. Nunca los de OBSOLETO, REVISION ni REDACCION.${claros.filter(a=>a.sinVersion).length?` De los que se asocian solos, ${claros.filter(a=>a.sinVersion).length} no traen la versión en el nombre: se tomó el único archivo vigente de su carpeta.`:''}</p>
     ${claros.length?`<div class="fila"><button class="b pri" id="bSubir" onclick="subir(ASOC.filter(a=>a.claro))">Subir los ${claros.length} claros</button></div><div class="barra"><div id="prog"></div></div><div id="progTxt" class="muted"></div>`:''}
     ${dudosos.length?`<details style="margin-top:10px"><summary><b>Elegir a mano (${dudosos.length})</b></summary><div class="tabla"><table><thead><tr><th>Documento</th><th>Word</th><th>PDF</th></tr></thead><tbody>
-      ${dudosos.map(a=>{const i=ASOC.indexOf(a);return `<tr><td class="cod">${esc(a.codigo)} v${ver(a.numero)}<br><span class="muted">${esc(a.estado)}</span></td>
+      ${dudosos.map(a=>{const i=ASOC.indexOf(a);return `<tr><td class="cod">${esc(a.codigo)} v${ver(a.numero)}<br><span class="muted">${a.otraVersion?'el archivo vigente dice otra versión que el listado':'más de un archivo posible'}</span></td>
         <td>${a.tiene_word?'<span class="chip ok">cargado</span>':opc(a.words,i,'word')}</td><td>${a.tiene_pdf?'<span class="chip ok">cargado</span>':opc(a.pdfs,i,'pdf')}</td></tr>`}).join('')}
       </tbody></table></div><button class="b pri" style="margin-top:10px" onclick="subir(ASOC.filter(a=>!a.claro&&(a.word||a.pdf)))">Subir lo elegido</button></details>`:''}
-    ${nada.length?`<details style="margin-top:10px"><summary><b>Sin archivo en esta carpeta (${nada.length})</b></summary><p class="muted">${nada.map(a=>esc(a.codigo)+' v'+ver(a.numero)).join(' · ')}</p></details>`:''}`;
+    ${nada.length?`<details style="margin-top:10px"><summary><b>Sin archivo vigente en esta carpeta (${nada.length})</b></summary><p class="muted">${nada.map(a=>esc(a.codigo)+' v'+ver(a.numero)).join(' · ')}</p></details>`:''}`;
 }
 
 async function subir(lista){
