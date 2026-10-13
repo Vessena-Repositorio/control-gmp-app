@@ -108,14 +108,16 @@ export async function registrarEnCapacitaciones(c, { asistentes, codigo, version
         // Quien contesto en pantalla tiene puntaje: evaluacion escrita. A quien
         // registro el capacitador (lector o lista), lo que el indique al
         // cerrar: oral, practica, escrita en papel o no aplica.
-        const escrita = p.puntaje != null;
+        // La nota de la prueba en papel tambien viaja en `puntaje`, pero esa es
+        // del grupo: lo que decide es por donde entro la persona.
+        const enPantalla = p.via !== 'capacitador' && p.puntaje != null;
         R.push({
             ...base,
             id: 'q' + Date.now().toString(36) + randomBytes(3).toString('hex'),
-            ev: escrita ? 'ESCRITA' : (evGrupo || 'NO APLICA'),
-            puntajeMin: escrita ? minimo : 0,
+            ev: enPantalla ? 'ESCRITA' : (evGrupo || 'NO APLICA'),
+            puntajeMin: enPantalla ? minimo : 0,
             nom: p.persona_nombre, sec: p.persona_sector || '',
-            nota: escrita ? String(p.puntaje) : '',
+            nota: p.puntaje == null ? '' : String(p.puntaje),
         });
     }
     await c.query(

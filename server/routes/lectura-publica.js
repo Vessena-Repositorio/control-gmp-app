@@ -129,7 +129,7 @@ rutasLecturaPublica.post('/s/:token/confirmar', async (req, res, next) => {
                 if (ya) {
                     await c.query(
                         `UPDATE dc_sesion_asistentes SET puntaje = $2, aprobado = $3, respuestas = $4,
-                                intentos = intentos + 1, confirmado_en = now(), identificador = $5 WHERE id = $1`,
+                                intentos = intentos + 1, confirmado_en = now(), identificador = $5, via = 'pantalla' WHERE id = $1`,
                         [ya.id, r.puntaje, r.aprobado, JSON.stringify(b.respuestas || null), String(b.codigo).trim()]);
                 } else {
                     await c.query(

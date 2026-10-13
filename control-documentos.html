@@ -407,11 +407,24 @@ async function cargarSesiones(vid){
           <div class="fila" style="margin-top:10px;align-items:flex-start"><div id="qr${s.id}" style="background:#fff;padding:8px;border:1px solid var(--border);border-radius:8px"></div>
           <div><div class="muted">Mostrá este QR o pasá el enlace:</div><code style="font-size:12px;word-break:break-all">${esc(url)}</code>
           <div class="fila" style="margin-top:8px"><button class="b sm" onclick="pantallaQR('${esc(url)}','Capacitación: ${esc(S.sel.codigo)}')">Mostrar QR grande</button></div></div></div></details>`:''}
-        <div class="tabla" style="margin-top:8px"><table><thead><tr><th>Persona</th><th>Sector</th><th>Puntaje</th><th>Intentos</th><th>Hora</th></tr></thead><tbody>
-          ${s.asistentes.map(a=>`<tr><td>${esc(a.persona_nombre)}</td><td class="muted">${esc(a.persona_sector||'')}</td>
-            <td>${a.puntaje==null?'—':a.puntaje+'%'} ${a.aprobado?'<span class="chip ok">aprobó</span>':'<span class="chip crit">no aprobó</span>'}</td><td>${a.intentos}</td><td>${dmaHora(a.confirmado_en)}</td></tr>`).join('')||'<tr><td colspan="5" class="muted">Todavía nadie confirmó.</td></tr>'}
+        <div class="tabla" style="margin-top:8px"><table><thead><tr><th>Persona</th><th>Sector</th><th>Cómo</th><th>Resultado</th><th>Hora</th></tr></thead><tbody>
+          ${s.asistentes.map(a=>{
+            const chip=a.aprobado===true?'<span class="chip ok">aprobó</span>':a.aprobado===false?'<span class="chip crit">no aprobó</span>':'<span class="chip warn">pendiente de evaluación</span>';
+            // Los que registro quien capacita: el resultado se carga a mano
+            // despues de corregir la prueba en papel.
+            const editable=!s.cerrada_en&&a.via==='capacitador';
+            const res=editable?`<select class="res${s.id}" data-id="${a.id}" style="width:auto;padding:4px 6px">
+                <option value="" ${a.aprobado==null?'selected':''}>pendiente</option><option value="si" ${a.aprobado===true?'selected':''}>aprobó</option><option value="no" ${a.aprobado===false?'selected':''}>no aprobó</option></select>
+              <input class="nota${s.id}" data-id="${a.id}" type="number" min="0" max="100" placeholder="nota" value="${a.puntaje??''}" style="width:70px;padding:4px 6px">`
+              :`${a.puntaje==null?'':a.puntaje+'% '}${chip}${a.via==='pantalla'&&a.intentos>1?` <span class="muted">(${a.intentos} intentos)</span>`:''}`;
+            return `<tr><td>${esc(a.persona_nombre)}</td><td class="muted">${esc(a.persona_sector||'')}</td>
+              <td class="muted">${a.via==='pantalla'?'leyó por QR':'lector / lista'}</td><td style="white-space:nowrap">${res}</td><td>${dmaHora(a.confirmado_en)}</td></tr>`}).join('')||'<tr><td colspan="5" class="muted">Todavía no hay nadie registrado.</td></tr>'}
         </tbody></table></div>
-        ${s.cerrada_en?'':`<div style="margin-top:10px"><b>Cerrar y firmar</b> <span class="muted">— ${aprob.length} aprobado(s) pasan a Capacitaciones con tu firma como capacitador/a.</span>
+        ${!s.cerrada_en&&s.asistentes.some(a=>a.via==='capacitador')?`<div class="fila" style="margin-top:6px">
+          <button class="b sm" onclick="document.querySelectorAll('.res${s.id}').forEach(x=>{if(!x.value)x.value='si'})">Marcar los pendientes como aprobados</button>
+          <button class="b sm pri" onclick="guardarResultados(${s.id},${vid})">Guardar resultados</button>
+          <span class="muted">Después de corregir la prueba en papel. Podés cerrar la sesión otro día.</span></div>`:''}
+        ${s.cerrada_en?'':`<div style="margin-top:10px"><b>Cerrar y firmar</b> <span class="muted">— ${aprob.length} aprobado(s) pasan a Capacitaciones con tu firma como capacitador/a${s.asistentes.some(a=>a.aprobado==null)?`; hay ${s.asistentes.filter(a=>a.aprobado==null).length} pendiente(s) de evaluación`:''}.</span>
           <div class="grid3"><div><label class="lb">Horas de capacitación</label><input id="sH${s.id}" type="number" step="0.25" min="0.25" value="0.5"></div>
           <div><label class="lb">Evaluación de los registrados por lector o lista</label><select id="sE${s.id}">
             <option value="NO APLICA">No aplica</option><option value="ORAL">Oral</option><option value="PRACTICA">Práctica</option><option value="ESCRITA">Escrita (en papel)</option></select></div><div></div>
@@ -422,12 +435,21 @@ async function cargarSesiones(vid){
   }catch(e){box.innerHTML=`<div class="aviso crit">${esc(e.message)}</div>`}
 }
 
+async function guardarResultados(sid,vid){
+  const notas={};document.querySelectorAll('.nota'+sid).forEach(i=>notas[i.dataset.id]=i.value);
+  const resultados=[...document.querySelectorAll('.res'+sid)].map(x=>({id:Number(x.dataset.id),
+    aprobado:x.value==='si'?true:x.value==='no'?false:null,nota:notas[x.dataset.id]}));
+  try{const r=await api(`/sesiones/${sid}/resultados`,{method:'PUT',body:JSON.stringify({resultados})});
+    toast(`Resultados guardados (${r.cambiados} cambio(s))`);cargarSesiones(vid)}
+  catch(e){toast(e.message,true)}
+}
+
 async function cerrarSesion(sid,vid){
   const usuario=document.getElementById('sU'+sid).value.trim(),clave=document.getElementById('sC'+sid).value,horas=document.getElementById('sH'+sid).value,evGrupo=document.getElementById('sE'+sid).value;
   if(!usuario||!clave)return toast('Para firmar escribí usuario y clave',true);
   if(!confirm('¿Cerrar la sesión? Ya no se podrá escanear el QR y los aprobados pasan a Capacitaciones.'))return;
   try{const r=await api(`/sesiones/${sid}/cerrar`,{method:'POST',body:JSON.stringify({usuario,clave,horas,evGrupo})});
-    toast(`Sesión cerrada: ${r.registrados} registro(s) en Capacitaciones`);abrir(S.sel.id)}
+    toast(`Sesión cerrada: ${r.registrados} registro(s) en Capacitaciones${r.noAprobaron?` · ${r.noAprobaron} no aprobaron y siguen pendientes`:''}`);abrir(S.sel.id)}
   catch(e){document.getElementById('sC'+sid).value='';toast(e.message,true)}
 }
 

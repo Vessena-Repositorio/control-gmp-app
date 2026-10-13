@@ -906,7 +906,7 @@ rutasControlDocumentos.get('/versiones/:id/sesiones', capacitar, async (req, res
              WHERE s.version_id = $1 ORDER BY s.abierta_en DESC`, [req.params.id]);
         for (const s of sesiones) {
             const { rows } = await consultar(
-                `SELECT persona_nombre, persona_sector, puntaje, aprobado, intentos, confirmado_en
+                `SELECT id, persona_nombre, persona_sector, puntaje, aprobado, intentos, confirmado_en, via
                  FROM dc_sesion_asistentes WHERE sesion_id = $1 ORDER BY confirmado_en`, [s.id]);
             s.asistentes = rows;
         }
@@ -934,12 +934,26 @@ rutasControlDocumentos.post('/sesiones/:id/cerrar', capacitar, async (req, res, 
                  JOIN dc_documentos d ON d.id = v.documento_id WHERE s.id = $1 FOR UPDATE OF s`, [req.params.id]);
             if (!s) throw fallo(404, 'sesión inexistente');
             if (s.cerrada_en) throw fallo(409, 'la sesión ya está cerrada');
-            const { rows: asistentes } = await c.query(
-                'SELECT * FROM dc_sesion_asistentes WHERE sesion_id = $1 AND aprobado ORDER BY confirmado_en', [s.id]);
+            const { rows: todos } = await c.query(
+                'SELECT * FROM dc_sesion_asistentes WHERE sesion_id = $1 ORDER BY confirmado_en FOR UPDATE', [s.id]);
+            // Asistio sin resultado: si hubo evaluacion (oral, practica o en
+            // papel) no se cierra hasta cargarlo; si no aplica, asistir alcanza.
+            const pendientes = todos.filter((a) => a.aprobado == null);
+            if (pendientes.length && evGrupo !== 'NO APLICA') {
+                throw fallo(409, `faltan los resultados de ${pendientes.length} persona(s): cargalos antes de cerrar (o elegí "No aplica" si no hubo evaluación)`);
+            }
+            if (pendientes.length) {
+                await c.query('UPDATE dc_sesion_asistentes SET aprobado = true WHERE sesion_id = $1 AND aprobado IS NULL', [s.id]);
+                pendientes.forEach((a) => { a.aprobado = true; });
+            }
+            const asistentes = todos.filter((a) => a.aprobado);
+            const noAprobaron = todos.filter((a) => a.aprobado === false);
             const firma = await firmar(c, req, {
                 usuario: b.usuario, clave: b.clave, significado: 'capacitador',
                 recurso: RECURSO, tabla: 'dc_versiones', registroId: s.version_id, contenidoSha256: s.huella,
-                comentario: `sesión ${s.id}: ${asistentes.length} persona(s) — ${asistentes.map((a) => a.persona_nombre).join(', ')}`.slice(0, 2000),
+                comentario: (`sesión ${s.id}, evaluación ${evGrupo.toLowerCase()}: aprobaron ${asistentes.length} — ` +
+                    asistentes.map((a) => a.persona_nombre).join(', ') +
+                    (noAprobaron.length ? `; no aprobaron ${noAprobaron.length} — ${noAprobaron.map((a) => a.persona_nombre).join(', ')}` : '')).slice(0, 2000),
             });
             const creados = await registrarEnCapacitaciones(c, {
                 asistentes, codigo: s.codigo, version: verTxt(s.numero), titulo: s.titulo,
@@ -950,9 +964,39 @@ rutasControlDocumentos.post('/sesiones/:id/cerrar', capacitar, async (req, res, 
             await c.query(
                 `UPDATE dc_sesiones SET cerrada_en = now(), firma_id = $2, horas = $3, registros_creados = $4 WHERE id = $1`,
                 [s.id, firma.id, horas, creados]);
-            return { firma, registrados: creados };
+            return { firma, registrados: creados, noAprobaron: noAprobaron.length };
         });
         res.json({ ok: true, ...r });
+    } catch (err) { responder(err, res, next); }
+});
+
+/**
+ * PUT /api/control-documentos/sesiones/:id/resultados { resultados: [{ id, aprobado, nota }] }
+ * Resultado de la evaluacion en papel (u oral, o practica) de quienes
+ * registro quien capacita. `aprobado` null lo deja pendiente.
+ */
+rutasControlDocumentos.put('/sesiones/:id/resultados', capacitar, async (req, res, next) => {
+    const lista = Array.isArray((req.body || {}).resultados) ? req.body.resultados : [];
+    try {
+        if (!lista.length) throw fallo(400, 'no llegaron resultados');
+        let cambiados = 0;
+        await enTransaccionAuditada(req, 'resultado de la evaluación de la capacitación', async (c) => {
+            const { rows: [s] } = await c.query('SELECT cerrada_en FROM dc_sesiones WHERE id = $1 FOR UPDATE', [req.params.id]);
+            if (!s) throw fallo(404, 'sesión inexistente');
+            if (s.cerrada_en) throw fallo(409, 'la sesión ya está cerrada y firmada');
+            for (const r of lista) {
+                const aprobado = r.aprobado === true ? true : r.aprobado === false ? false : null;
+                const nota = r.nota === '' || r.nota == null ? null : Number(r.nota);
+                if (nota != null && (!Number.isFinite(nota) || nota < 0 || nota > 100)) throw fallo(400, 'la nota va de 0 a 100');
+                const { rowCount } = await c.query(
+                    `UPDATE dc_sesion_asistentes SET aprobado = $3, puntaje = $4
+                     WHERE id = $1 AND sesion_id = $2 AND via = 'capacitador'
+                       AND (aprobado IS DISTINCT FROM $3 OR puntaje IS DISTINCT FROM $4)`,
+                    [r.id, req.params.id, aprobado, nota == null ? null : Math.round(nota)]);
+                cambiados += rowCount;
+            }
+        });
+        res.json({ ok: true, cambiados });
     } catch (err) { responder(err, res, next); }
 });
 
@@ -991,8 +1035,8 @@ rutasControlDocumentos.post('/sesiones/:id/asistentes', capacitar, async (req, r
         await enTransaccionAuditada(req, 'asistencia tomada por quien capacita', async (c) => {
             for (const p of personas) {
                 const { rows } = await c.query(
-                    `INSERT INTO dc_sesion_asistentes (sesion_id, persona_nombre, persona_sector, identificador, aprobado)
-                     VALUES ($1,$2,$3,$4,true)
+                    `INSERT INTO dc_sesion_asistentes (sesion_id, persona_nombre, persona_sector, identificador, aprobado, via)
+                     VALUES ($1,$2,$3,$4,NULL,'capacitador')
                      ON CONFLICT (sesion_id, persona_nombre) DO NOTHING RETURNING id`,
                     [s.id, String(p.n), p.s || null, identificador]);
                 if (rows.length) agregados.push({ nombre: p.n, sector: p.s || '' });
