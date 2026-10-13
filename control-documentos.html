@@ -101,7 +101,7 @@ ul.lst{margin:4px 0 0;padding-left:18px;font-size:13px}
     <div class="card">
       <h3>2 · Archivos de la red</h3>
       <p class="muted">Elegí la carpeta de procedimientos (por ejemplo <code>Z:\17-Documentacion Vessena\14- Procedimientos</code>)
-        y después la de especificaciones. Solo se suben las versiones vigentes, desde la subcarpeta VIGENTE de cada documento (o los archivos sueltos si no tiene); OBSOLETO, REVISION y REDACCION se ignoran.
+        y después la de especificaciones. Solo se suben las versiones vigentes, desde la subcarpeta VIGENTE de cada documento (o los archivos sueltos si no tiene); OBSOLETO, REVISION y REDACCION se ignoran. En especificaciones se busca en toda la carpeta y, si no está la versión del listado, se propone la última encontrada para que la confirmes.
         Se asocian solos los que traen el código y la versión del listado; los dudosos se eligen a mano. El navegador lee la carpeta, no la modifica.</p>
       <input type="file" id="carpeta" webkitdirectory directory multiple onchange="leerCarpeta(this.files)">
       <div id="asociacion"></div>
@@ -976,8 +976,9 @@ const RE_BORR=/[\\/](borrador(es)?|redacci[oó]n)[\\/]/i;
 // Por el comienzo del nombre: tambien "Revisión_CB", "OBSOLETOS 2023", etc.
 // Las carpetas de documento empiezan con el codigo, asi que no caen aca.
 const RE_EXCLUIDA=/^(obsolet|revisi[oó]n|redacci[oó]n|borrador)/i;
-// La version que dice el nombre del archivo (la ultima "V<numero>"), o null.
-function versionDe(nombre){const m=[...String(nombre).matchAll(/V\s*(\d+(?:[.,]\d+)?)/gi)].pop();return m?Number(m[1].replace(',','.')):null}
+// La version que dice el nombre del archivo (la ultima que aparezca), o null.
+// Acepta "V2.0", "V 2.0", "V2.00", "Ver 1.0", "Version 3" y "Versión 3".
+function versionDe(nombre){const m=[...String(nombre).matchAll(/V(?:er(?:si[oó]n)?)?\.?\s*(\d+(?:[.,]\d+)?)/gi)].pop();return m?Number(m[1].replace(',','.')):null}
 const EXT_OK=/\.(pdf|docx?|xlsx?)$/i;
 let ASOC=[];
 
@@ -1006,18 +1007,35 @@ async function leerCarpeta(files){
     ASOC=versiones.filter(v=>v.estado==='vigente').map(v=>{
       // La version se compara como numero: "V3.00" del archivo es la 3.0 del listado.
       const n=Number(v.numero);
-      const c=(idx.get(v.codigo.toUpperCase())||[]).filter(sirve);
+      // Especificaciones (ESP, AX-ESP): la carpeta no tiene el orden de los
+      // procedimientos (subcarpetas por producto, archivos sueltos). Se busca
+      // en toda la carpeta salvo lo obsoleto, y si no esta la version del
+      // listado se propone la ultima y se pregunta (Claudia, 13/10/2026).
+      const esp=/^(AX-)?ESP-/i.test(v.codigo);
+      const vistos=new Set();
+      const c=(idx.get(v.codigo.toUpperCase())||[]).filter(esp?(f=>!carpeta(f).some(s=>RE_EXCLUIDA.test(s))):sirve)
+        .filter(f=>{const k=f.name+'|'+f.size;if(vistos.has(k))return false;vistos.add(k);return true});
       const conVer=c.filter(f=>versionDe(f.name)===n);
       const conOtraVer=c.filter(f=>{const x=versionDe(f.name);return x!=null&&x!==n});
       const usar=conVer.length?conVer:c;
       const pdfs=usar.filter(f=>/\.pdf$/i.test(f.name)),words=usar.filter(f=>!/\.pdf$/i.test(f.name));
       // Claro: a lo sumo un Word y un PDF, y el nombre trae la version del
-      // listado o, si ninguno trae version, son los unicos de VIGENTE. Si en
-      // VIGENTE hay otra version que la del listado, se revisa a mano.
+      // listado o, si ninguno trae version, son los unicos. Si el archivo dice
+      // otra version que el listado, se revisa a mano.
       const unico=pdfs.length<=1&&words.length<=1&&(pdfs.length+words.length)>0;
       const claro=unico&&(conVer.length>0||!conOtraVer.length);
-      return {...v,pdfs,words,claro,sinVersion:claro&&!conVer.length,otraVersion:!conVer.length&&conOtraVer.length>0,
-        pdf:claro?pdfs[0]:null,word:claro?words[0]:null};
+      let pdf=claro?pdfs[0]:null,word=claro?words[0]:null,motivo='';
+      if(!claro&&c.length){
+        // Se propone la version mas alta encontrada (o la del listado si esta
+        // repetida), y queda preseleccionada para confirmar.
+        const verMax=Math.max(...c.map(f=>versionDe(f.name)??-1));
+        const ult=conVer.length?conVer:c.filter(f=>(versionDe(f.name)??-1)===verMax);
+        pdf=ult.find(f=>/\.pdf$/i.test(f.name))||null;word=ult.find(f=>!/\.pdf$/i.test(f.name))||null;
+        motivo=conVer.length?'hay más de un archivo con la versión del listado'
+          :verMax>=0?`la última encontrada es ${verMax}, el listado dice ${ver(n)}`:'varios archivos sin versión en el nombre';
+      }
+      return {...v,pdfs:esp&&!claro?c.filter(f=>/\.pdf$/i.test(f.name)):pdfs,words:esp&&!claro?c.filter(f=>!/\.pdf$/i.test(f.name)):words,
+        claro,esp,motivo,sinVersion:claro&&!conVer.length,otraVersion:!conVer.length&&conOtraVer.length>0,pdf,word};
     });
     pintarAsociacion();
   }catch(e){box.innerHTML=`<div class="aviso crit">${esc(e.message)}</div>`}
@@ -1029,14 +1047,14 @@ function pintarAsociacion(){
   const claros=pend.filter(a=>a.claro&&((a.word&&!a.tiene_word)||(a.pdf&&!a.tiene_pdf)));
   const dudosos=pend.filter(a=>!a.claro&&(a.pdfs.length||a.words.length));
   const nada=pend.filter(a=>!a.pdfs.length&&!a.words.length);
-  const opc=(lista,i,tipo)=>`<select onchange="ASOC[${i}].${tipo}=ASOC[${i}].${tipo}s[this.value]||null"><option value="">— ninguno —</option>${lista.map((f,j)=>`<option value="${j}">${esc(f.webkitRelativePath||f.name)}</option>`).join('')}</select>`;
+  const opc=(lista,i,tipo)=>`<select onchange="ASOC[${i}].${tipo}=ASOC[${i}].${tipo}s[this.value]||null"><option value="">— ninguno —</option>${lista.map((f,j)=>`<option value="${j}" ${f===ASOC[i][tipo]?'selected':''}>${esc(f.webkitRelativePath||f.name)}</option>`).join('')}</select>`;
   box.innerHTML=`<div class="kpis" style="margin-top:12px"><div class="kpi ok"><div class="lbl">Se asocian solos</div><div class="val">${claros.length}</div></div>
     <div class="kpi warn"><div class="lbl">Elegir a mano</div><div class="val">${dudosos.length}</div></div>
     <div class="kpi"><div class="lbl">Sin archivo vigente</div><div class="val">${nada.length}</div></div></div>
     <p class="muted">Se toman los archivos de la subcarpeta VIGENTE de cada documento; si no tiene, los sueltos en su carpeta. Nunca los de OBSOLETO, REVISION ni REDACCION.${claros.filter(a=>a.sinVersion).length?` De los que se asocian solos, ${claros.filter(a=>a.sinVersion).length} no traen la versión en el nombre: se tomó el único archivo vigente de su carpeta.`:''}</p>
     ${claros.length?`<div class="fila"><button class="b pri" id="bSubir" onclick="subir(ASOC.filter(a=>a.claro))">Subir los ${claros.length} claros</button></div><div class="barra"><div id="prog"></div></div><div id="progTxt" class="muted"></div>`:''}
     ${dudosos.length?`<details style="margin-top:10px"><summary><b>Elegir a mano (${dudosos.length})</b></summary><div class="tabla"><table><thead><tr><th>Documento</th><th>Word</th><th>PDF</th></tr></thead><tbody>
-      ${dudosos.map(a=>{const i=ASOC.indexOf(a);return `<tr><td class="cod">${esc(a.codigo)} v${ver(a.numero)}<br><span class="muted">${a.otraVersion?'el archivo vigente dice otra versión que el listado':'más de un archivo posible'}</span></td>
+      ${dudosos.map(a=>{const i=ASOC.indexOf(a);return `<tr><td class="cod">${esc(a.codigo)} v${ver(a.numero)}<br><span class="muted">${esc(a.motivo||(a.otraVersion?'el archivo vigente dice otra versión que el listado':'más de un archivo posible'))}${a.word||a.pdf?' · <b>se propone la marcada</b>':''}</span></td>
         <td>${a.tiene_word?'<span class="chip ok">cargado</span>':opc(a.words,i,'word')}</td><td>${a.tiene_pdf?'<span class="chip ok">cargado</span>':opc(a.pdfs,i,'pdf')}</td></tr>`}).join('')}
       </tbody></table></div><button class="b pri" style="margin-top:10px" onclick="subir(ASOC.filter(a=>!a.claro&&(a.word||a.pdf)))">Subir lo elegido</button></details>`:''}
     ${nada.length?`<details style="margin-top:10px"><summary><b>Sin archivo vigente en esta carpeta (${nada.length})</b></summary><p class="muted">${nada.map(a=>esc(a.codigo)+' v'+ver(a.numero)).join(' · ')}</p></details>`:''}`;
