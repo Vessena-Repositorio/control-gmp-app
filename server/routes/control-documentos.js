@@ -22,7 +22,7 @@ import { PERMISOS_POR_ROL, puede } from '../lib/permisos.js';
 import { enTransaccionAuditada, historial, verificarIntegridad } from '../lib/audit-trail.js';
 import { firmar, firmasDe, SIGNIFICADOS } from '../lib/firma-electronica.js';
 import { analizarListado, escalonarAvisos } from '../lib/importar-listado.js';
-import { guardar, abrir, leer as leerArchivo, extension, hayAlmacen, MAX_BYTES } from '../lib/almacen-documentos.js';
+import { guardar, abrir, leer as leerArchivo, extension, hayAlmacen, MAX_BYTES, TIPOS_PRUEBAS } from '../lib/almacen-documentos.js';
 import { marcarCopiaNoControlada } from '../lib/marca-agua.js';
 import { nuevaVersion, enviarARevision, firmarTarea, anularBorrador, vigenteAhora } from '../lib/ciclo-documentos.js';
 import { avance, datosPadron, sectoresDelPadron } from '../lib/entrenamiento-documentos.js';
@@ -1044,6 +1044,58 @@ rutasControlDocumentos.post('/sesiones/:id/asistentes', capacitar, async (req, r
         });
         const repetido = personas.length === 1 && !agregados.length;
         res.json({ ok: true, agregados, repetido, nombre: personas[0] ? personas[0].n : null });
+    } catch (err) { responder(err, res, next); }
+});
+
+/**
+ * POST /api/control-documentos/sesiones/:id/pruebas?nombre=... (cuerpo: el archivo)
+ * Guarda el escaneo de las pruebas en papel como evidencia de la sesion. La
+ * lectura de las burbujas la hace el navegador; aca solo se conserva el
+ * archivo, que lleva la firma de cada operario.
+ */
+rutasControlDocumentos.post('/sesiones/:id/pruebas',
+    express.raw({ type: 'application/octet-stream', limit: MAX_BYTES }),
+    capacitar,
+    async (req, res, next) => {
+        try {
+            const nombre = texto(req.query.nombre).split(/[\\/]/).pop();
+            if (!nombre) throw fallo(400, 'falta el nombre del archivo');
+            const r = await enTransaccionAuditada(req, `escaneo de las pruebas: ${nombre}`, async (c) => {
+                const { rows: [s] } = await c.query('SELECT id FROM dc_sesiones WHERE id = $1', [req.params.id]);
+                if (!s) throw fallo(404, 'sesión inexistente');
+                const g = await guardar(req.body, nombre, TIPOS_PRUEBAS);
+                const { rows: [p] } = await c.query(
+                    `INSERT INTO dc_sesion_pruebas (sesion_id, nombre, ruta, sha256, bytes, subido_por)
+                     VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+                    [s.id, nombre, g.ruta, g.sha256, g.bytes, req.usuario.nombre || req.usuario.usuario]);
+                return { id: p.id, sha256: g.sha256 };
+            });
+            res.status(201).json({ ok: true, ...r });
+        } catch (err) { responder(err, res, next); }
+    });
+
+/** GET /api/control-documentos/sesiones/:id/pruebas — escaneos guardados. */
+rutasControlDocumentos.get('/sesiones/:id/pruebas', capacitar, async (req, res, next) => {
+    try {
+        const { rows } = await consultar(
+            'SELECT id, nombre, bytes, subido_por, subido_en FROM dc_sesion_pruebas WHERE sesion_id = $1 ORDER BY subido_en',
+            [req.params.id]);
+        res.json({ ok: true, pruebas: rows });
+    } catch (err) { next(err); }
+});
+
+/** GET /api/control-documentos/pruebas/:id/descargar — el escaneo tal como se subio. */
+rutasControlDocumentos.get('/pruebas/:id/descargar', capacitar, async (req, res, next) => {
+    try {
+        const { rows: [p] } = await consultar('SELECT * FROM dc_sesion_pruebas WHERE id = $1', [req.params.id]);
+        if (!p) throw fallo(404, 'escaneo inexistente');
+        const { stream, bytes } = await abrir(p.ruta);
+        await auditar(req, { usuarioId: req.usuario.id, usuarioTxt: req.usuario.usuario, accion: 'descarga_prueba',
+            recurso: RECURSO, detalle: `sesión ${p.sesion_id}: ${p.nombre}` });
+        res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(p.nombre)}`);
+        res.setHeader('Content-Type', TIPOS_PRUEBAS[extension(p.nombre)] || 'application/octet-stream');
+        res.setHeader('Content-Length', bytes);
+        stream.pipe(res);
     } catch (err) { responder(err, res, next); }
 });
 

@@ -28,16 +28,27 @@ export const TIPOS = {
     '.xls': 'application/vnd.ms-excel',
 };
 
+export const TIPOS_PRUEBAS = {
+    '.pdf': 'application/pdf',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+};
+
 // El mas grande de la red (Z:, 07/10/2026) pesa 102 MB.
 export const MAX_BYTES = 150 * 1024 * 1024;
 
 export const extension = (nombre) => extname(String(nombre || '')).toLowerCase();
 
-/** Guarda el contenido y devuelve { ruta, sha256, bytes, mime }. */
-export async function guardar(buffer, nombre) {
+/**
+ * Guarda el contenido y devuelve { ruta, sha256, bytes, mime }.
+ * `tipos`: lo que se admite. Por defecto, documentos; las pruebas escaneadas
+ * usan TIPOS_PRUEBAS (PDF del escaner o fotos).
+ */
+export async function guardar(buffer, nombre, tipos = TIPOS) {
     if (!DIR) throw Object.assign(new Error('DOC_DIR no configurado: falta el volumen de documentos'), { status: 503 });
     const ext = extension(nombre);
-    const mime = TIPOS[ext];
+    const mime = tipos[ext];
     if (!mime) throw Object.assign(new Error(`tipo de archivo no admitido: ${ext || 'sin extensión'}`), { status: 400 });
     if (!buffer?.length) throw Object.assign(new Error('el archivo está vacío'), { status: 400 });
 

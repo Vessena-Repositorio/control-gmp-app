@@ -7,6 +7,8 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📄</text></svg>">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
 <style>
 :root{--bg:#f6f7f9;--card:#fff;--border:#e3e6ec;--text:#1c2331;--t2:#475467;--t3:#6b7382;
 --pri:#1f5fb0;--pri-d:#164a89;--pri-g:rgba(31,95,176,.08);--ok:#1a7f3f;--ok-g:#e8f5ec;
@@ -42,11 +44,11 @@ td.cod{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;white-space:
 .chip{display:inline-block;padding:2px 9px;border-radius:50px;font-size:12px;font-weight:600;white-space:nowrap}
 .chip.ok{background:var(--ok-g);color:#155c2b}.chip.warn{background:var(--warn-g);color:#7a4b0e}
 .chip.crit{background:var(--crit-g);color:#7c2323}.chip.mut{background:#eceef2;color:#5f6a80}.chip.info{background:var(--pri-g);color:var(--pri-d)}
-button.b{padding:9px 15px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:#fff;color:var(--text)}
+button.b,label.b{padding:9px 15px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:#fff;color:var(--text)}
 button.b.pri{background:var(--pri);border-color:var(--pri);color:#fff}
 button.b.ok{background:var(--ok);border-color:var(--ok);color:#fff}
 button.b:disabled{opacity:.6;cursor:default}
-button.b.sm{padding:5px 10px;font-size:12.5px}
+button.b.sm,label.b.sm{padding:5px 10px;font-size:12.5px}
 input,select,textarea{font-family:var(--f);font-size:14px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text);width:100%}
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--pri);box-shadow:0 0 0 3px var(--pri-g)}
 label.lb{display:block;font-size:12.5px;font-weight:600;color:var(--t2);margin:10px 0 3px}
@@ -304,6 +306,7 @@ async function sectores(){
 }
 
 async function cargarEntrenamiento(v,d){
+  S.versionEnt=v;
   const box=document.getElementById('entren');if(!box)return;
   try{
     const e=await api(`/versiones/${v.id}/entrenamiento`);
@@ -402,7 +405,9 @@ async function cargarSesiones(vid){
             onkeydown="if(event.key==='Enter'){event.preventDefault();asistenciaCodigo(${s.id},${vid},this)}">
           <div id="aUlt${s.id}" style="margin-top:6px;font-weight:700;min-height:20px"></div>
           <div class="fila"><button class="b sm" onclick="elegirDelPadron(${s.id},${vid})">Elegir de la lista del padrón</button>
-            <button class="b sm" onclick="cargarSesiones(${vid})">Actualizar lista</button></div><div id="aPad${s.id}"></div></div>`}
+            <button class="b sm" onclick="prepararPruebas(${s.id},${vid})">🖨️ Imprimir pruebas</button>
+            <label class="b sm" style="display:inline-block;cursor:pointer">📥 Subir pruebas escaneadas<input type="file" accept=".pdf,image/*" multiple style="display:none" onchange="leerPruebas(${s.id},${vid},this.files);this.value=''"></label>
+            <button class="b sm" onclick="cargarSesiones(${vid})">Actualizar lista</button></div><div id="aPad${s.id}"></div><div id="pR${s.id}"></div></div>`}
         ${s.abierta?`<details style="margin-top:8px"><summary>QR para leer en tablet o celular (con evaluación en pantalla)</summary>
           <div class="fila" style="margin-top:10px;align-items:flex-start"><div id="qr${s.id}" style="background:#fff;padding:8px;border:1px solid var(--border);border-radius:8px"></div>
           <div><div class="muted">Mostrá este QR o pasá el enlace:</div><code style="font-size:12px;word-break:break-all">${esc(url)}</code>
@@ -433,6 +438,236 @@ async function cargarSesiones(vid){
       </div>`}).join('');
     for(const s of sesiones)if(s.abierta)new QRCode(document.getElementById('qr'+s.id),{text:`${location.origin}/lectura.html?s=${s.token}`,width:150,height:150});
   }catch(e){box.innerHTML=`<div class="aviso crit">${esc(e.message)}</div>`}
+}
+
+// ---------------------------------------------------------------- pruebas en papel (lectura de burbujas)
+/* La hoja se dibuja en milimetros sobre A4. Los cuatro cuadrados negros de las
+   esquinas son la referencia: al leer el escaneo se los busca y con ellos se
+   calcula donde quedo cada burbuja, aunque la hoja este torcida, escalada o al
+   reves. Si se cambia una medida aca, cambia en la impresion y en la lectura a
+   la vez: por eso hay una sola definicion. */
+const HOJA={
+  marcas:[[15,15],[195,15],[15,282],[195,282]],   // centros de los cuadrados de 10 mm
+  qr:{x:155,y:22,t:32},
+  grilla:{y0:214,dy:12,x0:72,dx:22,r:3.6},       // burbuja (pregunta i, opcion j)
+  maxPreg:5,maxOps:4,
+};
+const LETRAS='ABCD';
+const burbuja=(i,j)=>[HOJA.grilla.x0+j*HOJA.grilla.dx,HOJA.grilla.y0+i*HOJA.grilla.dy];
+
+async function prepararPruebas(sid,vid){
+  const box=document.getElementById('pR'+sid);
+  try{
+    const [ev,ent,ses]=await Promise.all([api(`/versiones/${vid}/evaluacion`),api(`/versiones/${vid}/entrenamiento`),api(`/versiones/${vid}/sesiones`)]);
+    if(!ev.preguntas.length)return toast('Primero cargá las preguntas de evaluación del documento',true);
+    if(ev.preguntas.length>HOJA.maxPreg||ev.preguntas.some(p=>p.opciones.length>HOJA.maxOps))
+      return toast(`La hoja admite hasta ${HOJA.maxPreg} preguntas de hasta ${HOJA.maxOps} opciones`,true);
+    const s=ses.sesiones.find(x=>x.id===sid);
+    const registrados=s.asistentes.map(a=>({nombre:a.persona_nombre,sector:a.persona_sector||''}));
+    const yaEstan=new Set(registrados.map(a=>a.nombre));
+    const gente=[...registrados,...(ent.pendientes||[]).filter(p=>!yaEstan.has(p.nombre))];
+    box.innerHTML=`<div class="card" style="margin-top:8px"><b>Imprimir pruebas</b> <span class="muted">— una hoja por persona, con su nombre y un QR. Imprimí al 100% (sin "ajustar a la página").</span>
+      <div style="columns:2;margin-top:6px">${gente.map((p,k)=>`<label style="display:block;font-size:13.5px"><input type="checkbox" class="imp${sid}" value="${k}" checked style="width:auto"> ${esc(p.nombre)} <span class="muted">${esc(p.sector)}</span></label>`).join('')||'<span class="muted">No hay personas registradas ni pendientes.</span>'}</div>
+      <div class="fila" style="margin-top:8px"><label class="muted">Hojas en blanco (sin nombre) <input id="impB${sid}" type="number" min="0" max="50" value="2" style="width:70px"></label>
+      <button class="b pri sm" onclick="imprimirPruebas(${sid},${vid})">Imprimir</button></div></div>`;
+    S.imprimir={gente,ev};
+  }catch(e){toast(e.message,true)}
+}
+
+function imprimirPruebas(sid,vid){
+  const {gente,ev}=S.imprimir;
+  const elegidos=[...document.querySelectorAll('.imp'+sid+':checked')].map(c=>gente[Number(c.value)]);
+  const blancas=Math.max(0,Math.min(50,Number(document.getElementById('impB'+sid).value)||0));
+  for(let i=0;i<blancas;i++)elegidos.push({nombre:'',sector:''});
+  if(!elegidos.length)return toast('Elegí al menos una persona',true);
+  const d=S.sel,v=`v${ver((S.versionEnt||{}).numero||'')}`;
+  const qrImg=txt=>{const div=document.createElement('div');new QRCode(div,{text:txt,width:256,height:256,correctLevel:QRCode.CorrectLevel.M});return div.querySelector('canvas').toDataURL()};
+  const mm=n=>n+'mm';
+  const hojas=elegidos.map(p=>{
+    const marcas=HOJA.marcas.map(([x,y])=>`<div style="position:absolute;left:${mm(x-5)};top:${mm(y-5)};width:10mm;height:10mm;background:#000"></div>`).join('');
+    const preguntas=ev.preguntas.map((q,i)=>`<div style="margin-bottom:3.5mm"><b>${i+1}. ${esc(q.texto)}</b>${q.opciones.map((o,j)=>`<div style="margin-left:5mm">${LETRAS[j]}) ${esc(o)}</div>`).join('')}</div>`).join('');
+    const cab=LETRAS.slice(0,Math.max(...ev.preguntas.map(q=>q.opciones.length))).split('').map((l,j)=>{const [x]=burbuja(0,j);return `<div style="position:absolute;left:${mm(x-3)};top:${mm(HOJA.grilla.y0-10)};width:6mm;text-align:center;font-weight:700">${l}</div>`}).join('');
+    const grilla=ev.preguntas.map((q,i)=>{const [,y]=burbuja(i,0);
+      // La etiqueta termina 10 mm antes de la primera burbuja: un numero que la
+      // toque se leeria como marca.
+      return `<div style="position:absolute;left:${mm(HOJA.grilla.x0-45)};top:${mm(y-2.5)};width:35mm;text-align:right;font-weight:700">Pregunta ${i+1}</div>`+
+        q.opciones.map((_,j)=>{const [x,yy]=burbuja(i,j);return `<div style="position:absolute;left:${mm(x-HOJA.grilla.r)};top:${mm(yy-HOJA.grilla.r)};width:${mm(2*HOJA.grilla.r)};height:${mm(2*HOJA.grilla.r)};border:0.35mm solid #444;border-radius:50%;box-sizing:border-box"></div>`}).join('')}).join('');
+    return `<div class="hoja">${marcas}
+      <div style="position:absolute;left:25mm;top:9mm;width:125mm;font-size:9pt;color:#444">VESSENA S.A. · Evaluación de capacitación</div>
+      <div style="position:absolute;left:25mm;top:14mm;width:125mm;font-size:12pt;font-weight:700">${esc(d.codigo)} ${esc(v)} · ${esc(d.titulo)}</div>
+      <div style="position:absolute;left:25mm;top:30mm;width:125mm;font-size:11pt">Nombre: <b>${p.nombre?esc(p.nombre):'_______________________________________'}</b></div>
+      <div style="position:absolute;left:25mm;top:38mm;width:125mm;font-size:11pt">Sector: ${p.sector?esc(p.sector):'____________________'} &nbsp; Fecha: ____/____/______ &nbsp; Sesión ${sid}</div>
+      <img src="${qrImg(`DCP|${sid}|${p.nombre}`)}" style="position:absolute;left:${mm(HOJA.qr.x)};top:${mm(HOJA.qr.y)};width:${mm(HOJA.qr.t)};height:${mm(HOJA.qr.t)}">
+      <div style="position:absolute;left:22mm;top:60mm;width:166mm;height:132mm;overflow:hidden;font-size:10.5pt;line-height:1.35">${preguntas}</div>
+      <div style="position:absolute;left:22mm;top:${mm(HOJA.grilla.y0-17)};width:166mm;font-size:9.5pt;color:#333"><b>Respuestas:</b> rellená completamente UN círculo por pregunta, con lapicera oscura.</div>
+      ${cab}${grilla}
+      <div style="position:absolute;left:40mm;top:281mm;width:110mm;border-top:0.3mm solid #000;font-size:9pt;text-align:center;padding-top:1mm">Firma</div>
+    </div>`}).join('');
+  const w=window.open('','_blank');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Pruebas ${esc(d.codigo)} · sesión ${sid}</title>
+    <style>@page{size:A4;margin:0}body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#000}
+    .hoja{position:relative;width:210mm;height:297mm;overflow:hidden;page-break-after:always}
+    @media screen{body{background:#888}.hoja{background:#fff;margin:10px auto}}</style></head><body>${hojas}
+    <script>setTimeout(()=>print(),400)<\/script></body></html>`);
+  w.document.close();
+}
+
+// --- lectura de los escaneos
+async function paginasDe(file){
+  const salida=[];
+  if(/\.pdf$/i.test(file.name)||file.type==='application/pdf'){
+    pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const doc=await pdfjsLib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
+    for(let i=1;i<=doc.numPages;i++){
+      const pag=await doc.getPage(i);const base=pag.getViewport({scale:1});
+      const vp=pag.getViewport({scale:1500/base.width});
+      const cv=document.createElement('canvas');cv.width=vp.width;cv.height=vp.height;
+      await pag.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise;
+      salida.push({cv,origen:`${file.name} · página ${i}`});
+    }
+  }else{
+    const img=await new Promise((ok,err)=>{const im=new Image();im.onload=()=>ok(im);im.onerror=err;im.src=URL.createObjectURL(file)});
+    const k=Math.min(1,2000/Math.max(img.width,img.height));
+    const cv=document.createElement('canvas');cv.width=Math.round(img.width*k);cv.height=Math.round(img.height*k);
+    cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+    salida.push({cv,origen:file.name});
+  }
+  return salida;
+}
+
+function grises(cv){
+  const {width:w,height:h}=cv,d=cv.getContext('2d').getImageData(0,0,w,h).data,g=new Uint8Array(w*h);
+  for(let i=0,p=0;i<g.length;i++,p+=4)g[i]=(d[p]*299+d[p+1]*587+d[p+2]*114)/1000;
+  return {w,h,g};
+}
+
+// El cuadrado negro mas grande y mas "lleno" dentro de una ventana.
+function buscarMarca(im,x0,y0,x1,y1){
+  const W=x1-x0,H=y1-y0,vis=new Uint8Array(W*H);let mejor=null;
+  const oscuro=(x,y)=>im.g[(y0+y)*im.w+x0+x]<110;
+  const pila=[];
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    if(vis[y*W+x]||!oscuro(x,y))continue;
+    let n=0,mx=x,Mx=x,my=y,My=y;pila.push(x,y);vis[y*W+x]=1;
+    while(pila.length){const py=pila.pop(),px=pila.pop();n++;
+      if(px<mx)mx=px;if(px>Mx)Mx=px;if(py<my)my=py;if(py>My)My=py;
+      for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const nx=px+dx,ny=py+dy;
+        if(nx<0||ny<0||nx>=W||ny>=H||vis[ny*W+nx]||!oscuro(nx,ny))continue;vis[ny*W+nx]=1;pila.push(nx,ny)}}
+    const bw=Mx-mx+1,bh=My-my+1,lleno=n/(bw*bh),asp=bw/bh;
+    if(bw<im.w*0.012||asp<0.7||asp>1.43||lleno<0.75)continue;
+    if(!mejor||n>mejor.n)mejor={n,x:x0+(mx+Mx)/2,y:y0+(my+My)/2};
+  }
+  return mejor;
+}
+
+// Homografia de 4 puntos (milimetros de la hoja -> pixeles de la imagen).
+function homografia(src,dst){
+  const A=[],b=[];
+  for(let i=0;i<4;i++){const [x,y]=src[i],[u,v]=dst[i];
+    A.push([x,y,1,0,0,0,-u*x,-u*y]);b.push(u);A.push([0,0,0,x,y,1,-v*x,-v*y]);b.push(v)}
+  for(let c=0;c<8;c++){let p=c;for(let r=c+1;r<8;r++)if(Math.abs(A[r][c])>Math.abs(A[p][c]))p=r;
+    [A[c],A[p]]=[A[p],A[c]];[b[c],b[p]]=[b[p],b[c]];
+    for(let r=0;r<8;r++){if(r===c)continue;const f=A[r][c]/A[c][c];for(let k=c;k<8;k++)A[r][k]-=f*A[c][k];b[r]-=f*b[c]}}
+  const h=b.map((v,i)=>v/A[i][i]);
+  return (x,y)=>{const z=h[6]*x+h[7]*y+1;return [(h[0]*x+h[1]*y+h[2])/z,(h[3]*x+h[4]*y+h[5])/z]};
+}
+
+async function leerQR(cv,H){
+  const pts=[[HOJA.qr.x-3,HOJA.qr.y-3],[HOJA.qr.x+HOJA.qr.t+3,HOJA.qr.y-3],[HOJA.qr.x-3,HOJA.qr.y+HOJA.qr.t+3],[HOJA.qr.x+HOJA.qr.t+3,HOJA.qr.y+HOJA.qr.t+3]].map(([x,y])=>H(x,y));
+  const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);
+  const x0=Math.max(0,Math.min(...xs)),y0=Math.max(0,Math.min(...ys)),x1=Math.min(cv.width,Math.max(...xs)),y1=Math.min(cv.height,Math.max(...ys));
+  if(x1-x0<20||y1-y0<20)return null;
+  const c=document.createElement('canvas');c.width=x1-x0;c.height=y1-y0;c.getContext('2d').drawImage(cv,x0,y0,x1-x0,y1-y0,0,0,c.width,c.height);
+  try{return (await new ZXing.BrowserQRCodeReader().decodeFromImageUrl(c.toDataURL())).getText()}catch(e){return null}
+}
+
+// Lee una pagina: identifica la hoja por el QR y mide cuanto esta rellena cada burbuja.
+async function leerHoja(cv,nPreg,nOps){
+  const im=grises(cv),W=im.w,Hh=im.h;
+  const v=[[0,0,.35,.3],[.65,0,1,.3],[0,.7,.35,1],[.65,.7,1,1]].map(([a,b,c,d])=>buscarMarca(im,Math.round(a*W),Math.round(b*Hh),Math.round(c*W),Math.round(d*Hh)));
+  if(v.some(m=>!m))return {error:'no se encontraron los cuatro cuadrados de las esquinas'};
+  const pts=v.map(m=>[m.x,m.y]);
+  // Derecha o al reves: el QR esta arriba a la derecha; si ahi no se lee, se
+  // prueba la hoja girada 180 grados.
+  let H=homografia(HOJA.marcas,pts),qr=await leerQR(cv,H);
+  if(!qr){const H2=homografia(HOJA.marcas,[pts[3],pts[2],pts[1],pts[0]]);const q2=await leerQR(cv,H2);if(q2){H=H2;qr=q2}}
+  const llenado=[];
+  for(let i=0;i<nPreg;i++){const fila=[];
+    for(let j=0;j<nOps;j++){const [bx,by]=burbuja(i,j),[cx,cy]=H(bx,by),[ex,ey]=H(bx+HOJA.grilla.r*0.55,by);
+      const r=Math.hypot(ex-cx,ey-cy);let n=0,o=0;
+      for(let y=Math.floor(cy-r);y<=cy+r;y++)for(let x=Math.floor(cx-r);x<=cx+r;x++){
+        if(x<0||y<0||x>=W||y>=Hh||(x-cx)**2+(y-cy)**2>r*r)continue;n++;if(im.g[y*W+x]<140)o++}
+      fila.push(n?o/n:0)}
+    llenado.push(fila)}
+  const respuestas=llenado.map(f=>{const o=f.map((v,j)=>[v,j]).sort((a,b)=>b[0]-a[0]);
+    if(o[0][0]<0.2)return {r:null,duda:'sin marcar'};
+    if(o[1]&&o[0][0]<2*o[1][0]+0.05)return {r:o[0][1],duda:'más de una marcada'};
+    return {r:o[0][1],duda:null}});
+  return {qr,respuestas,llenado};
+}
+
+async function leerPruebas(sid,vid,files){
+  const box=document.getElementById('pR'+sid);
+  if(!files||!files.length)return;
+  box.innerHTML='<div class="aviso info" style="margin-top:8px">Leyendo las pruebas…</div>';
+  try{
+    const [ev,ses]=await Promise.all([api(`/versiones/${vid}/evaluacion`),api(`/versiones/${vid}/sesiones`)]);
+    if(!ev.preguntas.length)throw new Error('el documento no tiene preguntas de evaluación cargadas');
+    const s=ses.sesiones.find(x=>x.id===sid);
+    const nOps=Math.max(...ev.preguntas.map(q=>q.opciones.length));
+    const hojas=[];
+    for(const f of files)for(const p of await paginasDe(f)){
+      const r=await leerHoja(p.cv,ev.preguntas.length,nOps);
+      const [tipo,sesQR,nombre]=(r.qr||'').split('|');
+      const mini=document.createElement('canvas');mini.width=300;mini.height=Math.round(300*p.cv.height/p.cv.width);mini.getContext('2d').drawImage(p.cv,0,0,mini.width,mini.height);
+      hojas.push({...r,origen:p.origen,img:mini.toDataURL('image/jpeg',0.7),
+        nombre:tipo==='DCP'?nombre:'',otraSesion:tipo==='DCP'&&Number(sesQR)!==sid,
+        resp:(r.respuestas||[]).map(x=>x.r)});
+    }
+    S.pruebas={sid,vid,ev,hojas,files:[...files],nombres:s.asistentes.map(a=>a.persona_nombre)};
+    pintarPruebas();
+  }catch(e){box.innerHTML=`<div class="aviso crit" style="margin-top:8px">${esc(e.message)}</div>`}
+}
+
+function puntaje(ev,resp){const bien=ev.preguntas.filter((q,i)=>resp[i]===q.correcta).length;return Math.round(bien*100/ev.preguntas.length)}
+
+function pintarPruebas(){
+  const P=S.pruebas,box=document.getElementById('pR'+P.sid);
+  const ops=n=>`<option value="">—</option>`+LETRAS.slice(0,n).split('').map((l,j)=>`<option value="${j}">${l}</option>`).join('');
+  box.innerHTML=`<div class="card" style="margin-top:8px"><b>Pruebas leídas (${P.hojas.length})</b>
+    <span class="muted">— revisá las marcadas en amarillo. Patrón: ${P.ev.preguntas.map((q,i)=>`${i+1}${LETRAS[q.correcta]}`).join(' ')} · mínimo ${P.ev.puntajeMinimo}%</span>
+    <div class="tabla"><table><thead><tr><th>Hoja</th><th>Persona</th>${P.ev.preguntas.map((_,i)=>`<th>P${i+1}</th>`).join('')}<th>Puntaje</th></tr></thead><tbody>
+    ${P.hojas.map((h,k)=>{
+      if(h.error)return `<tr><td><img src="${h.img}" style="width:60px;cursor:zoom-in" onclick="window.open(this.src)"></td><td colspan="${P.ev.preguntas.length+2}"><span class="chip crit">no se pudo leer</span> ${esc(h.error)} <span class="muted">${esc(h.origen)}</span></td></tr>`;
+      const pt=puntaje(P.ev,h.resp),ok=pt>=P.ev.puntajeMinimo;
+      return `<tr><td><img src="${h.img}" style="width:60px;cursor:zoom-in" onclick="window.open(this.src)"><div class="muted" style="font-size:11px">${esc(h.origen)}</div></td>
+        <td>${h.nombre?`<b>${esc(h.nombre)}</b>`:`<select onchange="S.pruebas.hojas[${k}].nombre=this.value"><option value="">— elegir —</option>${P.nombres.map(n=>`<option>${esc(n)}</option>`).join('')}</select><div class="muted">hoja sin nombre o QR ilegible</div>`}
+          ${h.otraSesion?'<div><span class="chip crit">es de otra sesión</span></div>':''}</td>
+        ${P.ev.preguntas.map((q,i)=>{const d=h.respuestas[i]?.duda;return `<td style="${d?'background:var(--warn-g)':''}"><select style="width:auto;padding:3px" onchange="S.pruebas.hojas[${k}].resp[${i}]=this.value===''?null:Number(this.value);pintarPruebas()">${ops(q.opciones.length).replace(`value="${h.resp[i]??''}"`,`value="${h.resp[i]??''}" selected`)}</select>${d?`<div class="muted" style="font-size:11px">${d}</div>`:''}</td>`}).join('')}
+        <td><b>${pt}%</b> <span class="chip ${ok?'ok':'crit'}">${ok?'aprobó':'no aprobó'}</span></td></tr>`}).join('')}
+    </tbody></table></div>
+    <div class="fila" style="margin-top:8px"><button class="b pri" onclick="guardarPruebas()">Guardar resultados y el escaneo</button>
+      <span class="muted">Quien no estaba registrado en la sesión se agrega. Las hojas de otra sesión o sin persona se ignoran.</span></div></div>`;
+}
+
+async function guardarPruebas(){
+  const P=S.pruebas;
+  const validas=P.hojas.filter(h=>!h.error&&!h.otraSesion&&h.nombre);
+  if(!validas.length)return toast('No hay hojas con persona para guardar',true);
+  if(validas.some(h=>h.resp.some(r=>r==null))&&!confirm('Hay preguntas sin respuesta: cuentan como incorrectas. ¿Seguimos?'))return;
+  try{
+    for(const f of P.files){
+      const r=await fetch(`${API}/sesiones/${P.sid}/pruebas?nombre=${encodeURIComponent(f.name)}`,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/octet-stream'},body:f});
+      const d=await r.json().catch(()=>({}));if(!r.ok||d.ok===false)throw new Error('no se pudo guardar el escaneo: '+(d.error||r.status));
+    }
+    await api(`/sesiones/${P.sid}/asistentes`,{method:'POST',body:JSON.stringify({nombres:validas.map(h=>h.nombre)})});
+    const {sesiones}=await api(`/versiones/${P.vid}/sesiones`);
+    const s=sesiones.find(x=>x.id===P.sid);
+    const resultados=validas.map(h=>{const a=s.asistentes.find(x=>x.persona_nombre===h.nombre);const pt=puntaje(P.ev,h.resp);
+      return a&&a.via==='capacitador'?{id:a.id,aprobado:pt>=P.ev.puntajeMinimo,nota:pt}:null}).filter(Boolean);
+    const r=await api(`/sesiones/${P.sid}/resultados`,{method:'PUT',body:JSON.stringify({resultados})});
+    toast(`Guardados ${resultados.length} resultado(s) y el escaneo`);S.pruebas=null;cargarSesiones(P.vid);
+  }catch(e){toast(e.message,true)}
 }
 
 async function guardarResultados(sid,vid){
