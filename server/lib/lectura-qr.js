@@ -91,7 +91,7 @@ export function validarEvaluacion(preguntas) {
  * Agrega a la coleccion R de Capacitaciones un registro por asistente
  * aprobado. Corre dentro de la transaccion `c` del cierre de la sesion.
  */
-export async function registrarEnCapacitaciones(c, { asistentes, codigo, version, titulo, resp, horas, conEvaluacion, minimo, sectores, fecha }) {
+export async function registrarEnCapacitaciones(c, { asistentes, codigo, version, titulo, resp, horas, minimo, evGrupo, sectores, fecha }) {
     if (!asistentes.length) return 0;
     await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['capacitaciones']);
     const { rows: [fila] } = await c.query("SELECT valor, version FROM capacitaciones_datos WHERE clave = 'R' FOR UPDATE");
@@ -100,16 +100,22 @@ export async function registrarEnCapacitaciones(c, { asistentes, codigo, version
     const [a, m] = fecha.split('-').map(Number);
     const base = {
         fecha, mes: MESES[m - 1], tema: 'PROCEDIMIENTO', desc: `${codigo} v${version} · ${titulo}`.slice(0, 200),
-        cod: codigo, hrs: horas, tipo: 'TEORICO', ev: conEvaluacion ? 'ESCRITA' : 'NO APLICA', plan: 'NO',
-        resp, puntajeMin: conEvaluacion ? minimo : 0, planId: 0, dirigido: (sectores || []).join(', '),
-        persEst: 0, year: a, origen: 'lectura QR',
+        cod: codigo, hrs: horas, tipo: 'TEORICO', plan: 'NO',
+        resp, planId: 0, dirigido: (sectores || []).join(', '),
+        persEst: 0, year: a, origen: 'sesión de capacitación',
     };
     for (const p of asistentes) {
+        // Quien contesto en pantalla tiene puntaje: evaluacion escrita. A quien
+        // registro el capacitador (lector o lista), lo que el indique al
+        // cerrar: oral, practica, escrita en papel o no aplica.
+        const escrita = p.puntaje != null;
         R.push({
             ...base,
             id: 'q' + Date.now().toString(36) + randomBytes(3).toString('hex'),
+            ev: escrita ? 'ESCRITA' : (evGrupo || 'NO APLICA'),
+            puntajeMin: escrita ? minimo : 0,
             nom: p.persona_nombre, sec: p.persona_sector || '',
-            nota: p.puntaje == null ? '' : String(p.puntaje),
+            nota: escrita ? String(p.puntaje) : '',
         });
     }
     await c.query(

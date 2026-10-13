@@ -333,11 +333,11 @@ async function cargarEntrenamiento(v,d){
         <div class="fila" style="margin-top:6px"><button class="b sm" onclick="guardarMatriz(${d.id})">Guardar matriz</button><span class="muted">Ctrl+clic para elegir varios.</span></div></details>`;
     }
     if(puede('aprobar')){
-      h+=`<h3 style="margin-top:18px">Capacitación con QR (personal sin usuario)</h3>
+      h+=`<h3 style="margin-top:18px">Capacitación del personal sin usuario</h3>
         <div class="fila"><button class="b sm" onclick="editarEvaluacion(${v.id})">Preguntas de evaluación</button>
-          <button class="b sm pri" onclick="abrirSesion(${v.id})" ${v.tiene_pdf?'':'disabled title="Falta el PDF"'}>Abrir sesión con QR</button>
+          <button class="b sm pri" onclick="abrirSesion(${v.id})">Abrir sesión de capacitación</button>
           ${v.estado==='vigente'?`<button class="b sm" onclick="qrPuesto(${d.id})">QR del puesto de trabajo</button>`:''}</div>
-        ${v.tiene_pdf?'':'<div class="muted">Para capacitar con QR la versión tiene que tener el PDF cargado.</div>'}
+        ${v.tiene_pdf?'':'<div class="muted">Sin PDF cargado se puede tomar asistencia, pero no leer el documento por QR.</div>'}
         <div id="evalBox"></div><div id="sesiones"></div>`;
     }
     box.innerHTML=h;
@@ -396,16 +396,25 @@ async function cargarSesiones(vid){
         <b>Sesión ${s.id}${s.lugar?' · '+esc(s.lugar):''}</b>
         <span class="chip ${s.cerrada_en?'ok':s.abierta?'info':'warn'}">${s.cerrada_en?'cerrada y firmada':s.abierta?'abierta hasta '+dmaHora(s.vence_en):'QR vencido, falta cerrar'}</span></div>
         <div class="muted">Abrió ${esc(s.abierta_por)} el ${dmaHora(s.abierta_en)}${s.cerrada_en?` · ${s.registros_creados} registro(s) en Capacitaciones`:''}</div>
-        ${s.abierta?`<div class="fila" style="margin-top:10px;align-items:flex-start"><div id="qr${s.id}" style="background:#fff;padding:8px;border:1px solid var(--border);border-radius:8px"></div>
+        ${s.cerrada_en?'':`<div class="card" style="margin-top:10px;background:var(--pri-g)"><b>Tomar asistencia</b>
+          <div class="muted">Pasá las credenciales por el lector (cada lectura entra sola) o elegí a la gente de la lista.</div>
+          <input id="aC${s.id}" placeholder="Hacé clic acá y pasá la credencial por el lector" autocomplete="off" style="margin-top:6px;font-size:16px"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();asistenciaCodigo(${s.id},${vid},this)}">
+          <div id="aUlt${s.id}" style="margin-top:6px;font-weight:700;min-height:20px"></div>
+          <div class="fila"><button class="b sm" onclick="elegirDelPadron(${s.id},${vid})">Elegir de la lista del padrón</button>
+            <button class="b sm" onclick="cargarSesiones(${vid})">Actualizar lista</button></div><div id="aPad${s.id}"></div></div>`}
+        ${s.abierta?`<details style="margin-top:8px"><summary>QR para leer en tablet o celular (con evaluación en pantalla)</summary>
+          <div class="fila" style="margin-top:10px;align-items:flex-start"><div id="qr${s.id}" style="background:#fff;padding:8px;border:1px solid var(--border);border-radius:8px"></div>
           <div><div class="muted">Mostrá este QR o pasá el enlace:</div><code style="font-size:12px;word-break:break-all">${esc(url)}</code>
-          <div class="fila" style="margin-top:8px"><button class="b sm" onclick="pantallaQR('${esc(url)}','Capacitación: ${esc(S.sel.codigo)}')">Mostrar QR grande</button>
-          <button class="b sm" onclick="cargarSesiones(${vid})">Actualizar lista</button></div></div></div>`:''}
+          <div class="fila" style="margin-top:8px"><button class="b sm" onclick="pantallaQR('${esc(url)}','Capacitación: ${esc(S.sel.codigo)}')">Mostrar QR grande</button></div></div></div></details>`:''}
         <div class="tabla" style="margin-top:8px"><table><thead><tr><th>Persona</th><th>Sector</th><th>Puntaje</th><th>Intentos</th><th>Hora</th></tr></thead><tbody>
           ${s.asistentes.map(a=>`<tr><td>${esc(a.persona_nombre)}</td><td class="muted">${esc(a.persona_sector||'')}</td>
             <td>${a.puntaje==null?'—':a.puntaje+'%'} ${a.aprobado?'<span class="chip ok">aprobó</span>':'<span class="chip crit">no aprobó</span>'}</td><td>${a.intentos}</td><td>${dmaHora(a.confirmado_en)}</td></tr>`).join('')||'<tr><td colspan="5" class="muted">Todavía nadie confirmó.</td></tr>'}
         </tbody></table></div>
         ${s.cerrada_en?'':`<div style="margin-top:10px"><b>Cerrar y firmar</b> <span class="muted">— ${aprob.length} aprobado(s) pasan a Capacitaciones con tu firma como capacitador/a.</span>
           <div class="grid3"><div><label class="lb">Horas de capacitación</label><input id="sH${s.id}" type="number" step="0.25" min="0.25" value="0.5"></div>
+          <div><label class="lb">Evaluación de los registrados por lector o lista</label><select id="sE${s.id}">
+            <option value="NO APLICA">No aplica</option><option value="ORAL">Oral</option><option value="PRACTICA">Práctica</option><option value="ESCRITA">Escrita (en papel)</option></select></div><div></div>
           <div><label class="lb">Usuario</label><input id="sU${s.id}" value="${esc(S.usuario)}"></div><div><label class="lb">Clave</label><input id="sC${s.id}" type="password"></div></div>
           <button class="b ok" style="margin-top:8px" onclick="cerrarSesion(${s.id},${vid})">Firmar y cerrar la sesión</button></div>`}
       </div>`}).join('');
@@ -414,12 +423,48 @@ async function cargarSesiones(vid){
 }
 
 async function cerrarSesion(sid,vid){
-  const usuario=document.getElementById('sU'+sid).value.trim(),clave=document.getElementById('sC'+sid).value,horas=document.getElementById('sH'+sid).value;
+  const usuario=document.getElementById('sU'+sid).value.trim(),clave=document.getElementById('sC'+sid).value,horas=document.getElementById('sH'+sid).value,evGrupo=document.getElementById('sE'+sid).value;
   if(!usuario||!clave)return toast('Para firmar escribí usuario y clave',true);
   if(!confirm('¿Cerrar la sesión? Ya no se podrá escanear el QR y los aprobados pasan a Capacitaciones.'))return;
-  try{const r=await api(`/sesiones/${sid}/cerrar`,{method:'POST',body:JSON.stringify({usuario,clave,horas})});
+  try{const r=await api(`/sesiones/${sid}/cerrar`,{method:'POST',body:JSON.stringify({usuario,clave,horas,evGrupo})});
     toast(`Sesión cerrada: ${r.registrados} registro(s) en Capacitaciones`);abrir(S.sel.id)}
   catch(e){document.getElementById('sC'+sid).value='';toast(e.message,true)}
+}
+
+// Asistencia con lector: el lector "escribe" el codigo y manda Enter. Se
+// registra y el campo queda listo para la siguiente credencial.
+async function asistenciaCodigo(sid,vid,input){
+  const codigo=input.value.trim();input.value='';if(!codigo)return;
+  const ult=document.getElementById('aUlt'+sid);
+  try{
+    const r=await api(`/sesiones/${sid}/asistentes`,{method:'POST',body:JSON.stringify({codigo})});
+    ult.innerHTML=r.repetido?`<span style="color:var(--warn)">${esc(r.nombre)} ya estaba registrado/a</span>`:`<span style="color:var(--ok)">✓ ${esc(r.nombre)}</span>`;
+    S.contar=(S.contar||0)+1;
+    // La lista se refresca cada tanto, no en cada lectura: con 50 personas
+    // seguidas redibujar todo haria perder el foco del campo.
+    clearTimeout(S.refrescar);S.refrescar=setTimeout(async()=>{await cargarSesiones(vid);const i=document.getElementById('aC'+sid);if(i)i.focus()},4000);
+  }catch(e){ult.innerHTML=`<span style="color:var(--crit)">✗ ${esc(e.message)}</span>`}
+  input.focus();
+}
+
+async function elegirDelPadron(sid,vid){
+  const box=document.getElementById('aPad'+sid);
+  try{
+    const e=await api(`/versiones/${vid}/entrenamiento`);
+    if(e.sinMatriz){box.innerHTML='<div class="aviso warn" style="margin-top:8px">El documento no tiene sectores en la matriz: definilos en "Editar matriz de capacitación".</div>';return}
+    if(!e.pendientes.length){box.innerHTML='<div class="aviso ok" style="margin-top:8px">No queda nadie pendiente en los sectores del documento.</div>';return}
+    const porSector={};e.pendientes.forEach(p=>(porSector[p.sector]=porSector[p.sector]||[]).push(p));
+    box.innerHTML=`<div style="margin-top:8px">${Object.entries(porSector).map(([sec,ps],k)=>`<div style="margin-bottom:8px"><label><input type="checkbox" style="width:auto" onchange="document.querySelectorAll('.pad${sid}_${k}').forEach(c=>c.checked=this.checked)"> <b>${esc(sec)}</b> (${ps.length}) — marcar todos</label>
+      <div style="columns:2;margin-top:4px">${ps.map(p=>`<label style="display:block;font-size:13.5px"><input type="checkbox" class="pad${sid} pad${sid}_${k}" value="${esc(p.nombre)}" style="width:auto"> ${esc(p.nombre)}</label>`).join('')}</div></div>`).join('')}
+      <button class="b sm pri" onclick="agregarDelPadron(${sid},${vid})">Registrar a los marcados</button></div>`;
+  }catch(err){box.innerHTML=`<div class="aviso crit">${esc(err.message)}</div>`}
+}
+async function agregarDelPadron(sid,vid){
+  const nombres=[...document.querySelectorAll('.pad'+sid+':checked')].map(c=>c.value);
+  if(!nombres.length)return toast('Marcá al menos una persona',true);
+  try{const r=await api(`/sesiones/${sid}/asistentes`,{method:'POST',body:JSON.stringify({nombres})});
+    toast(`Registradas ${r.agregados.length} persona(s)`);cargarSesiones(vid)}
+  catch(e){toast(e.message,true)}
 }
 
 // Pantalla completa con el QR, para proyectar o mostrar en la tablet.

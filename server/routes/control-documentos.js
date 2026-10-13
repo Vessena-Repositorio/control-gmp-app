@@ -28,6 +28,7 @@ import { nuevaVersion, enviarARevision, firmarTarea, anularBorrador, vigenteAhor
 import { avance, datosPadron, sectoresDelPadron } from '../lib/entrenamiento-documentos.js';
 import { avisarCiclo, avisarLectura } from '../lib/avisos-documentos.js';
 import { nuevoToken, validarEvaluacion, registrarEnCapacitaciones, personaPorCodigo } from '../lib/lectura-qr.js';
+import { coleccionCapacitaciones } from '../lib/tareas.js';
 
 export const rutasControlDocumentos = Router();
 
@@ -883,7 +884,8 @@ rutasControlDocumentos.post('/versiones/:id/sesiones', capacitar, async (req, re
             const { rows: [v] } = await c.query('SELECT estado, pdf_ruta FROM dc_versiones WHERE id = $1', [req.params.id]);
             if (!v) throw fallo(404, 'version inexistente');
             if (!['vigente', 'en_entrenamiento'].includes(v.estado)) throw fallo(409, 'se capacita sobre una versión aprobada');
-            if (!v.pdf_ruta) throw fallo(409, 'la versión no tiene el PDF cargado: no hay qué mostrar');
+            // Sin PDF igual se puede capacitar en grupo y tomar asistencia; lo que
+            // no anda es la lectura por QR, que lo avisa en la pagina.
             const { rows: [n] } = await c.query(
                 `INSERT INTO dc_sesiones (version_id, token, lugar, abierta_por_id, vence_en)
                  VALUES ($1,$2,$3,$4, now() + ($5 || ' hours')::interval) RETURNING id, token, vence_en`,
@@ -922,7 +924,9 @@ rutasControlDocumentos.post('/sesiones/:id/cerrar', capacitar, async (req, res, 
     try {
         const horas = Number(b.horas) || 0.5;
         if (horas <= 0 || horas > 24) throw fallo(400, 'horas de capacitación inválidas');
-        const r = await enTransaccionAuditada(req, 'cierre de sesión de capacitación con QR', async (c) => {
+        // Como se evaluo a quienes registro el capacitador (no contestaron en pantalla).
+        const evGrupo = ['NO APLICA', 'ORAL', 'PRACTICA', 'ESCRITA'].includes(b.evGrupo) ? b.evGrupo : 'NO APLICA';
+        const r = await enTransaccionAuditada(req, 'cierre de sesión de capacitación', async (c) => {
             const { rows: [s] } = await c.query(
                 `SELECT s.*, v.numero, v.evaluacion, v.puntaje_minimo, d.codigo, d.titulo, d.capacitar_sectores,
                         coalesce(v.pdf_sha256, v.archivo_sha256) AS huella
@@ -940,7 +944,7 @@ rutasControlDocumentos.post('/sesiones/:id/cerrar', capacitar, async (req, res, 
             const creados = await registrarEnCapacitaciones(c, {
                 asistentes, codigo: s.codigo, version: verTxt(s.numero), titulo: s.titulo,
                 resp: req.usuario.nombre || req.usuario.usuario, horas,
-                conEvaluacion: Array.isArray(s.evaluacion) && s.evaluacion.length > 0, minimo: s.puntaje_minimo,
+                minimo: s.puntaje_minimo, evGrupo,
                 sectores: s.capacitar_sectores, fecha: hoyIso(),
             });
             await c.query(
@@ -949,6 +953,53 @@ rutasControlDocumentos.post('/sesiones/:id/cerrar', capacitar, async (req, res, 
             return { firma, registrados: creados };
         });
         res.json({ ok: true, ...r });
+    } catch (err) { responder(err, res, next); }
+});
+
+/**
+ * POST /api/control-documentos/sesiones/:id/asistentes { codigo } | { nombres: [...] }
+ *
+ * Asistencia tomada por quien capacita, para grupos grandes: pasando las
+ * credenciales por un lector (cada lectura es un `codigo`) o marcando a la
+ * gente en la lista del padron (`nombres`, como estan en el padron). No pasa
+ * por la evaluacion en pantalla; como se evaluo se indica al cerrar. Vale lo
+ * mismo que la planilla en papel: lo firma quien capacita al cerrar.
+ */
+rutasControlDocumentos.post('/sesiones/:id/asistentes', capacitar, async (req, res, next) => {
+    const b = req.body || {};
+    try {
+        const { rows: [s] } = await consultar('SELECT id, cerrada_en FROM dc_sesiones WHERE id = $1', [req.params.id]);
+        if (!s) throw fallo(404, 'sesión inexistente');
+        if (s.cerrada_en) throw fallo(409, 'la sesión ya está cerrada');
+
+        let personas = [];
+        let identificador;
+        if (b.codigo != null) {
+            const p = await personaPorCodigo(b.codigo);
+            if (!p) throw fallo(404, `no hay nadie con el código ${texto(b.codigo)}`);
+            personas = [p];
+            identificador = texto(b.codigo);
+        } else {
+            const pedidos = new Set((Array.isArray(b.nombres) ? b.nombres : []).map((n) => String(n).trim()).filter(Boolean));
+            if (!pedidos.size) throw fallo(400, 'no se eligió a nadie');
+            const padron = (await coleccionCapacitaciones('PE')).filter((p) => p && p.a !== false);
+            personas = padron.filter((p) => pedidos.has(String(p.n)));
+            identificador = 'lista del capacitador';
+        }
+
+        const agregados = [];
+        await enTransaccionAuditada(req, 'asistencia tomada por quien capacita', async (c) => {
+            for (const p of personas) {
+                const { rows } = await c.query(
+                    `INSERT INTO dc_sesion_asistentes (sesion_id, persona_nombre, persona_sector, identificador, aprobado)
+                     VALUES ($1,$2,$3,$4,true)
+                     ON CONFLICT (sesion_id, persona_nombre) DO NOTHING RETURNING id`,
+                    [s.id, String(p.n), p.s || null, identificador]);
+                if (rows.length) agregados.push({ nombre: p.n, sector: p.s || '' });
+            }
+        });
+        const repetido = personas.length === 1 && !agregados.length;
+        res.json({ ok: true, agregados, repetido, nombre: personas[0] ? personas[0].n : null });
     } catch (err) { responder(err, res, next); }
 });
 
