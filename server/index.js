@@ -20,6 +20,7 @@ import { rutasEstandares } from './routes/estandares.js';
 import { rutasProductosEan } from './routes/productos-ean.js';
 import { rutasAuditorias } from './routes/auditorias.js';
 import { rutasControlDocumentos } from './routes/control-documentos.js';
+import { rutasLecturaPublica } from './routes/lectura-publica.js';
 import { hayCompresion } from './lib/comprimir-foto.js';
 import { rutasCorreo } from './routes/correo.js';
 import { rutasEstabilidad } from './routes/estabilidad.js';
@@ -151,6 +152,8 @@ app.use('/api/estandares', rutasEstandares);
 app.use('/api/productos-ean', rutasProductosEan);
 app.use('/api/auditorias', rutasAuditorias);
 app.use('/api/control-documentos', rutasControlDocumentos);
+// Sin sesion: la usan los operarios desde el QR (el token es la llave).
+app.use('/api/lectura', rutasLecturaPublica);
 app.use('/api/envases-captura', rutasEnvasesCaptura);
 app.use('/api/correo', rutasCorreo);
 app.use('/api/estabilidad', rutasEstabilidad);

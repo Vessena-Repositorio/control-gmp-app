@@ -11,7 +11,9 @@ const RECURSO_POR_ARCHIVO = Object.fromEntries(
  * Paginas que se sirven sin sesion. Son las que hacen falta para poder
  * conseguir una: si estuvieran protegidas, nadie podria entrar nunca.
  */
-const PUBLICAS = new Set(['index.html', 'cambiar-clave.html']);
+// lectura.html: la abren los operarios de planta desde un QR, sin usuario;
+// lo que muestra lo decide el token del QR (routes/lectura-publica.js).
+const PUBLICAS = new Set(['index.html', 'cambiar-clave.html', 'lectura.html']);
 
 /**
  * Gate de las paginas. Se aplica del lado del servidor y no solo en el

@@ -27,6 +27,7 @@ import { marcarCopiaNoControlada } from '../lib/marca-agua.js';
 import { nuevaVersion, enviarARevision, firmarTarea, anularBorrador, vigenteAhora } from '../lib/ciclo-documentos.js';
 import { avance, datosPadron, sectoresDelPadron } from '../lib/entrenamiento-documentos.js';
 import { avisarCiclo, avisarLectura } from '../lib/avisos-documentos.js';
+import { nuevoToken, validarEvaluacion, registrarEnCapacitaciones, personaPorCodigo } from '../lib/lectura-qr.js';
 
 export const rutasControlDocumentos = Router();
 
@@ -829,4 +830,180 @@ rutasControlDocumentos.post('/versiones/:id/vigente-ahora', administrar, async (
         await enTransaccionAuditada(req, motivo, (c) => vigenteAhora(c, req.params.id));
         res.json({ ok: true });
     } catch (err) { responder(err, res, next); }
+});
+
+// ---------------------------------------------------------------------------
+// Lectura con QR: sesiones, evaluacion, QR fijo y credenciales (migracion 058)
+// ---------------------------------------------------------------------------
+// Capacitan quienes pueden aprobar en el modulo: Claudia, Gloria y Antonella.
+const capacitar = exigirPermiso(RECURSO, 'aprobar');
+
+/**
+ * PUT /api/control-documentos/versiones/:id/evaluacion { preguntas, puntajeMinimo }
+ * Preguntas de opcion multiple para quien lee por QR. No se cambian una vez
+ * que alguien las contesto: los puntajes dejarian de ser comparables.
+ */
+rutasControlDocumentos.put('/versiones/:id/evaluacion', capacitar, async (req, res, next) => {
+    const b = req.body || {};
+    try {
+        const preguntas = validarEvaluacion(b.preguntas || []);
+        const minimo = b.puntajeMinimo == null ? 80 : Number(b.puntajeMinimo);
+        if (!Number.isInteger(minimo) || minimo < 0 || minimo > 100) throw fallo(400, 'el puntaje mínimo va de 0 a 100');
+        await enTransaccionAuditada(req, 'evaluación de la capacitación', async (c) => {
+            const { rows: [v] } = await c.query('SELECT estado FROM dc_versiones WHERE id = $1 FOR UPDATE', [req.params.id]);
+            if (!v) throw fallo(404, 'version inexistente');
+            if (['obsoleto', 'anulado'].includes(v.estado)) throw fallo(409, `la versión está ${v.estado}`);
+            const { rows: [{ n }] } = await c.query(
+                `SELECT count(*)::int AS n FROM dc_sesion_asistentes a JOIN dc_sesiones s ON s.id = a.sesion_id
+                 WHERE s.version_id = $1 AND a.puntaje IS NOT NULL`, [req.params.id]);
+            if (n) throw fallo(409, 'ya hay personas que contestaron esta evaluación: no se puede cambiar');
+            await c.query('UPDATE dc_versiones SET evaluacion = $2, puntaje_minimo = $3 WHERE id = $1',
+                [req.params.id, preguntas.length ? JSON.stringify(preguntas) : null, minimo]);
+        });
+        res.json({ ok: true, preguntas: preguntas.length });
+    } catch (err) { responder(err, res, next); }
+});
+
+/** GET /api/control-documentos/versiones/:id/evaluacion — con la respuesta correcta, para editarla. */
+rutasControlDocumentos.get('/versiones/:id/evaluacion', capacitar, async (req, res, next) => {
+    try {
+        const { rows: [v] } = await consultar('SELECT evaluacion, puntaje_minimo FROM dc_versiones WHERE id = $1', [req.params.id]);
+        if (!v) throw fallo(404, 'version inexistente');
+        res.json({ ok: true, preguntas: v.evaluacion || [], puntajeMinimo: v.puntaje_minimo });
+    } catch (err) { responder(err, res, next); }
+});
+
+/** POST /api/control-documentos/versiones/:id/sesiones { horas, lugar } — abre una sesion con QR. */
+rutasControlDocumentos.post('/versiones/:id/sesiones', capacitar, async (req, res, next) => {
+    const b = req.body || {};
+    try {
+        const horas = Number(b.horas) || 4;
+        if (horas < 1 || horas > 72) throw fallo(400, 'la sesión dura entre 1 y 72 horas');
+        const s = await enTransaccionAuditada(req, 'sesión de capacitación con QR', async (c) => {
+            const { rows: [v] } = await c.query('SELECT estado, pdf_ruta FROM dc_versiones WHERE id = $1', [req.params.id]);
+            if (!v) throw fallo(404, 'version inexistente');
+            if (!['vigente', 'en_entrenamiento'].includes(v.estado)) throw fallo(409, 'se capacita sobre una versión aprobada');
+            if (!v.pdf_ruta) throw fallo(409, 'la versión no tiene el PDF cargado: no hay qué mostrar');
+            const { rows: [n] } = await c.query(
+                `INSERT INTO dc_sesiones (version_id, token, lugar, abierta_por_id, vence_en)
+                 VALUES ($1,$2,$3,$4, now() + ($5 || ' hours')::interval) RETURNING id, token, vence_en`,
+                [req.params.id, nuevoToken(), texto(b.lugar) || null, req.usuario.id, String(horas)]);
+            return n;
+        });
+        res.status(201).json({ ok: true, ...s, url: `/lectura.html?s=${s.token}` });
+    } catch (err) { responder(err, res, next); }
+});
+
+/** GET /api/control-documentos/versiones/:id/sesiones — sesiones con sus asistentes. */
+rutasControlDocumentos.get('/versiones/:id/sesiones', capacitar, async (req, res, next) => {
+    try {
+        const { rows: sesiones } = await consultar(
+            `SELECT s.id, s.token, s.lugar, s.abierta_en, s.vence_en, s.cerrada_en, s.registros_creados,
+                    (s.cerrada_en IS NULL AND s.vence_en > now()) AS abierta, u.nombre AS abierta_por
+             FROM dc_sesiones s JOIN usuarios u ON u.id = s.abierta_por_id
+             WHERE s.version_id = $1 ORDER BY s.abierta_en DESC`, [req.params.id]);
+        for (const s of sesiones) {
+            const { rows } = await consultar(
+                `SELECT persona_nombre, persona_sector, puntaje, aprobado, intentos, confirmado_en
+                 FROM dc_sesion_asistentes WHERE sesion_id = $1 ORDER BY confirmado_en`, [s.id]);
+            s.asistentes = rows;
+        }
+        res.json({ ok: true, sesiones });
+    } catch (err) { responder(err, res, next); }
+});
+
+/**
+ * POST /api/control-documentos/sesiones/:id/cerrar { usuario, clave, horas }
+ * Quien capacita firma la lista y los aprobados pasan a Capacitaciones.
+ * Se puede cerrar aunque haya vencido el plazo para escanear.
+ */
+rutasControlDocumentos.post('/sesiones/:id/cerrar', capacitar, async (req, res, next) => {
+    const b = req.body || {};
+    try {
+        const horas = Number(b.horas) || 0.5;
+        if (horas <= 0 || horas > 24) throw fallo(400, 'horas de capacitación inválidas');
+        const r = await enTransaccionAuditada(req, 'cierre de sesión de capacitación con QR', async (c) => {
+            const { rows: [s] } = await c.query(
+                `SELECT s.*, v.numero, v.evaluacion, v.puntaje_minimo, d.codigo, d.titulo, d.capacitar_sectores,
+                        coalesce(v.pdf_sha256, v.archivo_sha256) AS huella
+                 FROM dc_sesiones s JOIN dc_versiones v ON v.id = s.version_id
+                 JOIN dc_documentos d ON d.id = v.documento_id WHERE s.id = $1 FOR UPDATE OF s`, [req.params.id]);
+            if (!s) throw fallo(404, 'sesión inexistente');
+            if (s.cerrada_en) throw fallo(409, 'la sesión ya está cerrada');
+            const { rows: asistentes } = await c.query(
+                'SELECT * FROM dc_sesion_asistentes WHERE sesion_id = $1 AND aprobado ORDER BY confirmado_en', [s.id]);
+            const firma = await firmar(c, req, {
+                usuario: b.usuario, clave: b.clave, significado: 'capacitador',
+                recurso: RECURSO, tabla: 'dc_versiones', registroId: s.version_id, contenidoSha256: s.huella,
+                comentario: `sesión ${s.id}: ${asistentes.length} persona(s) — ${asistentes.map((a) => a.persona_nombre).join(', ')}`.slice(0, 2000),
+            });
+            const creados = await registrarEnCapacitaciones(c, {
+                asistentes, codigo: s.codigo, version: verTxt(s.numero), titulo: s.titulo,
+                resp: req.usuario.nombre || req.usuario.usuario, horas,
+                conEvaluacion: Array.isArray(s.evaluacion) && s.evaluacion.length > 0, minimo: s.puntaje_minimo,
+                sectores: s.capacitar_sectores, fecha: hoyIso(),
+            });
+            await c.query(
+                `UPDATE dc_sesiones SET cerrada_en = now(), firma_id = $2, horas = $3, registros_creados = $4 WHERE id = $1`,
+                [s.id, firma.id, horas, creados]);
+            return { firma, registrados: creados };
+        });
+        res.json({ ok: true, ...r });
+    } catch (err) { responder(err, res, next); }
+});
+
+/** POST /api/control-documentos/documentos/:id/qr — el QR fijo del puesto (lo crea si no existe). */
+rutasControlDocumentos.post('/documentos/:id/qr', capacitar, async (req, res, next) => {
+    try {
+        const token = await enTransaccionAuditada(req, 'QR de consulta para el puesto de trabajo', async (c) => {
+            const { rows: [d] } = await c.query('SELECT qr_token FROM dc_documentos WHERE id = $1 FOR UPDATE', [req.params.id]);
+            if (!d) throw fallo(404, 'documento inexistente');
+            if (d.qr_token) return d.qr_token;
+            const t = nuevoToken();
+            await c.query('UPDATE dc_documentos SET qr_token = $2 WHERE id = $1', [req.params.id, t]);
+            return t;
+        });
+        res.json({ ok: true, token, url: `/lectura.html?d=${token}` });
+    } catch (err) { responder(err, res, next); }
+});
+
+/**
+ * POST /api/control-documentos/personal-codigos { filas: [{ codigo, ci, nro, nombre }] }
+ * La lista de codigos de credencial. Reemplaza los codigos que vengan.
+ */
+rutasControlDocumentos.post('/personal-codigos', administrar, async (req, res, next) => {
+    try {
+        const filas = (Array.isArray((req.body || {}).filas) ? req.body.filas : [])
+            .map((f) => ({ codigo: texto(f.codigo).toUpperCase(), ci: texto(f.ci), nro: texto(f.nro), nombre: texto(f.nombre) }))
+            .filter((f) => f.codigo && (f.ci || f.nro || f.nombre));
+        if (!filas.length) throw fallo(400, 'no llegaron códigos con cédula, número o nombre');
+        const quien = req.usuario.nombre || req.usuario.usuario;
+        await enTransaccionAuditada(req, 'carga de códigos de credencial', async (c) => {
+            for (const f of filas) {
+                await c.query(
+                    `INSERT INTO personal_codigos (codigo, ci, nro, nombre, cargado_por) VALUES ($1,$2,$3,$4,$5)
+                     ON CONFLICT (codigo) DO UPDATE SET ci = EXCLUDED.ci, nro = EXCLUDED.nro, nombre = EXCLUDED.nombre,
+                        cargado_en = now(), cargado_por = EXCLUDED.cargado_por`,
+                    [f.codigo, f.ci || null, f.nro || null, f.nombre || null, quien]);
+            }
+        });
+        const { rows: [{ n }] } = await consultar('SELECT count(*)::int AS n FROM personal_codigos');
+        res.json({ ok: true, cargados: filas.length, total: n });
+    } catch (err) { responder(err, res, next); }
+});
+
+/** GET /api/control-documentos/personal-codigos/resumen */
+rutasControlDocumentos.get('/personal-codigos/resumen', administrar, async (_req, res, next) => {
+    try {
+        const { rows: [r] } = await consultar('SELECT count(*)::int AS total, max(cargado_en) AS ultimo FROM personal_codigos');
+        res.json({ ok: true, ...r });
+    } catch (err) { next(err); }
+});
+
+/** POST /api/control-documentos/personal-codigos/probar { codigo } — a quien corresponde. */
+rutasControlDocumentos.post('/personal-codigos/probar', capacitar, async (req, res, next) => {
+    try {
+        const p = await personaPorCodigo((req.body || {}).codigo);
+        res.json({ ok: true, persona: p ? { nombre: p.n, sector: p.s || '' } : null });
+    } catch (err) { next(err); }
 });

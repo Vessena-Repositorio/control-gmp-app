@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lectura de documento · Vessena</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📖</text></svg>">
+<!-- Pagina publica: la abren los operarios desde un QR, sin usuario.
+     Lo que muestra lo decide el token del QR (server/routes/lectura-publica.js). -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--border:#e3e6ec;--text:#1c2331;--t3:#6b7382;--pri:#1f5fb0;--pri-g:rgba(31,95,176,.08);
+--ok:#1a7f3f;--ok-g:#e8f5ec;--crit:#b23636;--crit-g:#fbe9e9;--warn-g:#fff4dc;--f:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:var(--f);font-size:17px;-webkit-user-select:none;user-select:none}
+.hdr{background:var(--pri);color:#fff;padding:14px 16px}.hdr .cod{font-size:13px;opacity:.85}.hdr h1{font-size:19px;margin:2px 0 0}
+.wrap{max-width:900px;margin:0 auto;padding:12px 12px 60px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px}
+.card h2{font-size:17px;margin:0 0 10px}
+.muted{color:var(--t3);font-size:14px}
+#hojas canvas{width:100%;height:auto;display:block;margin:0 0 10px;border:1px solid var(--border);border-radius:6px;background:#fff;pointer-events:none}
+.preg{margin-bottom:16px}.preg b{display:block;margin-bottom:8px}
+.op{display:flex;gap:10px;align-items:center;padding:12px;border:1px solid var(--border);border-radius:10px;margin-bottom:6px;cursor:pointer}
+.op input{width:22px;height:22px}
+.op.sel{border-color:var(--pri);background:var(--pri-g)}
+input.txt{width:100%;font-size:20px;padding:14px;border:2px solid var(--border);border-radius:10px;font-family:var(--f);letter-spacing:1px}
+input.txt:focus{outline:none;border-color:var(--pri)}
+button{width:100%;font-size:18px;font-weight:700;padding:16px;border-radius:12px;border:0;cursor:pointer;margin-top:10px;font-family:var(--f)}
+.pri{background:var(--pri);color:#fff}.ok{background:var(--ok);color:#fff}.sec{background:#fff;color:var(--text);border:1px solid var(--border)}
+button:disabled{opacity:.6}
+.aviso{padding:14px;border-radius:10px;margin:10px 0;font-size:16px}
+.aviso.ok{background:var(--ok-g);color:#155c2b}.aviso.crit{background:var(--crit-g);color:#7c2323}.aviso.info{background:var(--pri-g);color:#164a89}.aviso.warn{background:var(--warn-g);color:#7a4b0e}
+.oculto{display:none}
+</style>
+</head>
+<body>
+<div class="hdr"><div class="cod" id="cod">Cargando…</div><h1 id="titulo"></h1></div>
+<div class="wrap">
+  <div id="estado"></div>
+  <div class="card"><h2>📄 Leé el documento</h2><div class="muted" id="ayudaDoc">Deslizá hacia abajo para leer todas las páginas.</div><div id="hojas" style="margin-top:10px"><div class="muted">Cargando el documento…</div></div></div>
+
+  <div id="pasoEval" class="card oculto"><h2>✍️ Preguntas</h2><div class="muted" id="ayudaEval"></div><div id="preguntas" style="margin-top:10px"></div></div>
+
+  <div id="pasoId" class="card oculto">
+    <h2>🪪 Identificate</h2>
+    <div class="muted">Escaneá el código de tu credencial o escribilo.</div>
+    <input class="txt" id="codigo" placeholder="Código de la credencial" autocomplete="off" style="margin-top:10px"
+      onkeydown="if(event.key==='Enter'){event.preventDefault();identificar()}">
+    <input type="file" id="foto" accept="image/*" capture="environment" class="oculto" onchange="leerFoto(this.files[0])">
+    <button class="sec" onclick="document.getElementById('foto').click()">📷 Escanear credencial con la cámara</button>
+    <button class="pri" onclick="identificar()">Continuar</button>
+    <div id="quien"></div>
+  </div>
+
+  <div id="resultado"></div>
+</div>
+<script>
+const P=new URLSearchParams(location.search);
+const SES=P.get('s'),FIJO=P.get('d');
+const API='/api/lectura'+(SES?'/s/'+encodeURIComponent(SES):'/d/'+encodeURIComponent(FIJO||''));
+let INFO=null,PERSONA=null;
+const $=id=>document.getElementById(id);
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function dma(f){f=String(f||'').slice(0,10);return f?f.slice(8,10)+'/'+f.slice(5,7)+'/'+f.slice(0,4):''}
+async function api(ruta,op){
+  const r=await fetch(API+ruta,Object.assign({headers:{'Content-Type':'application/json'}},op||{}));
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok||d.ok===false)throw new Error(d.error||('error '+r.status));
+  return d;
+}
+document.addEventListener('contextmenu',e=>e.preventDefault());
+
+async function iniciar(){
+  if(!SES&&!FIJO){$('cod').textContent='';$('estado').innerHTML='<div class="aviso crit">Este enlace no es válido: escaneá de nuevo el QR.</div>';return}
+  try{
+    INFO=await api('');
+    $('cod').textContent=`${INFO.codigo}${INFO.version?' · versión '+INFO.version:''}`;
+    $('titulo').textContent=INFO.titulo;
+    if(FIJO){
+      if(!INFO.vigente){$('estado').innerHTML='<div class="aviso warn">Este documento no tiene una versión vigente. Consultá a Calidad.</div>';$('hojas').innerHTML='';return}
+      $('estado').innerHTML=`<div class="aviso info">Versión vigente${INFO.fechaVigencia?' desde el '+dma(INFO.fechaVigencia):''}. Solo para consulta.</div>`;
+    }else{
+      if(!INFO.abierta){$('estado').innerHTML='<div class="aviso crit">Esta sesión de capacitación ya cerró. Pedile a quien capacita un QR nuevo.</div>';$('hojas').innerHTML='';return}
+      $('estado').innerHTML=`<div class="aviso info">Capacitación a cargo de <b>${esc(INFO.capacitador)}</b>${INFO.lugar?' · '+esc(INFO.lugar):''}.</div>`;
+    }
+    await mostrarPdf();
+    if(SES){prepararPreguntas();$('pasoId').classList.remove('oculto')}
+  }catch(e){$('cod').textContent='';$('estado').innerHTML=`<div class="aviso crit">${esc(e.message)}</div>`;$('hojas').innerHTML=''}
+}
+
+async function mostrarPdf(){
+  const box=$('hojas');
+  try{
+    pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const r=await fetch(API+'/pdf');
+    if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.error||'no se pudo abrir el documento')}
+    const datos=new Uint8Array(await r.arrayBuffer());
+    const doc=await pdfjsLib.getDocument({data:datos}).promise;
+    box.innerHTML='';
+    const ancho=Math.min(box.clientWidth||800,1000)*(window.devicePixelRatio||1);
+    for(let i=1;i<=doc.numPages;i++){
+      const pag=await doc.getPage(i);
+      const base=pag.getViewport({scale:1});
+      const vp=pag.getViewport({scale:ancho/base.width});
+      const cv=document.createElement('canvas');cv.width=vp.width;cv.height=vp.height;box.appendChild(cv);
+      await pag.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise;
+    }
+  }catch(e){box.innerHTML=`<div class="aviso crit">${esc(e.message)}</div>`}
+}
+
+function prepararPreguntas(){
+  const ps=INFO.preguntas||[];
+  if(!ps.length)return;
+  $('pasoEval').classList.remove('oculto');
+  $('ayudaEval').textContent=`Contestá las ${ps.length} preguntas. Para aprobar necesitás ${INFO.puntajeMinimo}% o más.`;
+  $('preguntas').innerHTML=ps.map((p,i)=>`<div class="preg"><b>${i+1}. ${esc(p.texto)}</b>${p.opciones.map((o,j)=>
+    `<label class="op" id="op${i}_${j}"><input type="radio" name="p${i}" value="${j}" onchange="marcar(${i},${j})"> ${esc(o)}</label>`).join('')}</div>`).join('');
+}
+function marcar(i,j){document.querySelectorAll(`[id^="op${i}_"]`).forEach(e=>e.classList.remove('sel'));$(`op${i}_${j}`).classList.add('sel')}
+function respuestas(){return (INFO.preguntas||[]).map((_,i)=>{const r=document.querySelector(`input[name="p${i}"]:checked`);return r?Number(r.value):null})}
+
+async function leerFoto(f){
+  if(!f)return;
+  $('quien').innerHTML='<div class="aviso info">Leyendo el código…</div>';
+  try{
+    const url=URL.createObjectURL(f);
+    const lector=new ZXing.BrowserMultiFormatReader();
+    const r=await lector.decodeFromImageUrl(url);
+    URL.revokeObjectURL(url);
+    $('codigo').value=r.getText();identificar();
+  }catch(e){$('quien').innerHTML='<div class="aviso warn">No se pudo leer el código en la foto. Probá de nuevo más cerca y con luz, o escribilo.</div>'}
+  $('foto').value='';
+}
+
+async function identificar(){
+  const codigo=$('codigo').value.trim();
+  if(!codigo)return;
+  try{
+    const r=await api('/identificar',{method:'POST',body:JSON.stringify({codigo})});
+    PERSONA={codigo,nombre:r.nombre};
+    if(r.yaConfirmo){$('quien').innerHTML=`<div class="aviso ok"><b>${esc(r.nombre)}</b>: ya confirmaste esta capacitación.</div><button class="sec" onclick="siguiente()">Siguiente persona</button>`;return}
+    $('quien').innerHTML=`<div class="aviso info">¿Sos <b>${esc(r.nombre)}</b>${r.sector?' ('+esc(r.sector)+')':''}?</div>
+      <button class="ok" onclick="confirmar()">Sí, leí y comprendí el documento</button><button class="sec" onclick="siguiente()">No soy yo</button>`;
+  }catch(e){$('quien').innerHTML=`<div class="aviso crit">${esc(e.message)}</div>`}
+}
+
+async function confirmar(){
+  try{
+    const r=await api('/confirmar',{method:'POST',body:JSON.stringify({codigo:PERSONA.codigo,respuestas:respuestas()})});
+    $('quien').innerHTML='';
+    if(r.aprobado){
+      $('resultado').innerHTML=`<div class="aviso ok" style="font-size:19px">✅ Listo, <b>${esc(r.nombre)}</b>. ${r.puntaje!=null?'Puntaje: '+r.puntaje+'%. ':''}Quedó registrada tu lectura.</div>
+        <button class="pri" onclick="siguiente()">Siguiente persona</button>`;
+      $('pasoId').classList.add('oculto');$('pasoEval').classList.add('oculto');
+    }else{
+      $('resultado').innerHTML=`<div class="aviso crit">Tuviste ${r.errores} respuesta(s) incorrecta(s) (puntaje ${r.puntaje}%, se necesita ${r.minimo}%). Volvé a leer el documento y probá de nuevo.</div>`;
+    }
+    $('resultado').scrollIntoView({behavior:'smooth'});
+  }catch(e){$('quien').innerHTML=`<div class="aviso crit">${esc(e.message)}</div>`}
+}
+
+// En una tablet compartida: limpia todo para la persona que sigue.
+function siguiente(){
+  PERSONA=null;$('codigo').value='';$('quien').innerHTML='';$('resultado').innerHTML='';
+  document.querySelectorAll('input[type=radio]').forEach(r=>r.checked=false);document.querySelectorAll('.op').forEach(e=>e.classList.remove('sel'));
+  $('pasoId').classList.remove('oculto');if((INFO.preguntas||[]).length)$('pasoEval').classList.remove('oculto');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+iniciar();
+</script>
+</body>
+</html>

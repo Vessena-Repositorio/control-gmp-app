@@ -26,14 +26,14 @@ function apto(fuente, txt) {
  * Si el PDF no se puede abrir lanza error: entregar una copia sin marca seria
  * peor que no entregarla.
  */
-export async function marcarCopiaNoControlada(buffer, { codigo, version, quien, cuando }) {
+export async function marcarCopiaNoControlada(buffer, { codigo, version, quien, cuando, pantalla = false }) {
     const pdf = await PDFDocument.load(buffer, { ignoreEncryption: true, updateMetadata: false });
     const normal = await pdf.embedFont(StandardFonts.Helvetica);
     const negrita = await pdf.embedFont(StandardFonts.HelveticaBold);
 
     const marca = 'COPIA NO CONTROLADA';
     const pie = apto(normal,
-        `COPIA NO CONTROLADA · ${codigo} v${version} · descargada por ${quien} el ${cuando}. ` +
+        `COPIA NO CONTROLADA · ${codigo} v${version} · ${pantalla ? "vista en pantalla (QR)" : `descargada por ${quien}`} el ${cuando}. ` +
         'Válida solo a esa fecha: verificar la vigencia en el sistema antes de usar.');
 
     for (const pagina of pdf.getPages()) {

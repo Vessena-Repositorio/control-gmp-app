@@ -28,6 +28,7 @@ export const SIGNIFICADOS = {
     aprobador_calidad: 'Aprobado por Garantía de Calidad',
     rechazo: 'Rechazado por',
     lectura: 'Leído y comprendido por',
+    capacitador: 'Capacitación impartida por',
     revision_periodica: 'Revisión periódica sin cambios por',
     obsolescencia: 'Dado de baja por',
 };

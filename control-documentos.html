@@ -6,6 +6,7 @@
 <title>Control de Documentos · Vessena</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📄</text></svg>">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 :root{--bg:#f6f7f9;--card:#fff;--border:#e3e6ec;--text:#1c2331;--t2:#475467;--t3:#6b7382;
 --pri:#1f5fb0;--pri-d:#164a89;--pri-g:rgba(31,95,176,.08);--ok:#1a7f3f;--ok-g:#e8f5ec;
@@ -102,6 +103,15 @@ ul.lst{margin:4px 0 0;padding-left:18px;font-size:13px}
         los dudosos se eligen a mano. El navegador lee la carpeta, no la modifica.</p>
       <input type="file" id="carpeta" webkitdirectory directory multiple onchange="leerCarpeta(this.files)">
       <div id="asociacion"></div>
+    </div>
+    <div class="card">
+      <h3>3 · Códigos de credenciales</h3>
+      <p class="muted">Para que los operarios se identifiquen en la lectura con QR. Pegá una línea por persona:
+        <code>código;cédula</code> (o <code>código;cédula;número de funcionario;nombre</code>). Si el código de la credencial
+        ya es la cédula o el número de funcionario, no hace falta cargar nada.</p>
+      <textarea id="codigos" rows="6" placeholder="A10234;45678901"></textarea>
+      <div class="fila" style="margin-top:8px"><button class="b pri" onclick="cargarCodigos()">Cargar códigos</button><span class="muted" id="codigosResumen"></span></div>
+      <div class="fila" style="margin-top:12px"><input id="probarCod" placeholder="Probar un código" style="max-width:260px"><button class="b sm" onclick="probarCodigo()">Probar</button><span id="probarRes"></span></div>
     </div>
   </div>
 </div>
@@ -322,8 +332,127 @@ async function cargarEntrenamiento(v,d){
         <select id="mSec" multiple size="8" style="margin-top:6px">${ss.map(s=>`<option value="${esc(s.sector)}" ${(d.capacitar_sectores||[]).includes(s.sector)?'selected':''}>${esc(s.sector)} (${s.personas})</option>`).join('')}</select>
         <div class="fila" style="margin-top:6px"><button class="b sm" onclick="guardarMatriz(${d.id})">Guardar matriz</button><span class="muted">Ctrl+clic para elegir varios.</span></div></details>`;
     }
+    if(puede('aprobar')){
+      h+=`<h3 style="margin-top:18px">Capacitación con QR (personal sin usuario)</h3>
+        <div class="fila"><button class="b sm" onclick="editarEvaluacion(${v.id})">Preguntas de evaluación</button>
+          <button class="b sm pri" onclick="abrirSesion(${v.id})" ${v.tiene_pdf?'':'disabled title="Falta el PDF"'}>Abrir sesión con QR</button>
+          ${v.estado==='vigente'?`<button class="b sm" onclick="qrPuesto(${d.id})">QR del puesto de trabajo</button>`:''}</div>
+        ${v.tiene_pdf?'':'<div class="muted">Para capacitar con QR la versión tiene que tener el PDF cargado.</div>'}
+        <div id="evalBox"></div><div id="sesiones"></div>`;
+    }
     box.innerHTML=h;
+    if(puede('aprobar'))cargarSesiones(v.id);
   }catch(err){box.innerHTML=`<div class="aviso crit">${esc(err.message)}</div>`}
+}
+
+// ---------------------------------------------------------------- lectura con QR
+async function editarEvaluacion(vid){
+  const box=document.getElementById('evalBox');
+  try{
+    const e=await api(`/versiones/${vid}/evaluacion`);
+    S.eval={vid,preguntas:e.preguntas.length?e.preguntas:[{texto:'',opciones:['','',''],correcta:0}],minimo:e.puntajeMinimo};
+    pintarEvaluacion();
+  }catch(err){box.innerHTML=`<div class="aviso crit">${esc(err.message)}</div>`}
+}
+function pintarEvaluacion(){
+  const E=S.eval;
+  document.getElementById('evalBox').innerHTML=`<div class="card" style="margin-top:10px"><h3>Preguntas de opción múltiple</h3>
+    <p class="muted">Marcá la respuesta correcta de cada una. No se pueden cambiar después de que alguien las contestó.</p>
+    ${E.preguntas.map((p,i)=>`<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:8px">
+      <label class="lb">Pregunta ${i+1}</label><input value="${esc(p.texto)}" oninput="S.eval.preguntas[${i}].texto=this.value">
+      ${p.opciones.map((o,j)=>`<div class="fila" style="margin-top:4px"><input type="radio" name="ok${i}" style="width:auto" ${p.correcta===j?'checked':''} onchange="S.eval.preguntas[${i}].correcta=${j}">
+        <input value="${esc(o)}" placeholder="Opción ${j+1}" style="flex:1" oninput="S.eval.preguntas[${i}].opciones[${j}]=this.value"></div>`).join('')}
+      <div class="fila" style="margin-top:4px"><button class="b sm" onclick="S.eval.preguntas[${i}].opciones.push('');pintarEvaluacion()">+ opción</button>
+        <button class="b sm" onclick="S.eval.preguntas.splice(${i},1);pintarEvaluacion()">Quitar pregunta</button></div></div>`).join('')}
+    <div class="fila" style="margin-top:10px"><button class="b sm" onclick="S.eval.preguntas.push({texto:'',opciones:['','',''],correcta:0});pintarEvaluacion()">+ pregunta</button>
+      <label class="muted">Puntaje mínimo % <input type="number" min="0" max="100" value="${E.minimo}" style="width:80px" oninput="S.eval.minimo=Number(this.value)"></label>
+      <button class="b pri" onclick="guardarEvaluacion()">Guardar preguntas</button></div></div>`;
+}
+async function guardarEvaluacion(){
+  const E=S.eval;
+  // Las opciones vacias las saca el servidor, reubicando la correcta.
+  const preguntas=E.preguntas.filter(p=>p.texto.trim());
+  try{const r=await api(`/versiones/${E.vid}/evaluacion`,{method:'PUT',body:JSON.stringify({preguntas,puntajeMinimo:E.minimo})});
+    toast(r.preguntas?`Guardadas ${r.preguntas} preguntas`:'Sin preguntas: la lectura no tendrá evaluación');document.getElementById('evalBox').innerHTML=''}
+  catch(e){toast(e.message,true)}
+}
+
+async function abrirSesion(vid){
+  const lugar=prompt('¿Dónde es la capacitación? (opcional)','')??null;if(lugar===null)return;
+  const horas=Number(prompt('¿Cuántas horas queda abierto el QR?','4'));if(!horas)return;
+  try{await api(`/versiones/${vid}/sesiones`,{method:'POST',body:JSON.stringify({lugar,horas})});toast('Sesión abierta');cargarSesiones(vid)}
+  catch(e){toast(e.message,true)}
+}
+
+async function cargarSesiones(vid){
+  const box=document.getElementById('sesiones');if(!box)return;
+  try{
+    const {sesiones}=await api(`/versiones/${vid}/sesiones`);
+    if(!sesiones.length){box.innerHTML='';return}
+    box.innerHTML=sesiones.map(s=>{
+      const url=`${location.origin}/lectura.html?s=${s.token}`;
+      const aprob=s.asistentes.filter(a=>a.aprobado);
+      return `<div class="card" style="margin-top:10px"><div class="fila" style="justify-content:space-between">
+        <b>Sesión ${s.id}${s.lugar?' · '+esc(s.lugar):''}</b>
+        <span class="chip ${s.cerrada_en?'ok':s.abierta?'info':'warn'}">${s.cerrada_en?'cerrada y firmada':s.abierta?'abierta hasta '+dmaHora(s.vence_en):'QR vencido, falta cerrar'}</span></div>
+        <div class="muted">Abrió ${esc(s.abierta_por)} el ${dmaHora(s.abierta_en)}${s.cerrada_en?` · ${s.registros_creados} registro(s) en Capacitaciones`:''}</div>
+        ${s.abierta?`<div class="fila" style="margin-top:10px;align-items:flex-start"><div id="qr${s.id}" style="background:#fff;padding:8px;border:1px solid var(--border);border-radius:8px"></div>
+          <div><div class="muted">Mostrá este QR o pasá el enlace:</div><code style="font-size:12px;word-break:break-all">${esc(url)}</code>
+          <div class="fila" style="margin-top:8px"><button class="b sm" onclick="pantallaQR('${esc(url)}','Capacitación: ${esc(S.sel.codigo)}')">Mostrar QR grande</button>
+          <button class="b sm" onclick="cargarSesiones(${vid})">Actualizar lista</button></div></div></div>`:''}
+        <div class="tabla" style="margin-top:8px"><table><thead><tr><th>Persona</th><th>Sector</th><th>Puntaje</th><th>Intentos</th><th>Hora</th></tr></thead><tbody>
+          ${s.asistentes.map(a=>`<tr><td>${esc(a.persona_nombre)}</td><td class="muted">${esc(a.persona_sector||'')}</td>
+            <td>${a.puntaje==null?'—':a.puntaje+'%'} ${a.aprobado?'<span class="chip ok">aprobó</span>':'<span class="chip crit">no aprobó</span>'}</td><td>${a.intentos}</td><td>${dmaHora(a.confirmado_en)}</td></tr>`).join('')||'<tr><td colspan="5" class="muted">Todavía nadie confirmó.</td></tr>'}
+        </tbody></table></div>
+        ${s.cerrada_en?'':`<div style="margin-top:10px"><b>Cerrar y firmar</b> <span class="muted">— ${aprob.length} aprobado(s) pasan a Capacitaciones con tu firma como capacitador/a.</span>
+          <div class="grid3"><div><label class="lb">Horas de capacitación</label><input id="sH${s.id}" type="number" step="0.25" min="0.25" value="0.5"></div>
+          <div><label class="lb">Usuario</label><input id="sU${s.id}" value="${esc(S.usuario)}"></div><div><label class="lb">Clave</label><input id="sC${s.id}" type="password"></div></div>
+          <button class="b ok" style="margin-top:8px" onclick="cerrarSesion(${s.id},${vid})">Firmar y cerrar la sesión</button></div>`}
+      </div>`}).join('');
+    for(const s of sesiones)if(s.abierta)new QRCode(document.getElementById('qr'+s.id),{text:`${location.origin}/lectura.html?s=${s.token}`,width:150,height:150});
+  }catch(e){box.innerHTML=`<div class="aviso crit">${esc(e.message)}</div>`}
+}
+
+async function cerrarSesion(sid,vid){
+  const usuario=document.getElementById('sU'+sid).value.trim(),clave=document.getElementById('sC'+sid).value,horas=document.getElementById('sH'+sid).value;
+  if(!usuario||!clave)return toast('Para firmar escribí usuario y clave',true);
+  if(!confirm('¿Cerrar la sesión? Ya no se podrá escanear el QR y los aprobados pasan a Capacitaciones.'))return;
+  try{const r=await api(`/sesiones/${sid}/cerrar`,{method:'POST',body:JSON.stringify({usuario,clave,horas})});
+    toast(`Sesión cerrada: ${r.registrados} registro(s) en Capacitaciones`);abrir(S.sel.id)}
+  catch(e){document.getElementById('sC'+sid).value='';toast(e.message,true)}
+}
+
+// Pantalla completa con el QR, para proyectar o mostrar en la tablet.
+function pantallaQR(url,titulo){
+  const w=window.open('','_blank');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${titulo}</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
+    <style>body{font-family:system-ui,Arial;text-align:center;margin:30px}#q{display:inline-block;margin:20px}@media print{button{display:none}}</style></head>
+    <body><h1 style="font-size:26px">${titulo}</h1><div id="q"></div><p style="font-size:14px;color:#555;word-break:break-all">${url}</p>
+    <button onclick="print()" style="font-size:16px;padding:8px 18px">Imprimir</button>
+    <script>new QRCode(document.getElementById('q'),{text:${JSON.stringify(url)},width:360,height:360})<\/script></body></html>`);
+  w.document.close();
+}
+
+async function qrPuesto(docId){
+  try{const r=await api(`/documentos/${docId}/qr`,{method:'POST',body:'{}'});
+    pantallaQR(location.origin+r.url,`${esc(S.sel.codigo)} · ${esc(S.sel.titulo)} — consultar versión vigente`)}
+  catch(e){toast(e.message,true)}
+}
+
+async function cargarCodigos(){
+  const filas=document.getElementById('codigos').value.split(/\r?\n/).map(l=>l.split(/[;\t,]/).map(x=>x.trim())).filter(x=>x[0])
+    .map(([codigo,ci,nro,nombre])=>({codigo,ci,nro,nombre}));
+  if(!filas.length)return toast('Pegá al menos una línea código;cédula',true);
+  try{const r=await api('/personal-codigos',{method:'POST',body:JSON.stringify({filas})});
+    toast(`Cargados ${r.cargados} (total ${r.total})`);document.getElementById('codigos').value='';document.getElementById('codigosResumen').textContent=`${r.total} códigos cargados`}
+  catch(e){toast(e.message,true)}
+}
+async function probarCodigo(){
+  const codigo=document.getElementById('probarCod').value.trim();if(!codigo)return;
+  try{const r=await api('/personal-codigos/probar',{method:'POST',body:JSON.stringify({codigo})});
+    document.getElementById('probarRes').innerHTML=r.persona?`<span class="chip ok">${esc(r.persona.nombre)} · ${esc(r.persona.sector)}</span>`:'<span class="chip crit">no encontrado</span>'}
+  catch(e){toast(e.message,true)}
 }
 
 async function firmarLectura(vid){
