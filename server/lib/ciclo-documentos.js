@@ -11,6 +11,7 @@
  */
 import { firmar } from './firma-electronica.js';
 import { sumarMeses } from './importar-listado.js';
+import { SECCIONES, OBLIGATORIAS } from './formato-sop.js';
 
 export const MESES_REVISION = 36;
 export const PLAZO_DIAS = 7;
@@ -64,7 +65,7 @@ export async function nuevaVersion(c, req, documentoId) {
     const { rows: [d] } = await c.query('SELECT id FROM dc_documentos WHERE id = $1 FOR UPDATE', [documentoId]);
     if (!d) throw fallo(404, 'documento inexistente');
     const { rows: vs } = await c.query(
-        'SELECT numero, estado, formato, contenido_html, contenido_sha256 FROM dc_versiones WHERE documento_id = $1',
+        'SELECT numero, estado, formato, contenido_html, contenido_json, contenido_sha256 FROM dc_versiones WHERE documento_id = $1',
         [documentoId]);
     const enCurso = vs.find((v) => ['borrador', 'en_revision', 'en_aprobacion', 'aprobado', 'en_entrenamiento'].includes(v.estado));
     if (enCurso) throw fallo(409, `ya hay una versión ${enCurso.estado.replace('_', ' ')} (${enCurso.numero})`);
@@ -73,10 +74,11 @@ export async function nuevaVersion(c, req, documentoId) {
     const editor = vigente?.formato === 'editor';
 
     const { rows: [n] } = await c.query(
-        `INSERT INTO dc_versiones (documento_id, numero, formato, contenido_html, contenido_sha256, creado_por_id)
-         VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, numero`,
+        `INSERT INTO dc_versiones (documento_id, numero, formato, contenido_html, contenido_json, contenido_sha256, creado_por_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, numero`,
         [documentoId, numero, editor ? 'editor' : 'archivo',
-         editor ? vigente.contenido_html : null, editor ? vigente.contenido_sha256 : null, req.usuario.id]);
+         editor ? vigente.contenido_html : null, editor && vigente.contenido_json ? JSON.stringify(vigente.contenido_json) : null,
+         editor ? vigente.contenido_sha256 : null, req.usuario.id]);
     return n;
 }
 
@@ -89,6 +91,10 @@ export async function enviarARevision(c, req, versionId, b) {
     if (v.estado !== 'borrador') throw fallo(409, 'solo se envía una versión en borrador');
     if (v.formato === 'archivo' && (!v.pdf_sha256 || !v.archivo_sha256)) {
         throw fallo(409, 'antes de enviar subí el Word (editable) y el PDF de la versión');
+    }
+    if (v.formato === 'editor') {
+        const faltan = OBLIGATORIAS.filter((k) => !String(v.contenido_json?.[k] || '').trim());
+        if (faltan.length) throw fallo(400, `completá antes de enviar: ${faltan.map((k) => SECCIONES.find((s) => s.clave === k).titulo.toLowerCase()).join(', ')}`);
     }
     if (!v.huella) throw fallo(409, 'la versión no tiene contenido');
 
@@ -284,6 +290,11 @@ function isoLocal(f) {
 export async function vigenteAhora(c, versionId) {
     const v = await versionBloqueada(c, versionId);
     if (v.estado !== 'en_entrenamiento') throw fallo(409, 'solo una versión aprobada que espera su vigencia');
+    // El PDF oficial de una version escrita en la app ya tiene impresa la fecha
+    // de vigencia: adelantarla dejaria el papel diciendo otra cosa.
+    if (v.formato === 'editor' && v.pdf_sha256) {
+        throw fallo(409, 'el PDF oficial tiene impresa la fecha de vigencia: entra en vigencia ese día');
+    }
     await c.query('UPDATE dc_versiones SET fecha_vigencia = $2 WHERE id = $1', [v.id, await hoy(c)]);
     await ponerVigente(c, v.id);
     return { codigo: v.codigo, titulo: v.titulo, numero: v.numero, versionId: v.id };

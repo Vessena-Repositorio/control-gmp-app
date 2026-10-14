@@ -30,6 +30,8 @@ import { avisarCiclo, avisarLectura } from '../lib/avisos-documentos.js';
 import { nuevoToken, validarEvaluacion, registrarEnCapacitaciones, personaPorCodigo } from '../lib/lectura-qr.js';
 import { coleccionCapacitaciones } from '../lib/tareas.js';
 import { siguienteCodigo } from '../lib/codificacion.js';
+import { pdfSop, emitirPdfOficial, hashContenido } from '../lib/pdf-sop.js';
+import { SECCIONES } from '../lib/formato-sop.js';
 
 export const rutasControlDocumentos = Router();
 
@@ -245,10 +247,18 @@ rutasControlDocumentos.post('/documentos', cargar, async (req, res, next) => {
                  VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
                 [codigo, titulo, tipo, area, req.usuario.id, tipo === 'EXT', req.usuario.id]
             );
+            // Escrito en la app (formato SOP, migracion 062) solo para los
+            // documentos principales; anexos, registros y especificaciones se
+            // siguen haciendo en Word.
+            const editor = b.formato === 'editor';
+            if (editor && tp.secuencia !== 'general') throw fallo(400, 'este tipo de documento se sube en Word y PDF');
+            const vacio = Object.fromEntries(SECCIONES.map((s) => [s.clave, '']));
             const { rows: [v] } = await c.query(
-                `INSERT INTO dc_versiones (documento_id, numero, formato, resumen_cambios, cc_codigo, creado_por_id)
-                 VALUES ($1, 1, 'archivo', $2, $3, $4) RETURNING id`,
-                [d.id, texto(b.resumenCambios) || 'Emisión inicial', texto(b.ccCodigo) || null, req.usuario.id]
+                `INSERT INTO dc_versiones (documento_id, numero, formato, contenido_json, contenido_sha256,
+                                           resumen_cambios, cc_codigo, creado_por_id)
+                 VALUES ($1, 1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+                [d.id, editor ? 'editor' : 'archivo', editor ? JSON.stringify(vacio) : null, editor ? hashContenido(vacio) : null,
+                 texto(b.resumenCambios) || 'Emisión inicial', texto(b.ccCodigo) || null, req.usuario.id]
             );
             return { documentoId: d.id, versionId: v.id, codigo };
         });
@@ -273,21 +283,30 @@ rutasControlDocumentos.put('/versiones/:id', cargar, async (req, res, next) => {
             if (v.estado !== 'borrador') throw fallo(409, 'solo se edita una versión en borrador');
             // En una version de archivo solo se editan el resumen y el CC; el
             // contenido es el Word/PDF, que se reemplaza subiendo otro.
-            if (v.formato !== 'editor' && b.contenidoHtml != null) {
+            if (v.formato !== 'editor' && (b.contenidoHtml != null || b.contenido != null)) {
                 throw fallo(409, 'esta versión es un archivo: se reemplaza subiendo otro');
             }
 
             const html = b.contenidoHtml == null ? null : String(b.contenidoHtml);
+            // Contenido por secciones del formato SOP: solo las claves del
+            // formato, como texto.
+            let secciones = null;
+            if (b.contenido != null) {
+                secciones = Object.fromEntries(SECCIONES.map((s) => [s.clave, String(b.contenido[s.clave] ?? '').slice(0, 200000)]));
+            }
+            const huella = secciones ? hashContenido(secciones) : html == null ? null : sha256(html);
             const { rows: [n] } = await c.query(
                 `UPDATE dc_versiones SET
                     contenido_html   = coalesce($2, contenido_html),
+                    contenido_json   = coalesce($6::jsonb, contenido_json),
                     contenido_sha256 = coalesce($3, contenido_sha256),
                     resumen_cambios  = coalesce($4, resumen_cambios),
                     cc_codigo        = coalesce($5, cc_codigo)
                  WHERE id = $1 RETURNING contenido_sha256`,
-                [req.params.id, html, html == null ? null : sha256(html),
+                [req.params.id, html, huella,
                  b.resumenCambios == null ? null : texto(b.resumenCambios),
-                 b.ccCodigo == null ? null : texto(b.ccCodigo)]
+                 b.ccCodigo == null ? null : texto(b.ccCodigo),
+                 secciones ? JSON.stringify(secciones) : null]
             );
             return n;
         });
@@ -626,6 +645,19 @@ rutasControlDocumentos.get('/versiones/:id/descargar', leer, async (req, res, ne
         // Quien tiene una tarea sobre la version la puede bajar aunque su rol no la vea.
         if (!(await puedeVer(req, v))) throw fallo(404, 'version inexistente');
 
+        // Escrita en la app y todavia sin PDF oficial (borrador, en revision):
+        // se arma en el momento, con la marca BORRADOR. Asi revisores y
+        // aprobadores leen lo mismo que va a salir.
+        if (v.formato === 'editor' && !v.pdf_ruta) {
+            const r = await pdfSop(v.id);
+            await auditar(req, { usuarioId: req.usuario.id, usuarioTxt: req.usuario.usuario, accion: 'descarga_documento',
+                recurso: RECURSO, detalle: `${v.codigo} v${v.numero} (vista previa)` });
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(`${v.codigo}_V${verTxt(v.numero)}_borrador.pdf`)}`);
+            res.setHeader('Cache-Control', 'no-store');
+            return res.end(r.pdf);
+        }
+
         // El editable es para quien trabaja el documento; el resto baja el PDF.
         const trabaja = puede(req.rol, 'cargar');
         const ruta = req.query.que === 'archivo' && trabaja
@@ -766,6 +798,13 @@ rutasControlDocumentos.post('/tareas/:id/firmar', leer, async (req, res, next) =
         await avisarCiclo(r);
         // Aprobada: a quien la tiene que leer y tiene usuario, le llega ahora.
         if (r.resultado === 'vigente' || r.resultado === 'aprobada') {
+            // Escrita en la app: el PDF oficial sale ahora, con las firmas. Va
+            // antes del aviso de lectura, que manda a leer ese PDF. Si falla,
+            // Calidad lo vuelve a pedir desde el documento (emitir-pdf).
+            const { rows: [v] } = await consultar('SELECT formato FROM dc_versiones WHERE id = $1', [r.doc.versionId]);
+            if (v?.formato === 'editor') {
+                await emitirPdfOficial(r.doc.versionId).catch((err) => console.error('[documentos] PDF oficial:', err.message));
+            }
             await avisarLectura(r.doc.versionId).catch((err) => console.error('[documentos] aviso de lectura:', err.message));
         }
         res.json({ ok: true, resultado: r.resultado, firma: r.firma });
@@ -773,6 +812,19 @@ rutasControlDocumentos.post('/tareas/:id/firmar', leer, async (req, res, next) =
 });
 
 /** POST /api/control-documentos/versiones/:id/anular { motivo } — borrador que no sigue. */
+/**
+ * POST /api/control-documentos/versiones/:id/emitir-pdf
+ * Genera el PDF oficial de una version escrita en la app ya aprobada, si no
+ * se genero al aprobar (por ejemplo, si el volumen no respondia).
+ */
+rutasControlDocumentos.post('/versiones/:id/emitir-pdf', administrar, async (req, res, next) => {
+    try {
+        const r = await emitirPdfOficial(req.params.id);
+        if (!r) throw fallo(404, 'version inexistente');
+        res.json({ ok: true, ...r });
+    } catch (err) { responder(err, res, next); }
+});
+
 rutasControlDocumentos.post('/versiones/:id/anular', cargar, async (req, res, next) => {
     try {
         const motivo = texto((req.body || {}).motivo);

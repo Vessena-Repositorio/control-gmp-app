@@ -249,9 +249,10 @@ async function nuevoDocumento(){
         <div id="nCodBox" style="display:none"><label class="lb">Código (del origen)</label><input id="nCod" placeholder="Código del documento externo"></div>
       </div>
       <label class="lb">Título</label><input id="nTit" placeholder="Ej. Limpieza y sanitización de la línea 3">
+      <div id="nFormBox"><label class="lb">Cómo se redacta</label><select id="nForm"><option value="editor">Escribirlo en la app con el formato SOP (AX-SOP-DOC-001-B)</option><option value="archivo">Subir el Word y el PDF</option></select></div>
       <div class="aviso info" id="nPrev" style="margin-top:12px">Elegí tipo y área para ver el código.</div>
       <div class="fila"><button class="b pri" onclick="crearDocumento()">Crear borrador</button>
-        <span class="muted">Se crea la versión 1.0 en borrador: después subís el Word y el PDF y lo enviás a revisión.</span></div></div>`;
+        <span class="muted">Se crea la versión 1.0 en borrador: después lo escribís (o subís el Word y el PDF) y lo enviás a revisión.</span></div></div>`;
     box.scrollIntoView({behavior:'smooth'});
     nuevoCambio();
   }catch(e){toast(e.message,true)}
@@ -263,6 +264,7 @@ async function nuevoCambio(){
   const t=nuevoTipo(),prev=document.getElementById('nPrev');
   document.getElementById('nAreaBox').style.display=t.con_area&&!t.deriva_de?'':'none';
   document.getElementById('nPadreBox').style.display=t.deriva_de?'':'none';
+  document.getElementById('nFormBox').style.display=t.secuencia==='general'?'':'none';
   document.getElementById('nCodBox').style.display=!t.secuencia&&!t.deriva_de?'':'none';
   if(t.deriva_de){
     document.getElementById('nPadres').innerHTML=S.docs.filter(d=>d.tipo===t.deriva_de).map(d=>`<option value="${esc(d.codigo)}">${esc(d.titulo)}</option>`).join('');
@@ -286,7 +288,8 @@ async function nuevoCambio(){
 async function crearDocumento(){
   const t=nuevoTipo(),titulo=document.getElementById('nTit').value.trim();
   if(!titulo)return toast('Escribí el título',true);
-  const body={tipo:t.codigo,titulo,area:document.getElementById('nArea').value,codigo:document.getElementById('nCod').value};
+  const body={tipo:t.codigo,titulo,area:document.getElementById('nArea').value,codigo:document.getElementById('nCod').value,
+    formato:t.secuencia==='general'?document.getElementById('nForm').value:'archivo'};
   if(t.deriva_de){const p=S.docs.find(d=>d.codigo===document.getElementById('nPadre').value.trim().toUpperCase());if(!p)return toast('Elegí el documento al que pertenece',true);body.padreId=p.id}
   try{const r=await api('/documentos',{method:'POST',body:JSON.stringify(body)});
     toast('Creado '+r.codigo+' en borrador');await cargar();abrir(r.documentoId)}
@@ -307,7 +310,10 @@ async function abrir(id){
     for(const v of versiones){
       const bajar=[];
       bajar.push(`<button class="b sm" onclick="descargar(${v.id},'pdf')">PDF</button>`);
-      if(puede('cargar'))bajar.push(`<button class="b sm" onclick="descargar(${v.id},'archivo')">Word</button>`);
+      // Lo escrito en la app no tiene Word: es el PDF armado por el sistema.
+      if(puede('cargar')&&v.formato!=='editor')bajar.push(`<button class="b sm" onclick="descargar(${v.id},'archivo')">Word</button>`);
+      if(puede('administrar')&&v.formato==='editor'&&!v.tiene_pdf&&['aprobado','en_entrenamiento','vigente'].includes(v.estado))
+        bajar.push(`<button class="b sm pri" onclick="emitirPdf(${v.id})" title="El PDF oficial no se generó al aprobar">Generar PDF oficial</button>`);
       h+=`<tr><td>${ver(v.numero)}</td><td><span class="chip ${ESTV[v.estado]||'warn'}">${esc(v.estado.replace('_',' '))}</span></td><td>${dma(v.fecha_vigencia)}</td>
         <td class="muted">${esc([v.elaborado_por_nombre,v.revisado_por_nombre,v.aprobado_por_nombre].map(x=>x||'—').join(' / '))}</td>
         <td>${(v.firmas||[]).map(f=>`<div>${esc(f.leyenda)} <b>${esc(f.nombre)}</b> <span class="muted">${dmaHora(f.firmadoEn)}</span>${f.comentario&&f.leyenda.startsWith('Rechazado')?`<br><span class="muted">“${esc(f.comentario)}”</span>`:''}</div>`).join('')||'<span class="muted">—</span>'}</td>
@@ -360,6 +366,7 @@ async function abrir(id){
 }
 
 function descargar(id,que){location.href=`${API}/versiones/${id}/descargar?que=${que}`}
+async function emitirPdf(vid){try{await api(`/versiones/${vid}/emitir-pdf`,{method:'POST',body:'{}'});toast('PDF oficial generado');abrir(S.sel.id)}catch(e){toast(e.message,true)}}
 
 // ---------------------------------------------------------------- entrenamiento
 const MODOS={lectura:'Lectura con firma (quien no tiene usuario: registro en Capacitaciones)',presencial:'Capacitación presencial (registrada en Capacitaciones con el código del documento)',no_requiere:'No requiere (cambio menor que no cambia la tarea)'};
@@ -858,11 +865,53 @@ function panelTarea(t){
       <button class="b" style="color:var(--crit)" onclick="firmarTarea(${t.id},'rechazar')">Rechazar</button></div></div>`;
 }
 
+// ---------------------------------------------------------------- editor del formato SOP
+// Las secciones de AX-SOP-DOC-001-B. Tiene que coincidir con SECCIONES de
+// server/lib/formato-sop.js, que es la que arma el PDF.
+const SECCIONES_SOP=[
+  ['objetivo','OBJETIVO','Qué se busca lograr con este procedimiento.'],
+  ['alcance','ALCANCE','Áreas o procesos a los que aplica, y las exclusiones si las hay.'],
+  ['definiciones','DEFINICIONES/ABREVIACIONES','Una por línea: "Término: definición". La tabla se arma sola.'],
+  ['responsabilidades','RESPONSABILIDADES','Roles en forma macro. Ej.: "- Supervisor de producción: asegurar que..."'],
+  ['procedimiento','PROCEDIMIENTO','"## Título" para cada subsección (5.1, 5.2…), "1." para los pasos y "|" para una tabla ¿Quién? ¿Qué? ¿Cuándo?'],
+  ['referencias','REFERENCIAS','Documentos globales y locales que sirven de base.'],
+  ['relacionados','DOCUMENTOS RELACIONADOS','Anexos y otros documentos que complementan el procedimiento.'],
+  ['registros','REGISTROS','Registros que genera (código y nombre).'],
+  ['indicadores','INDICADORES','KPIs relevantes del proceso.'],
+];
+
+async function panelEditor(v){
+  const {version}=await api(`/versiones/${v.id}`);
+  const c=version.contenido_json||{};
+  return `<div style="margin-bottom:12px">
+    <div class="aviso info">Escribí cada sección. Encabezado, firmas, índice, número de páginas e histórico de cambios los arma el sistema.<br>
+      <span style="font-size:12.5px">Formato: línea en blanco = párrafo nuevo · <code>- </code>viñeta · <code>1. </code>paso · <code>## </code>subsección · <code>**negrita**</code> · <code>*cursiva*</code> · tabla: <code>| Quién | Qué | Cuándo |</code> (la primera fila es el encabezado)</span></div>
+    ${SECCIONES_SOP.map(([k,t,a],i)=>`<label class="lb">${i+1}. ${t}</label><div class="muted" style="font-size:12px;margin-bottom:3px">${esc(a)}</div>
+      <textarea class="secSop" data-clave="${k}" rows="${k==='procedimiento'?14:k==='objetivo'||k==='alcance'?3:4}" style="font-family:ui-monospace,Consolas,monospace;font-size:13px">${esc(c[k]||'')}</textarea>`).join('')}
+    <label class="lb">${SECCIONES_SOP.length+1}. HISTÓRICO DE CAMBIOS</label><div class="muted" style="font-size:12px">Se arma con las versiones; el cambio de esta versión es el "Qué cambia" de abajo.</div>
+    <div class="fila" style="margin-top:10px"><button class="b pri" onclick="guardarSop(${v.id})">Guardar texto</button>
+      <button class="b" onclick="previaSop(${v.id})">👁️ Vista previa del PDF</button><span class="muted" id="sopEstado"></span></div></div>`;
+}
+
+function contenidoSop(){const o={};document.querySelectorAll('.secSop').forEach(t=>o[t.dataset.clave]=t.value);return o}
+
+async function guardarSop(vid,silencio){
+  try{await api(`/versiones/${vid}`,{method:'PUT',body:JSON.stringify({contenido:contenidoSop()})});
+    const e=document.getElementById('sopEstado');if(e)e.textContent='Guardado '+new Date().toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'});
+    if(!silencio)toast('Texto guardado');return true}
+  catch(e){toast(e.message,true);return false}
+}
+
+async function previaSop(vid){
+  if(await guardarSop(vid,true))window.open(`${API}/versiones/${vid}/descargar`,'_blank');
+}
+
 async function panelBorrador(v){
   const us=await usuarios();
   const ops=us.map(u=>`<option value="${u.id}">${esc(u.nombre)}</option>`).join('');
   const arch=v.formato==='archivo';
-  return `<div class="card" style="margin-top:12px"><h3>Borrador</h3>
+  const editor=v.formato==='editor'?await panelEditor(v):'';
+  return `<div class="card" style="margin-top:12px"><h3>Borrador</h3>${editor}
     ${arch?`<div class="fila"><span>Word (editable): ${v.tiene_word?'<span class="chip ok">cargado</span>':'<span class="chip warn">falta</span>'}</span>
       <input type="file" accept=".doc,.docx,.xls,.xlsx" style="max-width:300px" onchange="subirArchivo(${v.id},this.files[0])"></div>
       <div class="fila" style="margin-top:6px"><span>PDF (oficial): ${v.tiene_pdf?'<span class="chip ok">cargado</span>':'<span class="chip warn">falta</span>'}</span>
@@ -899,6 +948,9 @@ async function subirArchivo(vid,f){
 }
 
 async function enviarVersion(vid){
+  // Escrito en la app: se guarda lo ultimo antes de firmar, para que se firme
+  // lo que esta en pantalla.
+  if(document.querySelector('.secSop')&&!(await guardarSop(vid,true)))return;
   const body={resumenCambios:document.getElementById('bRes').value,ccCodigo:document.getElementById('bCC').value,
     revisores:elegidos('bRev'),aprobadores:elegidos('bApr'),plazoRevision:document.getElementById('bPR').value,
     plazoAprobacion:document.getElementById('bPA').value,usuario:document.getElementById('bUsr').value.trim(),clave:document.getElementById('bClave').value,
