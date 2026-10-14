@@ -82,6 +82,7 @@ ul.lst{margin:4px 0 0;padding-left:18px;font-size:13px}
         <input id="buscar" placeholder="Buscar por código o título" style="flex:2;min-width:200px" oninput="pintarListado()">
         <select id="fArea" style="flex:1;min-width:120px" onchange="pintarListado()"></select>
         <select id="fTipo" style="flex:1;min-width:120px" onchange="pintarListado()"></select>
+        <button class="b pri" id="bNuevo" style="display:none" onclick="nuevoDocumento()">➕ Nuevo documento</button>
       </div>
     </div>
     <div class="card tabla" id="listado"><div class="muted">Cargando…</div></div>
@@ -159,6 +160,7 @@ async function cargar(){
     document.getElementById('quien').textContent=yo.nombre||yo.usuario||'';
     S.docs=d.documentos;S.permisos=d.permisos||[];
     document.getElementById('tabImp').style.display=puede('administrar')?'':'none';
+    document.getElementById('bNuevo').style.display=puede('cargar')?'':'none';
     const areas=[...new Set(S.docs.map(x=>x.area).filter(Boolean))].sort();
     const tipos=[...new Set(S.docs.map(x=>x.tipo))].sort();
     document.getElementById('fArea').innerHTML='<option value="">Todas las áreas</option>'+areas.map(a=>`<option>${esc(a)}</option>`).join('');
@@ -227,6 +229,68 @@ function pintarListado(){
       <td>${d.vigente_numero!=null?ver(d.vigente_numero):'—'}${d.en_curso_id?(d.en_curso_rechazado?` <span class="chip crit">v${ver(d.en_curso_numero)} rechazada</span>`:` <span class="chip info">v${ver(d.en_curso_numero)} en curso</span>`):''}</td>
       <td>${dma(d.fecha_vigencia)}</td><td>${dma(d.proxima_revision)}</td><td><span class="chip ${s[0]}">${s[1]}</span>${d.vigente_id&&!d.vigente_con_archivo&&puede('administrar')?' <span class="chip mut">sin archivo</span>':''}</td></tr>`}).join('')
     +'</tbody></table>':'<div class="muted">No hay documentos con ese filtro.</div>';
+}
+
+// ---------------------------------------------------------------- documento nuevo
+// El codigo lo asigna el servidor (lib/codificacion.js). Aca se muestra el que
+// le tocaria; el definitivo sale al crear, con el bloqueo tomado.
+async function nuevoDocumento(){
+  const box=document.getElementById('detalle');
+  try{
+    const {tipos,areas}=await api('/codificacion');S.cod={tipos,areas};
+    const grupo=(t)=>t.deriva_de?'Anexos, registros y listados de un documento':t.secuencia?'Documentos':'Otros';
+    const grupos={};tipos.forEach(t=>(grupos[grupo(t)]=grupos[grupo(t)]||[]).push(t));
+    box.innerHTML=`<div class="card"><div class="fila" style="justify-content:space-between"><h3 style="margin:0">Nuevo documento</h3>
+      <button class="b sm" onclick="document.getElementById('detalle').innerHTML=''">Cerrar</button></div>
+      <div class="grid3" style="margin-top:6px">
+        <div><label class="lb">Tipo</label><select id="nTipo" onchange="nuevoCambio()">${Object.entries(grupos).map(([g,ts])=>`<optgroup label="${esc(g)}">${ts.map(t=>`<option value="${esc(t.codigo)}">${esc(t.codigo)} · ${esc(t.nombre)}</option>`).join('')}</optgroup>`).join('')}</select></div>
+        <div id="nAreaBox"><label class="lb">Área</label><select id="nArea" onchange="nuevoCambio()"><option value="">— elegir —</option>${areas.map(a=>`<option value="${esc(a.codigo)}">${esc(a.codigo)} · ${esc(a.nombre)}</option>`).join('')}</select></div>
+        <div id="nPadreBox" style="display:none"><label class="lb">Documento al que pertenece</label><input id="nPadre" list="nPadres" placeholder="Código, ej. SOP-AC-039" oninput="nuevoCambio()"><datalist id="nPadres"></datalist></div>
+        <div id="nCodBox" style="display:none"><label class="lb">Código (del origen)</label><input id="nCod" placeholder="Código del documento externo"></div>
+      </div>
+      <label class="lb">Título</label><input id="nTit" placeholder="Ej. Limpieza y sanitización de la línea 3">
+      <div class="aviso info" id="nPrev" style="margin-top:12px">Elegí tipo y área para ver el código.</div>
+      <div class="fila"><button class="b pri" onclick="crearDocumento()">Crear borrador</button>
+        <span class="muted">Se crea la versión 1.0 en borrador: después subís el Word y el PDF y lo enviás a revisión.</span></div></div>`;
+    box.scrollIntoView({behavior:'smooth'});
+    nuevoCambio();
+  }catch(e){toast(e.message,true)}
+}
+
+function nuevoTipo(){return S.cod.tipos.find(t=>t.codigo===document.getElementById('nTipo').value)}
+
+async function nuevoCambio(){
+  const t=nuevoTipo(),prev=document.getElementById('nPrev');
+  document.getElementById('nAreaBox').style.display=t.con_area&&!t.deriva_de?'':'none';
+  document.getElementById('nPadreBox').style.display=t.deriva_de?'':'none';
+  document.getElementById('nCodBox').style.display=!t.secuencia&&!t.deriva_de?'':'none';
+  if(t.deriva_de){
+    document.getElementById('nPadres').innerHTML=S.docs.filter(d=>d.tipo===t.deriva_de).map(d=>`<option value="${esc(d.codigo)}">${esc(d.titulo)}</option>`).join('');
+  }
+  if(!t.secuencia&&!t.deriva_de){prev.innerHTML='Este tipo no se numera: lleva el código de su origen.';return}
+  const params=new URLSearchParams({tipo:t.codigo});
+  if(t.deriva_de){
+    const p=S.docs.find(d=>d.codigo===document.getElementById('nPadre').value.trim().toUpperCase());
+    if(!p){prev.innerHTML=`Elegí el ${esc(t.deriva_de)} al que pertenece.`;return}
+    params.set('padre',p.id);
+  }else if(t.con_area){
+    const a=document.getElementById('nArea').value;if(!a){prev.innerHTML='Elegí el área para ver el código.';return}
+    params.set('area',a);
+  }
+  try{const r=await api('/codigos/siguiente?'+params);
+    prev.innerHTML=`Código que se le asignaría: <b style="font-size:16px">${esc(r.codigo)}</b>`+
+      (r.ultimo!=null?` <span class="muted">(el último de esta numeración es el ${String(r.ultimo).padStart(3,'0')})</span>`:'')}
+  catch(e){prev.innerHTML=`<span style="color:var(--crit)">${esc(e.message)}</span>`}
+}
+
+async function crearDocumento(){
+  const t=nuevoTipo(),titulo=document.getElementById('nTit').value.trim();
+  if(!titulo)return toast('Escribí el título',true);
+  const body={tipo:t.codigo,titulo,area:document.getElementById('nArea').value,codigo:document.getElementById('nCod').value};
+  if(t.deriva_de){const p=S.docs.find(d=>d.codigo===document.getElementById('nPadre').value.trim().toUpperCase());if(!p)return toast('Elegí el documento al que pertenece',true);body.padreId=p.id}
+  try{const r=await api('/documentos',{method:'POST',body:JSON.stringify(body)});
+    toast('Creado '+r.codigo+' en borrador');await cargar();abrir(r.documentoId)}
+  catch(e){toast(e.message,true)}
 }
 
 async function abrir(id){

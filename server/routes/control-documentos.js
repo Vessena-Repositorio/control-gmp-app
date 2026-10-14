@@ -29,6 +29,7 @@ import { avance, datosPadron, sectoresDelPadron } from '../lib/entrenamiento-doc
 import { avisarCiclo, avisarLectura } from '../lib/avisos-documentos.js';
 import { nuevoToken, validarEvaluacion, registrarEnCapacitaciones, personaPorCodigo } from '../lib/lectura-qr.js';
 import { coleccionCapacitaciones } from '../lib/tareas.js';
+import { siguienteCodigo } from '../lib/codificacion.js';
 
 export const rutasControlDocumentos = Router();
 
@@ -184,37 +185,72 @@ rutasControlDocumentos.get('/versiones/:id', leer, async (req, res, next) => {
 });
 
 /**
+ * GET /api/control-documentos/codificacion — tipos (con su regla) y areas, para el alta.
+ */
+rutasControlDocumentos.get('/codificacion', cargar, async (_req, res, next) => {
+    try {
+        const [{ rows: tipos }, { rows: areas }] = await Promise.all([
+            consultar(`SELECT codigo, nombre, secuencia, deriva_de, con_area FROM dc_tipos WHERE activo ORDER BY orden, codigo`),
+            consultar('SELECT codigo, nombre FROM dc_areas WHERE activa ORDER BY codigo'),
+        ]);
+        res.json({ ok: true, tipos, areas });
+    } catch (err) { next(err); }
+});
+
+/**
+ * GET /api/control-documentos/codigos/siguiente?tipo=&area=&padre=
+ * El codigo que tendria el documento si se creara ahora. Es una vista
+ * previa: el definitivo se asigna al crear, con el lock tomado.
+ */
+rutasControlDocumentos.get('/codigos/siguiente', cargar, async (req, res, next) => {
+    try {
+        const r = await siguienteCodigo({ query: consultar }, {
+            tipo: req.query.tipo, area: req.query.area, padreId: req.query.padre || null,
+        });
+        res.json({ ok: true, ...r });
+    } catch (err) { responder(err, res, next); }
+});
+
+/**
  * POST /api/control-documentos/documentos
- * { codigo, titulo, tipo, area, duenoId, numero, contenidoHtml, resumenCambios, ccCodigo }
- * Alta de un documento nuevo con su primera version en borrador, escrita en el
- * editor. Los existentes en Word/PDF entran por la importacion (etapa 1).
+ * { tipo, area, padreId, titulo, codigo?, resumenCambios, ccCodigo }
+ *
+ * Alta de un documento nuevo con su version 1.0 en borrador. El codigo lo
+ * asigna el sistema segun la regla de codificacion (lib/codificacion.js);
+ * solo se escribe a mano para los tipos que no numeran (documentos externos).
+ * La version es de archivo: se sube el Word y el PDF desde el borrador.
  */
 rutasControlDocumentos.post('/documentos', cargar, async (req, res, next) => {
     const b = req.body || {};
-    const codigo = texto(b.codigo).toUpperCase();
     const titulo = texto(b.titulo);
     const tipo = texto(b.tipo).toUpperCase();
-    const numero = b.numero == null || b.numero === '' ? 1 : Number(b.numero);
-    const html = String(b.contenidoHtml || '');
 
     try {
-        if (!codigo || !titulo || !tipo) throw fallo(400, 'faltan código, título o tipo');
-        if (!Number.isInteger(numero) || numero < 0) throw fallo(400, 'número de versión inválido');
+        if (!titulo || !tipo) throw fallo(400, 'faltan el tipo o el título');
 
-        const r = await enTransaccionAuditada(req, 'alta de documento', async (c) => {
+        const r = await enTransaccionAuditada(req, 'alta de documento nuevo', async (c) => {
+            const { rows: [tp] } = await c.query('SELECT secuencia, deriva_de FROM dc_tipos WHERE codigo = $1 AND activo', [tipo]);
+            if (!tp) throw fallo(400, `tipo de documento desconocido: ${tipo}`);
+            let codigo, area;
+            if (tp.secuencia || tp.deriva_de) {
+                ({ codigo, area } = await siguienteCodigo(c, {
+                    tipo, area: b.area, padreId: b.padreId || null, bloquear: true }));
+            } else {
+                codigo = texto(b.codigo).toUpperCase();
+                area = texto(b.area).toUpperCase() || null;
+                if (!codigo) throw fallo(400, 'este tipo lleva el código de su origen: escribilo');
+            }
             const { rows: [d] } = await c.query(
-                `INSERT INTO dc_documentos (codigo, titulo, tipo, area, dueno_id, creado_por_id)
-                 VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
-                [codigo, titulo, tipo, texto(b.area) || null, b.duenoId || req.usuario.id, req.usuario.id]
+                `INSERT INTO dc_documentos (codigo, titulo, tipo, area, dueno_id, externo, creado_por_id)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+                [codigo, titulo, tipo, area, req.usuario.id, tipo === 'EXT', req.usuario.id]
             );
             const { rows: [v] } = await c.query(
-                `INSERT INTO dc_versiones (documento_id, numero, formato, contenido_html, contenido_sha256,
-                                           resumen_cambios, cc_codigo, creado_por_id)
-                 VALUES ($1,$2,'editor',$3,$4,$5,$6,$7) RETURNING id`,
-                [d.id, numero, html, sha256(html), texto(b.resumenCambios) || null,
-                 texto(b.ccCodigo) || null, req.usuario.id]
+                `INSERT INTO dc_versiones (documento_id, numero, formato, resumen_cambios, cc_codigo, creado_por_id)
+                 VALUES ($1, 1, 'archivo', $2, $3, $4) RETURNING id`,
+                [d.id, texto(b.resumenCambios) || 'Emisión inicial', texto(b.ccCodigo) || null, req.usuario.id]
             );
-            return { documentoId: d.id, versionId: v.id };
+            return { documentoId: d.id, versionId: v.id, codigo };
         });
         res.status(201).json({ ok: true, ...r });
     } catch (err) {
