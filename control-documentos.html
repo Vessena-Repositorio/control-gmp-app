@@ -121,7 +121,7 @@ ul.lst{margin:4px 0 0;padding-left:18px;font-size:13px}
 <div class="toast" id="toast"></div>
 <script>
 const API='/api/control-documentos';
-const S={docs:[],permisos:[],filtro:'todos',sel:null,usuario:'',abiertos:new Set()};
+const S={docs:[],permisos:[],filtro:'todos',sel:null,usuario:'',abiertos:new Set(),cerrados:new Set()};
 
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function toast(m,err){const t=document.getElementById('toast');t.textContent=m;t.className='toast on'+(err?' err':'');clearTimeout(t._t);t._t=setTimeout(()=>t.className='toast',5000)}
@@ -277,10 +277,14 @@ function pintarListado(){
     const hsVis=hs.filter(h=>visibles.has(h.id));
     if(!visibles.has(r.id)&&!hsVis.length)continue;
     n++;
-    const abierto=S.abiertos.has(r.codigo)||(filtrando&&hsVis.length>0);
-    const flecha=hs.length?`<span onclick="event.stopPropagation();alternar('${esc(r.codigo)}')" title="${abierto?'Contraer':'Desplegar'}" style="display:inline-block;width:18px;cursor:pointer;color:var(--pri)">${abierto?'▾':'▸'}</span>`:'<span style="display:inline-block;width:18px"></span>';
+    // Abierto a mano: todos los hijos (los que no coinciden, atenuados). Abierto
+    // solo porque un hijo coincide con el filtro: solo esos. Cerrado a mano
+    // queda cerrado aunque el filtro lo abriria.
+    const aMano=S.abiertos.has(r.codigo);
+    const abierto=!S.cerrados.has(r.codigo)&&(aMano||(filtrando&&hsVis.length>0));
+    const flecha=hs.length?`<span onclick="event.stopPropagation();alternar('${esc(r.codigo)}',${abierto})" title="${abierto?'Contraer':'Desplegar'}" style="display:inline-block;width:18px;cursor:pointer;color:var(--pri)">${abierto?'▾':'▸'}</span>`:'<span style="display:inline-block;width:18px"></span>';
     filas+=fila(r,0,flecha).replace('</td><td>',hs.length?` <span class="chip mut" style="font-family:var(--f)">${hs.length}</span></td><td>`:'</td><td>');
-    if(abierto)for(const h of (filtrando?hsVis:hs))filas+=fila(h,1);
+    if(abierto)for(const h of (aMano||!filtrando?hs:hsVis))filas+=fila(h,1);
   }
   document.getElementById('listado').innerHTML=n?`<div class="fila" style="justify-content:flex-end;margin-bottom:6px">
       <button class="b sm" onclick="desplegarTodo(true)">Desplegar todo</button><button class="b sm" onclick="desplegarTodo(false)">Contraer todo</button></div>
@@ -309,8 +313,12 @@ function asociados(d){
   if(hs.length)h+=`<div style="margin-top:10px"><b>Registros, anexos y listados (${hs.length}):</b><ul class="lst">${hs.map(x=>`<li>${link(x)} ${(()=>{const s=SIT[situacion(x)];return `<span class="chip ${s[0]}">${s[1]}</span>`})()}</li>`).join('')}</ul></div>`;
   return h;
 }
-function alternar(cod){S.abiertos.has(cod)?S.abiertos.delete(cod):S.abiertos.add(cod);pintarListado()}
-function desplegarTodo(si){S.abiertos=si?new Set(hijosPorPadre().keys()):new Set();pintarListado()}
+// `abierto`: como estaba al hacer clic (lo pasa la flecha).
+function alternar(cod,abierto){
+  if(abierto){S.abiertos.delete(cod);S.cerrados.add(cod)}else{S.cerrados.delete(cod);S.abiertos.add(cod)}
+  pintarListado();
+}
+function desplegarTodo(si){const todos=new Set(hijosPorPadre().keys());S.abiertos=si?todos:new Set();S.cerrados=si?new Set():todos;pintarListado()}
 
 // ---------------------------------------------------------------- documento nuevo
 // El codigo lo asigna el servidor (lib/codificacion.js). Aca se muestra el que
