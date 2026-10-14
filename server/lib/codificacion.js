@@ -43,10 +43,17 @@ export async function siguienteCodigo(c, { tipo, area, padreId, bloquear = false
         if (!p) throw fallo(404, 'documento padre inexistente');
         if (p.tipo !== tp.deriva_de) throw fallo(400, `el documento padre tiene que ser un ${tp.deriva_de} (${p.codigo} es ${p.tipo})`);
         const base = `${t.split('-')[0]}-${p.codigo.toUpperCase()}`;
+        // En el listado hay derivados con el numero sin ceros (REG-SOP-AC-30-E
+        // es de SOP-AC-030): cuentan para la serie de letras.
+        const sinCeros = base.replace(/-0+(\d+)$/, '-$1');
         const { rows } = await c.query(
-            `SELECT upper(codigo) AS codigo FROM dc_documentos WHERE upper(codigo) LIKE $1`, [`${base}-%`]);
+            `SELECT upper(codigo) AS codigo FROM dc_documentos WHERE upper(codigo) LIKE $1 OR upper(codigo) LIKE $2`,
+            [`${base}-%`, `${sinCeros}-%`]);
         // Solo la letra: REG-SOP-LCC-046-A.1 cuenta como A.
-        const usadas = rows.map((r) => r.codigo.slice(base.length + 1).match(/^([A-Z]+)/)?.[1]).filter(Boolean);
+        const usadas = rows.map((r) => {
+            const resto = r.codigo.startsWith(base + '-') ? r.codigo.slice(base.length + 1) : r.codigo.slice(sinCeros.length + 1);
+            return resto.match(/^([A-Z]+)/)?.[1];
+        }).filter(Boolean);
         const sig = numeroALetra(Math.max(0, ...usadas.map(letraANumero)) + 1);
         return { codigo: `${base}-${sig}`, area: p.area, padre: p.codigo };
     }

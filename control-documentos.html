@@ -121,7 +121,7 @@ ul.lst{margin:4px 0 0;padding-left:18px;font-size:13px}
 <div class="toast" id="toast"></div>
 <script>
 const API='/api/control-documentos';
-const S={docs:[],permisos:[],filtro:'todos',sel:null,usuario:''};
+const S={docs:[],permisos:[],filtro:'todos',sel:null,usuario:'',abiertos:new Set()};
 
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function toast(m,err){const t=document.getElementById('toast');t.textContent=m;t.className='toast on'+(err?' err':'');clearTimeout(t._t);t._t=setTimeout(()=>t.className='toast',5000)}
@@ -258,17 +258,64 @@ function pintarListado(){
     if(area&&d.area!==area)return false;if(tipo&&d.tipo!==tipo)return false;
     return !q||d.codigo.toLowerCase().includes(q)||d.titulo.toLowerCase().includes(q);
   });
-  document.getElementById('listado').innerHTML=lista.length?`<table><thead><tr><th>Código</th><th>Título</th><th>Versión</th><th>Vigencia</th><th>Vence</th><th>Situación</th></tr></thead><tbody>`
-    +lista.map(d=>{const s=SIT[situacion(d)];return `<tr class="click" onclick="abrir(${d.id})"><td class="cod">${esc(d.codigo)}</td><td>${esc(d.titulo)}</td>
+  // Agrupado por padre: el SOP (o la ESP) con sus registros, anexos,
+  // listados y planes debajo. El padre se ve si coincide el o alguno de sus
+  // hijos; con un filtro o una busqueda activa se despliega solo.
+  const visibles=new Set(lista.map(d=>d.id));
+  const hijos=hijosPorPadre();
+  const porCodigo=new Map(S.docs.map(d=>[d.codigo,d]));
+  const raices=S.docs.filter(d=>{const p=padreDe(d.codigo);return !p||!porCodigo.has(p)});
+  const filtrando=Boolean(q||area||tipo||S.filtro!=='todos');
+  const fila=(d,nivel,extra)=>{const s=SIT[situacion(d)];const tenue=!visibles.has(d.id);
+    return `<tr class="click" onclick="abrir(${d.id})" style="${tenue?'opacity:.55':''}">
+      <td class="cod" style="${nivel?'padding-left:30px':''}">${extra||''}${nivel?'↳ ':''}${esc(d.codigo)}</td><td>${esc(d.titulo)}</td>
       <td>${d.vigente_numero!=null?ver(d.vigente_numero):'—'}${d.en_curso_id?(d.en_curso_rechazado?` <span class="chip crit">v${ver(d.en_curso_numero)} rechazada</span>`:` <span class="chip info">v${ver(d.en_curso_numero)} en curso</span>`):''}</td>
-      <td>${dma(d.fecha_vigencia)}</td><td>${dma(d.proxima_revision)}</td><td><span class="chip ${s[0]}">${s[1]}</span>${d.vigente_id&&!d.vigente_con_archivo&&puede('administrar')?' <span class="chip mut">sin archivo</span>':''}</td></tr>`}).join('')
-    +'</tbody></table>':'<div class="muted">No hay documentos con ese filtro.</div>';
+      <td>${dma(d.fecha_vigencia)}</td><td>${dma(d.proxima_revision)}</td><td><span class="chip ${s[0]}">${s[1]}</span>${d.vigente_id&&!d.vigente_con_archivo&&puede('administrar')?' <span class="chip mut">sin archivo</span>':''}</td></tr>`};
+  let filas='',n=0;
+  for(const r of raices){
+    const hs=(hijos.get(r.codigo)||[]);
+    const hsVis=hs.filter(h=>visibles.has(h.id));
+    if(!visibles.has(r.id)&&!hsVis.length)continue;
+    n++;
+    const abierto=S.abiertos.has(r.codigo)||(filtrando&&hsVis.length>0);
+    const flecha=hs.length?`<span onclick="event.stopPropagation();alternar('${esc(r.codigo)}')" title="${abierto?'Contraer':'Desplegar'}" style="display:inline-block;width:18px;cursor:pointer;color:var(--pri)">${abierto?'▾':'▸'}</span>`:'<span style="display:inline-block;width:18px"></span>';
+    filas+=fila(r,0,flecha).replace('</td><td>',hs.length?` <span class="chip mut" style="font-family:var(--f)">${hs.length}</span></td><td>`:'</td><td>');
+    if(abierto)for(const h of (filtrando?hsVis:hs))filas+=fila(h,1);
+  }
+  document.getElementById('listado').innerHTML=n?`<div class="fila" style="justify-content:flex-end;margin-bottom:6px">
+      <button class="b sm" onclick="desplegarTodo(true)">Desplegar todo</button><button class="b sm" onclick="desplegarTodo(false)">Contraer todo</button></div>
+    <table><thead><tr><th>Código</th><th>Título</th><th>Versión</th><th>Vigencia</th><th>Vence</th><th>Situación</th></tr></thead><tbody>${filas}</tbody></table>`
+    :'<div class="muted">No hay documentos con ese filtro.</div>';
 }
+
+// El padre de un derivado se lee del codigo: REG-SOP-AC-039-A -> SOP-AC-039,
+// AX-ESP-COM-035-A -> ESP-COM-035, REG-SOP-LCC-046-A.1 -> SOP-LCC-046.
+// El numero se completa a tres cifras: REG-SOP-AC-30-E es de SOP-AC-030.
+function padreDe(codigo){const m=String(codigo).match(/^(?:AX|REG|LIS|PL)-([A-Z]+-[A-Z0-9]+)-(\d+)-[A-Z]+[0-9.]*$/);return m?`${m[1]}-${m[2].padStart(3,'0')}`:null}
+function hijosPorPadre(){
+  const m=new Map();
+  for(const d of S.docs){const p=padreDe(d.codigo);if(p)(m.get(p)||m.set(p,[]).get(p)).push(d)}
+  for(const l of m.values())l.sort((a,b)=>a.codigo.localeCompare(b.codigo));
+  return m;
+}
+// En el detalle: los hijos de un SOP, o el SOP de un registro o anexo.
+function asociados(d){
+  const p=padreDe(d.codigo),padre=p&&S.docs.find(x=>x.codigo===p);
+  const hs=hijosPorPadre().get(d.codigo)||[];
+  const link=x=>`<a href="#" onclick="event.preventDefault();abrir(${x.id})" style="color:var(--pri)">${esc(x.codigo)}</a> <span class="muted">${esc(x.titulo)}</span>`;
+  let h='';
+  if(padre)h+=`<div style="margin-top:10px"><b>Pertenece a:</b> ${link(padre)}</div>`;
+  if(puede('cargar')&&!p&&['SOP','ESP','MET'].includes(d.tipo))h+=`<div style="margin-top:10px"><button class="b sm" onclick="nuevoDocumento('${esc(d.codigo)}')">➕ Agregar registro o anexo</button></div>`;
+  if(hs.length)h+=`<div style="margin-top:10px"><b>Registros, anexos y listados (${hs.length}):</b><ul class="lst">${hs.map(x=>`<li>${link(x)} ${(()=>{const s=SIT[situacion(x)];return `<span class="chip ${s[0]}">${s[1]}</span>`})()}</li>`).join('')}</ul></div>`;
+  return h;
+}
+function alternar(cod){S.abiertos.has(cod)?S.abiertos.delete(cod):S.abiertos.add(cod);pintarListado()}
+function desplegarTodo(si){S.abiertos=si?new Set(hijosPorPadre().keys()):new Set();pintarListado()}
 
 // ---------------------------------------------------------------- documento nuevo
 // El codigo lo asigna el servidor (lib/codificacion.js). Aca se muestra el que
 // le tocaria; el definitivo sale al crear, con el bloqueo tomado.
-async function nuevoDocumento(){
+async function nuevoDocumento(padre){
   const box=document.getElementById('detalle');
   try{
     const {tipos,areas}=await api('/codificacion');S.cod={tipos,areas};
@@ -288,6 +335,9 @@ async function nuevoDocumento(){
       <div class="fila"><button class="b pri" onclick="crearDocumento()">Crear borrador</button>
         <span class="muted">Se crea la versión 1.0 en borrador: después lo escribís (o subís el Word y el PDF) y lo enviás a revisión.</span></div></div>`;
     box.scrollIntoView({behavior:'smooth'});
+    // Desde un SOP o una ESP: el tipo derivado que le corresponde y el padre ya puestos.
+    const pd=padre&&S.docs.find(x=>x.codigo===padre);
+    if(pd){const t=tipos.find(x=>x.deriva_de===pd.tipo);if(t){document.getElementById('nTipo').value=t.codigo;document.getElementById('nPadre').value=pd.codigo}}
     nuevoCambio();
   }catch(e){toast(e.message,true)}
 }
@@ -339,7 +389,7 @@ async function abrir(id){
     let h=`<div class="card"><div class="fila" style="justify-content:space-between"><h3 style="margin:0">${esc(d.codigo)} · ${esc(d.titulo)}</h3>
       <button class="b sm" onclick="document.getElementById('detalle').innerHTML=''">Cerrar</button></div>
       <dl class="det" style="margin-top:10px"><dt>Tipo / área</dt><dd>${esc(d.tipo)} · ${esc(d.area||'—')}</dd>
-      <dt>Próxima revisión</dt><dd>${dma(d.proxima_revision)}${d.avisar_desde?` <span class="muted">(avisos desde ${dma(d.avisar_desde)})</span>`:''}</dd></dl>
+      <dt>Próxima revisión</dt><dd>${dma(d.proxima_revision)}${d.avisar_desde?` <span class="muted">(avisos desde ${dma(d.avisar_desde)})</span>`:''}</dd></dl>${asociados(d)}
       <h3 style="margin-top:16px">Versiones</h3><div class="tabla"><table><thead><tr><th>Versión</th><th>Estado</th><th>Vigencia</th><th>Elaboró / revisó / aprobó</th><th>Firmas</th><th></th></tr></thead><tbody>`;
     for(const v of versiones){
       const bajar=[];
