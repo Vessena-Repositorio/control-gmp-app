@@ -26,7 +26,7 @@ import { guardar, abrir, leer as leerArchivo, extension, hayAlmacen, MAX_BYTES, 
 import { marcarCopiaNoControlada } from '../lib/marca-agua.js';
 import { nuevaVersion, enviarARevision, firmarTarea, anularBorrador, vigenteAhora } from '../lib/ciclo-documentos.js';
 import { avance, datosPadron, sectoresDelPadron } from '../lib/entrenamiento-documentos.js';
-import { avisarCiclo, avisarLectura } from '../lib/avisos-documentos.js';
+import { avisarCiclo, avisarLectura, recordarTarea } from '../lib/avisos-documentos.js';
 import { nuevoToken, validarEvaluacion, registrarEnCapacitaciones, personaPorCodigo } from '../lib/lectura-qr.js';
 import { coleccionCapacitaciones } from '../lib/tareas.js';
 import { siguienteCodigo } from '../lib/codificacion.js';
@@ -755,7 +755,7 @@ rutasControlDocumentos.get('/mis-tareas', leer, async (req, res, next) => {
                  ORDER BY t.cerrada_en DESC`,
                 [req.usuario.id]),
         ]);
-        res.json({ ok: true, tareas: rows, devueltos, lecturas: await lecturasPendientes(req) });
+        res.json({ ok: true, tareas: rows, devueltos, lecturas: await lecturasPendientes(req), enCurso: await misDocumentosEnCurso(req) });
     } catch (err) { next(err); }
 });
 
@@ -1241,4 +1241,60 @@ rutasControlDocumentos.post('/personal-codigos/probar', capacitar, async (req, r
         const p = await personaPorCodigo((req.body || {}).codigo);
         res.json({ ok: true, persona: p ? { nombre: p.n, sector: p.s || '' } : null });
     } catch (err) { next(err); }
+});
+
+// ---------------------------------------------------------------------------
+// Mis documentos en curso: lo que elabore y todavia no esta vigente
+// ---------------------------------------------------------------------------
+
+/**
+ * Las versiones en curso que elaboro esta persona (las creo o las firmo como
+ * autora), con las tareas de su ronda: quien firmo, quien falta y para cuando.
+ * Claudia (14/10/2026): tener a la vista lo que espera respuesta.
+ */
+async function misDocumentosEnCurso(req) {
+    const { rows } = await consultar(
+        `SELECT v.id AS version_id, v.numero, v.estado, v.ronda, v.fecha_vigencia, v.formato,
+                d.id AS documento_id, d.codigo, d.titulo,
+                coalesce((SELECT json_agg(json_build_object(
+                            'id', t.id, 'tipo', t.tipo, 'estado', t.estado, 'vence_el', t.vence_el,
+                            'nombre', u.nombre, 'cerrada_en', t.cerrada_en) ORDER BY t.tipo DESC, t.id)
+                          FROM dc_tareas t JOIN usuarios u ON u.id = t.usuario_id
+                          WHERE t.version_id = v.id AND t.ronda = v.ronda AND t.estado <> 'cancelada'), '[]') AS tareas
+         FROM dc_versiones v JOIN dc_documentos d ON d.id = v.documento_id
+         WHERE v.estado IN ('borrador', 'en_revision', 'en_aprobacion', 'aprobado', 'en_entrenamiento')
+           AND (v.creado_por_id = $1
+                OR EXISTS (SELECT 1 FROM firmas_electronicas f WHERE f.tabla = 'dc_versiones'
+                           AND f.registro_id = v.id::text AND f.significado = 'autor' AND f.usuario_id = $1))
+         ORDER BY CASE v.estado WHEN 'en_revision' THEN 1 WHEN 'en_aprobacion' THEN 2 WHEN 'borrador' THEN 3 ELSE 4 END, d.codigo`,
+        [req.usuario.id]);
+    return rows;
+}
+
+/**
+ * POST /api/control-documentos/tareas/:id/recordar
+ * Quien elaboro el documento (o Calidad) le recuerda por correo a quien
+ * tiene la tarea. Queda en la auditoria de accesos.
+ */
+rutasControlDocumentos.post('/tareas/:id/recordar', leer, async (req, res, next) => {
+    try {
+        const { rows: [t] } = await consultar(
+            `SELECT t.id, t.tipo, t.estado, t.vence_el, t.version_id, v.numero, v.creado_por_id, v.resumen_cambios,
+                    d.codigo, d.titulo, u.nombre, coalesce(u.email, u.usuario) AS correo,
+                    EXISTS (SELECT 1 FROM firmas_electronicas f WHERE f.tabla = 'dc_versiones'
+                            AND f.registro_id = v.id::text AND f.significado = 'autor' AND f.usuario_id = $2) AS soy_autor
+             FROM dc_tareas t JOIN dc_versiones v ON v.id = t.version_id
+             JOIN dc_documentos d ON d.id = v.documento_id JOIN usuarios u ON u.id = t.usuario_id
+             WHERE t.id = $1`, [req.params.id, req.usuario.id]);
+        if (!t) throw fallo(404, 'tarea inexistente');
+        if (t.estado !== 'pendiente') throw fallo(409, 'esa tarea ya no está pendiente');
+        if (!t.soy_autor && t.creado_por_id !== req.usuario.id && !puede(req.rol, 'administrar')) {
+            throw fallo(403, 'recuerda quien elaboró el documento, o Calidad');
+        }
+        const enviado = await recordarTarea(t, req.usuario.nombre || req.usuario.usuario);
+        if (!enviado) throw fallo(503, 'no se pudo mandar el correo (¿la persona tiene correo cargado?)');
+        await auditar(req, { usuarioId: req.usuario.id, usuarioTxt: req.usuario.usuario, accion: 'recordatorio_tarea',
+            recurso: RECURSO, detalle: `${t.codigo} v${t.numero}: ${t.tipo} de ${t.nombre}` });
+        res.json({ ok: true, para: t.nombre });
+    } catch (err) { responder(err, res, next); }
 });

@@ -174,7 +174,7 @@ async function cargar(){
 async function cargarTareas(){
   const box=document.getElementById('tareas');
   try{
-    const {tareas,devueltos=[],lecturas=[]}=await api('/mis-tareas');S.tareas=tareas;S.lecturas=lecturas;
+    const {tareas,devueltos=[],lecturas=[],enCurso=[]}=await api('/mis-tareas');S.tareas=tareas;S.lecturas=lecturas;
     const pend=tareas.filter(t=>t.estado==='pendiente');
     const cuenta=pend.length+devueltos.length+lecturas.length;
     const n=document.getElementById('nTareas');n.textContent=cuenta;n.style.display=cuenta?'':'none';
@@ -187,14 +187,48 @@ async function cargarTareas(){
       <table style="margin-bottom:18px"><thead><tr><th>Documento</th><th>Vigencia</th></tr></thead><tbody>`
       +lecturas.map(l=>`<tr class="click" onclick="verTab(0);abrir(${l.documento_id})"><td class="cod">${esc(l.codigo)} v${ver(l.numero)}<br><span class="muted" style="font-family:var(--f)">${esc(l.titulo)}</span></td>
         <td>${l.estado==='vigente'?'<span class="chip ok">vigente</span>':`<span class="chip info">desde ${dma(l.fecha_vigencia)}</span>`}</td></tr>`).join('')+'</tbody></table>':'';
-    if(!tareas.length){box.innerHTML=(dev+lee)||'<div class="muted">No tenés documentos para revisar, aprobar ni leer.</div>';return}
+    const cur=htmlEnCurso(enCurso);
+    if(!tareas.length){box.innerHTML=(dev+lee)||(cur?'':'<div class="muted">No tenés documentos para revisar, aprobar ni leer.</div>');box.insertAdjacentHTML('beforeend',cur);return}
     box.innerHTML=dev+lee+(dev||lee?'<h3>Para revisar o aprobar</h3>':'')+`<table><thead><tr><th>Documento</th><th>Tarea</th><th>Qué cambia</th><th>Elaboró</th><th>Vence</th></tr></thead><tbody>`
       +tareas.map(t=>{const atr=t.vence_el&&String(t.vence_el).slice(0,10)<hoyISO();
         return `<tr class="click" onclick="verTab(0);abrir(${t.documento_id})"><td class="cod">${esc(t.codigo)} v${ver(t.numero)}<br><span class="muted" style="font-family:var(--f)">${esc(t.titulo)}</span></td>
         <td>${t.tipo==='revision'?'Revisar':'Aprobar'}${t.estado==='en_espera'?' <span class="chip mut">espera las revisiones</span>':''}</td>
         <td class="muted">${esc(t.resumen_cambios||'')}</td><td>${esc(t.elaborado_por_nombre||'—')}</td>
         <td>${t.vence_el?`<span class="chip ${atr?'crit':'info'}">${dma(t.vence_el)}</span>`:'—'}</td></tr>`}).join('')+'</tbody></table>';
+    box.insertAdjacentHTML('beforeend',cur);
   }catch(e){box.innerHTML=`<div class="aviso crit">${esc(e.message)}</div>`}
+}
+
+// Lo que elabore y espera respuesta (o todavia no envie). Cada persona que
+// falta tiene "Recordar": le manda un correo en el momento.
+function htmlEnCurso(lista){
+  if(!lista.length)return '';
+  const EST={borrador:['info','en redacción'],en_revision:['warn','en revisión'],en_aprobacion:['warn','en aprobación'],aprobado:['ok','aprobado'],en_entrenamiento:['ok','aprobado, espera su vigencia']};
+  const hoy=hoyISO();
+  return `<h3 style="margin-top:22px">Mis documentos en curso (${lista.length})</h3>
+    <table><thead><tr><th>Documento</th><th>Estado</th><th>Quién falta</th><th>Ya firmaron</th></tr></thead><tbody>
+    ${lista.map(v=>{
+      const e=EST[v.estado]||['mut',v.estado];
+      const faltan=v.tareas.filter(t=>t.estado==='pendiente'||t.estado==='en_espera');
+      const firmaron=v.tareas.filter(t=>t.estado==='firmada');
+      const rech=v.estado==='borrador'&&v.tareas.find(t=>t.estado==='rechazada');
+      const falta=faltan.map(t=>{const atr=t.estado==='pendiente'&&t.vence_el&&String(t.vence_el).slice(0,10)<hoy;
+        return `<div style="margin-bottom:4px">${t.tipo==='revision'?'Revisa':'Aprueba'}: <b>${esc(t.nombre)}</b>
+          ${t.estado==='en_espera'?'<span class="chip mut">espera las revisiones</span>'
+            :`<span class="chip ${atr?'crit':'info'}">${atr?'atrasada · venció ':'vence '}${dma(t.vence_el)}</span>
+              <button class="b sm" style="padding:2px 8px" onclick="event.stopPropagation();recordar(${t.id},this)">Recordar</button>`}</div>`}).join('');
+      return `<tr class="click" onclick="verTab(0);abrir(${v.documento_id})">
+        <td class="cod">${esc(v.codigo)} v${ver(v.numero)}<br><span class="muted" style="font-family:var(--f)">${esc(v.titulo)}</span></td>
+        <td><span class="chip ${rech?'crit':e[0]}">${rech?'rechazado, para corregir':e[1]}</span>${v.estado==='en_entrenamiento'?`<div class="muted">vigente desde ${dma(v.fecha_vigencia)}</div>`:''}</td>
+        <td>${falta||(v.estado==='borrador'?'<span class="muted">sin enviar</span>':'<span class="muted">—</span>')}</td>
+        <td class="muted">${firmaron.map(t=>`${t.tipo==='revision'?'Revisó':'Aprobó'} ${esc(t.nombre)} · ${dmaHora(t.cerrada_en)}`).join('<br>')||'—'}</td></tr>`}).join('')}
+    </tbody></table>`;
+}
+
+async function recordar(tid,btn){
+  btn.disabled=true;
+  try{const r=await api(`/tareas/${tid}/recordar`,{method:'POST',body:'{}'});toast('Recordatorio enviado a '+r.para);btn.textContent='✓ enviado'}
+  catch(e){btn.disabled=false;toast(e.message,true)}
 }
 
 async function usuarios(){

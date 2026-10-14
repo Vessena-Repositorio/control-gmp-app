@@ -147,6 +147,21 @@ export async function avisarLectura(versionId) {
     return { correos };
 }
 
+/**
+ * Recordatorio a pedido de quien elaboro el documento: a quien tiene la tarea
+ * pendiente. Devuelve true si salio el correo.
+ */
+export async function recordarTarea(t, quienPide) {
+    const ref = `${esc(t.codigo)} v${ver(t.numero)} · ${esc(t.titulo)}`;
+    const que = t.tipo === 'revision' ? 'revisar' : 'aprobar';
+    return mandar(t.correo, `[Vessena · Documentos] Recordatorio: tenés para ${que} ${t.codigo} v${ver(t.numero)}`,
+        marco(`Recordatorio: documento para ${que}`, ref,
+            `<p style="font-size:14px;margin:0 0 8px"><b>${esc(quienPide)}</b> te recuerda que tenés para ${que} <b>${ref}</b>.</p>` +
+            (t.resumen_cambios ? `<p style="font-size:13px;color:#475467;margin:0 0 8px"><b>Qué cambia:</b> ${esc(t.resumen_cambios)}</p>` : '') +
+            (t.vence_el ? `<p style="font-size:14px;margin:0"><b>Plazo:</b> ${dma(t.vence_el)}</p>` : ''),
+            AZUL, 'Ir a Mis tareas'));
+}
+
 /* ── Cada 10 minutos: vigencias ─────────────────────────────────────────── */
 
 export async function revisarVigenciasDocumentos() {
