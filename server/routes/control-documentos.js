@@ -29,6 +29,7 @@ import { avance, datosPadron, sectoresDelPadron } from '../lib/entrenamiento-doc
 import { avisarCiclo, avisarLectura, recordarTarea } from '../lib/avisos-documentos.js';
 import { nuevoToken, validarEvaluacion, registrarEnCapacitaciones, personaPorCodigo } from '../lib/lectura-qr.js';
 import { coleccionCapacitaciones } from '../lib/tareas.js';
+import { codigosDePersona, personasPorCargo, planPersona } from '../lib/puestos.js';
 import { siguienteCodigo } from '../lib/codificacion.js';
 import { pdfSop, emitirPdfOficial, hashContenido } from '../lib/pdf-sop.js';
 import { SECCIONES } from '../lib/formato-sop.js';
@@ -860,7 +861,9 @@ async function lecturasPendientes(req) {
     const yo = datos.persona(req.usuario.nombre || '');
     if (!yo) return [];
     const sector = String(yo.s || '').toUpperCase().replace(/\s+/g, ' ').trim();
-    return rows.filter((r) => (r.capacitar_sectores || []).includes(sector))
+    // Por su sector o por su cargo (matriz de puestos).
+    const porCargo = await codigosDePersona(String(yo.n));
+    return rows.filter((r) => (r.capacitar_sectores || []).includes(sector) || porCargo.has(String(r.codigo).toUpperCase()))
         .map(({ capacitar_sectores: _s, ...r }) => r);
 }
 
@@ -1297,4 +1300,184 @@ rutasControlDocumentos.post('/tareas/:id/recordar', leer, async (req, res, next)
             recurso: RECURSO, detalle: `${t.codigo} v${t.numero}: ${t.tipo} de ${t.nombre}` });
         res.json({ ok: true, para: t.nombre });
     } catch (err) { responder(err, res, next); }
+});
+
+// ---------------------------------------------------------------------------
+// Puestos: matriz SOP x cargo y plan de capacitacion de cada persona (063)
+// ---------------------------------------------------------------------------
+
+const VALORES_MATRIZ = new Set(['1', '2', 'E', 'R', 'A', 'A/R', 'R/E']);
+
+/** GET /api/control-documentos/puestos/cargos — cargos, con cuantos SOP y personas tiene cada uno. */
+rutasControlDocumentos.get('/puestos/cargos', capacitar, async (_req, res, next) => {
+    try {
+        const { rows } = await consultar(
+            `SELECT c.id, c.nombre, c.orden,
+                    (SELECT count(*)::int FROM dc_matriz m WHERE m.cargo_id = c.id AND m.valor IN ('1','2')) AS sops,
+                    (SELECT count(*)::int FROM dc_personal_cargos p WHERE p.cargo_id = c.id AND p.hasta IS NULL) AS personas
+             FROM dc_cargos c WHERE c.activo ORDER BY c.orden, c.nombre`);
+        res.json({ ok: true, cargos: rows });
+    } catch (err) { next(err); }
+});
+
+/** GET /api/control-documentos/puestos/matriz?cargo=ID | ?codigo=SOP-.. — filas de la matriz. */
+rutasControlDocumentos.get('/puestos/matriz', capacitar, async (req, res, next) => {
+    try {
+        const { rows } = await consultar(
+            `SELECT m.cargo_id, c.nombre AS cargo, upper(m.codigo) AS codigo, m.valor, d.id AS documento_id, d.titulo,
+                    (d.id IS NULL) AS no_cargado
+             FROM dc_matriz m JOIN dc_cargos c ON c.id = m.cargo_id
+             LEFT JOIN dc_documentos d ON upper(d.codigo) = upper(m.codigo)
+             WHERE m.valor IS NOT NULL
+               AND ($1::bigint IS NULL OR m.cargo_id = $1) AND ($2::text IS NULL OR upper(m.codigo) = upper($2))
+             ORDER BY c.orden, c.nombre, m.codigo`,
+            [req.query.cargo || null, req.query.codigo || null]);
+        res.json({ ok: true, filas: rows });
+    } catch (err) { next(err); }
+});
+
+/** PUT /api/control-documentos/puestos/matriz { cargoId, codigo, valor, motivo } — una celda. */
+rutasControlDocumentos.put('/puestos/matriz', administrar, async (req, res, next) => {
+    const b = req.body || {};
+    try {
+        const codigo = texto(b.codigo).toUpperCase().replace(/\s+/g, '');
+        const valor = texto(b.valor).toUpperCase() || null;
+        if (!codigo || !b.cargoId) throw fallo(400, 'faltan el cargo o el código');
+        if (valor && !VALORES_MATRIZ.has(valor)) throw fallo(400, 'el valor va 1, 2, E, R o A');
+        await enTransaccionAuditada(req, texto(b.motivo) || 'actualización de la matriz de capacitación', (c) => c.query(
+            `INSERT INTO dc_matriz (cargo_id, codigo, valor) VALUES ($1, $2, $3)
+             ON CONFLICT (cargo_id, codigo) DO UPDATE SET valor = EXCLUDED.valor`, [b.cargoId, codigo, valor]));
+        res.json({ ok: true });
+    } catch (err) { responder(err, res, next); }
+});
+
+/**
+ * POST /api/control-documentos/puestos/matriz/importar
+ * { archivoNombre, cargos: ['Analista LCC', ...], filas: [{ codigo, valores: [v por cargo] }] }
+ * La hoja "Matriz" de Matriz-SOP-AC-039. Crea los cargos que falten y
+ * reemplaza las celdas que vengan.
+ */
+rutasControlDocumentos.post('/puestos/matriz/importar', administrar, async (req, res, next) => {
+    const b = req.body || {};
+    try {
+        const cargos = (Array.isArray(b.cargos) ? b.cargos : []).map((c) => texto(c).replace(/\s+/g, ' '));
+        const filas = Array.isArray(b.filas) ? b.filas : [];
+        if (!cargos.length || !filas.length) throw fallo(400, 'no llegaron cargos o filas de la matriz');
+        const r = await enTransaccionAuditada(req, `importación de la matriz de capacitación ${texto(b.archivoNombre)}`, async (c) => {
+            const ids = [];
+            for (const [i, nombre] of cargos.entries()) {
+                if (!nombre) { ids.push(null); continue; }
+                const { rows: [x] } = await c.query(
+                    `INSERT INTO dc_cargos (nombre, orden) VALUES ($1, $2)
+                     ON CONFLICT (lower(nombre)) DO UPDATE SET orden = EXCLUDED.orden RETURNING id`, [nombre, i + 1]);
+                ids.push(x.id);
+            }
+            let celdas = 0;
+            for (const f of filas) {
+                const codigo = texto(f.codigo).toUpperCase().replace(/\s+/g, '');
+                if (!/^[A-Z]+-[A-Z0-9]+-\d+/.test(codigo)) continue;
+                for (const [i, v] of (f.valores || []).entries()) {
+                    const valor = texto(v).toUpperCase().replace(/\s+/g, '');
+                    if (!ids[i] || !valor || !VALORES_MATRIZ.has(valor)) continue;
+                    await c.query(
+                        `INSERT INTO dc_matriz (cargo_id, codigo, valor) VALUES ($1, $2, $3)
+                         ON CONFLICT (cargo_id, codigo) DO UPDATE SET valor = EXCLUDED.valor`, [ids[i], codigo, valor]);
+                    celdas++;
+                }
+            }
+            return { cargos: ids.filter(Boolean).length, celdas };
+        });
+        res.json({ ok: true, ...r });
+    } catch (err) { responder(err, res, next); }
+});
+
+/** GET /api/control-documentos/puestos/personas — el padron activo, con el cargo de cada uno. */
+rutasControlDocumentos.get('/puestos/personas', capacitar, async (_req, res, next) => {
+    try {
+        const personal = (await coleccionCapacitaciones('PE')).filter((p) => p && p.a !== false && p.n);
+        const { rows } = await consultar(
+            `SELECT pc.persona_nombre, c.nombre AS cargo, pc.desde FROM dc_personal_cargos pc
+             JOIN dc_cargos c ON c.id = pc.cargo_id WHERE pc.hasta IS NULL`);
+        const cargoDe = new Map();
+        for (const r of rows) (cargoDe.get(r.persona_nombre) || cargoDe.set(r.persona_nombre, []).get(r.persona_nombre)).push(r.cargo);
+        res.json({ ok: true, personas: personal.map((p) => ({ nombre: p.n, sector: p.s || '', ci: p.ci || '', cargos: cargoDe.get(String(p.n)) || [] }))
+            .sort((a, b) => a.nombre.localeCompare(b.nombre)) });
+    } catch (err) { next(err); }
+});
+
+/**
+ * POST /api/control-documentos/puestos/asignar { persona, cargoId, desde, reemplaza }
+ * La persona asume un cargo desde una fecha. Con `reemplaza` (lo habitual en
+ * un cambio de cargo) deja su cargo anterior el dia antes.
+ */
+rutasControlDocumentos.post('/puestos/asignar', capacitar, async (req, res, next) => {
+    const b = req.body || {};
+    try {
+        const persona = texto(b.persona);
+        const desde = texto(b.desde).slice(0, 10);
+        if (!persona || !b.cargoId || !/^\d{4}-\d{2}-\d{2}$/.test(desde)) throw fallo(400, 'faltan la persona, el cargo o la fecha');
+        const p = (await coleccionCapacitaciones('PE')).find((x) => x && String(x.n) === persona);
+        if (!p) throw fallo(404, 'la persona no está en el padrón de Capacitaciones');
+        await enTransaccionAuditada(req, `${persona} asume un cargo`, async (c) => {
+            const { rows: [cg] } = await c.query('SELECT nombre FROM dc_cargos WHERE id = $1 AND activo', [b.cargoId]);
+            if (!cg) throw fallo(404, 'cargo inexistente');
+            const { rows: ya } = await c.query(
+                'SELECT 1 FROM dc_personal_cargos WHERE persona_nombre = $1 AND cargo_id = $2 AND hasta IS NULL', [persona, b.cargoId]);
+            if (ya.length) throw fallo(409, `${persona} ya ocupa ${cg.nombre}`);
+            if (b.reemplaza !== false) {
+                await c.query(
+                    `UPDATE dc_personal_cargos SET hasta = ($2::date - 1) WHERE persona_nombre = $1 AND hasta IS NULL`,
+                    [persona, desde]);
+            }
+            await c.query(
+                `INSERT INTO dc_personal_cargos (persona_nombre, persona_ci, cargo_id, desde, creado_por_id)
+                 VALUES ($1,$2,$3,$4,$5)`, [persona, p.ci || null, b.cargoId, desde, req.usuario.id]);
+        });
+        res.json({ ok: true });
+    } catch (err) { responder(err, res, next); }
+});
+
+/** POST /api/control-documentos/puestos/dejar { asignacionId, hasta } — deja un cargo (egreso, cambio). */
+rutasControlDocumentos.post('/puestos/dejar', capacitar, async (req, res, next) => {
+    const b = req.body || {};
+    try {
+        const hasta = texto(b.hasta).slice(0, 10) || hoyIso();
+        await enTransaccionAuditada(req, 'deja el cargo', async (c) => {
+            const { rowCount } = await c.query(
+                'UPDATE dc_personal_cargos SET hasta = $2 WHERE id = $1 AND hasta IS NULL', [b.asignacionId, hasta]);
+            if (!rowCount) throw fallo(404, 'esa asignación no está vigente');
+        });
+        res.json({ ok: true });
+    } catch (err) { responder(err, res, next); }
+});
+
+/** GET /api/control-documentos/puestos/plan?persona= — su plan de capacitacion. */
+rutasControlDocumentos.get('/puestos/plan', capacitar, async (req, res, next) => {
+    try {
+        const nombre = texto(req.query.persona);
+        if (!nombre) throw fallo(400, 'falta la persona');
+        const plan = await planPersona(nombre, await datosPadron(), hoyIso());
+        res.json({ ok: true, persona: nombre, ...plan });
+    } catch (err) { responder(err, res, next); }
+});
+
+/** GET /api/control-documentos/puestos/pendientes — personas con capacitacion del puesto pendiente o vencida. */
+rutasControlDocumentos.get('/puestos/pendientes', capacitar, async (_req, res, next) => {
+    try {
+        const datos = await datosPadron();
+        const hoy = hoyIso();
+        const { rows } = await consultar('SELECT DISTINCT persona_nombre FROM dc_personal_cargos WHERE hasta IS NULL ORDER BY 1');
+        const personas = [];
+        for (const r of rows) {
+            const plan = await planPersona(r.persona_nombre, datos, hoy);
+            const vencidos = plan.items.filter((i) => i.estado === 'vencido');
+            const pendientes = plan.items.filter((i) => i.estado === 'pendiente');
+            if (!vencidos.length && !pendientes.length) continue;
+            personas.push({ persona: r.persona_nombre, cargos: plan.cargos.map((c) => c.cargo),
+                vencidos: vencidos.length, pendientes: pendientes.length, total: plan.items.length,
+                proximo: pendientes.map((i) => i.plazo).sort()[0] || null });
+        }
+        personas.sort((a, b) => b.vencidos - a.vencidos || a.persona.localeCompare(b.persona));
+        res.json({ ok: true, personas });
+    } catch (err) { next(err); }
 });

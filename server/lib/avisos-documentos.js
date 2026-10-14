@@ -21,6 +21,7 @@ import { correrUnaVezPorDia, ZONA } from './tareas.js';
 import { enTransaccionSistema } from './audit-trail.js';
 import { activarVigencias } from './ciclo-documentos.js';
 import { avance, datosPadron } from './entrenamiento-documentos.js';
+import { personasPorCargo } from './puestos.js';
 
 const RECURSO = 'control-documentos';
 const HORA = Number(process.env.AVISOS_DOCUMENTOS_HORA ?? 8);
@@ -119,16 +120,18 @@ export async function avisarLectura(versionId) {
         `SELECT v.id, v.numero, v.estado, v.fecha_vigencia, v.modo_capacitacion,
                 d.codigo, d.titulo, d.capacitar_sectores
          FROM dc_versiones v JOIN dc_documentos d ON d.id = v.documento_id WHERE v.id = $1`, [versionId]);
-    if (!v || v.modo_capacitacion !== 'lectura' || !(v.capacitar_sectores || []).length) return { correos: 0 };
+    if (!v || v.modo_capacitacion !== 'lectura') return { correos: 0 };
 
     const datos = await datosPadron();
     const sectores = new Set(v.capacitar_sectores);
     const { rows: usuarios } = await consultar(
         `SELECT nombre, coalesce(email, usuario) AS correo FROM usuarios
          WHERE activo AND origen = 'vessena' AND nombre IS NOT NULL`);
+    // Por sector o por cargo (matriz de puestos).
+    const porCargo = await personasPorCargo(v.codigo);
     const para = usuarios.filter((u) => {
         const p = datos.persona(u.nombre);
-        return p && p.a !== false && sectores.has(String(p.s || '').toUpperCase().replace(/\s+/g, ' ').trim());
+        return p && p.a !== false && (sectores.has(String(p.s || '').toUpperCase().replace(/\s+/g, ' ').trim()) || porCargo.has(String(p.n)));
     }).map((u) => u.correo);
 
     const ref = `${esc(v.codigo)} v${ver(v.numero)} · ${esc(v.titulo)}`;

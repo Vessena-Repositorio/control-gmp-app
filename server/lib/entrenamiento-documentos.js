@@ -15,6 +15,7 @@
 import { consultar } from '../db.js';
 import { coleccionCapacitaciones } from './tareas.js';
 import { buscadorDePersonas } from './personas-capacitaciones.js';
+import { personasPorCargo } from './puestos.js';
 
 const norm = (s) => String(s ?? '').toUpperCase().replace(/\s+/g, ' ').trim();
 // Se conservan los espacios: en "SOP-AC-029 V8" el espacio separa el codigo de
@@ -61,13 +62,16 @@ export async function sectoresDelPadron() {
  */
 export async function avance(doc, version, datos) {
     const sectores = new Set((doc.capacitar_sectores || []).map(norm));
-    if (!sectores.size) return { sinMatriz: true, total: 0, capacitados: [], pendientes: [] };
+    // Ademas de los sectores, quienes ocupan un cargo con 1 o 2 en este SOP en
+    // la matriz de puestos (migracion 063; Claudia, 14/10/2026).
+    const porCargo = await personasPorCargo(doc.codigo);
+    if (!sectores.size && !porCargo.size) return { sinMatriz: true, total: 0, capacitados: [], pendientes: [] };
 
     const personal = datos?.personal || await coleccionCapacitaciones('PE');
     const registros = datos?.registros || await coleccionCapacitaciones('R');
     const persona = datos?.persona || buscadorDePersonas(personal);
 
-    const alcance = personal.filter((p) => p && p.a !== false && sectores.has(norm(p.s)));
+    const alcance = personal.filter((p) => p && p.a !== false && (sectores.has(norm(p.s)) || porCargo.has(String(p.n))));
     // Desde la aprobacion de la version: una capacitacion en la version
     // anterior no cubre los cambios de esta. Las importadas no tienen fecha de
     // aprobacion en el sistema: cuenta cualquier registro del documento.
@@ -97,7 +101,8 @@ export async function avance(doc, version, datos) {
     const pendientes = [];
     for (const p of alcance) {
         const h = hecho.get(String(p.n));
-        (h ? capacitados : pendientes).push({ nombre: p.n, sector: p.s, ...(h || {}) });
+        const pc = porCargo.get(String(p.n));
+        (h ? capacitados : pendientes).push({ nombre: p.n, sector: p.s, cargo: pc?.cargo, prioridad: pc?.prioridad, ...(h || {}) });
     }
     const orden = (a, b) => String(a.sector).localeCompare(String(b.sector)) || String(a.nombre).localeCompare(String(b.nombre));
     return { total: alcance.length, capacitados: capacitados.sort(orden), pendientes: pendientes.sort(orden), desde };
