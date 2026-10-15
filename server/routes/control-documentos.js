@@ -1437,6 +1437,37 @@ rutasControlDocumentos.post('/puestos/asignar', capacitar, async (req, res, next
     } catch (err) { responder(err, res, next); }
 });
 
+/**
+ * POST /api/control-documentos/puestos/asignar-varios { desde, asignaciones: [{ persona, cargoId }] }
+ * Asignacion inicial de cargos al personal que todavia no tiene (Claudia,
+ * 15/10/2026). Solo a quien no tiene cargo: no reemplaza ninguno.
+ */
+rutasControlDocumentos.post('/puestos/asignar-varios', capacitar, async (req, res, next) => {
+    const b = req.body || {};
+    try {
+        const desde = texto(b.desde).slice(0, 10);
+        const lista = Array.isArray(b.asignaciones) ? b.asignaciones.filter((a) => a && a.persona && a.cargoId) : [];
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(desde) || !lista.length) throw fallo(400, 'faltan la fecha o las personas');
+        const padron = new Map((await coleccionCapacitaciones('PE')).filter((p) => p && p.a !== false).map((p) => [String(p.n), p]));
+        let asignadas = 0;
+        const salteadas = [];
+        await enTransaccionAuditada(req, `asignación inicial de cargos (${lista.length})`, async (c) => {
+            for (const a of lista) {
+                const p = padron.get(String(a.persona));
+                if (!p) { salteadas.push(`${a.persona}: no está en el padrón`); continue; }
+                const { rows: ya } = await c.query(
+                    'SELECT 1 FROM dc_personal_cargos WHERE persona_nombre = $1 AND hasta IS NULL', [String(a.persona)]);
+                if (ya.length) { salteadas.push(`${a.persona}: ya tiene cargo`); continue; }
+                await c.query(
+                    `INSERT INTO dc_personal_cargos (persona_nombre, persona_ci, cargo_id, desde, creado_por_id)
+                     VALUES ($1,$2,$3,$4,$5)`, [String(a.persona), p.ci || null, a.cargoId, desde, req.usuario.id]);
+                asignadas++;
+            }
+        });
+        res.json({ ok: true, asignadas, salteadas });
+    } catch (err) { responder(err, res, next); }
+});
+
 /** POST /api/control-documentos/puestos/dejar { asignacionId, hasta } — deja un cargo (egreso, cambio). */
 rutasControlDocumentos.post('/puestos/dejar', capacitar, async (req, res, next) => {
     const b = req.body || {};

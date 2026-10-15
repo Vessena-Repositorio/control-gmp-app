@@ -121,6 +121,9 @@ ul.lst{margin:4px 0 0;padding-left:18px;font-size:13px}
 
   <div class="page" id="p3">
     <div class="card"><h3>Pendientes de capacitación del puesto</h3><div class="muted">Personas con SOPs de su cargo sin capacitar. Prioridad 1: el día que asume el cargo; prioridad 2: dentro de los 3 meses, o antes si le toca hacer la tarea.</div><div id="ptPend" class="tabla" style="margin-top:8px"></div></div>
+    <div class="card" id="ptInicialCard" style="display:none"><h3>Asignación inicial de cargos</h3><div class="muted">Personas del padrón que todavía no tienen cargo. Importá el listado de personal con roles, o asigná a mano con el cargo propuesto por sector.</div>
+      <div class="fila" style="margin-top:8px"><label class="b sm pri" style="cursor:pointer">📥 Importar listado de personal con roles (Excel)<input type="file" accept=".xls,.xlsx" style="display:none" onchange="importarRoles(this.files[0]);this.value=''"></label></div>
+      <div id="ptRoles"></div><details style="margin-top:10px"><summary>Asignar a mano, con el cargo propuesto por sector</summary><div id="ptInicial" style="margin-top:8px"></div></details></div>
     <div class="card"><h3>Persona</h3>
       <div class="fila"><input id="ptPersona" list="ptPersonas" placeholder="Nombre como está en el padrón de Capacitaciones" style="flex:1;min-width:240px" onchange="verPlan(this.value)"><datalist id="ptPersonas"></datalist></div>
       <div id="ptPlan"></div></div>
@@ -1125,12 +1128,139 @@ async function cargarPuestos(){
     document.getElementById('ptCargo').innerHTML=cargos.length?cargos.map(c=>`<option value="${c.id}">${esc(c.nombre)} — ${c.sops} SOP · ${c.personas} persona(s)</option>`).join('')
       :'<option value="">Todavía no hay matriz: importala desde el Excel</option>';
     if(cargos.length)verMatriz();
+    pintarInicial();
     const {personas:pend}=await api('/puestos/pendientes');
     document.getElementById('ptPend').innerHTML=pend.length?`<table><thead><tr><th>Persona</th><th>Cargo</th><th>Vencidos</th><th>Pendientes</th><th>Próximo plazo</th></tr></thead><tbody>
       ${pend.map(p=>`<tr class="click" onclick="document.getElementById('ptPersona').value='${esc(p.persona)}';verPlan('${esc(p.persona)}')"><td><b>${esc(p.persona)}</b></td><td class="muted">${esc(p.cargos.join(', '))}</td>
         <td>${p.vencidos?`<span class="chip crit">${p.vencidos}</span>`:'—'}</td><td>${p.pendientes||'—'}</td><td>${dma(p.proximo)}</td></tr>`).join('')}</tbody></table>`
       :'<div class="muted">Nadie tiene capacitación del puesto pendiente (o todavía no se asignaron cargos).</div>';
   }catch(e){toast(e.message,true)}
+}
+
+// Cargo propuesto por sector para la asignacion inicial (15/10/2026). El
+// puesto de RRHH es la categoria de sueldo (151 "Operario especializado"), no
+// el cargo de la matriz: lo que distingue el cargo es el sector. Jefes,
+// coordinadores y gerentes van sin propuesta: se eligen a mano.
+const CARGO_POR_SECTOR={
+  'ENVASADO':'Operario especializado envasado','PLASTICOS':'Operario Plastico','DEPOSITO PT':'Operario Logistica',
+  'DEPOSITO MP/COMP':'Operario de Materias primas','FABRICACION':'Operario producción','MANTENIMIENTO':'Operario Comun mantenimiento',
+  'LCC':'Auxiliar de LCC','CALIDAD':'Auxiliar de LCC','VENTAS':'Vendedores','ADMINISTRACION OFIC':'Administracion',
+  'ADMINISTRACION PLANTA':'Administracion','COMPRAS':'Asistente de Compras','PLANIFICACION':'Administrativo de Planta/Planificador',
+  'LIMPIEZA':'Proveedores de limpieza','CLEANWAY':'Proveedores de limpieza',
+};
+const normCargo=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+
+// --- Importacion del listado de personal con roles (PERSONAL_ACTIVO_ULTIMO,
+// 15/10/2026): la primera columna dice "SECTOR-ROL" ("LCC-ANALISTA",
+// "MANPOWER ENVASADO-OPERARIO-AUTOELEVADOR"). Se normaliza (sin MANPOWER ni
+// AUTOELEVADOR, que no es un cargo de la matriz) y se propone el cargo.
+// Las marcadas con * son dudosas: se proponen igual pero se avisa.
+const DESIGNACION_A_CARGO={
+  'ENVASADO OPERARIO':'Operario especializado envasado','ENVASADO':'Operario especializado envasado','ENVASADO JEFE':'Jefe de Envasado',
+  'PLASTICO OPERARIO':'Operario Plastico','PLASTICOS OPERARIO':'Operario Plastico','PLASTICO JEFE':'Jefe de Plasticos','PLASTICOS JEFE':'Jefe de Plasticos',
+  'MANTENIMIENTO OPERARIO':'*Operario Comun mantenimiento','MANTENIMIENTO JEFE':'Jefe de Mantenimiento','MANTENIMIENTO ADMINISTRACION':'Administracion',
+  'DEPOSITO PT OPERARIO':'Operario Logistica','DEPOSITO PT JEFE':'Jefe de Logistica','DEPOSITO PT ADMINISTRACION':'Administracion',
+  'DEPOSITO MP/COMP JEFE':'Coordinador de Materias primas y componentes','DEPOSITO MP/COMP OPERARIO':'Operario de Materias primas',
+  'FABRICACION OPERARIO':'Operario producción','LCC ANALISTA':'Analista LCC','CALIDAD ANALISTA':'Analista LCC',
+  'CALIDAD LCC JEFE':'Coordinador de Control de Calidad','CALIDAD ASEGURAMIENTO DE CALIDAD':'Especialista Aseguramiento de Calidad/Supervisor de Calidad',
+  'CALIDAD DT GERENCIA':'Director Técnico','GERENCIA GENERAL':'Gerente General','OPERACIONES GERENCIA':'Gerente de Operaciones',
+  'INGENIERIA Y PRODUCCION GERENCIA':'*Gerente de Ingenieria','PLANIFICACION JEFE':'Coordinador Técnico/Planificador',
+  'VENTAS GERENCIA':'Gerente de Ventas','VENTAS JEFE':'*Gerente de Ventas','VENTAS OPERARIO':'*Reponedores','VENTAS ADMINISTRACION':'Administracion',
+  'CONTADURIA ADMINISTRACION':'Administracion','CONTADURIA GERENCIA':'*Administracion','COMPRAS JEFE':'Jefe de Compras',
+  'COMPRAS ADMINISTRACION':'Asistente de Compras','ADMINISTRACION PLANTA':'Administrativo de Planta/Planificador',
+};
+const claveDesig=s=>normCargo(s).toUpperCase().replace(/\bMANPOWER\b/g,' ').replace(/\bAUTOELEVADOR\b/g,' ').replace(/[-_]+/g,' ').replace(/\s+/g,' ').trim();
+const palabrasNom=s=>new Set(normCargo(s).toUpperCase().replace(/[^A-Z ]/g,' ').split(' ').filter(w=>w.length>2&&!['DEL','DE','LOS','LAS'].includes(w)));
+
+async function importarRoles(file){
+  if(!file)return;
+  try{
+    const wb=XLSX.read(await file.arrayBuffer(),{type:'array'});
+    const filas=[];
+    for(const h of wb.SheetNames){
+      const t=XLSX.utils.sheet_to_json(wb.Sheets[h],{header:1,raw:false,defval:''});
+      const cab=(t[0]||[]).map(x=>normCargo(x));
+      const cSec=cab.findIndex(x=>x==='sector'),cNom=cab.findIndex(x=>x==='nombre');
+      if(cSec<0||cNom<0)continue;
+      t.slice(1).forEach(f=>{const n=String(f[cNom]).trim();if(n)filas.push({nombre:n,designacion:String(f[cSec]).trim(),hoja:h})});
+    }
+    if(!filas.length)throw new Error('no encontré hojas con columnas SECTOR y Nombre');
+    // Persona del padron: la que comparte mas palabras (2 o mas), sin importar el orden.
+    const padron=(S.personas||[]).map(p=>({p,w:palabrasNom(p.nombre)}));
+    for(const f of filas){
+      const w=palabrasNom(f.nombre);let mejor=null,max=1;
+      for(const x of padron){let n=0;w.forEach(k=>{if(x.w.has(k))n++});if(n>max){max=n;mejor=x.p}}
+      f.persona=mejor?mejor.nombre:null;f.clave=claveDesig(f.designacion);
+    }
+    const desig={};filas.forEach(f=>{const s=DESIGNACION_A_CARGO[f.clave]||'';desig[f.clave]=desig[f.clave]||{n:0,sug:s.replace('*',''),dudosa:s.startsWith('*')||!s};desig[f.clave].n++});
+    S.roles={filas,desig};
+    pintarRoles();
+  }catch(e){toast(e.message,true)}
+}
+
+function pintarRoles(){
+  const R=S.roles,box=document.getElementById('ptRoles');if(!R){box.innerHTML='';return}
+  const idDe=n=>(S.cargos.find(c=>normCargo(c.nombre)===normCargo(n))||{}).id||'';
+  const ops=sel=>`<option value="">— sin cargo —</option>`+S.cargos.map(c=>`<option value="${c.id}" ${String(c.id)===String(sel)?'selected':''}>${esc(c.nombre)}</option>`).join('');
+  for(const d of Object.values(R.desig))if(d.cargoId===undefined)d.cargoId=idDe(d.sug);
+  const sinPadron=R.filas.filter(f=>!f.persona);
+  box.innerHTML=`<div class="card" style="margin-top:10px;background:var(--pri-g)"><b>1 · Designación → cargo de la matriz</b>
+    <div class="muted">Cambiar uno lo cambia para todas las personas con esa designación. En amarillo, las dudosas.</div>
+    <div class="tabla"><table><thead><tr><th>Designación del listado</th><th>Personas</th><th>Cargo</th></tr></thead><tbody>
+    ${Object.entries(R.desig).sort((a,b)=>b[1].n-a[1].n).map(([k,d])=>`<tr style="${d.dudosa?'background:var(--warn-g)':''}"><td>${esc(k)}</td><td>${d.n}</td>
+      <td><select style="padding:4px" onchange="S.roles.desig['${esc(k)}'].cargoId=this.value;pintarRoles()">${ops(d.cargoId)}</select>${d.dudosa?' <span class="chip warn">revisar</span>':''}</td></tr>`).join('')}
+    </tbody></table></div>
+    <b style="display:block;margin-top:12px">2 · Personas</b>
+    <div class="fila"><label class="muted">Asumen desde <input id="ptRolDesde" type="date" value="${hoyISO()}" style="width:auto"></label>
+      <button class="b pri sm" onclick="asignarRoles()">Asignar a los ${R.filas.filter(f=>f.persona&&R.desig[f.clave].cargoId&&!(S.personas.find(p=>p.nombre===f.persona)||{cargos:[]}).cargos.length).length} que tienen persona y cargo</button></div>
+    <div class="tabla"><table><thead><tr><th>Listado</th><th>Persona del padrón</th><th>Cargo</th></tr></thead><tbody>
+    ${R.filas.map(f=>{const c=S.cargos.find(x=>String(x.id)===String(R.desig[f.clave].cargoId));const ya=(S.personas.find(p=>p.nombre===f.persona)||{cargos:[]}).cargos;
+      return `<tr><td>${esc(f.nombre)}<br><span class="muted">${esc(f.designacion)}</span></td>
+        <td>${f.persona?esc(f.persona):'<span class="chip crit">no está en el padrón</span>'}</td>
+        <td>${ya.length?`<span class="chip ok">ya tiene: ${esc(ya.join(', '))}</span>`:c?esc(c.nombre):'<span class="muted">—</span>'}</td></tr>`}).join('')}
+    </tbody></table></div>
+    ${sinPadron.length?`<p class="muted">${sinPadron.length} persona(s) del listado no se encontraron en el padrón de Capacitaciones: se agregan allá y se vuelve a importar.</p>`:''}</div>`;
+}
+
+async function asignarRoles(){
+  const R=S.roles,desde=document.getElementById('ptRolDesde').value;
+  const asignaciones=R.filas.filter(f=>f.persona&&R.desig[f.clave].cargoId&&!(S.personas.find(p=>p.nombre===f.persona)||{cargos:[]}).cargos.length)
+    .map(f=>({persona:f.persona,cargoId:Number(R.desig[f.clave].cargoId)}));
+  if(!asignaciones.length)return toast('No hay personas para asignar',true);
+  if(!confirm(`Se asigna el cargo a ${asignaciones.length} persona(s) desde el ${dma(desde)}. ¿Seguimos?`))return;
+  try{const r=await api('/puestos/asignar-varios',{method:'POST',body:JSON.stringify({desde,asignaciones})});
+    toast(`Asignados ${r.asignadas}`+(r.salteadas.length?` · ${r.salteadas.length} salteados`:''),r.salteadas.length>0);
+    S.roles=null;document.getElementById('ptRoles').innerHTML='';cargarPuestos()}
+  catch(e){toast(e.message,true)}
+}
+
+function pintarInicial(){
+  const card=document.getElementById('ptInicialCard'),box=document.getElementById('ptInicial');
+  const sin=(S.personas||[]).filter(p=>!p.cargos.length);
+  card.style.display=sin.length&&(S.cargos||[]).length?'':'none';
+  if(!sin.length||!(S.cargos||[]).length){box.innerHTML='';return}
+  const idDe=n=>(S.cargos.find(c=>normCargo(c.nombre)===normCargo(n))||{}).id;
+  const ops=sel=>`<option value="">— elegir —</option>`+S.cargos.map(c=>`<option value="${c.id}" ${c.id===sel?'selected':''}>${esc(c.nombre)}</option>`).join('');
+  const porSector={};sin.forEach(p=>(porSector[p.sector||'(sin sector)']=porSector[p.sector||'(sin sector)']||[]).push(p));
+  box.innerHTML=`<div class="fila"><b>${sin.length} sin cargo</b><label class="muted">Asumen desde <input id="ptIniDesde" type="date" value="${hoyISO()}" style="width:auto"></label>
+      <button class="b pri sm" onclick="asignarInicial()">Asignar los marcados</button></div>
+    <div class="tabla" style="margin-top:8px"><table><thead><tr><th></th><th>Persona</th><th>Sector</th><th>Cargo</th></tr></thead><tbody>
+    ${Object.entries(porSector).sort().map(([sec,ps])=>ps.map(p=>{const sug=idDe(CARGO_POR_SECTOR[String(sec).toUpperCase()]);
+      return `<tr><td><input type="checkbox" class="ptIni" data-persona="${esc(p.nombre)}" ${sug?'checked':''} style="width:auto"></td><td>${esc(p.nombre)}</td><td class="muted">${esc(sec)}</td>
+        <td><select class="ptIniCargo" data-persona="${esc(p.nombre)}" onchange="this.closest('tr').querySelector('.ptIni').checked=!!this.value" style="padding:4px">${ops(sug)}</select></td></tr>`}).join('')).join('')}
+    </tbody></table></div>
+    <p class="muted">La fecha es desde cuándo cuenta el plazo: con la de hoy, los SOPs de prioridad 1 que no figuran capacitados en Capacitaciones quedan pendientes para hoy.</p>`;
+}
+
+async function asignarInicial(){
+  const desde=document.getElementById('ptIniDesde').value;
+  const asignaciones=[...document.querySelectorAll('.ptIni:checked')].map(c=>({persona:c.dataset.persona,
+    cargoId:Number([...document.querySelectorAll('.ptIniCargo')].find(s=>s.dataset.persona===c.dataset.persona).value)})).filter(a=>a.cargoId);
+  if(!asignaciones.length)return toast('Marcá personas con un cargo elegido',true);
+  if(!confirm(`Se asigna el cargo a ${asignaciones.length} persona(s) desde el ${dma(desde)}. ¿Seguimos?`))return;
+  try{const r=await api('/puestos/asignar-varios',{method:'POST',body:JSON.stringify({desde,asignaciones})});
+    toast(`Asignados ${r.asignadas}`+(r.salteadas.length?` · ${r.salteadas.length} salteados`:''),r.salteadas.length>0);cargarPuestos()}
+  catch(e){toast(e.message,true)}
 }
 
 async function verPlan(nombre){
