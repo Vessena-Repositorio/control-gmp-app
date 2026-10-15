@@ -1131,7 +1131,7 @@ async function cargarPuestos(){
     pintarInicial();
     const {personas:pend}=await api('/puestos/pendientes');
     document.getElementById('ptPend').innerHTML=pend.length?`<table><thead><tr><th>Persona</th><th>Cargo</th><th>Vencidos</th><th>Pendientes</th><th>Próximo plazo</th></tr></thead><tbody>
-      ${pend.map(p=>`<tr class="click" onclick="document.getElementById('ptPersona').value='${esc(p.persona)}';verPlan('${esc(p.persona)}')"><td><b>${esc(p.persona)}</b></td><td class="muted">${esc(p.cargos.join(', '))}</td>
+      ${pend.map(p=>`<tr class="click" data-persona="${esc(p.persona)}" onclick="abrirPlan(this.dataset.persona)"><td><b>${esc(p.persona)}</b></td><td class="muted">${esc(p.cargos.join(', '))}</td>
         <td>${p.vencidos?`<span class="chip crit">${p.vencidos}</span>`:'—'}</td><td>${p.pendientes||'—'}</td><td>${dma(p.proximo)}</td></tr>`).join('')}</tbody></table>`
       :'<div class="muted">Nadie tiene capacitación del puesto pendiente (o todavía no se asignaron cargos).</div>';
   }catch(e){toast(e.message,true)}
@@ -1261,6 +1261,13 @@ async function asignarInicial(){
   try{const r=await api('/puestos/asignar-varios',{method:'POST',body:JSON.stringify({desde,asignaciones})});
     toast(`Asignados ${r.asignadas}`+(r.salteadas.length?` · ${r.salteadas.length} salteados`:''),r.salteadas.length>0);cargarPuestos()}
   catch(e){toast(e.message,true)}
+}
+
+// Desde Pendientes: carga el plan y lleva la pantalla hasta el (esta mas abajo).
+async function abrirPlan(nombre){
+  document.getElementById('ptPersona').value=nombre;
+  await verPlan(nombre);
+  document.getElementById('ptPersona').closest('.card').scrollIntoView({behavior:'smooth',block:'start'});
 }
 
 async function verPlan(nombre){
