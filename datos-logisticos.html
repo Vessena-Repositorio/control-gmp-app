@@ -4,8 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Vessena S.A. — Datos Logísticos PT</title>
-<!-- Para armar la ficha de alta y las exportaciones en Excel, igual que en control de documentos. -->
+<!-- Para las exportaciones en Excel, igual que en control de documentos. -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<!-- La ficha de alta se llena sobre la plantilla de Finanzas, y esta librería es
+     la que puede escribir en un .xlsx sin perderle el formato ni las fórmulas. -->
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <style>
 :root{--bg:#F5F6F8;--srf:#FFFFFF;--brd:#E1E4EA;--brdL:#EEF0F3;--txt:#1B1E25;--txS:#5A6170;--txM:#8B92A0;--pri:#1E40AF;--priL:#EFF6FF;--red:#DC2626;--redL:#FEF2F2;--grn:#16A34A;--grnL:#F0FDF4;--wrn:#D97706;--wrnL:#FFFBEB;--vio:#6D28D9;--vioL:#F5F3FF;--ves:#C41E2A;--side:#1B1E25;
   --carton:#B98A55;--cartonL:#E3CBA9;--madera:#8C6239;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -402,6 +405,13 @@ function vPanel(){
       ${pend.length?`<input type="search" class="in" id="pq" placeholder="Filtrar por SKU, descripción o dato faltante" style="max-width:320px">`:""}</div>
       ${pend.length?`<div style="max-height:420px;overflow:auto;border:1px solid var(--brdL);border-radius:6px"><table style="min-width:640px"><thead><tr><th>SKU</th><th>Descripción</th><th>Origen</th><th>Qué le falta</th></tr></thead><tbody id="pcuerpo"></tbody></table></div>
       <p class="pag-sub" style="margin:8px 0 0">Hacé clic en un SKU para abrir su ficha${puedeEditar()?" y completar los datos":""}.</p>`:`<p class="pag-sub">✓ Todos los SKU activos tienen la ficha completa.</p>`}</div>
+    ${esAdmin()?`<div class="card"${PLANTILLA?"":' style="border-color:var(--wrn)"'}><h3 style="font-size:14px;font-weight:700;margin-bottom:4px">📄 Plantilla de la ficha de alta</h3>
+      <p class="pag-sub">${PLANTILLA
+        ?`Cada ficha se arma sobre <b>${esc(PLANTILLA.nombre)}</b>, el formulario de Finanzas: se le escriben los valores y queda con su formato. La subió ${esc(PLANTILLA.subidaPor||"—")} el ${fdt(PLANTILLA.subidaEn)}.`
+        :`<b>Falta subir la plantilla</b> (el formulario en blanco de Finanzas, “PLANTILLA BASE.xlsx”). Hasta entonces la ficha sale con los mismos datos en las mismas celdas, pero sin el formato al que está acostumbrada Marianela.`}</p>
+      <div class="acc" style="justify-content:flex-start">
+        <label class="btn g" style="cursor:pointer">📤 ${PLANTILLA?"Reemplazar la plantilla":"Subir la plantilla"}<input type="file" id="plt" hidden accept=".xlsx,.xls"></label>
+        ${PLANTILLA?`<a class="btn g" href="${API}/plantilla" target="_blank" rel="noopener">📎 Ver la que está</a>`:""}</div></div>`:""}
     <div class="card"><h3 style="font-size:14px;font-weight:700;margin-bottom:8px">Últimos cambios</h3>
       ${logs.slice(0,8).map(l=>`<div class="usr-row" style="padding:7px 0"><span><b>${esc(l.accion)}</b>${l.entidad?" · "+esc(l.entidad):""}${l.detalle?" · "+esc(l.detalle):""}</span><span style="font-size:12px;color:var(--txS)">${esc(l.usuario)} · ${fdt(l.ts)}</span></div>`).join("")||`<p class="pag-sub">Todavía no hay cambios registrados.</p>`}</div>`;
   const filas=pend.map(p=>({p,f:faltantes(p),n:p.nota})).sort((a,b)=>b.f.length-a.f.length||String(a.p.sku).localeCompare(String(b.p.sku),"es",{numeric:true}));
@@ -413,6 +423,18 @@ function vPanel(){
       ||`<tr><td colspan="4" class="vacio">Ningún SKU coincide con el filtro.</td></tr>`;
     $("#pcuerpo").querySelectorAll("tr[data-s]").forEach(tr=>{tr.onclick=()=>ficha(tr.dataset.s);tr.onkeydown=e=>{if(e.key==="Enter")ficha(tr.dataset.s);};});};
   pint(); if($("#pq"))$("#pq").oninput=pint;
+  if($("#plt"))$("#plt").onchange=async e=>{
+    const f=e.target.files[0];if(!f)return;
+    try{
+      const r=await fetch(API+"/plantilla?nombre="+encodeURIComponent(f.name),
+        {method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/octet-stream"},body:f});
+      const d=await r.json().catch(()=>null);
+      if(!r.ok||(d&&d.ok===false))throw new Error((d&&d.error)||("Error "+r.status));
+      await estadoPlantilla();
+      aviso("Plantilla guardada: desde ahora las fichas salen con ese formato.","success");
+      refrescar();
+    }catch(x){alert(x.message);}
+  };
   $("#main").querySelectorAll("[data-s]").forEach(el=>{if(el.tagName==="TR")return;
     el.onclick=()=>ficha(el.dataset.s);el.onkeydown=e=>{if(e.key==="Enter")ficha(el.dataset.s);};});
 }
@@ -975,8 +997,54 @@ function hojaSku(p){
   poner(40,0,"VENCE HABILITACION");poner(40,1,p.mspVence?String(p.mspVence).slice(0,10):"");
   return f;
 }
-/** El Excel de la ficha de alta, como Blob. */
-function libroFicha(p){
+/* La ficha sale sobre la plantilla de Finanzas: el formulario en blanco que se
+   sube una vez (migración 062). Se le escriben los valores en las celdas que
+   van a mano y las fórmulas del propio formulario hacen el resto, así Marianela
+   recibe siempre el mismo formato al que está acostumbrada. */
+let PLANTILLA=null;
+async function estadoPlantilla(){
+  try{const d=await api("/plantilla/estado");PLANTILLA=d.hay?d.plantilla:null;}catch(e){PLANTILLA=null;}
+}
+/* Las celdas que se escriben. El resto del formulario son formulas:
+   E20 (unidades por pallet) y B29 (tasa multiplicadora) en ALTA PRODUCTO, y
+   casi toda la hoja FICHA SKU, que se completa desde la primera. */
+const CELDAS_ALTA=p=>({
+  B5:String(p.sku), B6:p.desc||"", B7:p.nota||"",
+  B9:p.tipoProducto||"", B10:p.categoriaImpuesto||"", B11:p.impuestoCV||"",
+  B12:p.categoriaProducto||"", E12:p.marca||"", B13:p.linea||"", E13:p.sublinea||"",
+  B14:p.familia||"", E14:p.subfamilia||"",
+  B19:p.umBase||"Unidad", B20:p.unx??null, B21:p.pesoPT??null, E21:VOLUMEN_L(p),
+  B26:p.umBase||"Unidad", B27:p.umDestino||(p.unx?"CX"+p.unx:""), B28:p.unx??null,
+  B33:p.ean||"", B34:p.dun||"", B35:VENCIMIENTO_DIAS(p)});
+const CELDAS_SKU=p=>({
+  B16:p.estiba??null, B17:p.porPiso??null,
+  B36:MM(p.cL), C36:MM(p.cA), D36:MM(p.cH),
+  B37:MM(p.uL), C37:MM(p.uA), D37:MM(p.uH)});
+
+async function libroDesdePlantilla(p){
+  if(!window.ExcelJS||!PLANTILLA)return null;
+  const r=await fetch(API+"/plantilla",{credentials:"same-origin"});
+  if(!r.ok)return null;
+  const wb=new ExcelJS.Workbook();
+  await wb.xlsx.load(await r.arrayBuffer());
+  const poner=(hoja,celdas)=>{const ws=wb.getWorksheet(hoja);if(!ws)return false;
+    Object.entries(celdas).forEach(([c,v])=>{ws.getCell(c).value=(v===""||v===undefined?null:v);});
+    return true;};
+  if(!poner("ALTA PRODUCTO",CELDAS_ALTA(p)))return null;   // no es la plantilla esperada
+  poner("FICHA SKU",CELDAS_SKU(p));
+  // Que Excel recalcule las fórmulas del formulario al abrirlo
+  wb.calcProperties=Object.assign({},wb.calcProperties,{fullCalcOnLoad:true});
+  return new Blob([await wb.xlsx.writeBuffer()],
+    {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+}
+/** La ficha: sobre la plantilla si está cargada, dibujada si todavía no. */
+async function libroFicha(p){
+  try{const b=await libroDesdePlantilla(p);if(b)return b;}
+  catch(e){console.error("No se pudo usar la plantilla:",e);}
+  return libroDibujado(p);
+}
+/** Sin plantilla: los mismos datos en las mismas celdas, sin el formato. */
+function libroDibujado(p){
   if(!window.XLSX)throw new Error("Para armar la ficha en Excel hace falta conexión a internet (se usa la librería de Excel).");
   const wb=XLSX.utils.book_new();
   const h1=XLSX.utils.aoa_to_sheet(hojaAlta(p));h1["!cols"]=[{wch:30},{wch:42},{wch:4},{wch:28},{wch:22}];
@@ -992,13 +1060,13 @@ function bajarArchivo(blob,nombre){
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=nombre;
   document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
-function bajarFichaAlta(p){
-  try{bajarArchivo(libroFicha(p),nombreFicha(p));}catch(e){alert(e.message);}
+async function bajarFichaAlta(p){
+  try{bajarArchivo(await libroFicha(p),nombreFicha(p));}catch(e){alert(e.message);}
 }
 /** Arma la ficha y la deja guardada: es la que se le manda a Finanzas. */
 async function generarYSubirFicha(p){
   if(!HAY_ALMACEN)throw new Error("Falta configurar en el servidor dónde se guardan los documentos (DOC_DIR): sin eso no se puede mandar la ficha.");
-  await subir(p.sku,"ficha",nombreFicha(p),libroFicha(p));
+  await subir(p.sku,"ficha",nombreFicha(p),await libroFicha(p));
 }
 
 /* ---------- Inicio ---------- */
@@ -1015,6 +1083,7 @@ async function generarYSubirFicha(p){
   yo={nombre:s.nombre,rol:s.rol};PERMISOS=s.permisos||[];HAY_ALMACEN=!!s.hayAlmacen;DIAS_MSP=s.diasAvisoMsp||30;
   await cargarProductos();
   await cargarHistorial();
+  await estadoPlantilla();
   arrancar();
 })();
 </script>

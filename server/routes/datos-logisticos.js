@@ -484,6 +484,67 @@ rutasDatosLogisticos.get('/documentos/:id', leer, async (req, res, next) => {
 });
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   La plantilla de la ficha (migracion 062)
+   ═══════════════════════════════════════════════════════════════════════════
+   Es el formulario en blanco de Finanzas. La pantalla lo baja, le escribe los
+   valores en las celdas que van a mano y deja que las formulas del propio
+   formulario hagan el resto: asi la ficha sale con el formato al que Marianela
+   esta acostumbrada. */
+
+/** GET /api/datos-logisticos/plantilla/estado */
+rutasDatosLogisticos.get('/plantilla/estado', leer, async (_req, res, next) => {
+    try {
+        const { rows } = await consultar(
+            'SELECT id, nombre, bytes, subida_por, subida_en FROM dl_plantilla ORDER BY subida_en DESC LIMIT 1'
+        );
+        const p = rows[0];
+        res.json({
+            ok: true,
+            hay: Boolean(p),
+            plantilla: p ? { id: p.id, nombre: p.nombre, bytes: p.bytes, subidaPor: p.subida_por, subidaEn: p.subida_en } : null,
+        });
+    } catch (err) { next(err); }
+});
+
+/** GET /api/datos-logisticos/plantilla — el archivo, para llenarlo. */
+rutasDatosLogisticos.get('/plantilla', leer, async (_req, res, next) => {
+    try {
+        const { rows } = await consultar('SELECT * FROM dl_plantilla ORDER BY subida_en DESC LIMIT 1');
+        if (!rows.length) throw fallo(404, 'Todavía no se subió la plantilla de la ficha');
+        const { stream, bytes } = await abrir(rows[0].ruta);
+        res.setHeader('Content-Type', rows[0].mime || 'application/octet-stream');
+        res.setHeader('Content-Length', bytes);
+        res.setHeader('Content-Disposition', `inline; filename="${rows[0].nombre.replace(/["\\]/g, '')}"`);
+        stream.pipe(res);
+    } catch (err) { responder(err, res, next); }
+});
+
+/** POST /api/datos-logisticos/plantilla?nombre= — el .xlsx en el cuerpo. */
+rutasDatosLogisticos.post('/plantilla',
+    express.raw({ type: 'application/octet-stream', limit: MAX_BYTES }),
+    administrar,
+    async (req, res, next) => {
+        try {
+            if (!hayAlmacen) throw fallo(503, 'Falta configurar dónde se guardan los documentos (DOC_DIR)');
+            const nombre = texto(req.query.nombre, 200).split(/[\\/]/).pop();
+            if (!nombre) throw fallo(400, 'Falta el nombre del archivo');
+            if (!['.xlsx', '.xls'].includes(extension(nombre))) throw fallo(400, 'La plantilla tiene que ser el Excel del formulario');
+            const g = await guardar(req.body, nombre);
+            const r = await enTransaccion(async (c) => {
+                const { rows } = await c.query(
+                    `INSERT INTO dl_plantilla (nombre, ruta, sha256, mime, bytes, nota, subida_por)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+                    [nombre, g.ruta, g.sha256, g.mime, g.bytes, texto(req.query.nota, 300) || null,
+                        req.usuario.nombre || req.usuario.usuario]
+                );
+                await registrar(c, req, 'plantilla_subida', null, nombre);
+                return rows[0].id;
+            });
+            res.status(201).json({ ok: true, id: r });
+        } catch (err) { responder(err, res, next); }
+    });
+
+/* ═══════════════════════════════════════════════════════════════════════════
    Registros sanitarios (habilitacion MSP)
    ═══════════════════════════════════════════════════════════════════════════ */
 
