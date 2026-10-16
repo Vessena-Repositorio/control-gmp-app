@@ -792,8 +792,12 @@ function ficha(sku){
       return `<div style="border:1px solid var(--brdL);border-radius:8px;padding:10px;margin-bottom:8px">
         <div style="font-size:12px;font-weight:700;color:var(--txS);text-transform:uppercase;letter-spacing:.04em">${TIPO_DOC[t]}</div>
         ${d?`<div style="margin-top:4px"><a href="${API}/documentos/${d.id}" target="_blank" rel="noopener">📎 ${esc(d.nombre)}</a>
-          <div style="font-size:11.5px;color:var(--txS)">${esc(d.subidoPor||"")} · ${fdt(d.subidoEn)}</div></div>`
-          :`<div class="pag-sub" style="margin-top:4px">Todavía no se subió.</div>`}
+          <div style="font-size:11.5px;color:var(--txS)">${t==="ficha"?"Es la que se mandó a Finanzas · ":""}${esc(d.subidoPor||"")} · ${fdt(d.subidoEn)}</div></div>`
+          // La ficha no se sube: la arma la app sola al mandarla a revisar o al
+          // aprobarla. Decir "no se subió" hacía pensar que faltaba algo.
+          :`<div class="pag-sub" style="margin-top:4px">${t==="ficha"
+            ?"La arma la app cuando mandás la ficha a revisar o cuando se aprueba. Mientras tanto podés bajarla con el botón de abajo."
+            :"Todavía no se subió."}</div>`}
         ${puedeEditar()&&t!=="ficha"?`<label class="btn g sm" style="margin-top:6px;cursor:pointer">📤 ${d?"Reemplazar":"Subir"}<input type="file" data-subir="${t}" hidden accept=".pdf,.doc,.docx,.xls,.xlsx"></label>`:""}</div>`;}).join("")}</div>
 
     ${(()=>{const al=alertasK(p);return al.length?`<div class="ctx-help warn" style="display:block">⚠ Revisá:${al.map(x=>`<div style="margin-top:4px">${esc(x.t)}${puedeEditar()?` <button class="btn sm" data-des="${x.k}" style="margin-left:6px">Desestimar</button>`:""}</div>`).join("")}</div>`:"";})()}
