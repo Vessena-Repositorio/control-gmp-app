@@ -1128,7 +1128,9 @@
       id: 'lcc',
       title: 'LCC',
       code: 'V',
-      roles: ['admin','operario'],
+      // 'vista' entra por Datos Logísticos PT (logística y ventas). De la
+      // sección solo ven lo que pueden abrir: el resto lo esconde puedeAbrir().
+      roles: ['admin','operario','vista'],
       items: [
         {
           id: 'control-en-proceso',
@@ -1185,6 +1187,14 @@
           url: 'aprobacion-graneles.html',
           icon: 'flask',
           code: 'LCC-007'
+        },
+        {
+          id: 'datos-logisticos-app',
+          name: 'Datos Logísticos PT',
+          desc: 'Medidas, pesos, paletizado y códigos de cada producto terminado, habilitaciones MSP y la ficha de alta que va a Finanzas.',
+          url: 'datos-logisticos.html',
+          icon: 'box',
+          code: 'LCC-008'
         }
       ]
     },
@@ -1201,23 +1211,6 @@
           url: 'https://script.google.com/macros/s/AKfycbyR7-3o9UT6SSCGsNoI5hs29X-1GjEUWZMpsSCdpJr0_Cjy7WpyGQur0YL4Cl3jYEOymQ/exec',
           icon: 'flow',
           code: 'DEV-001'
-        }
-      ]
-    },
-    {
-      id: 'logistica',
-      title: 'Logística',
-      code: 'VII',
-      // Tambien la ven Logistica y Ventas, que entran solo a esto.
-      roles: ['admin','operario','vista'],
-      items: [
-        {
-          id: 'datos-logisticos-app',
-          name: 'Datos Logísticos PT',
-          desc: 'Medidas, pesos, paletizado y códigos de cada producto terminado, habilitaciones MSP y la ficha de alta que va a Finanzas.',
-          url: 'datos-logisticos.html',
-          icon: 'box',
-          code: 'DL-001'
         }
       ]
     }
