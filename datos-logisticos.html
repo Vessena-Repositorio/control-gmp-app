@@ -6,9 +6,9 @@
 <title>Vessena S.A. — Datos Logísticos PT</title>
 <!-- Para las exportaciones en Excel, igual que en control de documentos. -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<!-- La ficha de alta se llena sobre la plantilla de Finanzas, y esta librería es
-     la que puede escribir en un .xlsx sin perderle el formato ni las fórmulas. -->
-<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<!-- La ficha de alta se llena sobre la plantilla de Finanzas: un .xlsx es un zip
+     de XML, y con esto se le cambian solo las celdas, sin tocar nada más. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 :root{--bg:#F5F6F8;--srf:#FFFFFF;--brd:#E1E4EA;--brdL:#EEF0F3;--txt:#1B1E25;--txS:#5A6170;--txM:#8B92A0;--pri:#1E40AF;--priL:#EFF6FF;--red:#DC2626;--redL:#FEF2F2;--grn:#16A34A;--grnL:#F0FDF4;--wrn:#D97706;--wrnL:#FFFBEB;--vio:#6D28D9;--vioL:#F5F3FF;--ves:#C41E2A;--side:#1B1E25;
   --carton:#B98A55;--cartonL:#E3CBA9;--madera:#8C6239;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -1021,21 +1021,71 @@ const CELDAS_SKU=p=>({
   B36:MM(p.cL), C36:MM(p.cA), D36:MM(p.cH),
   B37:MM(p.uL), C37:MM(p.uA), D37:MM(p.uH)});
 
+/* Un .xlsx es un zip de XML. La plantilla se abre, se le escriben las celdas y
+   se vuelve a cerrar sin tocar nada más: el formato, las fórmulas y —sobre
+   todo— los desplegables que salen de la hoja Parámetros quedan intactos.
+   (Probado con librerías que leen y reescriben el Excel: pierden los
+   desplegables, porque Excel los guarda en una extensión que no interpretan.) */
+const escXml=s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const colDe=ref=>ref.match(/^[A-Z]+/)[0];
+const filDe=ref=>Number(ref.match(/\d+$/)[0]);
+const nroCol=c=>[...c].reduce((n,ch)=>n*26+(ch.charCodeAt(0)-64),0);
+const celdaXml=(ref,attrs,valor)=>(
+  valor===null||valor===undefined||valor===""?`<c r="${ref}"${attrs}/>`
+  :typeof valor==="number"&&isFinite(valor)?`<c r="${ref}"${attrs}><v>${valor}</v></c>`
+  :`<c r="${ref}"${attrs} t="inlineStr"><is><t xml:space="preserve">${escXml(valor)}</t></is></c>`);
+
+function ponerCelda(xml,ref,valor){
+  const re=new RegExp('<c r="'+ref+'"([^>]*?)(/>|>[\\s\\S]*?</c>)');
+  const m=re.exec(xml);
+  if(m){
+    const attrs=m[1].replace(/\s+t="[^"]*"/g,"");    // el tipo lo ponemos nosotros
+    return xml.slice(0,m.index)+celdaXml(ref,attrs,valor)+xml.slice(m.index+m[0].length);
+  }
+  // La plantilla no trae esa celda (pasa con las que siempre estuvieron
+  // vacías): se crea en su lugar, con el formato de la fila.
+  if(valor===null||valor===undefined||valor==="")return xml;
+  const fila=filDe(ref), reFila=new RegExp('<row r="'+fila+'"([^>]*)>([\\s\\S]*?)</row>');
+  const f=reFila.exec(xml);
+  if(!f)return xml;                                  // ni la fila está: se deja como viene
+  const cuerpo=f[2];
+  const celdas=[...cuerpo.matchAll(/<c r="([A-Z]+)\d+"([^>]*?)(?:\/>|>)/g)];
+  const anterior=celdas.filter(c=>nroCol(c[1])<nroCol(colDe(ref))).pop()||celdas[0];
+  const estilo=anterior?(/\s+s="[^"]*"/.exec(anterior[2])||[""])[0]:"";
+  const siguiente=celdas.find(c=>nroCol(c[1])>nroCol(colDe(ref)));
+  const donde=siguiente?siguiente.index:cuerpo.length;
+  const nuevo=cuerpo.slice(0,donde)+celdaXml(ref,estilo,valor)+cuerpo.slice(donde);
+  return xml.slice(0,f.index)+'<row r="'+fila+'"'+f[1]+'>'+nuevo+'</row>'+xml.slice(f.index+f[0].length);
+}
 async function libroDesdePlantilla(p){
-  if(!window.ExcelJS||!PLANTILLA)return null;
+  if(!window.JSZip||!PLANTILLA)return null;
   const r=await fetch(API+"/plantilla",{credentials:"same-origin"});
   if(!r.ok)return null;
-  const wb=new ExcelJS.Workbook();
-  await wb.xlsx.load(await r.arrayBuffer());
-  const poner=(hoja,celdas)=>{const ws=wb.getWorksheet(hoja);if(!ws)return false;
-    Object.entries(celdas).forEach(([c,v])=>{ws.getCell(c).value=(v===""||v===undefined?null:v);});
-    return true;};
-  if(!poner("ALTA PRODUCTO",CELDAS_ALTA(p)))return null;   // no es la plantilla esperada
-  poner("FICHA SKU",CELDAS_SKU(p));
+  const zip=await JSZip.loadAsync(await r.arrayBuffer());
+  const libro=await zip.file("xl/workbook.xml").async("string");
+  const rels=await zip.file("xl/_rels/workbook.xml.rels").async("string");
+  const archivoDeHoja=nombre=>{
+    const id=new RegExp('<sheet[^>]*name="'+nombre+'"[^>]*r:id="([^"]+)"').exec(libro);
+    if(!id)return null;
+    const t=new RegExp('Id="'+id[1]+'"[^>]*Target="([^"]+)"').exec(rels);
+    return t?"xl/"+t[1].replace(/^\/?xl\//,""):null;
+  };
+  const llenar=async(hoja,celdas)=>{
+    const arch=archivoDeHoja(hoja);
+    if(!arch||!zip.file(arch))return false;
+    let xml=await zip.file(arch).async("string");
+    Object.entries(celdas).forEach(([ref,v])=>{xml=ponerCelda(xml,ref,v);});
+    zip.file(arch,xml);
+    return true;
+  };
+  if(!await llenar("ALTA PRODUCTO",CELDAS_ALTA(p)))return null;   // no es la plantilla esperada
+  await llenar("FICHA SKU",CELDAS_SKU(p));
   // Que Excel recalcule las fórmulas del formulario al abrirlo
-  wb.calcProperties=Object.assign({},wb.calcProperties,{fullCalcOnLoad:true});
-  return new Blob([await wb.xlsx.writeBuffer()],
-    {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  zip.file("xl/workbook.xml", /<calcPr[^>]*>/.test(libro)
+    ? libro.replace(/<calcPr([^>]*?)\/?>/, '<calcPr$1 fullCalcOnLoad="1"/>')
+    : libro.replace("</workbook>", '<calcPr fullCalcOnLoad="1"/></workbook>'));
+  return zip.generateAsync({type:"blob",compression:"DEFLATE",
+    mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
 }
 /** La ficha: sobre la plantilla si está cargada, dibujada si todavía no. */
 async function libroFicha(p){
