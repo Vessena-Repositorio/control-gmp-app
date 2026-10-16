@@ -151,7 +151,41 @@ async function productoDe(sku) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   1 y 2. A Finanzas, cuando la ficha se aprueba
+   1. A quien revisa, cuando la ficha se manda a revisar
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Le avisa a Antonella -y a Claudia- que hay una ficha esperando revision, con
+ * el Excel adjunto, que es lo que van a aprobar. Antes esto no existia: la
+ * ficha cambiaba de estado y habia que entrar a la app para enterarse
+ * (Claudia, 16/10/2026).
+ */
+export async function avisarRevision(sku) {
+    const p = await productoDe(sku);
+    if (!p) return { enviado: false, motivo: 'el producto no existe' };
+    const para = await supervisoresDe('datos-logisticos', 'revision');
+    if (!para.length) return { enviado: false, motivo: 'no hay quién revise cargado' };
+
+    const campos = camposFicha(p);
+    const adjuntos = await adjuntosDe(sku, ['ficha']);
+    const titulo = `Ficha para revisar: ${p.sku}`;
+    const faltan = Object.entries(campos).filter(([, v]) => !v).map(([k]) => k);
+    const html = marco({
+        titulo, color: '#b54708',
+        intro: `${esc(p.armada_por || 'Calidad')} armó la ficha del SKU <b>${esc(p.sku)}</b> — ${esc(p.descripcion || '')} ` +
+            'y la mandó a revisar. Si está bien, aprobala en la app: ahí sale sola a Finanzas con la ficha adjunta.',
+        cuerpo: tablaDatos(campos) + (faltan.length
+            ? `<p style="background:#fef0c7;border-radius:8px;padding:8px 10px;margin-top:10px;font-size:13px">
+                 Sin completar: ${esc(faltan.join(', '))}</p>`
+            : ''),
+    });
+    const texto = `${titulo}\n${p.descripcion || ''}\n\n${Object.entries(campos).map(([k, v]) => `${k}: ${v || '—'}`).join('\n')}\n\n${BASE}${PAGINA}\n`;
+    const enviado = await mandar(para, `[Calidad] ${titulo} — ${p.descripcion || ''}`, html, texto, adjuntos);
+    return { enviado, para, adjuntos: adjuntos.length };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   2 y 3. A Finanzas, cuando la ficha se aprueba
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /**

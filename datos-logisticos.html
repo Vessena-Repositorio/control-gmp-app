@@ -499,7 +499,7 @@ function vGuia(){
   const items=[
     ["🧭","Para qué sirve","Guarda los datos logísticos de cada producto terminado —medidas, pesos, pallet, códigos de barras y habilitación MSP— y arma con ellos la ficha de alta que Finanzas carga en iDempiere."],
     ["👤","Quién entra","Con el usuario del portal. Calidad carga y aprueba; logística y ventas ven y exportan. No hay usuarios ni contraseñas aparte."],
-    ["🔁","El circuito de la ficha","1) Gloria completa los datos y la manda a revisar. 2) Antonella —o Claudia— la aprueba. 3) Al aprobarla sale sola a Finanzas (Marianela) con la ficha en Excel adjunta. Si después cambia un dato de la ficha, vuelve a quedar pendiente y al aprobarse le llega como actualización, diciendo qué cambió."],
+    ["🔁","El circuito de la ficha","1) Gloria completa los datos y la manda a revisar, y a quien revisa le llega un correo con la ficha adjunta. 2) Antonella —o Claudia— la aprueba. 3) Al aprobarla sale sola a Finanzas (Marianela) con la ficha en Excel adjunta. Si después cambia un dato de la ficha, vuelve a quedar pendiente y al aprobarse le llega como actualización, diciendo qué cambió."],
     ["🩺","Registros sanitarios","En la ficha del producto se carga la habilitación MSP: número, vencimiento y el documento. Una renovación es un registro nuevo y el anterior queda. "+DIAS_MSP+" días antes del vencimiento le llega un aviso a Claudia."],
     ["📎","Certificado y ficha de seguridad","Se suben desde la ficha del producto. Cuando están los dos y la ficha está aprobada, sale solo el aviso a Ventas y Logística con los tres adjuntos."],
     ["⚠","Datos pendientes","La app marca lo que falta para que la ficha esté completa. Si un dato no corresponde a ese producto, se marca como “no aplica” y deja de figurar."],
@@ -759,7 +759,7 @@ function ficha(sku){
       <button class="btn sm" data-x>✕ Cerrar</button></div>
 
     ${p.estado==="borrador"&&p.rechazo?`<div class="ctx-help warn">✍ Devuelta para corregir: ${esc(p.rechazo)}</div>`:""}
-    ${p.estado==="pendiente"?`<div class="ctx-help warn">⏳ Esperando que la revisen Antonella o Claudia. La armó ${esc(p.armadaPor||"—")} el ${fdt(p.armadaEn)}.</div>`:""}
+    ${p.estado==="pendiente"?`<div class="ctx-help warn">⏳ Esperando que la revisen Antonella o Claudia, a quienes ya les llegó el correo con la ficha. La armó ${esc(p.armadaPor||"—")} el ${fdt(p.armadaEn)}.</div>`:""}
     ${p.estado==="aprobada"?`<div class="ctx-help success">✓ Ficha aprobada por ${esc(p.aprobadaPor||"—")} el ${fdt(p.aprobadaEn)}${p.enviadaFinanzasEn?` · enviada a Finanzas el ${fdt(p.enviadaFinanzasEn)}`:""}.</div>`:""}
     ${p.enviadaVentasEn?`<div class="ctx-help success">📣 Aviso a Ventas y Logística enviado el ${fdt(p.enviadaVentasEn)}.</div>`:
       falta.length?`<div class="ctx-help">Para avisarle a Ventas falta: ${esc(falta.join(", "))}.</div>`:""}
@@ -863,7 +863,12 @@ async function mandarARevision(p){
   try{
     await generarYSubirFicha(p);
     const d=await api(`/productos/${encodeURIComponent(p.sku)}/revision`,{method:"POST",body:"{}"});
-    reemplazar(d.producto);cerrar();aviso("Quedó esperando revisión.","success");
+    reemplazar(d.producto);cerrar();
+    const r=d.revision||{};
+    aviso(r.enviado
+      ?"Quedó esperando revisión y se avisó por correo a "+((r.para||[]).join(", ")||"quien revisa")+", con la ficha adjunta."
+      :"Quedó esperando revisión, pero el correo no salió: "+(r.motivo||"revisá la configuración de correo")+". Avisale vos.",
+      r.enviado?"success":"warn");
   }catch(e){alert(e.message);}
 }
 async function aprobarFicha(p){

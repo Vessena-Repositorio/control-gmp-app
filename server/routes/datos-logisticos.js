@@ -25,7 +25,7 @@ import { consultar, enTransaccion } from '../db.js';
 import { exigirPermiso } from '../lib/acceso.js';
 import { puede } from '../lib/permisos.js';
 import { guardar, abrir, extension, hayAlmacen, MAX_BYTES, TIPOS } from '../lib/almacen-documentos.js';
-import { avisarFinanzas, avisarVentas, camposFicha, cambiosDeFicha, loQueFalta, DIAS_AVISO_MSP } from '../lib/avisos-datos-logisticos.js';
+import { avisarRevision, avisarFinanzas, avisarVentas, camposFicha, cambiosDeFicha, loQueFalta, DIAS_AVISO_MSP } from '../lib/avisos-datos-logisticos.js';
 
 export const rutasDatosLogisticos = Router();
 
@@ -350,8 +350,10 @@ rutasDatosLogisticos.post('/productos/:sku/revision', cargar, async (req, res, n
             );
             await registrar(c, req, 'ficha_a_revision', sku, null);
         });
+        // Fuera de la transaccion: el correo no puede voltear el cambio de estado.
+        const revision = await avisarRevision(sku);
         const { rows } = await consultar(`${SELECT_PRODUCTO} WHERE p.sku = $1`, [sku]);
-        res.json({ ok: true, producto: aPantalla(rows[0]) });
+        res.json({ ok: true, revision, producto: aPantalla(rows[0]) });
     } catch (err) { responder(err, res, next); }
 });
 
