@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vessena S.A. — Datos Logísticos PT</title>
+<!-- Para armar la ficha de alta y las exportaciones en Excel, igual que en control de documentos. -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#F5F6F8;--srf:#FFFFFF;--brd:#E1E4EA;--brdL:#EEF0F3;--txt:#1B1E25;--txS:#5A6170;--txM:#8B92A0;--pri:#1E40AF;--priL:#EFF6FF;--red:#DC2626;--redL:#FEF2F2;--grn:#16A34A;--grnL:#F0FDF4;--wrn:#D97706;--wrnL:#FFFBEB;--vio:#6D28D9;--vioL:#F5F3FF;--ves:#C41E2A;--side:#1B1E25;
+  --carton:#B98A55;--cartonL:#E3CBA9;--madera:#8C6239;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0F141B;--srf:#171E27;--brd:#2A3442;--brdL:#222B36;--txt:#E7ECF2;--txS:#A3AEBC;--txM:#7C8796;--pri:#7FA2F5;--priL:#1C2A47;--red:#F28B82;--redL:#3A1D1D;--grn:#6FCF97;--grnL:#16301F;--wrn:#F4B860;--wrnL:#352812;--vio:#B9A3F5;--vioL:#2A2240;--side:#0A0E13;--cartonL:#5A4630;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0F141B;--srf:#171E27;--brd:#2A3442;--brdL:#222B36;--txt:#E7ECF2;--txS:#A3AEBC;--txM:#7C8796;--pri:#7FA2F5;--priL:#1C2A47;--red:#F28B82;--redL:#3A1D1D;--grn:#6FCF97;--grnL:#16301F;--wrn:#F4B860;--wrnL:#352812;--vio:#B9A3F5;--vioL:#2A2240;--side:#0A0E13;--cartonL:#5A4630;color-scheme:dark}
+*,*::before,*::after{box-sizing:inherit;margin:0;padding:0}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{font-family:'Inter',-apple-system,system-ui,"Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--txt);font-size:14px;min-height:100%;font-variant-numeric:tabular-nums}
+input,select,textarea,button{font-family:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--pri);outline-offset:2px}
+[hidden]{display:none!important}
+::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-thumb{background:#bbb;border-radius:3px}
+
+/* Login */
+.login-bg{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1B1E25,#2D3748);padding:20px}
+.login-card{background:#fff;color:#1B1E25;border-radius:16px;width:100%;max-width:400px;padding:40px;box-shadow:0 24px 80px rgba(0,0,0,.3)}
+.login-card .marca{font-size:10px;font-weight:800;color:var(--ves);letter-spacing:.1em;text-transform:uppercase;text-align:center}
+.login-card h1{font-size:22px;font-weight:800;text-align:center}
+.login-card p.sub{font-size:12px;color:#5A6170;text-align:center;margin:4px 0 20px}
+.login-card input{background:#F8FAFC;color:#1B1E25;padding:11px 14px;font-size:14px}
+.login-card .btn{width:100%;padding:12px;font-size:14px;margin-top:8px;justify-content:center}
+
+/* Layout */
+.side{position:fixed;top:0;left:0;bottom:0;width:220px;background:var(--side);display:flex;flex-direction:column;z-index:10;padding-top:env(safe-area-inset-top,0px)}
+.side .cab{padding:16px 16px 14px;border-bottom:1px solid rgba(255,255,255,.08)}
+.side .cab .marca{font-size:10px;font-weight:800;color:#F87171;letter-spacing:.1em;text-transform:uppercase}
+.side .cab .tit{font-size:15px;font-weight:800;color:#fff;margin-top:2px}
+.side .yo{padding:10px 16px;border-bottom:1px solid rgba(255,255,255,.06);font-size:12px;color:rgba(255,255,255,.75)}
+.side .yo b{display:block;color:#fff;font-size:13px}
+.side nav{flex:1;padding:6px 0;overflow-y:auto}
+.side nav button,.side .salir{display:flex;align-items:center;gap:9px;width:calc(100% - 12px);margin:1px 6px;padding:9px 14px;border:0;background:transparent;border-radius:5px;cursor:pointer;font-size:12.5px;color:rgba(255,255,255,.65);text-align:left}
+.side nav button[aria-current=page]{background:rgba(255,255,255,.1);color:#fff;font-weight:600}
+.side nav button:hover,.side .salir:hover{color:#fff}
+.side .pie{padding:6px;border-top:1px solid rgba(255,255,255,.08)}
+.main{margin-left:220px;padding:20px 28px 40px}
+@media (max-width:820px){.side{position:static;width:auto}.side nav{display:flex;flex-wrap:wrap}.side nav button{width:auto}.main{margin-left:0;padding:16px}}
+
+h1.pag{font-size:20px;font-weight:800;margin:0 0 4px}
+p.pag-sub{font-size:12.5px;color:var(--txS);margin:0 0 14px}
+.fila-tit{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.card{background:var(--srf);border:1px solid var(--brd);border-radius:9px;padding:18px;margin-bottom:14px}
+.ctx-help{background:var(--priL);border:1px solid rgba(30,64,175,.12);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12.5px;color:var(--pri);display:flex;gap:8px;line-height:1.5}
+.ctx-help.warn{background:var(--wrnL);border-color:rgba(217,119,6,.15);color:var(--wrn)}
+.ctx-help.success{background:var(--grnL);border-color:rgba(22,163,74,.15);color:var(--grn)}
+.btn{padding:7px 15px;border-radius:6px;border:none;cursor:pointer;font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:5px;background:var(--pri);color:#fff}
+a.btn{text-decoration:none}
+.btn.g{background:transparent;color:var(--txS);border:1px solid var(--brd)}
+.btn.sm{padding:4px 10px;font-size:11.5px;background:transparent;color:var(--txS);border:1px solid var(--brd)}
+.btn.red{background:var(--red);color:#fff}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.bg{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;white-space:nowrap}
+label.fd{display:block;margin-bottom:10px}
+label.fd span{font-size:11px;font-weight:700;color:var(--txS);margin-bottom:3px;display:block;text-transform:uppercase;letter-spacing:.04em}
+input.in,select.in,textarea.in{width:100%;padding:8px 11px;border:1px solid var(--brd);border-radius:6px;font-size:13px;background:var(--srf);color:var(--txt)}
+input.in[aria-invalid=true]{border-color:var(--red)}
+
+/* KPIs */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:12px;margin-bottom:14px}
+.kpi{background:var(--srf);border:1px solid var(--brd);border-radius:9px;padding:14px 16px}
+.kpi .v{font-size:23px;font-weight:800;white-space:nowrap}
+.kpi .l{font-size:12px;color:var(--txS)}
+.barras .b{display:grid;grid-template-columns:180px 1fr 80px;gap:10px;align-items:center;font-size:12.5px;padding:5px 0}
+.barras .t{height:10px;background:var(--brdL);border-radius:5px;overflow:hidden;display:flex}
+.barras .t i{display:block;height:100%}
+
+/* Filtros y tabla */
+.filtros{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
+.filtros input[type=search]{flex:1 1 240px;max-width:380px}
+.filtros select{max-width:220px}
+.seg{display:inline-flex;border:1px solid var(--brd);border-radius:6px;overflow:hidden;background:var(--srf)}
+.seg button{border:0;background:transparent;padding:7px 12px;cursor:pointer;font-size:12.5px}
+.seg button[aria-pressed=true]{background:var(--pri);color:#fff}
+.chk{display:inline-flex;gap:6px;align-items:center;font-size:12.5px;cursor:pointer;color:var(--txS)}
+.conteo{margin-left:auto;font-size:12.5px;color:var(--txS)}
+.tabla{overflow-x:auto;background:var(--srf);border:1px solid var(--brd);border-radius:9px}
+table{border-collapse:collapse;width:100%;min-width:980px;font-size:12.5px}
+th{text-align:left;padding:9px 10px;font-size:10.5px;font-weight:700;color:var(--txS);text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--brd);background:var(--srf);position:sticky;top:0;cursor:pointer;white-space:nowrap}
+th[aria-sort=ascending]::after{content:" ▲"}th[aria-sort=descending]::after{content:" ▼"}
+td{padding:9px 10px;border-bottom:1px solid var(--brdL);white-space:nowrap}
+td.num,th.num{text-align:right}
+td.desc{white-space:normal;min-width:240px}
+tbody tr{cursor:pointer}tbody tr:hover{background:var(--bg)}
+tbody tr.pend td:first-child{box-shadow:inset 4px 0 0 var(--wrn)}
+tbody tr.baja{opacity:.5}
+.vacio{padding:40px;text-align:center;color:var(--txS)}
+
+/* Modal */
+.md-fondo{position:fixed;inset:0;background:rgba(15,20,27,.55);z-index:30;display:flex;align-items:flex-start;justify-content:center;padding:calc(30px + env(safe-area-inset-top,0px)) 16px 30px;overflow-y:auto}
+.md{background:var(--srf);border-radius:12px;width:100%;max-width:760px;padding:22px 24px;box-shadow:0 24px 80px rgba(0,0,0,.3)}
+.md .md-cab{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px}
+.md .sku{font-size:28px;font-weight:800;line-height:1}
+.md h3{font-size:12px;font-weight:700;color:var(--txS);text-transform:uppercase;letter-spacing:.04em;margin:16px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--brdL)}
+.dos{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:640px){.dos{grid-template-columns:1fr}}
+dl.datos{display:grid;grid-template-columns:1fr auto;gap:4px 12px;font-size:13px}
+dl.datos dt{color:var(--txS)}dl.datos dd{text-align:right;font-weight:600}
+.codigos{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0}
+.codigos div{background:var(--bg);border-radius:8px;padding:8px 12px}
+.codigos span{font-size:11px;color:var(--txS);display:block}
+.codigos strong{font-size:17px;letter-spacing:.03em}
+.pallet{background:var(--bg);border-radius:8px;padding:10px}
+.pallet svg{display:block;width:100%;height:auto}
+.ley{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px;font-size:11.5px;color:var(--txS)}
+.ley b{display:block;font-size:18px;color:var(--txt)}
+.grilla{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 12px}
+.grilla .a2{grid-column:span 2}.grilla .a3{grid-column:1/-1}
+@media (max-width:640px){.grilla{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.calc{font-size:12.5px;color:var(--txS);background:var(--bg);border-radius:6px;padding:8px 10px;margin:6px 0}
+.errores{color:var(--red);font-size:12.5px;padding-left:18px;margin:8px 0}
+.acc{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:14px}
+.usr-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;border-bottom:1px solid var(--brdL);flex-wrap:wrap}
+.av{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.guia .paso{background:var(--bg);border-radius:7px;padding:10px 12px;margin-bottom:8px}
+.guia .paso b{display:block;font-size:13px;margin-bottom:2px}
+.guia ol{padding-left:18px;font-size:12.5px;color:var(--txS);line-height:1.6}
+</style>
+<body>
+<div id="app"></div>
+<script>
+"use strict";
+/* Datos Logísticos PT — la ficha de alta de producto.
+
+   Esta pantalla reemplaza al artefacto de Claude que había armado otra
+   persona. Lo que hacía bien se conserva tal cual: el cálculo del pallet con
+   su dibujo, la lista de datos pendientes, las alertas de valores raros y las
+   exportaciones (la de trabajo y la del formato ASU).
+
+   Lo que cambia:
+     · los datos están en el servidor (/api/datos-logisticos), no en la nube de
+       Claude ni en el navegador de cada PC;
+     · se entra con la sesión del portal y los permisos son por recurso: no hay
+       usuarios ni contraseñas propios de esta app;
+     · la ficha tiene un circuito —borrador, pendiente, aprobada— y al
+       aprobarse sale sola a Finanzas con el Excel adjunto;
+     · los registros sanitarios (habilitación MSP) se cargan con su documento y
+       guardan el histórico de renovaciones. */
+
+const API = "/api/datos-logisticos";
+const PESO_SEPARADOR=0.58, PESO_BASE_PALLET=25, ALTO_TACO=0.10, PALLET_L=1.0, PALLET_A=1.2;
+
+const NAV=[{k:"panel",l:"Panel",i:"📊"},{k:"prod",l:"Productos",i:"📦"},{k:"pend",l:"Datos pendientes",i:"⚠"},
+  {k:"fichas",l:"Fichas a revisar",i:"✍"},{k:"msp",l:"Habilitaciones MSP",i:"🩺"},{k:"trail",l:"Historial",i:"📜"},{k:"guide",l:"Guía de uso",i:"❓"}];
+
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmt=(v,dec)=>v===null||v===undefined||v===""||Number.isNaN(v)?"":(typeof v==="number"?v.toLocaleString("es-UY",{minimumFractionDigits:dec??0,maximumFractionDigits:dec??3}):String(v));
+const fdt=d=>d?new Date(d).toLocaleString("es-UY",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}):"—";
+const fd=d=>d?new Date(String(d).slice(0,10)+"T00:00").toLocaleDateString("es-UY"):"—";
+const hoyISO=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");};
+
+/* ---------- Estado ---------- */
+let productos=[], logs=[], yo=null, PERMISOS=[], pagina="panel", HAY_ALMACEN=false, DIAS_MSP=30;
+let downloads=null;                 // lo usaba el artefacto; acá se descarga con un <a>
+const filtro={texto:"",grupo:"",cat:"",pend:false,bajas:false,orden:"sku",dir:1};
+const puedeEditar=()=>PERMISOS.includes("cargar");
+const puedeAprobar=()=>PERMISOS.includes("aprobar");
+const esAdmin=()=>PERMISOS.includes("administrar");
+const conectado=true;
+const tienePend=p=>faltantes(p).length>0||!!p.nota;
+const ESTADOS={borrador:{t:"Borrador",c:"var(--txS)",b:"var(--brdL)"},
+  pendiente:{t:"Esperando revisión",c:"var(--wrn)",b:"var(--wrnL)"},
+  aprobada:{t:"Aprobada",c:"var(--grn)",b:"var(--grnL)"}};
+const sello=p=>{const e=ESTADOS[p.estado]||ESTADOS.borrador;return `<span class="bg" style="background:${e.b};color:${e.c}">${e.t}</span>`;};
+
+/* ---------- Servidor ---------- */
+async function api(ruta,opciones){
+  const r=await fetch(API+ruta,Object.assign({credentials:"same-origin",headers:{"Content-Type":"application/json"}},opciones||{}));
+  let d=null;try{d=await r.json();}catch(e){}
+  if(r.status===401){location.href="/?volver="+encodeURIComponent(location.pathname);throw new Error("La sesión venció");}
+  if(!r.ok||(d&&d.ok===false))throw new Error((d&&d.error)||("Error "+r.status));
+  return d;
+}
+/** Sube un archivo tal cual (el servidor lo guarda en el volumen). */
+async function subir(sku,tipo,nombre,blob){
+  const r=await fetch(`${API}/productos/${encodeURIComponent(sku)}/documentos?tipo=${tipo}&nombre=${encodeURIComponent(nombre)}`,
+    {method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/octet-stream"},body:blob});
+  let d=null;try{d=await r.json();}catch(e){}
+  if(!r.ok||(d&&d.ok===false))throw new Error((d&&d.error)||("No se pudo subir el archivo (error "+r.status+")"));
+  return d;
+}
+/**
+ * El producto como lo espera la pantalla: lo que guarda `extra` al mismo nivel
+ * (las marcas de "no aplica" y las alertas desestimadas), la habilitación MSP
+ * como "Si"/"No" —que es lo que muestran los desplegables y el formato ASU— y
+ * las fechas recortadas a aaaa-mm-dd, que es lo que leen los campos de fecha.
+ */
+const soloFecha=f=>(f?String(f).slice(0,10):null);
+function dePantalla(p){
+  const q=Object.assign({},p.extra||{},p);
+  q.msp=p.msp===true?"Si":p.msp===false?"No":"";
+  q.mspVence=soloFecha(p.mspVence);
+  q.registros=(p.registros||[]).map(r=>Object.assign({},r,{vence:soloFecha(r.vence),emitido:soloFecha(r.emitido)}));
+  return q;
+}
+async function cargarProductos(){
+  const d=await api("/productos");
+  productos=(d.productos||[]).map(dePantalla);
+}
+async function cargarHistorial(){
+  try{const d=await api("/actividad?dias=365");
+    logs=(d.actividad||[]).map(a=>({ts:a.ts,usuario:a.usuario,accion:a.accion,entidad:a.sku?"SKU "+a.sku:"",detalle:a.detalles||""}));
+  }catch(e){logs=[];}
+}
+/* El artefacto registraba cada cosa en su propia colección; acá lo hace el
+   servidor en dl_actividad, así que no hay nada que escribir desde la pantalla. */
+const alog=async()=>{};
+
+/**
+ * Guarda los cambios de un producto. Recibe el objeto entero (así lo llaman
+ * las pantallas que venían del artefacto) y manda solo lo que cambió.
+ */
+async function guardar(o,accion,ant){
+  // SKU nuevo: va entero, no por diferencias.
+  if(!productos.some(x=>x.sku===o.sku)){
+    const cuerpo={};
+    CAMPOS.forEach(c=>{if(o[c.k]!==undefined&&o[c.k]!==null&&o[c.k]!=="")cuerpo[c.k]=o[c.k];});
+    cuerpo.sku=o.sku;
+    const d=await api("/productos",{method:"POST",body:JSON.stringify(cuerpo)});
+    reemplazar(d.producto);cerrar();refrescar();
+    aviso(`SKU ${o.sku} creado. Cuando esté completo, mandalo a revisar.`,"success");
+    return;
+  }
+  const previo=ant||productos.find(x=>x.sku===o.sku)||{};
+  const cuerpo={};
+  CAMPOS.forEach(c=>{const k=c.k;if(k==="sku")return;
+    const a=previo[k]===undefined?null:previo[k], b=o[k]===undefined?null:o[k];
+    if(String(a??"")!==String(b??""))cuerpo[k]=b;});
+  if((o.activo!==false)!==(previo.activo!==false))cuerpo.activo=o.activo!==false;
+  // Las marcas que no son campos de la ficha (alertas desestimadas, "no aplica")
+  const extra={};
+  ["alertasOk","noAplica","baseConfirmada","altoConfirmado"].forEach(k=>{
+    if(JSON.stringify(o[k]??null)!==JSON.stringify(previo[k]??null))extra[k]=o[k]??null;});
+  if(Object.keys(extra).length)cuerpo.extra=extra;
+  if(!Object.keys(cuerpo).length)return;
+  const d=await api("/productos/"+encodeURIComponent(o.sku),{method:"PUT",body:JSON.stringify(cuerpo)});
+  reemplazar(d.producto);
+  cerrar();
+  if(d.vuelveARevision)aviso("La ficha ya había salido a Finanzas: con este cambio vuelve a quedar pendiente de revisión.","warn");
+  refrescar();
+}
+function reemplazar(p){
+  const q=dePantalla(p);const i=productos.findIndex(x=>x.sku===q.sku);
+  if(i>=0)productos[i]=q;else productos.push(q);
+  return q;
+}
+
+/* ---------- Avisos arriba de la pantalla ---------- */
+function aviso(texto,clase){
+  const d=document.createElement("div");
+  d.className="ctx-help"+(clase?" "+clase:"");
+  d.style.cssText="position:fixed;left:50%;transform:translateX(-50%);top:14px;z-index:60;max-width:560px;box-shadow:0 10px 30px rgba(0,0,0,.18)";
+  d.textContent=texto;document.body.appendChild(d);
+  setTimeout(()=>d.remove(),6000);
+}
+
+/* ---------- Layout ---------- */
+function arrancar(){
+  $("#app").innerHTML=`<aside class="side"><div class="cab"><div class="marca">Vessena S.A.</div><div class="tit">Datos Logísticos PT</div></div>
+    <div class="yo"><b>${esc(yo.nombre)}</b>${esc(yo.rol)}</div>
+    <nav id="nav"></nav>
+    <div class="pie"><a class="salir" href="/" style="display:block;text-decoration:none">← Volver al portal</a></div></aside>
+    <main class="main" id="main"></main><div id="modal"></div>`;
+  pintarNav(); ir(pagina);
+}
+function pintarNav(){
+  $("#nav").innerHTML=NAV.map(n=>{
+    const extra=n.k==="pend"?productos.filter(p=>p.activo!==false&&tienePend(p)).length
+      :n.k==="fichas"?productos.filter(p=>p.estado==="pendiente").length:0;
+    return `<button data-k="${n.k}" ${pagina===n.k?'aria-current="page"':""}><span>${n.i}</span>${n.l}${extra?` <b style="margin-left:auto;background:var(--wrnL);color:var(--wrn);border-radius:9px;padding:0 6px;font-size:11px">${extra}</b>`:""}</button>`;
+  }).join("");
+  $("#nav").querySelectorAll("button").forEach(b=>b.onclick=()=>ir(b.dataset.k));
+}
+function ir(k){pagina=k;pintarNav();
+  ({panel:vPanel,prod:vProductos,pend:vPendientes,fichas:vFichas,msp:vMsp,trail:vTrail,guide:vGuia}[k]||vPanel)();}
+function refrescar(){if(!yo||!$("#main"))return; if(!$("#modal").innerHTML) ir(pagina);}
+/* ---------- Cálculos ---------- */
+function calc(p){
+  const r = {};
+  r.cajasPal = p.unPal && p.unx ? p.unPal / p.unx : null;
+  const altoBulto = p.acostada ? p.cA : p.cH;
+  r.pHcarga = altoBulto && p.estiba ? altoBulto * p.estiba / 100 : null;
+  r.pH = r.pHcarga != null ? r.pHcarga + ALTO_TACO : null;
+  r.pHcm = r.pH != null ? Math.round(r.pH * 1000) / 10 : null;
+  r.pHcargaCm = r.pHcarga != null ? Math.round(r.pHcarga * 1000) / 10 : null;
+  r.pesoCajaCerr = p.unx && p.pesoPT ? p.unx * p.pesoPT + (p.pesoCaja || 0) : null;
+  r.pesoSep = p.sep != null ? p.sep * PESO_SEPARADOR : null;
+  r.filmP = p.filmU != null && p.unPal ? p.filmU * p.unPal : null;
+  r.pesoPal = (p.filmU != null && r.cajasPal && r.pesoCajaCerr) ? r.cajasPal * r.pesoCajaCerr + (r.pesoSep || 0) + r.filmP + PESO_BASE_PALLET : null;
+  return r;
+}
+const SIN_DATO = v => v === null || v === undefined || v === "" || /^(na|n\/a|nc|n\/d|no aplica)$/i.test(String(v).trim());
+function faltantes(p){
+  const f = [];
+  const req = [["ean","EAN13"],["dun","DUN14"],["unx","unidades por bulto"],["cL","largo de caja"],["cA","ancho de caja"],["cH","alto de caja"],
+    ["porPiso","bultos por piso"],["estiba","pisos"],["unPal","unidades por pallet"],["pesoPT","peso PT"],["uL","largo PT"],["uA","ancho PT"],["uH","alto PT"]];
+  req.push(["marca","marca"],["contenido","contenido neto"]);
+  if (p.grupo === "Nacionales") req.push(["codCaja","código de caja o funda"],["pesoCaja","peso de caja o funda vacía"],["sep","separadores"],["filmU","film stretch"]);
+  const na = p.noAplica || [];
+  req.forEach(([k,t]) => { if (SIN_DATO(p[k]) && !na.includes(k)) f.push(t); });
+  return f;
+}
+function faltantesK(p){
+  const req = [["ean","EAN13"],["dun","DUN14"],["unx","unidades por bulto"],["cL","largo de caja"],["cA","ancho de caja"],["cH","alto de caja"],
+    ["porPiso","bultos por piso"],["estiba","pisos"],["unPal","unidades por pallet"],["pesoPT","peso PT"],["uL","largo PT"],["uA","ancho PT"],["uH","alto PT"],["marca","marca"],["contenido","contenido neto"]];
+  if (p.grupo === "Nacionales") req.push(["codCaja","código de caja o funda"],["pesoCaja","peso de caja o funda vacía"],["sep","separadores"],["filmU","film stretch"]);
+  return req.filter(([k]) => SIN_DATO(p[k]));
+}
+const NOMBRE_CAMPO = k => (faltantesK({grupo:"Nacionales"}).find(x=>x[0]===k)||[k,k])[1];
+
+/* ---------- 6. Alertas de valores fuera de lo normal ---------- */
+const PESO_MAX_PALLET = 1000, ALTO_MAX_PALLET = 2.2, TOLERANCIA_BASE = 1.10;
+const NOMBRE_ALERTA={peso:"peso del pallet",alto:"alto del pallet",base:"bultos por piso / base del pallet",contenido:"peso PT vs. contenido neto"};
+const alertaDesestimada=(p,k)=>(p.alertasOk||[]).includes(k)||(k==="base"&&p.baseConfirmada)||(k==="alto"&&p.altoConfirmado);
+function alertasK(p,todas){
+  const a = [], cp = calc(p), ok = k => todas || !alertaDesestimada(p,k);
+  if (cp.pesoPal && cp.pesoPal > PESO_MAX_PALLET && ok("peso")) a.push({k:"peso",t:`El pallet pesa ${fmt(cp.pesoPal,1)} kg: supera los ${PESO_MAX_PALLET} kg.`});
+  if (cp.pH && cp.pH > ALTO_MAX_PALLET && ok("alto")) a.push({k:"alto",t:`El pallet mide ${fmt(cp.pHcm,1)} cm con el taco: supera los ${fmt(ALTO_MAX_PALLET*100)} cm.`});
+  const largo = p.cL, ancho = p.acostada ? p.cH : p.cA;
+  if (p.porPiso && largo && ancho && ok("base")) {
+    const ocupa = p.porPiso * largo * ancho, base = PALLET_L*100 * PALLET_A*100;
+    if (ocupa > base * TOLERANCIA_BASE) a.push({k:"base",t:`${fmt(p.porPiso)} bultos de ${fmt(largo)} × ${fmt(ancho)} cm ocupan ${fmt(Math.round(ocupa/100)/100,2)} m², más que la base del pallet (1,20 m²).`});
+  }
+  if (p.pesoPT && p.contenido && p.contenidoUM && ok("contenido")) {
+    const kg = {ml:0.001,cc:0.001,l:1,g:0.001,kg:1}[p.contenidoUM] * p.contenido;
+    const liquido = ["ml","cc","l"].includes(p.contenidoUM);
+    const min = liquido ? kg*0.8 : kg, max = kg*1.5 + 0.15;
+    if (kg && (p.pesoPT < min || p.pesoPT > max)) a.push({k:"contenido",t:`El peso PT (${fmt(p.pesoPT,3)} kg) no se corresponde con el contenido neto (${fmt(p.contenido)} ${p.contenidoUM}).`});
+  }
+  return a;
+}
+function alertas(p){return alertasK(p).map(x=>x.t);}
+function desestimadas(p){return ["peso","alto","base","contenido"].filter(k=>alertaDesestimada(p,k));}
+function errorCodigo(v,largos,nombre){
+  if(!/^\d+$/.test(v))return `El ${nombre} solo puede tener números (sin espacios, letras ni guiones).`;
+  if(!largos.includes(v.length))return `El ${nombre} tiene que tener ${largos.join(" o ")} dígitos (tiene ${v.length}).`;
+  if(!digitoOk(v)){const b=v.slice(0,-1);let t=0;[...b].reverse().forEach((d,i)=>t+=Number(d)*(i%2===0?3:1));
+    return `El dígito verificador del ${nombre} no es válido: termina en ${v.slice(-1)} y debería terminar en ${(10-t%10)%10}.`;}
+  return null;
+}
+function digitoOk(c){
+  if (!/^\d{13,14}$/.test(c)) return false;
+  const b = c.slice(0,-1); let t = 0;
+  [...b].reverse().forEach((d,i) => t += Number(d) * (i % 2 === 0 ? 3 : 1));
+  return (10 - t % 10) % 10 === Number(c.slice(-1));
+}
+
+
+function dibujoPallet(p, cp){
+  const pisos = p.estiba || 0, porPiso = p.porPiso || 0;
+  if (!pisos || !cp.pH) return `<p class="meta">Sin estiba o alto de caja: no se puede dibujar el pallet.</p>`;
+  const W = 480, base = 26, altoMax = 200, escala = altoMax / Math.max(cp.pHcarga, 1.4);
+  const altoCarga = Math.min(cp.pHcarga, 2.4) * escala, h = altoCarga / pisos;
+  const cols = Math.min(Math.max(Math.round(Math.sqrt(porPiso * 1.2)), 1), 8);
+  const x0 = 24, anchoCarga = W - 120, w = anchoCarga / cols, yBase = altoMax + 16;
+  let s = `<svg viewBox="0 0 ${W} ${yBase+base+6}" role="img" aria-label="Pallet de ${pisos} pisos y ${fmt(cp.pHcm,1)} cm de alto total">`;
+  for (let i = 0; i < pisos; i++){ const y = yBase - (i+1) * h;
+    for (let j = 0; j < cols; j++) s += `<rect x="${x0+j*w+1}" y="${y+1}" width="${w-2}" height="${h-2}" rx="2" fill="var(--cartonL)" stroke="var(--carton)"/>`; }
+  s += `<rect x="${x0-6}" y="${yBase}" width="${anchoCarga+12}" height="7" fill="var(--madera)"/>`;
+  [0,.5,1].forEach(f => s += `<rect x="${x0-6+f*(anchoCarga-18)}" y="${yBase+7}" width="30" height="${base-14}" fill="var(--madera)"/>`);
+  s += `<rect x="${x0-6}" y="${yBase+base-7}" width="${anchoCarga+12}" height="7" fill="var(--madera)"/>`;
+  const yTop = yBase - altoCarga, xl = x0 + anchoCarga + 22;
+  s += `<line x1="${xl}" y1="${yTop}" x2="${xl}" y2="${yBase+base}" stroke="var(--txt)"/><line x1="${xl-6}" y1="${yTop}" x2="${xl+6}" y2="${yTop}" stroke="var(--txt)"/><line x1="${xl-6}" y1="${yBase+base}" x2="${xl+6}" y2="${yBase+base}" stroke="var(--txt)"/>`;
+  s += `<text x="${xl+12}" y="${(yTop+yBase)/2+5}" font-size="16" font-weight="700" fill="var(--txt)" font-family="IBM Plex Sans Condensed, Arial Narrow, sans-serif">${fmt(cp.pHcm,1)} cm</text>`;
+  return s + `</svg>`;
+}
+
+
+/* ---------- Panel ---------- */
+function vPanel(){
+  const act=productos.filter(p=>p.activo!==false), pend=act.filter(tienePend);
+  const nac=act.filter(p=>p.grupo==="Nacionales"), imp=act.filter(p=>p.grupo==="Importados");
+  const aRevisar=productos.filter(p=>p.estado==="pendiente");
+  const hoy=new Date();hoy.setHours(0,0,0,0);
+  const msp=act.filter(p=>p.mspVence).map(p=>({p,d:Math.round((new Date(String(p.mspVence).slice(0,10)+"T00:00")-hoy)/864e5)}))
+    .filter(x=>x.d<=DIAS_MSP).sort((a,b)=>a.d-b.d);
+  $("#main").innerHTML=`<h1 class="pag">Panel</h1><p class="pag-sub">Estado de los datos logísticos de los SKU activos.</p>
+    <div class="kpis">
+      <div class="kpi"><div class="v">${productos.length}</div><div class="l">SKU totales (activos + dados de baja)</div></div>
+      <div class="kpi"><div class="v">${act.length}</div><div class="l">SKU activos</div></div>
+      <div class="kpi"><div class="v" style="color:var(--grn)">${act.filter(p=>p.estado==="aprobada").length}</div><div class="l">Fichas aprobadas</div></div>
+      <div class="kpi"><div class="v" style="color:var(--wrn)">${aRevisar.length}</div><div class="l">Fichas esperando revisión</div></div>
+      <div class="kpi"><div class="v" style="color:var(--wrn)">${pend.length}</div><div class="l">Con datos pendientes</div></div>
+      <div class="kpi"><div class="v">${nac.length} / ${imp.length}</div><div class="l">Nacionales / importados</div></div>
+    </div>
+    ${msp.length?`<div class="card" style="border-color:var(--red)"><h3 style="font-size:14px;font-weight:700;margin-bottom:8px">🩺 Habilitaciones MSP vencidas o por vencer (${msp.length})</h3>
+      ${msp.map(x=>`<div class="usr-row" style="padding:8px 0;cursor:pointer" tabindex="0" data-s="${esc(x.p.sku)}"><span><b>${esc(x.p.sku)}</b> · ${esc(x.p.desc)}${x.p.mspNum?" · N.º "+esc(x.p.mspNum):""}</span>
+        <span class="bg" style="${x.d<0?"background:var(--redL);color:var(--red)":"background:var(--wrnL);color:var(--wrn)"}">${x.d<0?`Vencida hace ${-x.d} días`:x.d===0?"Vence hoy":`Vence en ${x.d} días`} · ${fd(x.p.mspVence)}</span></div>`).join("")}
+      <p class="pag-sub" style="margin:8px 0 0">El aviso por correo sale solo, ${DIAS_MSP} días antes del vencimiento.</p></div>`:""}
+    ${aRevisar.length?`<div class="card" style="border-color:var(--wrn)"><h3 style="font-size:14px;font-weight:700;margin-bottom:8px">✍ Fichas esperando revisión (${aRevisar.length})</h3>
+      ${aRevisar.map(p=>`<div class="usr-row" style="padding:8px 0;cursor:pointer" tabindex="0" data-s="${esc(p.sku)}"><span><b>${esc(p.sku)}</b> · ${esc(p.desc)}</span>
+        <span style="font-size:12px;color:var(--txS)">Armada por ${esc(p.armadaPor||"—")} · ${fdt(p.armadaEn)}</span></div>`).join("")}
+      <p class="pag-sub" style="margin:8px 0 0">${puedeAprobar()?"Abrí la ficha y aprobala: al aprobarla sale sola a Finanzas.":"Las revisan Antonella o Claudia."}</p></div>`:""}
+    <div class="card"><div class="fila-tit" style="margin-bottom:8px"><h3 style="font-size:14px;font-weight:700">SKU con datos pendientes (${pend.length})</h3>
+      ${pend.length?`<input type="search" class="in" id="pq" placeholder="Filtrar por SKU, descripción o dato faltante" style="max-width:320px">`:""}</div>
+      ${pend.length?`<div style="max-height:420px;overflow:auto;border:1px solid var(--brdL);border-radius:6px"><table style="min-width:640px"><thead><tr><th>SKU</th><th>Descripción</th><th>Origen</th><th>Qué le falta</th></tr></thead><tbody id="pcuerpo"></tbody></table></div>
+      <p class="pag-sub" style="margin:8px 0 0">Hacé clic en un SKU para abrir su ficha${puedeEditar()?" y completar los datos":""}.</p>`:`<p class="pag-sub">✓ Todos los SKU activos tienen la ficha completa.</p>`}</div>
+    <div class="card"><h3 style="font-size:14px;font-weight:700;margin-bottom:8px">Últimos cambios</h3>
+      ${logs.slice(0,8).map(l=>`<div class="usr-row" style="padding:7px 0"><span><b>${esc(l.accion)}</b>${l.entidad?" · "+esc(l.entidad):""}${l.detalle?" · "+esc(l.detalle):""}</span><span style="font-size:12px;color:var(--txS)">${esc(l.usuario)} · ${fdt(l.ts)}</span></div>`).join("")||`<p class="pag-sub">Todavía no hay cambios registrados.</p>`}</div>`;
+  const filas=pend.map(p=>({p,f:faltantes(p),n:p.nota})).sort((a,b)=>b.f.length-a.f.length||String(a.p.sku).localeCompare(String(b.p.sku),"es",{numeric:true}));
+  const pint=()=>{const q=($("#pq")?.value||"").toLowerCase();
+    const l=filas.filter(x=>!q||[x.p.sku,x.p.desc,x.f.join(" "),x.n].some(v=>v&&String(v).toLowerCase().includes(q)));
+    if(!$("#pcuerpo"))return;
+    $("#pcuerpo").innerHTML=l.map(x=>`<tr tabindex="0" data-s="${esc(x.p.sku)}"><td><b>${esc(x.p.sku)}</b></td><td class="desc">${esc(x.p.desc)}</td><td>${esc(x.p.grupo)}</td>
+      <td style="white-space:normal">${x.f.map(t=>`<span class="bg" style="background:var(--wrnL);color:var(--wrn);margin:1px 2px">${esc(t)}</span>`).join("")}${x.n?`<span class="bg" style="background:var(--priL);color:var(--pri);margin:1px 2px">📝 ${esc(x.n)}</span>`:""}</td></tr>`).join("")
+      ||`<tr><td colspan="4" class="vacio">Ningún SKU coincide con el filtro.</td></tr>`;
+    $("#pcuerpo").querySelectorAll("tr[data-s]").forEach(tr=>{tr.onclick=()=>ficha(tr.dataset.s);tr.onkeydown=e=>{if(e.key==="Enter")ficha(tr.dataset.s);};});};
+  pint(); if($("#pq"))$("#pq").oninput=pint;
+  $("#main").querySelectorAll("[data-s]").forEach(el=>{if(el.tagName==="TR")return;
+    el.onclick=()=>ficha(el.dataset.s);el.onkeydown=e=>{if(e.key==="Enter")ficha(el.dataset.s);};});
+}
+
+/* ---------- Fichas a revisar ---------- */
+function vFichas(){
+  const l=productos.filter(p=>p.estado==="pendiente")
+    .sort((a,b)=>String(a.armadaEn||"").localeCompare(String(b.armadaEn||"")));
+  const devueltas=productos.filter(p=>p.estado==="borrador"&&p.rechazo);
+  $("#main").innerHTML=`<h1 class="pag">Fichas a revisar</h1>
+    <p class="pag-sub">Gloria arma la ficha con los datos de Antonella y la manda a revisar. Antonella —o Claudia— la aprueba, y ahí sale sola a Finanzas con el Excel adjunto.</p>
+    ${l.length?`<div class="card">${l.map(p=>`<div class="usr-row" style="padding:10px 0;cursor:pointer" tabindex="0" data-s="${esc(p.sku)}">
+        <span><b>${esc(p.sku)}</b> · ${esc(p.desc)}<br><span style="font-size:12px;color:var(--txS)">Armada por ${esc(p.armadaPor||"—")} · ${fdt(p.armadaEn)}${faltantes(p).length?` · <b style="color:var(--wrn)">le faltan ${faltantes(p).length} dato(s)</b>`:""}</span></span>
+        ${sello(p)}</div>`).join("")}</div>`
+      :`<div class="card"><p class="pag-sub">No hay ninguna ficha esperando revisión.</p></div>`}
+    ${devueltas.length?`<div class="card" style="border-color:var(--wrn)"><h3 style="font-size:14px;font-weight:700;margin-bottom:8px">Devueltas para corregir (${devueltas.length})</h3>
+      ${devueltas.map(p=>`<div class="usr-row" style="padding:8px 0;cursor:pointer" tabindex="0" data-s="${esc(p.sku)}"><span><b>${esc(p.sku)}</b> · ${esc(p.desc)}<br><span style="font-size:12px;color:var(--red)">${esc(p.rechazo)}</span></span></div>`).join("")}</div>`:""}`;
+  $("#main").querySelectorAll("[data-s]").forEach(el=>{el.onclick=()=>ficha(el.dataset.s);el.onkeydown=e=>{if(e.key==="Enter")ficha(el.dataset.s);};});
+}
+
+/* ---------- Habilitaciones MSP ---------- */
+function vMsp(){
+  const hoy=new Date();hoy.setHours(0,0,0,0);
+  const dias=p=>p.mspVence?Math.round((new Date(String(p.mspVence).slice(0,10)+"T00:00")-hoy)/864e5):null;
+  const con=productos.filter(p=>p.mspVence||p.msp==="Si"||(p.registros||[]).length)
+    .map(p=>({p,d:dias(p)})).sort((a,b)=>(a.d??99999)-(b.d??99999));
+  const sin=productos.filter(p=>p.activo!==false&&!p.msp&&!(p.registros||[]).length);
+  const estado=x=>x.d===null?`<span class="bg" style="background:var(--brdL);color:var(--txS)">Sin vencimiento cargado</span>`
+    :x.d<0?`<span class="bg" style="background:var(--redL);color:var(--red)">Vencida hace ${-x.d} días</span>`
+    :x.d<=DIAS_MSP?`<span class="bg" style="background:var(--wrnL);color:var(--wrn)">Vence en ${x.d} días</span>`
+    :`<span class="bg" style="background:var(--grnL);color:var(--grn)">Vigente</span>`;
+  $("#main").innerHTML=`<h1 class="pag">Habilitaciones MSP</h1>
+    <p class="pag-sub">El registro sanitario de cada producto, con su documento. Una renovación es un registro nuevo: el anterior queda guardado. El aviso de vencimiento le llega a Claudia ${DIAS_MSP} días antes.</p>
+    <div class="card">${con.length?`<div style="overflow:auto"><table style="min-width:700px"><thead><tr><th>SKU</th><th>Descripción</th><th>Habilitación</th><th>Vence</th><th>Estado</th><th>Documento</th></tr></thead><tbody>
+      ${con.map(x=>`<tr tabindex="0" data-s="${esc(x.p.sku)}" style="cursor:pointer"><td><b>${esc(x.p.sku)}</b></td><td class="desc">${esc(x.p.desc)}</td>
+        <td>${esc(x.p.mspNum||"—")}</td><td>${x.p.mspVence?fd(x.p.mspVence):"—"}</td><td>${estado(x)}</td>
+        <td>${(x.p.registros||[]).filter(r=>r.documentoId).length?"📎 sí":"—"}</td></tr>`).join("")}
+      </tbody></table></div>`:`<p class="pag-sub">Todavía no hay ninguna habilitación cargada. Entrá a un producto y cargala desde su ficha.</p>`}</div>
+    <div class="card"><h3 style="font-size:14px;font-weight:700;margin-bottom:4px">Sin definir si lleva habilitación (${sin.length})</h3>
+      <p class="pag-sub">Son los SKU activos donde todavía no se dijo si llevan habilitación MSP o no. En la ficha del producto se marca.</p></div>`;
+  $("#main").querySelectorAll("tr[data-s]").forEach(tr=>{tr.onclick=()=>ficha(tr.dataset.s);tr.onkeydown=e=>{if(e.key==="Enter")ficha(tr.dataset.s);};});
+}
+
+/* ---------- Historial ---------- */
+function vTrail(){
+  $("#main").innerHTML=`<h1 class="pag">Historial</h1>
+    <p class="pag-sub">Todo lo que se cargó, cambió, aprobó o mandó por correo queda acá, con quién y cuándo. Lo registra el servidor.</p>
+    <div class="card"><input type="search" class="in" id="tq" placeholder="Buscar por SKU, acción o persona" style="max-width:360px;margin-bottom:10px">
+      <div style="max-height:600px;overflow:auto" id="tlista"></div></div>`;
+  const pint=()=>{const q=($("#tq").value||"").toLowerCase();
+    const l=logs.filter(x=>!q||[x.accion,x.entidad,x.detalle,x.usuario].some(v=>v&&String(v).toLowerCase().includes(q)));
+    $("#tlista").innerHTML=l.slice(0,400).map(l2=>`<div class="usr-row" style="padding:7px 0;align-items:flex-start">
+      <span style="font-size:12.5px"><b>${esc(l2.accion)}</b>${l2.entidad?" · "+esc(l2.entidad):""}${l2.detalle?"<br><span style='color:var(--txS)'>"+esc(l2.detalle)+"</span>":""}</span>
+      <span style="font-size:11.5px;color:var(--txS);white-space:nowrap">${esc(l2.usuario)} · ${fdt(l2.ts)}</span></div>`).join("")
+      ||`<p class="pag-sub">No hay movimientos que coincidan.</p>`;};
+  pint();$("#tq").oninput=pint;
+}
+
+/* ---------- Guía ---------- */
+function vGuia(){
+  const items=[
+    ["🧭","Para qué sirve","Guarda los datos logísticos de cada producto terminado —medidas, pesos, pallet, códigos de barras y habilitación MSP— y arma con ellos la ficha de alta que Finanzas carga en iDempiere."],
+    ["👤","Quién entra","Con el usuario del portal. Calidad carga y aprueba; logística y ventas ven y exportan. No hay usuarios ni contraseñas aparte."],
+    ["🔁","El circuito de la ficha","1) Gloria completa los datos y la manda a revisar. 2) Antonella —o Claudia— la aprueba. 3) Al aprobarla sale sola a Finanzas (Marianela) con la ficha en Excel adjunta. Si después cambia un dato de la ficha, vuelve a quedar pendiente y al aprobarse le llega como actualización, diciendo qué cambió."],
+    ["🩺","Registros sanitarios","En la ficha del producto se carga la habilitación MSP: número, vencimiento y el documento. Una renovación es un registro nuevo y el anterior queda. "+DIAS_MSP+" días antes del vencimiento le llega un aviso a Claudia."],
+    ["📎","Certificado y ficha de seguridad","Se suben desde la ficha del producto. Cuando están los dos y la ficha está aprobada, sale solo el aviso a Ventas y Logística con los tres adjuntos."],
+    ["⚠","Datos pendientes","La app marca lo que falta para que la ficha esté completa. Si un dato no corresponde a ese producto, se marca como “no aplica” y deja de figurar."],
+    ["📐","El pallet","Se calcula con los bultos por piso, los pisos y las medidas: alto, peso y el dibujo. La base de madera pesa "+PESO_BASE_PALLET+" kg y el taco mide "+(ALTO_TACO*100)+" cm."],
+    ["📤","Exportar","“Exportar” baja todos los datos para trabajar. “Formato ASU” baja la planilla con las columnas que pide el supermercado. La ficha de alta se baja desde cada producto."],
+    ["📜","Historial","Queda todo: quién cargó, quién cambió qué, quién aprobó y cuándo salió cada correo."],
+  ];
+  $("#main").innerHTML=`<h1 class="pag">Guía de uso</h1><p class="pag-sub">Cómo funciona la app, en corto.</p>
+    <div class="card">${items.map(([i,t,d])=>`<div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--brdL)">
+      <div style="font-size:20px">${i}</div><div><div style="font-weight:700;font-size:13.5px">${esc(t)}</div>
+      <div style="font-size:12.5px;color:var(--txS);margin-top:2px">${esc(d)}</div></div></div>`).join("")}</div>`;
+}
+/* ---------- Productos ---------- */
+const COLS=[{k:"sku",t:"SKU"},{k:"desc",t:"Descripción",cls:"desc"},{k:"grupo",t:"Origen"},{k:"ean",t:"EAN13"},{k:"dun",t:"DUN14"},
+  {k:"unx",t:"Un/bulto",num:1},{k:"codCaja",t:"Caja/funda"},{k:"porPiso",t:"Bultos/piso",num:1},{k:"estiba",t:"Pisos",num:1},
+  {k:"unPal",t:"Un/pallet",num:1},{k:"pHcm",t:"Alto pallet (cm)",num:1,dec:1,c:1},{k:"pesoPal",t:"Peso pallet (kg)",num:1,dec:1,c:1},{k:"estado",t:"Ficha"}];
+function listar(soloPend){
+  const q=filtro.texto.trim().toLowerCase();
+  const l=productos.filter(p=>((filtro.bajas&&!soloPend)?p.activo===false:p.activo!==false)&&(!filtro.grupo||p.grupo===filtro.grupo)&&(!filtro.cat||p.cat===filtro.cat)&&
+    (!(filtro.pend||soloPend)||tienePend(p))&&(!q||[p.sku,p.desc,p.ean,p.dun].some(x=>x&&String(x).toLowerCase().includes(q))));
+  const k=filtro.orden,d=filtro.dir,col=COLS.find(c=>c.k===k),val=p=>col&&col.c?calc(p)[k]:p[k];
+  return l.sort((a,b)=>{const x=val(a),y=val(b);if(x==null&&y==null)return 0;if(x==null)return 1;if(y==null)return -1;
+    if(k==="sku"){const nx=+x,ny=+y;if(!isNaN(nx)&&!isNaN(ny))return(nx-ny)*d;}
+    return(typeof x==="number"&&typeof y==="number"?x-y:String(x).localeCompare(String(y),"es"))*d;});
+}
+function vProductos(soloPend){
+  const cats=[...new Set(productos.map(p=>p.cat).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"es"));
+  $("#main").innerHTML=`<div class="fila-tit"><div><h1 class="pag">${soloPend?"Datos pendientes":"Productos"}</h1>
+    <p class="pag-sub">${soloPend?"SKU activos a los que les falta algún dato logístico o tienen una nota.":"Hacé clic en una fila para ver la ficha completa."}</p></div>
+    <div class="acc" style="margin:0">${puedeEditar()?`<button class="btn" id="nuevo">+ Nuevo SKU</button>`:""}<button class="btn g" id="expAsu">📤 Formato ASU</button><button class="btn g" id="exp">📥 Exportar a Excel</button></div></div>
+    ${!puedeEditar()&&conectado?`<div class="ctx-help">👁 Tu usuario es de visualización: podés buscar, ver fichas y exportar.</div>`:""}
+    <div class="filtros"><input type="search" class="in" id="q" placeholder="Buscar por SKU, descripción, EAN13 o DUN14" value="${esc(filtro.texto)}">
+      <div class="seg" role="group" aria-label="Origen">${["","Nacionales","Importados"].map(g=>`<button data-g="${g}" aria-pressed="${filtro.grupo===g}">${g||"Todos"}</button>`).join("")}</div>
+      <select class="in" id="cat" aria-label="Categoría"><option value="">Todas las categorías</option>${cats.map(c=>`<option${c===filtro.cat?" selected":""}>${esc(c)}</option>`).join("")}</select>
+      ${soloPend?"":`<label class="chk"><input type="checkbox" id="fp"${filtro.pend?" checked":""}> Solo con pendientes</label>`}
+      ${!soloPend?`<label class="chk"><input type="checkbox" id="fb"${filtro.bajas?" checked":""}> Ver solo dados de baja</label>`:""}
+      <span class="conteo" id="conteo"></span></div>
+    <div class="tabla"><table><thead><tr id="cab"></tr></thead><tbody id="cuerpo"></tbody></table><div class="vacio" id="vacio" hidden>Ningún producto coincide con la búsqueda. Probá con otro texto o quitá los filtros.</div></div>`;
+  const pint=()=>pintarTabla(soloPend);
+  $("#q").oninput=e=>{filtro.texto=e.target.value;pint();};
+  $("#cat").onchange=e=>{filtro.cat=e.target.value;pint();};
+  $("#fp")&&($("#fp").onchange=e=>{filtro.pend=e.target.checked;pint();});
+  $("#fb")&&($("#fb").onchange=e=>{filtro.bajas=e.target.checked;pint();});
+  document.querySelectorAll(".seg button").forEach(b=>b.onclick=()=>{filtro.grupo=b.dataset.g;document.querySelectorAll(".seg button").forEach(x=>x.setAttribute("aria-pressed",x===b));pint();});
+  $("#exp").onclick=()=>exportar(listar(soloPend));
+  $("#expAsu").onclick=()=>exportarASU(listar(soloPend));
+  $("#nuevo")&&($("#nuevo").onclick=()=>formulario(null));
+  pint();
+}
+function vPendientes(){vProductos(true);}
+function pintarTabla(soloPend){
+  $("#cab").innerHTML=COLS.map(c=>`<th class="${c.num?"num":""}" data-k="${c.k}" tabindex="0" ${filtro.orden===c.k?`aria-sort="${filtro.dir>0?"ascending":"descending"}"`:""}>${c.t}</th>`).join("");
+  $("#cab").querySelectorAll("th").forEach(th=>{const o=()=>{filtro.dir=filtro.orden===th.dataset.k?-filtro.dir:1;filtro.orden=th.dataset.k;pintarTabla(soloPend);};th.onclick=o;th.onkeydown=e=>{if(e.key==="Enter")o();};});
+  const l=listar(soloPend);
+  $("#cuerpo").innerHTML=l.map(p=>{const cp=calc(p);return `<tr tabindex="0" data-s="${esc(p.sku)}" class="${tienePend(p)&&p.activo!==false?"pend":""} ${p.activo===false?"baja":""}">${COLS.map(c=>`<td class="${c.num?"num":""} ${c.cls||""}">${c.k==="estado"?sello(p):esc(fmt(c.c?cp[c.k]:p[c.k],c.dec))}</td>`).join("")}</tr>`;}).join("");
+  $("#cuerpo").querySelectorAll("tr").forEach(tr=>{tr.onclick=()=>ficha(tr.dataset.s);tr.onkeydown=e=>{if(e.key==="Enter")ficha(tr.dataset.s);};});
+  $("#vacio").hidden=l.length>0;
+  const pe=l.filter(tienePend).length;
+  $("#conteo").textContent=filtro.bajas?`${l.length} productos dados de baja`:`${l.length} productos`+(pe&&!soloPend?` · ${pe} con pendientes`:"");
+}
+
+/* ---------- Modal ---------- */
+let focoPrevio=null;
+function modal(html){focoPrevio=document.activeElement;$("#modal").innerHTML=`<div class="md-fondo" id="mdf"><div class="md" role="dialog" aria-modal="true" tabindex="-1">${html}</div></div>`;
+  const m=$("#modal .md");m.focus();$("#mdf").onclick=e=>{if(e.target.id==="mdf")cerrar();};m.querySelectorAll("[data-x]").forEach(b=>b.onclick=cerrar);}
+function cerrar(){$("#modal").innerHTML="";refrescar();if(focoPrevio&&document.contains(focoPrevio))focoPrevio.focus();}
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&$("#modal")?.innerHTML)cerrar();});
+const fila=(t,v,u)=>`<dt>${t}</dt><dd>${v===null||v===undefined||v===""?"—":esc(v)+(u?" "+u:"")}</dd>`;
+
+/* ---------- Los campos del producto ----------
+   Los de la app anterior, mas la clasificacion que pide la ficha de alta
+   (hoja "Parametros" del formulario de Finanzas). El numero de habilitacion
+   MSP y su vencimiento no estan aca: salen del registro sanitario que se carga
+   con su documento, para que no queden dos verdades. */
+const LISTA_CATEGORIA=["","COMPONENTES","CONSUMIBLES","ENVASES PRODUCIDOS","FILMS","GRANELES","MATERIAS PRIMAS","PRODUCTOS TERMINADOS","RECURSO PRODUCCIÓN","TERCEROS"];
+const LISTA_LINEA=["","COSMETICA","HIGIENE","HIGIENE INDUSTRIAL","HIGIENE PERSONAL","MARCA PROPIA"];
+const LISTA_SUBLINEA=["","ALCOHOLES","DETER LAVAVAJILLA","ENVASES","ENVASES RETORNABLES","HIGIENE SANITARIO","JABON EN BARRA","JABON TOCADOR PAST","JABON TOCADOR LIQ","JABON LIQUIDO","JABON ROPA 3 EN 1","LIMPIADORES ESPECIFICOS","LIMPIADORES LIQUIDOS","PAÑALES INFANTILES","PAPEL HIGIENICO","PERFUMADORES","POLVO DE LAVAR","PROTECCIÓN FEMENINA","PULIDORES CREMOSO Y POLVO","SOLUCIÓN DE HIPOCLORITO","SUAVIZANTE DE ROPA"];
+const LISTA_FAMILIA=["","AXION","BREF","CLEAN DAY","CONEJO","CRISTAL","CLERMONT","DEFINITY","DEMAS","DEVOTO","EL DORADO","FABULOSO","KEEPER","LEADER PRICE","M MAX","MARCAS PROPIAS","MAS","NATURAL BABY","NATURALMENTE","OKEY","OTROS","PERSIL","PLASTICOS","PLUMA","PRECIO LIDER","SAPOLIO","SUPREMO HOGAR","TA-TA","TIENDA INGLESA","TITAN"];
+const LISTA_UM=["","Unidad","CX3","CX4","CX5","CX6","CX7","CX8","CX10","CX12","CX15","CX18","CX20","CX24","CX28","CX30","CX32","CX36","CX48","CX60","CX72","CX80","FX1","FX2","FX3","FX4","FX6","FX8","FX9","FX12","FX15","FX16","FX18","FX24","FX32","DA","WD","GR","HR","KG","L","MO","WM","Mt","MG","ML","MJ","WK","EA"];
+const LISTA_TIPO_PRODUCTO=["","Artículo","Recurso","Servicio","Tipo de gasto"];
+const LISTA_IMPUESTO=["","IVA","IVA EN SUSPENSO","EVA EXPORTACIONES Y ASIMILADAS","IVA NO FACTURABLE","IVA OBRA CIVIL","IVA PERCIBIDO","IVA PORCENTUAL","IVA TASA MANUAL"];
+const LISTA_IMPUESTO_CV=["","ENTREGA GRATUITA","GRAVADO OTRA TASA","IVA TASA BÁSICA","IVA TASA MÍNIMA","NO GRAVADO"];
+
+const CAMPOS=[{k:"sku",t:"SKU"},{k:"desc",t:"Descripción",cls:"a2"},{k:"grupo",t:"Origen",op:["Nacionales","Importados"]},{k:"cat",t:"Categoría"},{k:"vida",t:"Vida útil (meses)",n:1},
+  {k:"ean",t:"EAN13"},{k:"dun",t:"DUN14"},{k:"unx",t:"Unidades por bulto",n:1},{k:"codCaja",t:"Código caja / funda"},{k:"pesoCaja",t:"Peso caja/funda vacía (kg)",n:1},{k:"acostada",t:"Bulto acostado en el pallet",chk:1},
+  {k:"tipoEmpaque",t:"Tipo de empaque",op:["","Caja","Funda","Display","Inner Pack"]},{k:"cL",t:"Caja largo (cm)",n:1},{k:"cA",t:"Caja ancho (cm)",n:1},{k:"cH",t:"Caja alto (cm)",n:1},{k:"porPiso",t:"Bultos por piso",n:1},{k:"estiba",t:"Pisos",n:1},{k:"unPal",t:"Unidades por pallet",n:1},
+  {k:"pesoPT",t:"Peso PT (kg)",n:1},{k:"sep",t:"Separadores por pallet",n:1},{k:"filmU",t:"Film stretch por unidad (kg)",n:1},{k:"uL",t:"PT largo (cm)",n:1},{k:"uA",t:"PT ancho (cm)",n:1},{k:"uH",t:"PT alto (cm)",n:1},
+  {k:"marca",t:"Marca"},{k:"contenido",t:"Contenido neto",n:1},{k:"contenidoUM",t:"Unidad contenido",op:["","ml","l","g","kg","cc","unidades"]},
+  {k:"presentacion",t:"Presentación",op:["","Aerosol","Bandeja","Barra","Barril","Blister","Bolsa","Botella","Caja","Casillero","Dispensador","Display","Envoltura Plástica","Funda","Lata","Multipack","Pallet","Pote","Sachet","Sin Empaque","Stick","Tambor","Tubo"]},
+  {k:"packGtins",t:"GTIN de los componentes del pack (separados por ;)",cls:"a2"},
+  {k:"tempCerrado",t:"Temp. envase cerrado",op:["Temperatura Ambiente","Refrigerado (0 - 7 °C)","Congelado (-18°C)"]},{k:"tempAbierto",t:"Temp. envase abierto",op:["Temperatura Ambiente","Refrigerado (0 - 7 °C)","Congelado (-18°C)"]},
+  // Clasificacion de la ficha de alta
+  {k:"categoriaProducto",t:"Categoría de producto (ficha)",op:LISTA_CATEGORIA},{k:"linea",t:"Línea de producto",op:LISTA_LINEA},
+  {k:"sublinea",t:"Sublínea de producto",op:LISTA_SUBLINEA},{k:"familia",t:"Familia de producto",op:LISTA_FAMILIA},{k:"subfamilia",t:"Subfamilia de producto"},
+  {k:"umBase",t:"Unidad de medida",op:LISTA_UM},{k:"umDestino",t:"UM destino (caja/funda)",op:LISTA_UM},
+  {k:"tipoProducto",t:"Tipo de producto",op:LISTA_TIPO_PRODUCTO},{k:"categoriaImpuesto",t:"Categoría del impuesto",op:LISTA_IMPUESTO},{k:"impuestoCV",t:"Impuesto compra/venta",op:LISTA_IMPUESTO_CV},
+  {k:"msp",t:"Lleva habilitación MSP",op:["","Si","No"]},
+  {k:"nota",t:"Nota",area:1,cls:"a3"}];
+function formulario(p,base){
+  const LIMPIAR=["sku","ean","dun","estadoAlta","altaFecha","altaPor","modificado","modificadoPor","packsLM","packsV3","msp","mspNum","mspVence"];
+  const copia=base?(()=>{const c={...base};LIMPIAR.forEach(k=>delete c[k]);c.activo=true;c.copiaDe=base.sku;return c;})():null;
+  const nuevo=!p;p=p||copia||{grupo:"Nacionales",vida:24,activo:true,acostada:false,cm:true,tipoEmpaque:"Caja",tempCerrado:"Temperatura Ambiente",tempAbierto:"Temperatura Ambiente"};
+  const campo=c=>{const v=p[c.k];
+    if(c.op)return `<label class="fd ${c.cls||""}"><span>${c.t}</span><select class="in" name="${c.k}">${c.op.map(o=>`<option${o===v?" selected":""}>${o}</option>`).join("")}</select></label>`;
+    if(c.chk)return `<label class="chk ${c.cls||""}" style="margin:22px 0 10px"><input type="checkbox" name="${c.k}"${v?" checked":""}> ${c.t}</label>`;
+    if(c.area)return `<label class="fd ${c.cls||""}"><span>${c.t}</span><textarea class="in" name="${c.k}" rows="2">${esc(v)}</textarea></label>`;
+    return `<label class="fd ${c.cls||""}"><span>${c.t}</span><input class="in" name="${c.k}" ${c.tipo==="date"?'type="date"':""} ${c.n?'inputmode="decimal"':""} value="${esc(typeof v==="number"?String(v).replace(".",","):v)}" ${c.k==="sku"&&!nuevo?"readonly":""}></label>`;};
+  modal(`<div class="md-cab"><h1 class="pag">${nuevo?(copia?"Nuevo SKU (copia de "+esc(copia.copiaDe)+")":"Nuevo SKU"):"Editar SKU "+esc(p.sku)}</h1><button class="btn sm" data-x>✕ Cerrar</button></div>
+    ${copia?`<div class="ctx-help success">⧉ Se copiaron los datos del SKU ${esc(copia.copiaDe)}. Completá el SKU nuevo, el EAN13 y el DUN14, y revisá la descripción y lo que cambie.</div>`:""}
+    <div class="ctx-help">💡 Los cálculos (bultos por pallet, alto y peso del pallet) se actualizan mientras completás. Si el bulto va acostado, marcá la opción y el alto del pallet se calcula con el ancho.</div>
+    <form id="fm" novalidate><div class="grilla">${CAMPOS.map(campo).join("")}</div><div class="calc" id="calc"></div><div id="alertas"></div><ul class="errores" id="err"></ul>
+    <div class="acc"><button type="button" class="btn g" data-x>Cancelar</button><button type="submit" class="btn">${nuevo?"Crear SKU":"Guardar cambios"}</button></div></form>`);
+  const f=$("#fm");
+  const leer=()=>{const o={...p};CAMPOS.forEach(c=>{const el=f.elements[c.k];
+    if(c.chk)o[c.k]=el.checked;else if(c.n){let t=el.value.trim();if(t.includes(","))t=t.replace(/\./g,"").replace(",",".");o[c.k]=t===""?null:Number(t);}else o[c.k]=el.value.trim()||null;});return o;};
+  const act=()=>{const cp=calc(leer());$("#calc").textContent=`Cálculo: ${fmt(cp.cajasPal)||"—"} bultos por pallet · alto ${fmt(cp.pHcm,1)||"—"} cm · bulto cerrado ${fmt(cp.pesoCajaCerr,2)||"—"} kg · pallet ${fmt(cp.pesoPal,1)||"—"} kg`;};
+  // Unidades por pallet: se calcula sola con unidades por bulto × bultos por piso × pisos, salvo que se escriba a mano
+  let unPalManual=!nuevo||!!(copia&&copia.unPal!=null&&!(copia.unx&&copia.porPiso&&copia.estiba&&copia.unx*copia.porPiso*copia.estiba===copia.unPal));
+  const elUP=f.elements.unPal, nota=document.createElement("small");
+  nota.style.cssText="display:block;font-size:11px;color:var(--txS);margin-top:2px;text-transform:none;letter-spacing:0;font-weight:400";
+  elUP.parentNode.appendChild(nota);
+  const autoUP=()=>{const o=leer();
+    if(!unPalManual&&o.unx&&o.porPiso&&o.estiba){elUP.value=String(o.unx*o.porPiso*o.estiba);nota.textContent="Calculado: unidades por bulto × bultos por piso × pisos";}
+    else if(!nuevo&&unPalManual){nota.textContent="Valor cargado. Se recalcula si cambiás unidades por bulto, bultos por piso o pisos.";}
+    else if(unPalManual){nota.innerHTML='Cargado a mano. <a href="#" id="upAuto">Volver a calcular</a>';const a=$("#upAuto");if(a)a.onclick=e=>{e.preventDefault();unPalManual=false;autoUP();act();};}
+    else nota.textContent="Se calcula al completar unidades por bulto, bultos por piso y pisos";};
+  elUP.addEventListener("input",()=>{unPalManual=elUP.value.trim()!=="";autoUP();});
+  // Control de EAN13 y DUN14 mientras se escribe
+  const chequeo=(k,largos,nombre)=>{const el=f.elements[k],msg=document.createElement("small");
+    msg.style.cssText="display:block;font-size:11px;margin-top:2px;text-transform:none;letter-spacing:0;font-weight:400";el.parentNode.appendChild(msg);
+    const ver=()=>{const v=el.value.trim();if(!v){msg.textContent="";el.removeAttribute("aria-invalid");return;}
+      if(!nuevo&&v===String(p[k]??"")){msg.textContent="Código ya cargado";msg.style.color="var(--txS)";el.removeAttribute("aria-invalid");return;}
+      const e=errorCodigo(v,largos,nombre);msg.textContent=e||"✓ Formato y dígito verificador correctos";msg.style.color=e?"var(--red)":"var(--grn)";
+      e?el.setAttribute("aria-invalid","true"):el.removeAttribute("aria-invalid");};
+    el.addEventListener("input",ver);ver();};
+  chequeo("ean",[13],"EAN13");chequeo("dun",[14],"DUN14");
+  f.addEventListener("input",e=>{if(["unx","porPiso","estiba"].includes(e.target.name)){unPalManual=false;autoUP();}});
+  autoUP();
+  const actAl=()=>{const a=alertas(leer());$("#alertas").innerHTML=a.length?`<div class="ctx-help warn">⚠ <span>Revisá: ${a.map(esc).join(" ")}</span></div>`:"";};
+  f.addEventListener("input",actAl);
+  f.oninput=act;act();actAl();
+  f.onsubmit=async e=>{e.preventDefault();const o=leer(),err=[];f.querySelectorAll(".in").forEach(i=>i.removeAttribute("aria-invalid"));const mk=k=>f.elements[k]?.setAttribute("aria-invalid","true");
+    if(!o.sku||!/^[A-Za-z0-9._-]+$/.test(o.sku)){err.push("El SKU es obligatorio y solo admite letras, números, punto, guion y guion bajo.");mk("sku");}
+    else if(nuevo&&productos.some(x=>x.sku===o.sku)){err.push(`El SKU ${o.sku} ya existe.`);mk("sku");}
+    if(!o.desc){err.push("La descripción es obligatoria.");mk("desc");}
+    CAMPOS.filter(c=>c.n).forEach(c=>{if(o[c.k]!==null&&(Number.isNaN(o[c.k])||o[c.k]<0)){err.push(`${c.t}: tiene que ser un número positivo.`);mk(c.k);}});
+    {const eE=o.ean?errorCodigo(o.ean,[13],"EAN13"):null;if(eE&&(nuevo||o.ean!==p.ean)){err.push(eE);mk("ean");}}
+    {const eD=o.dun?errorCodigo(o.dun,[14],"DUN14"):null;if(eD&&(nuevo||o.dun!==p.dun)){err.push(eD);mk("dun");}}
+    if(o.dun&&(nuevo||o.dun!==p.dun)){const x=productos.find(q=>q.dun===o.dun&&q.sku!==o.sku&&q.activo!==false);if(x){err.push(`El DUN14 ya está cargado en el SKU ${x.sku}.`);mk("dun");}}
+    if(err.length){$("#err").innerHTML=err.map(x=>`<li>${esc(x)}</li>`).join("");return;}
+    const cambioPallet=nuevo||["unx","porPiso","estiba","unPal"].some(k=>o[k]!==p[k]);
+    if(cambioPallet&&o.unx&&o.porPiso&&o.estiba&&o.unPal&&o.unx*o.porPiso*o.estiba!==o.unPal&&!confirm(`Unidades por bulto × bultos por piso × pisos da ${o.unx*o.porPiso*o.estiba}, pero las unidades por pallet son ${o.unPal}. ¿Guardar igual?`))return;
+    const CAMPOS_ALERTA=["unx","porPiso","estiba","unPal","cL","cA","cH","acostada","pesoPT","pesoCaja","contenido","contenidoUM","sep","filmU"];
+    const al=alertas(o);
+    if(al.length&&(nuevo||CAMPOS_ALERTA.some(k=>(o[k]??null)!==(p[k]??null)))&&!confirm("Revisá estos valores:\n\n- "+al.join("\n- ")+"\n\n¿Guardar igual?"))return;
+    await guardar(o,nuevo?"CREAR SKU":"EDITAR SKU",nuevo?null:p);};
+}
+function imprimirFicha(p){
+  const cp=calc(p),m=(a,b,c)=>(a||b||c)?`${fmt(a)} × ${fmt(b)} × ${fmt(c)} cm`:"—",v=(x,d,u)=>{const t=fmt(x,d);return t?t+(u?" "+u:""):"—";};
+  const fl=(t,x)=>`<tr><th>${t}</th><td>${esc(x)}</td></tr>`;
+  const html=`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Ficha logística SKU ${esc(p.sku)}</title>
+  <style>:root{--txt:#1B1E25;--cartonL:#E3CBA9;--carton:#B98A55;--madera:#8C6239}
+  body{font-family:Arial,Helvetica,sans-serif;color:#1B1E25;margin:24px;font-size:12px}
+  .cab{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #C41E2A;padding-bottom:8px;margin-bottom:12px}
+  .marca{font-size:10px;font-weight:800;color:#C41E2A;letter-spacing:.1em;text-transform:uppercase}
+  h1{font-size:26px;margin:2px 0}h2{font-size:13px;margin:14px 0 4px;text-transform:uppercase;letter-spacing:.04em;color:#5A6170;border-bottom:1px solid #ddd;padding-bottom:3px}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:18px}table{width:100%;border-collapse:collapse}th{text-align:left;font-weight:normal;color:#5A6170;padding:3px 0;width:55%}td{text-align:right;font-weight:bold;padding:3px 0}
+  .cod{display:grid;grid-template-columns:1fr 1fr;gap:10px}.cod div{border:1px solid #ddd;border-radius:6px;padding:6px 10px}.cod span{display:block;font-size:10px;color:#5A6170}.cod b{font-size:16px;letter-spacing:.03em}
+  svg{width:100%;height:auto}.pie{margin-top:16px;font-size:10px;color:#8B92A0;border-top:1px solid #ddd;padding-top:6px}
+  @media print{body{margin:10mm}button{display:none}}</style></head><body>
+  <div class="cab"><div><div class="marca">Vessena S.A. · Ficha logística de producto terminado</div><h1>${esc(p.sku)}</h1><div style="font-size:14px;font-weight:bold">${esc(p.desc)}</div>
+  <div style="color:#5A6170">${esc(p.grupo)}${p.cat?" · "+esc(p.cat):""}${p.marca?" · "+esc(p.marca):""} · vida útil ${v(p.vida,0,"meses")}</div></div>
+  <button onclick="window.print()" style="padding:8px 14px;font-size:13px;cursor:pointer">🖨 Imprimir / Guardar PDF</button></div>
+  <div class="cod"><div><span>EAN13 (unidad)</span><b>${esc(p.ean)||"—"}</b></div><div><span>DUN14 (bulto)</span><b>${esc(p.dun)||"—"}</b></div></div>
+  <div class="cols"><div><h2>Pallet</h2>${dibujoPallet(p,cp)}
+    <table>${fl("Medidas",cp.pH?`${fmt(PALLET_L*100)} × ${fmt(PALLET_A*100)} × ${fmt(cp.pHcm,1)} cm`:"—")}${fl("Alto de la carga",v(cp.pHcargaCm,1,"cm"))}${fl("Bultos por piso",v(p.porPiso))}${fl("Pisos",v(p.estiba))}${fl("Bultos por pallet",v(cp.cajasPal))}${fl("Unidades por pallet",v(p.unPal))}${fl("Separadores",p.sep!=null?`${fmt(p.sep)} (${fmt(cp.pesoSep,2)} kg)`:"—")}${fl("Film stretch",v(cp.filmP,3,"kg"))}${fl("Peso del pallet",v(cp.pesoPal,1,"kg"))}</table></div>
+  <div><h2>Unidad</h2><table>${fl("Peso",v(p.pesoPT,3,"kg"))}${fl("Medidas",m(p.uL,p.uA,p.uH))}${fl("Contenido neto",p.contenido!=null?fmt(p.contenido)+" "+(p.contenidoUM||""):"—")}${fl("Presentación",p.presentacion||"—")}</table>
+  <h2>Caja o funda</h2><table>${fl("Código",p.codCaja||"—")}${fl("Unidades por bulto",v(p.unx))}${fl("Tipo de empaque",p.tipoEmpaque||"—")}${fl("Medidas",m(p.cL,p.cA,p.cH))}${fl("Peso vacía",v(p.pesoCaja,3,"kg"))}${fl("Peso cerrada",v(cp.pesoCajaCerr,2,"kg"))}</table>
+  <h2>Almacenamiento</h2><table>${fl("Envase cerrado",p.tempCerrado||"—")}${fl("Envase abierto",p.tempAbierto||"—")}${p.msp==="Si"?fl("Habilitación MSP",`${p.mspNum||"—"}${p.mspVence?" (vence "+new Date(p.mspVence+"T00:00").toLocaleDateString("es-UY")+")":""}`):""}</table></div></div>
+  <div class="pie">Emitido el ${new Date().toLocaleString("es-UY")}${yo?" por "+esc(yo.name):""}. Alto del pallet con taco de ${fmt(ALTO_TACO*100)} cm y base de madera de ${PESO_BASE_PALLET} kg.</div>
+  <script>setTimeout(()=>window.print(),400)<\/script></body></html>`;
+  const w=window.open("","_blank");
+  if(!w){alert("El navegador bloqueó la ventana nueva. Permití las ventanas emergentes para este archivo y probá de nuevo.");return;}
+  w.document.open();w.document.write(html);w.document.close();
+  alog("IMPRIMIR FICHA","SKU "+p.sku,"");
+}
+
+/* ---------- Aviso a Finanzas por correo ---------- */
+
+/* ---------- Exportar en formato ASU (planilla de ventas) ---------- */
+const ASU_TIT=["CPP (SKU) *", "GTIN*", "Descripción*", "Marca*", "Contenido Neto*", "Unidad de medida Contenido Neto*", "Pack de más de 1 articulo con GTIN", "Categoria GPC*", "País de Origen", "País de Envasado", "Presentación", "Peso Bruto", "Unidad de medida Peso Bruto", "Alto (cm) Unidad de venta", "Ancho (cm) Unidad de venta", "Profunidad (cm) Unidad de venta", "Tipo de IVA", "Es Venta al peso", "Es Peso Variable", "Fragil", "Se puede almacenar con Alimentos", "Tiene Empaque 1", "GTIN empaque 1", "Tipo de empaque 1", "Peso Bruto empaque 1", "Unidad de medida Peso Bruto empaque 1", "Alto (cm) empaque 1", "Ancho (cm) empaque 1", "Profunidad (cm) empaque 1", "Unidades de venta en empaque 1", "Tiene Empaque 2", "GTIN empaque 2", "Tipo de empaque 2", "Peso Bruto empaque 2", "Unidad de medida Peso Bruto empaque 2", "Alto (cm) empaque 2", "Ancho (cm) empaque 2", "Profunidad (cm) empaque 2", "Unidades de venta en empaque 2", "Tiene Palletizado", "Alto (cm) Palletizado", "Ancho (cm) Palletizado", "Profunidad (cm) Palletizado", "Bultos por camada", "Camadas por Pallet", "Lote minimo de compra", "Temperatura de Almacenamiento Envase Cerrado", "Temperatura de Almacenamiento Envase Abierto", "Lleva habilitación MSP", "Número de habilitación Ministerio Salud Pública", "Fecha de vencimiento de la habilitación MSP"];
+const ASU_DESC=["Código Interno Producto Proveedor de la unidad mínima de venta", "Código de identifcación del producto GS1. (código de barras)", "Descripción comprensible y utilizable del artículo comercial que pasa por el punto de venta. GS1 recomienda incluir, Nombre funcional, Marca, SubMarca, Variedad, empaque y contenido neto", "Nombre comercial del fabricante del producto", "Cantidad real del producto comercializado. CAMPO NUMÉRICO", "Unidad en que se mide el contenido neto del producto.", "Si se trata de un Pack compuesto por más de un producto codificado con GTIN, debe ingresar los GTIN que lo componen separados por coma. Deje este campo vacio si su producto no es Pack, Categoria y Marca se tomarán del primer GTIN ingresado", "Clasificacion Global del Producto", "País de procedencia del producto independientemente del país de envasado.", "Ingrese el país de envasado del producto.", "Tipo de Packaging del producto (Ej. Caja, sachet, funda)", "Peso neto del producto  mas el  peso del packaging de la unidad de venta. CAMPO NUMÉRICO", "Unidad en que se mide el peso bruto.", "El valor está en centimetros, se refiere a la posición del producto en góndola donde Alto corresponde al eje \"y\", Ancho al \"x\" y Profundidad al \"z\"", "El valor está en centimetros, se refiere a la posición del producto en góndola donde Alto corresponde al eje \"y\", Ancho al \"x\" y Profundidad al \"z\"", "El valor está en centimetros, se refiere a la posición del producto en góndola donde Alto corresponde al eje \"y\", Ancho al \"x\" y Profundidad al \"z\"", "Tipo de IVA que se le puede aplicar al producto.", "Seleccionar \"Si\" o \"No\"Si el producto se vende al peso o es por costo unitario", "Seleccionar \"Si\" o \"No\" si el producto es de peso variable", "Colocar \"Si\" o \"No\", en caso que aplique. Ej: huevos, vasos de vidrio, etc", "Colocar SI o NO. Se entiende por NO a aquellos Articulos que no pueden almacenarse junto a alimentos por riesgo de contaminación. Ej: insecticidas, detergentes, jabones.", "Si el producto cuenta con empaque, si pone que Si debe completar el resto de los datos del empaque_1", "Código de identifcación GS1 de este nivel. Puede tener 13 o 14 digitos (DUN-14 por ejemplo)", "Como describe el fabricante a este nivel de empaque: VALORES POSIBLES: Caja, Display, Inner Pack.", "Peso neto del producto  mas el  peso del packaging correspondiente. CAMPO NUMERICO", "Unidad en que se mide el peso bruto.", "Volumetría referida al empaque donde Alto corresponde al eje \"y\", Ancho al \"x\" y Profundidad al \"z\"", "Volumetría referida al empaque donde Alto corresponde al eje \"y\", Ancho al \"x\" y Profundidad al \"z\"", "Volumetría referida al empaque donde Alto corresponde al eje \"y\", Ancho al \"x\" y Profundidad al \"z\"", "Cantidad de unidades de venta contenidas en este empaque", "Si el producto cuenta con empaque, si pone que Si debe completar el resto de los datos del empaque_2", "Código de identifcación GS1 de este nivel. Puede tener 13 o 14 digitos (DUN-14 por ejemplo)", "Como describe el fabricante a este nivel de empaque: VALORES POSIBLES: Caja, Display, Inner Pack.", "Peso neto del producto  mas el  peso del packaging correspondiente. CAMPO NUMERICO", "Unidad en que se mide el peso bruto.", "Volumetría referida al empaque donde Alto corresponde al eje \"y\", Ancho al \"x\" y Profundidad al \"z\"", "Volumetría referida al empaque donde Alto corresponde al eje \"y\", Ancho al \"x\" y Profundidad al \"z\"", "Volumetría referida al empaque donde Alto corresponde al eje \"y\", Ancho al \"x\" y Profundidad al \"z\"", "Cantidad de unidades de venta contenidas en este empaque", "Si el producto está palletizado, si pone que Si debe completar el resto de los datos del palletizado", "Volumetría del pallet en estantería donde Alto corresponde al eje \"y\", Ancho al \"x\" y Profundidad al \"z\"", "Volumetría del pallet en estantería donde Alto corresponde al eje \"y\", Ancho al \"x\" y Profundidad al \"z\"", "Volumetría del pallet en estantería donde Alto corresponde al eje \"y\", Ancho al \"x\" y Profundidad al \"z\"", "Cantidad de bultos que hay en un piso o camada del pallet", "Cantidad de pisos o camadas que tiene el pallet", "Cantidad más pequeña que se puede comprar en una sola transacción o pedido.", "Temperatura en las que se debe almacenar el producto sin abrir, refrigerado, congelado o temperatura ambiente", "Temperatura en las que se debe almacenar el producto luego de abierto, refrigerado, congelado o temperatura ambiente", "Lleva habilitación MSP", "El número correspondiente a la habilitación MSP", "Fecha de vencimiento de la habilitación MSP"];
+function filaASU(p){
+  const cp=calc(p),g=v=>v==null?null:Math.round(v*1000*10)/10,tieneEmp=!!p.dun,tienePal=!!(p.porPiso&&p.estiba);
+  return [p.sku,p.ean,p.desc,p.marca,p.contenido,p.contenidoUM,p.packGtins,null,null,null,p.presentacion,
+    g(p.pesoPT),p.pesoPT!=null?"g":null,p.uH,p.uL,p.uA,null,null,null,null,null,
+    tieneEmp?"Si":"No",p.dun,tieneEmp?((p.tipoEmpaque==="Funda"?"Caja":p.tipoEmpaque)||"Caja"):null,g(cp.pesoCajaCerr),cp.pesoCajaCerr!=null?"g":null,p.cH,p.cL,p.cA,p.unx,
+    "No",null,null,null,null,null,null,null,null,
+    tienePal?"Si":"No",tienePal?cp.pHcm:null,tienePal?PALLET_L*100:null,tienePal?PALLET_A*100:null,p.porPiso,p.estiba,null,
+    p.tempCerrado,p.tempAbierto,p.msp,p.mspNum,p.mspVence];
+}
+async function exportarASU(l){
+  if(!window.XLSX){alert("Para exportar en formato ASU hace falta conexión a internet (se usa la librería de Excel). Probá de nuevo con conexión.");return;}
+  const filas=l.map(filaASU);
+  const ws=XLSX.utils.aoa_to_sheet([ASU_TIT,ASU_DESC,...filas]);
+  ws["!cols"]=ASU_TIT.map((t,i)=>({wch:i===2?45:Math.min(Math.max(String(t).length,10),28)}));
+  [0,1,22].forEach(c=>filas.forEach((f,i)=>{const r=XLSX.utils.encode_cell({r:i+2,c});if(ws[r]&&ws[r].v!=null){ws[r].t="s";ws[r].v=String(ws[r].v);}}));
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"DATOS");
+  const blob=new Blob([XLSX.write(wb,{bookType:"xlsx",type:"array"})]),arch=`formato_ASU_${new Date().toISOString().slice(0,10)}.xlsx`;
+  if(downloads){try{await downloads.save({filename:arch,data:blob});}catch(e){if(e&&e.code!=="declined")alert("No se pudo descargar el archivo.");}}
+  else{const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=arch;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+  if(yo)alog("EXPORTAR ASU","Productos",`${l.length} SKU`);
+}
+
+/* ---------- Exportar ---------- */
+const EXP=[["sku","SKU"],["desc","Descripción"],["grupo","Origen"],["cat","Categoría"],["vida","Vida útil (meses)"],["ean","EAN13"],["dun","DUN14"],["unx","Unidades por caja/funda"],["codCaja","Código de caja/funda"],
+  ["cL","Caja/funda largo (cm)"],["cA","Caja/funda ancho (cm)"],["cH","Caja/funda alto (cm)"],["porPiso","Cajas/fundas por piso"],["estiba","Estiba (pisos)"],["unPal","Unidades por pallet"],["cajasPal","Cajas/fundas por pallet"],
+  ["pLcm","Pallet largo (cm)"],["pAcm","Pallet ancho (cm)"],["pHcm","Pallet alto (cm)"],["pesoPT","Peso PT (kg)"],["uL","PT largo (cm)"],["uA","PT ancho (cm)"],["uH","PT alto (cm)"],["marca","Marca"],["contenido","Contenido neto"],["contenidoUM","Unidad contenido"],["presentacion","Presentación"],["tipoEmpaque","Tipo de empaque"],["pesoCaja","Peso caja/funda vacía (kg)"],
+  ["pesoCajaCerr","Peso caja/funda cerrada (kg)"],["sep","Separadores por pallet"],["pesoSep","Peso separadores (kg)"],["filmU","Film stretch por unidad (kg)"],["filmP","Film stretch por pallet (kg)"],["pesoPal","Peso pallet cerrado (kg)"],["pend","Datos pendientes"],["nota","Nota"]];
+async function exportar(l){
+  const filas=l.map(p=>{const o={...p,...calc(p),pLcm:PALLET_L*100,pAcm:PALLET_A*100,pend:faltantes(p).join(", ")};return EXP.map(([k])=>o[k]===undefined?null:o[k]);});
+  const nom=`datos_logisticos_${new Date().toISOString().slice(0,10)}`;let blob,arch;
+  if(window.XLSX){const ws=XLSX.utils.aoa_to_sheet([EXP.map(e=>e[1]),...filas]);ws["!cols"]=EXP.map(([k])=>({wch:k==="desc"?42:k==="pend"||k==="nota"?40:14}));
+    ["sku","ean","dun"].forEach(k=>{const c=EXP.findIndex(e=>e[0]===k);filas.forEach((f,i)=>{const r=XLSX.utils.encode_cell({r:i+1,c});if(ws[r]){ws[r].t="s";ws[r].v=String(ws[r].v);}});});
+    const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Datos logísticos");blob=new Blob([XLSX.write(wb,{bookType:"xlsx",type:"array"})]);arch=nom+".xlsx";}
+  else{const c=v=>{const s=typeof v==="number"?String(v).replace(".",","):String(v??"");return /[;"\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s;};
+    blob=new Blob(["\ufeff"+[EXP.map(e=>e[1]).join(";"),...filas.map(f=>f.map(c).join(";"))].join("\r\n")]);arch=nom+".csv";}
+  if(downloads){try{await downloads.save({filename:arch,data:blob});}catch(e){if(e&&e.code!=="declined")alert("No se pudo descargar el archivo.");}}
+  else{const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=arch;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+  if(yo)alog("EXPORTAR","Productos",`${l.length} SKU`);
+}
+
+
+/* ---------- Base local (cuando la app se abre descargada, fuera de Claude) ---------- */
+let modoLocal=false;
+const USUARIOS_INI=[{"id": "u_valanis", "username": "valanis", "name": "Viviana Alanis", "cargo": "Jefe de Logística", "area": "Logística", "role": "viewer", "sinClave": true, "active": true, "email": "viviana.alanis@vessena.com.uy"}, {"id": "u_ggaray", "username": "ggaray", "name": "Gisela Garay", "cargo": "Administrativo de Logística", "area": "Logística", "role": "viewer", "sinClave": true, "active": true, "email": "info@vessena.com.uy"}, {"id": "u_fferraro", "username": "fferraro", "name": "Fabricio Ferraro", "cargo": "Administrativo de Ventas", "area": "Ventas", "role": "viewer", "sinClave": true, "active": true, "email": "fabricio.ferraro@vessena.com.uy"}, {"id": "u_gnunez", "username": "gnunez", "name": "Gloria Nuñez", "cargo": "Calidad", "area": "Calidad", "role": "admin", "hash": "2575e689c8be3e5791233979e8d6e48ce25c6340f35e6a3a2f4db208a7ea93c1", "cambiarClave": true, "active": true, "email": null}, {"id": "u_cbarlocco", "username": "cbarlocco", "name": "Claudia Barlocco", "cargo": "Calidad", "area": "Calidad", "role": "admin", "hash": "2575e689c8be3e5791233979e8d6e48ce25c6340f35e6a3a2f4db208a7ea93c1", "cambiarClave": true, "active": true, "email": null}, {"id": "u_anunez", "username": "anunez", "name": "Antonella Nuñez", "cargo": "Calidad", "area": "Calidad", "role": "admin", "hash": "2575e689c8be3e5791233979e8d6e48ce25c6340f35e6a3a2f4db208a7ea93c1", "cambiarClave": true, "active": true, "email": null}];
+/* ---------- La ficha de un producto ---------- */
+const TIPO_DOC={ficha:"Ficha de alta (Excel)",certificado:"Certificado MSP del producto",seguridad:"Ficha de seguridad"};
+const docVigente=(p,tipo)=>(p.documentos||[]).find(d=>d.tipo===tipo&&d.vigente);
+
+function ficha(sku){
+  const p=productos.find(x=>x.sku===sku);if(!p)return;
+  const cp=calc(p),f=faltantes(p),m=(a,b,c)=>(a||b||c)?`${fmt(a)} × ${fmt(b)} × ${fmt(c)}`:null;
+  const falta=loQueFaltaParaVentas(p);
+  modal(`<div class="md-cab"><div><div class="sku">${esc(p.sku)}</div><div style="font-weight:600;margin-top:4px">${esc(p.desc)}</div>
+      <div class="pag-sub" style="margin:2px 0 0">${esc(p.grupo||"")}${p.cat?" · "+esc(p.cat):""} · vida útil ${fmt(p.vida)||"—"} meses ${p.activo===false?'· <span class="bg" style="background:var(--redL);color:var(--red)">Dado de baja</span>':""} ${sello(p)}</div></div>
+      <button class="btn sm" data-x>✕ Cerrar</button></div>
+
+    ${p.estado==="borrador"&&p.rechazo?`<div class="ctx-help warn">✍ Devuelta para corregir: ${esc(p.rechazo)}</div>`:""}
+    ${p.estado==="pendiente"?`<div class="ctx-help warn">⏳ Esperando que la revisen Antonella o Claudia. La armó ${esc(p.armadaPor||"—")} el ${fdt(p.armadaEn)}.</div>`:""}
+    ${p.estado==="aprobada"?`<div class="ctx-help success">✓ Ficha aprobada por ${esc(p.aprobadaPor||"—")} el ${fdt(p.aprobadaEn)}${p.enviadaFinanzasEn?` · enviada a Finanzas el ${fdt(p.enviadaFinanzasEn)}`:""}.</div>`:""}
+    ${p.enviadaVentasEn?`<div class="ctx-help success">📣 Aviso a Ventas y Logística enviado el ${fdt(p.enviadaVentasEn)}.</div>`:
+      falta.length?`<div class="ctx-help">Para avisarle a Ventas falta: ${esc(falta.join(", "))}.</div>`:""}
+
+    <div class="codigos"><div><span>EAN13 (unidad)</span><strong>${esc(p.ean)||"—"}</strong></div><div><span>DUN14 (bulto)</span><strong>${esc(p.dun)||"—"}</strong></div></div>
+    <div class="dos"><div><h3>Pallet</h3><div class="pallet">${dibujoPallet(p,cp)}</div>
+        <div class="ley"><div><b>${fmt(p.unPal)||"—"}</b>unidades</div><div><b>${fmt(cp.cajasPal)||"—"}</b>bultos</div><div><b>${fmt(p.estiba)||"—"}</b>pisos de ${fmt(p.porPiso)||"—"}</div><div><b>${cp.pesoPal?fmt(cp.pesoPal,1):"—"}</b>kg</div></div></div>
+      <div><h3>Unidad</h3><dl class="datos">${fila("Peso",fmt(p.pesoPT,3),"kg")}${fila("Medidas (cm)",m(p.uL,p.uA,p.uH))}${fila("Contenido neto",p.contenido!=null?fmt(p.contenido)+" "+(p.contenidoUM||""):null)}${fila("Presentación",p.presentacion)}</dl>
+        <h3>Caja o funda</h3><dl class="datos">${fila("Código",p.codCaja)}${fila("Unidades",fmt(p.unx))}${fila("Tipo de empaque",p.tipoEmpaque)}${fila("Medidas (cm)",m(p.cL,p.cA,p.cH))}${fila("Peso vacía",fmt(p.pesoCaja,3),"kg")}${fila("Peso cerrada",fmt(cp.pesoCajaCerr,2),"kg")}</dl>
+        <h3>Pallet</h3><dl class="datos">${fila("Medidas (cm)",cp.pH?`${fmt(PALLET_L*100)} × ${fmt(PALLET_A*100)} × ${fmt(cp.pHcm,1)}`:null)}${fila("Alto de la carga",fmt(cp.pHcargaCm,1),"cm")}${fila("Separadores",p.sep!=null?`${fmt(p.sep)} (${fmt(cp.pesoSep,2)} kg)`:null)}${fila("Film stretch",fmt(cp.filmP,3),"kg")}${fila("Peso total",fmt(cp.pesoPal,1),"kg")}</dl></div></div>
+
+    <h3>Clasificación para el alta (iDempiere)</h3>
+    <div class="dos"><dl class="datos">${fila("Categoría de producto",p.categoriaProducto)}${fila("Línea",p.linea)}${fila("Sublínea",p.sublinea)}${fila("Familia",p.familia)}${fila("Subfamilia",p.subfamilia)}${fila("Marca",p.marca)}</dl>
+      <dl class="datos">${fila("Unidad de medida",p.umBase)}${fila("UM destino",p.umDestino)}${fila("Tipo de producto",p.tipoProducto)}${fila("Categoría del impuesto",p.categoriaImpuesto)}${fila("Impuesto compra/venta",p.impuestoCV)}${fila("GTIN del pack",p.packGtins)}</dl></div>
+
+    <h3>Otros datos (formato ASU)</h3><div class="dos"><dl class="datos">${fila("Temp. envase cerrado",p.tempCerrado)}${fila("Temp. envase abierto",p.tempAbierto)}</dl>
+      <dl class="datos">${fila("Habilitación MSP",p.msp==="Si"?"Sí":p.msp==="No"?"No":null)}${fila("N.º habilitación",p.mspNum)}${fila("Vence",p.mspVence?fd(p.mspVence):null)}</dl></div>
+
+    <h3>Registros sanitarios</h3>
+    ${(p.registros||[]).length?`<table style="width:100%;margin-bottom:6px"><thead><tr><th>Habilitación</th><th>Emitida</th><th>Vence</th><th>Documento</th><th>Cargó</th>${esAdmin()?"<th></th>":""}</tr></thead><tbody>
+      ${(p.registros||[]).map(r=>`<tr><td><b>${esc(r.numero)}</b>${r.nota?`<br><span style="font-size:11.5px;color:var(--txS)">${esc(r.nota)}</span>`:""}</td><td>${r.emitido?fd(r.emitido):"—"}</td><td>${fd(r.vence)}</td>
+        <td>${r.documentoId?`<a href="${API}/documentos/${r.documentoId}" target="_blank" rel="noopener">📎 ver</a>`:"—"}</td>
+        <td style="font-size:11.5px;color:var(--txS)">${esc(r.cargadoPor||"")}<br>${fdt(r.cargadoEn)}</td>
+        ${esAdmin()?`<td><button class="btn sm" data-borrarreg="${r.id}">Borrar</button></td>`:""}</tr>`).join("")}</tbody></table>`
+      :`<p class="pag-sub">Sin registros sanitarios cargados.</p>`}
+    ${puedeEditar()?`<div class="acc" style="justify-content:flex-start;margin-bottom:12px"><button class="btn g" id="nuevoReg">🩺 Cargar habilitación MSP</button></div>`:""}
+
+    <h3>Documentos del producto</h3>
+    <div class="dos">${["ficha","certificado","seguridad"].map(t=>{const d=docVigente(p,t);
+      return `<div style="border:1px solid var(--brdL);border-radius:8px;padding:10px;margin-bottom:8px">
+        <div style="font-size:12px;font-weight:700;color:var(--txS);text-transform:uppercase;letter-spacing:.04em">${TIPO_DOC[t]}</div>
+        ${d?`<div style="margin-top:4px"><a href="${API}/documentos/${d.id}" target="_blank" rel="noopener">📎 ${esc(d.nombre)}</a>
+          <div style="font-size:11.5px;color:var(--txS)">${esc(d.subidoPor||"")} · ${fdt(d.subidoEn)}</div></div>`
+          :`<div class="pag-sub" style="margin-top:4px">Todavía no se subió.</div>`}
+        ${puedeEditar()&&t!=="ficha"?`<label class="btn g sm" style="margin-top:6px;cursor:pointer">📤 ${d?"Reemplazar":"Subir"}<input type="file" data-subir="${t}" hidden accept=".pdf,.doc,.docx,.xls,.xlsx"></label>`:""}</div>`;}).join("")}</div>
+
+    ${(()=>{const al=alertasK(p);return al.length?`<div class="ctx-help warn" style="display:block">⚠ Revisá:${al.map(x=>`<div style="margin-top:4px">${esc(x.t)}${puedeEditar()?` <button class="btn sm" data-des="${x.k}" style="margin-left:6px">Desestimar</button>`:""}</div>`).join("")}</div>`:"";})()}
+    ${f.length?`<div class="ctx-help warn" style="margin-top:14px;display:block">⚠ Datos pendientes: ${puedeEditar()?faltantesK(p).filter(([k])=>!(p.noAplica||[]).includes(k)).map(([k,t])=>`<span class="bg" style="background:var(--srf);color:var(--wrn);margin:2px">${esc(t)} <button class="btn sm" data-na="${k}" title="Marcar que este dato no corresponde a este producto">no aplica</button></span>`).join(" "):f.join(", ")}</div>`:""}
+    ${(p.noAplica||[]).length?`<p class="pag-sub" style="margin:4px 0 8px">No aplica: ${(p.noAplica).map(k=>`${esc(NOMBRE_CAMPO(k))}${puedeEditar()?` <a href="#" data-sina="${k}">(restaurar)</a>`:""}`).join(", ")}</p>`:""}
+    ${desestimadas(p).length?`<p class="pag-sub" style="margin:4px 0 8px">Alertas desestimadas: ${desestimadas(p).map(k=>`${esc(NOMBRE_ALERTA[k])}${puedeEditar()?` <a href="#" data-redes="${k}">(volver a mostrar)</a>`:""}`).join(", ")}</p>`:""}
+    ${p.nota?`<div class="ctx-help">📝 ${esc(p.nota)}</div>`:""}
+    ${p.actualizadoPor?`<p class="pag-sub">Última modificación: ${esc(p.actualizadoPor)} · ${fdt(p.actualizadoEn)}</p>`:""}
+
+    <div class="acc" style="margin-top:10px">
+      <button class="btn g" id="impr">🖨 Imprimir ficha / PDF</button>
+      <button class="btn g" id="xlsFicha">📥 Bajar la ficha de alta (Excel)</button></div>
+    ${puedeEditar()?`<div class="acc"><button class="btn ${p.activo===false?"g":"red"}" id="baja">${p.activo===false?"Reactivar":"Dar de baja"}</button>
+      <button class="btn g" id="dup">⧉ Duplicar</button><button class="btn" id="edit">✏ Editar</button></div>`:""}
+    <div class="acc">
+      ${puedeEditar()&&p.estado!=="pendiente"?`<button class="btn" id="aRevision" style="background:var(--wrn)">✍ ${p.estado==="aprobada"?"Volver a mandar a revisión":"Mandar a revisar"}</button>`:""}
+      ${puedeAprobar()&&p.estado==="pendiente"?`<button class="btn g" id="devolver">↩ Devolver para corregir</button>
+        <button class="btn" id="aprobar" style="background:var(--grn)">✓ Aprobar y enviar a Finanzas</button>`:""}
+    </div>`);
+
+  $("#impr").onclick=()=>imprimirFicha(p);
+  $("#xlsFicha").onclick=()=>bajarFichaAlta(p);
+  document.querySelectorAll("[data-des]").forEach(b=>b.onclick=()=>{const k=b.dataset.des;
+    if(!confirm(`¿Desestimar la alerta de ${NOMBRE_ALERTA[k]} para el SKU ${p.sku}? Deja de mostrarse y queda en el historial.`))return;
+    guardar({...p,alertasOk:[...new Set([...(p.alertasOk||[]),k])]},"DESESTIMAR ALERTA",p).then(cerrar);});
+  document.querySelectorAll("[data-redes]").forEach(a=>a.onclick=e=>{e.preventDefault();const k=a.dataset.redes;
+    const d={...p,alertasOk:(p.alertasOk||[]).filter(x=>x!==k)};if(k==="base")d.baseConfirmada=false;if(k==="alto")d.altoConfirmado=false;
+    guardar(d,"REACTIVAR ALERTA",p).then(cerrar);});
+  document.querySelectorAll("[data-na]").forEach(b=>b.onclick=()=>{const k=b.dataset.na;
+    if(!confirm(`¿Marcar "${NOMBRE_CAMPO(k)}" como "no aplica" para el SKU ${p.sku}? Deja de figurar como dato pendiente.`))return;
+    guardar({...p,noAplica:[...new Set([...(p.noAplica||[]),k])]},"NO APLICA",p).then(cerrar);});
+  document.querySelectorAll("[data-sina]").forEach(a=>a.onclick=e=>{e.preventDefault();const k=a.dataset.sina;
+    guardar({...p,noAplica:(p.noAplica||[]).filter(x=>x!==k)},"RESTAURAR DATO",p).then(cerrar);});
+  document.querySelectorAll("[data-borrarreg]").forEach(b=>b.onclick=()=>borrarRegistro(p,Number(b.dataset.borrarreg)));
+  document.querySelectorAll("[data-subir]").forEach(i=>i.onchange=e=>subirDocumento(p,i.dataset.subir,e.target.files[0]));
+  if($("#nuevoReg"))$("#nuevoReg").onclick=()=>formRegistro(p);
+  if(puedeEditar()){$("#edit").onclick=()=>formulario(p);$("#dup").onclick=()=>formulario(null,p);$("#baja").onclick=()=>baja(p);}
+  if($("#aRevision"))$("#aRevision").onclick=()=>mandarARevision(p);
+  if($("#aprobar"))$("#aprobar").onclick=()=>aprobarFicha(p);
+  if($("#devolver"))$("#devolver").onclick=()=>devolverFicha(p);
+}
+
+/** Lo que falta para que salga el aviso a Ventas (el servidor manda lo mismo). */
+function loQueFaltaParaVentas(p){
+  const falta=[];
+  if(p.estado!=="aprobada")falta.push("que se apruebe la ficha");
+  if(!docVigente(p,"certificado"))falta.push("el certificado MSP");
+  if(!docVigente(p,"seguridad"))falta.push("la ficha de seguridad");
+  return falta;
+}
+
+async function baja(p){
+  const b=p.activo!==false;
+  if(!confirm(b?`¿Dar de baja el SKU ${p.sku}? Deja de contar en el panel, pero no se borra.`:`¿Reactivar el SKU ${p.sku}?`))return;
+  try{const d=await api("/productos/"+encodeURIComponent(p.sku),{method:"PUT",body:JSON.stringify({activo:!b})});
+    reemplazar(d.producto);cerrar();}
+  catch(e){alert(e.message);}
+}
+
+/* ---------- El circuito ---------- */
+async function mandarARevision(p){
+  if(!confirm(`¿Mandar a revisar la ficha del SKU ${p.sku}?\n\nLa van a revisar Antonella o Claudia. Si la aprueban, sale sola a Finanzas.`))return;
+  try{
+    await generarYSubirFicha(p);
+    const d=await api(`/productos/${encodeURIComponent(p.sku)}/revision`,{method:"POST",body:"{}"});
+    reemplazar(d.producto);cerrar();aviso("Quedó esperando revisión.","success");
+  }catch(e){alert(e.message);}
+}
+async function aprobarFicha(p){
+  if(!confirm(`¿Aprobar la ficha del SKU ${p.sku}?\n\nAl aprobarla sale sola a Finanzas (Marianela) con la ficha de alta adjunta.`))return;
+  try{
+    await generarYSubirFicha(p);
+    const d=await api(`/productos/${encodeURIComponent(p.sku)}/aprobar`,{method:"POST",body:"{}"});
+    reemplazar(d.producto);cerrar();
+    const f=d.finanzas||{};
+    aviso(f.enviado?"Ficha aprobada y enviada a Finanzas."
+      :"Ficha aprobada, pero el correo a Finanzas no salió: "+(f.motivo||"revisá la configuración de correo."),f.enviado?"success":"warn");
+    if(d.ventas&&d.ventas.enviado)aviso("También salió el aviso a Ventas y Logística.","success");
+  }catch(e){alert(e.message);}
+}
+async function devolverFicha(p){
+  const motivo=prompt(`¿Qué hay que corregir en la ficha del SKU ${p.sku}?\n\nLo ve quien la armó.`);
+  if(motivo===null)return;
+  try{const d=await api(`/productos/${encodeURIComponent(p.sku)}/devolver`,{method:"POST",body:JSON.stringify({motivo})});
+    reemplazar(d.producto);cerrar();aviso("Devuelta para corregir.","warn");}
+  catch(e){alert(e.message);}
+}
+
+/* ---------- Documentos y registros sanitarios ---------- */
+async function subirDocumento(p,tipo,archivo){
+  if(!archivo)return;
+  if(!HAY_ALMACEN){alert("Falta configurar en el servidor dónde se guardan los documentos (DOC_DIR).");return;}
+  try{
+    const r=await subir(p.sku,tipo,archivo.name,archivo);
+    const d=await api("/productos/"+encodeURIComponent(p.sku));
+    reemplazar(d.producto);cerrar();ficha(p.sku);
+    if(r.ventas&&r.ventas.enviado)aviso("Ya estaba todo: salió el aviso a Ventas y Logística.","success");
+    else if(r.falta&&r.falta.length)aviso("Guardado. Para avisarle a Ventas falta: "+r.falta.join(", ")+".");
+  }catch(e){alert(e.message);}
+}
+function formRegistro(p){
+  modal(`<div class="md-cab"><h1 class="pag">🩺 Habilitación MSP — ${esc(p.sku)}</h1><button class="btn sm" data-x>✕ Cerrar</button></div>
+    <p class="pag-sub">Una renovación se carga como un registro nuevo: el anterior queda guardado con su documento.</p>
+    <div class="dos">
+      <label class="fd"><span>N.º de habilitación</span><input class="in" id="rNum" placeholder="Ej.: 12345/2026"></label>
+      <label class="fd"><span>Vence</span><input class="in" id="rVence" type="date" value="${hoyISO()}"></label>
+      <label class="fd"><span>Emitida (opcional)</span><input class="in" id="rEmit" type="date"></label>
+      <label class="fd"><span>Documento (PDF)</span><input class="in" id="rDoc" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"></label>
+    </div>
+    <label class="fd"><span>Nota (opcional)</span><input class="in" id="rNota" placeholder="Lo que haya que aclarar"></label>
+    <div class="acc"><button class="btn g" data-x>Cancelar</button><button class="btn" id="rGuardar">Guardar</button></div>`);
+  $("#rGuardar").onclick=async()=>{
+    const numero=$("#rNum").value.trim(), vence=$("#rVence").value, emitido=$("#rEmit").value;
+    if(!numero){alert("Falta el número de la habilitación.");return;}
+    if(!vence){alert("Falta la fecha de vencimiento.");return;}
+    const b=$("#rGuardar");b.disabled=true;b.textContent="Guardando…";
+    try{
+      let documentoId=null;
+      const f=$("#rDoc").files[0];
+      if(f){
+        if(!HAY_ALMACEN)throw new Error("Falta configurar en el servidor dónde se guardan los documentos (DOC_DIR).");
+        documentoId=(await subir(p.sku,"registro",f.name,f)).id;
+      }
+      const d=await api(`/productos/${encodeURIComponent(p.sku)}/registros`,
+        {method:"POST",body:JSON.stringify({numero,vence,emitido:emitido||null,nota:$("#rNota").value.trim(),documentoId})});
+      reemplazar(d.producto);cerrar();ficha(p.sku);
+    }catch(e){alert(e.message);b.disabled=false;b.textContent="Guardar";}
+  };
+}
+async function borrarRegistro(p,id){
+  if(!confirm("¿Borrar este registro sanitario? Se borra solo si se cargó por error: una renovación no reemplaza a la anterior."))return;
+  try{const d=await api("/registros/"+id,{method:"DELETE"});reemplazar(d.producto);cerrar();ficha(p.sku);}
+  catch(e){alert(e.message);}
+}
+
+/* ---------- La ficha de alta en Excel ----------
+   Son las dos hojas del formulario que usa Finanzas: "ALTA PRODUCTO", que es
+   lo que Marianela carga en iDempiere, y "FICHA SKU", que ademas lleva el
+   paletizado y las medidas en milimetros. Las celdas estan en el mismo lugar
+   que en el formulario de papel para que se lea igual. */
+const VENCIMIENTO_DIAS=p=>(p.vida!=null?Math.round(p.vida*365/12):null);
+const VOLUMEN_L=p=>{const u=String(p.contenidoUM||"").toLowerCase();
+  if(p.contenido==null)return null;
+  if(u==="ml"||u==="cc")return Math.round(p.contenido)/1000;
+  if(u==="l")return p.contenido;
+  return null;};
+const MM=v=>(v==null?null:Math.round(v*10));
+
+function hojaAlta(p){
+  const f=[];const poner=(fila,col,v)=>{f[fila]=f[fila]||[];f[fila][col]=v===undefined?null:v;};
+  poner(1,0,"ALTA DE PRODUCTO");
+  poner(3,0,"PRODUCTO");
+  poner(4,0,"CODIGO");poner(4,1,String(p.sku));
+  poner(5,0,"NOMBRE");poner(5,1,p.desc||"");
+  poner(6,0,"NOTAS");poner(6,1,p.nota||"");
+  poner(8,0,"Tipo de Producto");poner(8,1,p.tipoProducto||"");poner(8,3,'Marcar "ACTIVO"');
+  poner(9,0,"Categoría del Impuesto");poner(9,1,p.categoriaImpuesto||"");poner(9,3,'Marcar "Maneja lista de materiales"');
+  poner(10,0,"Impuesto Compra/Venta");poner(10,1,p.impuestoCV||"");
+  poner(11,0,"Categoría de Producto");poner(11,1,p.categoriaProducto||"");poner(11,3,"Marca");poner(11,4,p.marca||"");
+  poner(12,0,"Línea de Producto");poner(12,1,p.linea||"");poner(12,3,"Sublínea de Producto");poner(12,4,p.sublinea||"");
+  poner(13,0,"Familia de Producto");poner(13,1,p.familia||"");poner(13,3,"Subfamilia de Producto");poner(13,4,p.subfamilia||"");
+  poner(15,0,'Marcar "Se Compra" / "Se vende" / "Se almacena"');
+  poner(17,0,"Unidades de Medida");
+  poner(18,0,"Unidad de Medida");poner(18,1,p.umBase||"Unidad");
+  poner(19,0,"Unidades por Funda/Caja");poner(19,1,p.unx??null);poner(19,3,"Unidades por Pallet");poner(19,4,p.unPal??null);
+  poner(20,0,"Peso (unidad)");poner(20,1,p.pesoPT??null);poner(20,3,"Volumen (unidad)");poner(20,4,VOLUMEN_L(p));
+  poner(22,0,'NOTA: A MEDIDA QUE VAYAMOS TENIENDO EL PRODUCTO TERMINADO IR COMPLETANDO EL CAMPO "Peso"/"Volumen"');
+  poner(24,0,"CONVERSION UNIDAD DE MEDIDA");
+  poner(25,0,"UNIDAD DE MEDIDA");poner(25,1,p.umBase||"Unidad");
+  poner(26,0,"UM Destino");poner(26,1,p.umDestino||(p.unx?"CX"+p.unx:""));
+  poner(27,0,"Factor de Destino a Base");poner(27,1,p.unx??null);poner(27,3,"(cantidad por funda o por caja)");
+  poner(28,0,"TASA MULTIPLICADORA");poner(28,1,p.unx?Math.round(1/p.unx*1e7)/1e7:null);
+  poner(31,0,"OTROS");
+  poner(32,0,"CODIGO DE BARRAS EAN 13");poner(32,1,p.ean||"");poner(32,3,"(etiqueta)");
+  poner(33,0,"CODIGO DUN 14");poner(33,1,p.dun||"");poner(33,3,"(funda/caja)");
+  poner(34,0,"VENCIMIENTO");poner(34,1,VENCIMIENTO_DIAS(p));poner(34,3,"(dias)");
+  return f;
+}
+function hojaSku(p){
+  const cp=calc(p),f=[];const poner=(fila,col,v)=>{f[fila]=f[fila]||[];f[fila][col]=v===undefined?null:v;};
+  poner(1,0,"PRODUCTO");
+  poner(2,0,"CODIGO");poner(2,1,String(p.sku));
+  poner(3,0,"NOMBRE");poner(3,1,p.desc||"");
+  poner(4,0,"NOTAS");poner(4,1,p.nota||"");
+  poner(6,0,"Categoría de Producto");poner(6,1,p.categoriaProducto||"");poner(6,3,"Marca");poner(6,4,p.marca||"");
+  poner(7,0,"Línea de Producto");poner(7,1,p.linea||"");poner(7,3,"Sublínea de Producto");poner(7,4,p.sublinea||"");
+  poner(8,0,"Familia de Producto");poner(8,1,p.familia||"");poner(8,3,"Subfamilia de Producto");poner(8,4,p.subfamilia||"");
+  poner(11,0,"Unidades de Medida y paletizado");
+  poner(12,0,"Unidad de Medida");poner(12,1,p.umBase||"Unidad");
+  poner(13,0,"Unidades por Funda/Caja");poner(13,1,p.unx??null);poner(13,3,"Unidades por Pallet");poner(13,4,p.unPal??null);
+  poner(14,0,"Peso (unidad)");poner(14,1,p.pesoPT??null);poner(14,3,"Volumen (unidad)");poner(14,4,VOLUMEN_L(p));
+  poner(15,0,"Estiba");poner(15,1,p.estiba??null);
+  poner(16,0,"Cant. Fundas/Cajas por piso");poner(16,1,p.porPiso??null);
+  poner(17,0,"Cant. Fundas/Cajas por pallet");poner(17,1,cp.cajasPal??null);
+  poner(19,0,'NOTA: A MEDIDA QUE VAYAMOS TENIENDO EL PRODUCTO TERMINADO IR COMPLETANDO EL CAMPO "Peso"/"Volumen"');
+  poner(21,0,"CONVERSION UNIDAD DE MEDIDA");
+  poner(22,0,"UNIDAD DE MEDIDA");poner(22,1,p.umBase||"Unidad");
+  poner(23,0,"UM Destino");poner(23,1,p.umDestino||(p.unx?"CX"+p.unx:""));
+  poner(24,0,"Factor de Destino a Base");poner(24,1,p.unx??null);poner(24,3,"(cantidad por funda o por caja)");
+  poner(25,0,"TASA MULTIPLICADORA");poner(25,1,p.unx?Math.round(1/p.unx*1e7)/1e7:null);
+  poner(28,0,"OTROS");
+  poner(29,0,"CODIGO DE BARRAS EAN 13");poner(29,1,p.ean||"");poner(29,3,"(etiqueta)");
+  poner(30,0,"CODIGO DUN 14");poner(30,1,p.dun||"");poner(30,3,"(funda/caja)");
+  poner(31,0,"VENCIMIENTO");poner(31,1,VENCIMIENTO_DIAS(p));
+  poner(33,0,"MEDIDAS (mm)");
+  poner(34,1,"LARGO");poner(34,2,"ANCHO");poner(34,3,"ALTURA");
+  poner(35,0,"CAJA/FUNDA");poner(35,1,MM(p.cL));poner(35,2,MM(p.cA));poner(35,3,MM(p.cH));
+  poner(36,0,"UNID");poner(36,1,MM(p.uL));poner(36,2,MM(p.uA));poner(36,3,MM(p.uH));
+  // Lo que la ficha de papel no tenia y Finanzas pide igual
+  poner(38,0,"HABILITACION MSP");poner(38,1,p.msp||"");
+  poner(39,0,"N.º HABILITACION");poner(39,1,p.mspNum||"");
+  poner(40,0,"VENCE HABILITACION");poner(40,1,p.mspVence?String(p.mspVence).slice(0,10):"");
+  return f;
+}
+/** El Excel de la ficha de alta, como Blob. */
+function libroFicha(p){
+  if(!window.XLSX)throw new Error("Para armar la ficha en Excel hace falta conexión a internet (se usa la librería de Excel).");
+  const wb=XLSX.utils.book_new();
+  const h1=XLSX.utils.aoa_to_sheet(hojaAlta(p));h1["!cols"]=[{wch:30},{wch:42},{wch:4},{wch:28},{wch:22}];
+  const h2=XLSX.utils.aoa_to_sheet(hojaSku(p));h2["!cols"]=[{wch:30},{wch:42},{wch:12},{wch:28},{wch:22}];
+  XLSX.utils.book_append_sheet(wb,h1,"ALTA PRODUCTO");
+  XLSX.utils.book_append_sheet(wb,h2,"FICHA SKU");
+  return new Blob([XLSX.write(wb,{bookType:"xlsx",type:"array"})],
+    {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+}
+const nombreFicha=p=>`${p.sku} ${String(p.desc||"").replace(/[\\/:*?"<>|]/g,"").slice(0,60)}.xlsx`.trim();
+
+function bajarArchivo(blob,nombre){
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=nombre;
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+function bajarFichaAlta(p){
+  try{bajarArchivo(libroFicha(p),nombreFicha(p));}catch(e){alert(e.message);}
+}
+/** Arma la ficha y la deja guardada: es la que se le manda a Finanzas. */
+async function generarYSubirFicha(p){
+  if(!HAY_ALMACEN)throw new Error("Falta configurar en el servidor dónde se guardan los documentos (DOC_DIR): sin eso no se puede mandar la ficha.");
+  await subir(p.sku,"ficha",nombreFicha(p),libroFicha(p));
+}
+
+/* ---------- Inicio ---------- */
+(async function(){
+  $("#app").innerHTML=`<div class="login-bg"><div class="login-card"><div class="marca">Vessena S.A.</div><h1>Datos Logísticos PT</h1><p class="sub">Verificando tu sesión…</p></div></div>`;
+  let s;
+  try{s=await api("/sesion");}
+  catch(e){
+    $("#app").innerHTML=`<div class="login-bg"><div class="login-card"><div class="marca">Vessena S.A.</div><h1>Datos Logísticos PT</h1>
+      <p class="sub">No se pudo verificar tu sesión: ${esc(e.message)}</p>
+      <a class="btn" href="/?volver=${encodeURIComponent(location.pathname)}" style="justify-content:center">Entrar al portal</a></div></div>`;
+    return;
+  }
+  yo={nombre:s.nombre,rol:s.rol};PERMISOS=s.permisos||[];HAY_ALMACEN=!!s.hayAlmacen;DIAS_MSP=s.diasAvisoMsp||30;
+  await cargarProductos();
+  await cargarHistorial();
+  arrancar();
+})();
+</script>
+</body>
+</html>

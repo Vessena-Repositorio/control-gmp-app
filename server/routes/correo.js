@@ -26,6 +26,7 @@ import {
 import { revisarAvisosControlCambios, configControlCambios } from '../lib/avisos-control-cambios.js';
 import { revisarReporteFabuloso, configFabuloso } from '../lib/avisos-fabuloso.js';
 import { revisarProcesoPendientes, configProceso } from '../lib/avisos-proceso.js';
+import { revisarVencimientosMSP } from '../lib/avisos-datos-logisticos.js';
 import { revisarRotulosDelFinde } from '../lib/rotulos.js';
 import { revisarResumenAprobaciones } from '../lib/resumen-aprobaciones.js';
 import { revisarRecordatoriosLcc } from '../lib/avisos-lcc-envases.js';
@@ -145,6 +146,7 @@ endpointDeAviso('/avisos/auditorias/mes', revisarAuditoriasDelMes);
 endpointDeAviso('/avisos/auditorias/informes', revisarInformesPendientes);
 endpointDeAviso('/avisos/auditorias/autoinspecciones', revisarAutoinspecciones);
 endpointDeAviso('/avisos/control-en-proceso', revisarProcesoPendientes);
+endpointDeAviso('/avisos/datos-logisticos/msp', revisarVencimientosMSP);
 endpointDeAviso('/avisos/rotulos-fin-de-semana', revisarRotulosDelFinde);
 endpointDeAviso('/avisos/resumen-aprobaciones', revisarResumenAprobaciones);
 endpointDeAviso('/avisos/recordatorio-lcc', revisarRecordatoriosLcc);

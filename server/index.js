@@ -20,6 +20,7 @@ import { rutasEstandares } from './routes/estandares.js';
 import { rutasProductosEan } from './routes/productos-ean.js';
 import { rutasAuditorias } from './routes/auditorias.js';
 import { rutasControlDocumentos } from './routes/control-documentos.js';
+import { rutasDatosLogisticos } from './routes/datos-logisticos.js';
 import { rutasLecturaPublica } from './routes/lectura-publica.js';
 import { hayCompresion } from './lib/comprimir-foto.js';
 import { rutasCorreo } from './routes/correo.js';
@@ -34,6 +35,7 @@ import { permitirArchivo } from './lib/acceso.js';
 import { REPLICAS } from './lib/dominios.js';
 import { revisarAvisosCapa } from './lib/avisos.js';
 import { revisarVigenciasDocumentos, revisarTareasDocumentos, revisarVencimientosDocumentos, revisarResumenDocumentos } from './lib/avisos-documentos.js';
+import { revisarVencimientosMSP } from './lib/avisos-datos-logisticos.js';
 import { revisarAvisosEstabilidad } from './lib/avisos-estabilidad.js';
 import { revisarAvisosControlCambios } from './lib/avisos-control-cambios.js';
 import { revisarRecordatoriosPlan, revisarInduccionesPendientes } from './lib/avisos-capacitaciones.js';
@@ -152,6 +154,7 @@ app.use('/api/estandares', rutasEstandares);
 app.use('/api/productos-ean', rutasProductosEan);
 app.use('/api/auditorias', rutasAuditorias);
 app.use('/api/control-documentos', rutasControlDocumentos);
+app.use('/api/datos-logisticos', rutasDatosLogisticos);
 // Sin sesion: la usan los operarios desde el QR (el token es la llave).
 app.use('/api/lectura', rutasLecturaPublica);
 app.use('/api/envases-captura', rutasEnvasesCaptura);
@@ -280,6 +283,7 @@ function arrancar() {
                 ['documentos:tareas', revisarTareasDocumentos],
                 ['documentos:vencimientos', revisarVencimientosDocumentos],
                 ['documentos:resumen', revisarResumenDocumentos],
+                ['datos-logisticos:msp', revisarVencimientosMSP],
             ];
             const revisarAvisos = () => {
                 // Cada una falla por separado: que una se caiga no puede dejar
