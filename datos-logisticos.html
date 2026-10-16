@@ -431,6 +431,7 @@ function vPanel(){
       const d=await r.json().catch(()=>null);
       if(!r.ok||(d&&d.ok===false))throw new Error((d&&d.error)||("Error "+r.status));
       await estadoPlantilla();
+      LISTAS=null; await cargarListas();
       aviso("Plantilla guardada: desde ahora las fichas salen con ese formato.","success");
       refrescar();
     }catch(x){alert(x.message);}
@@ -606,10 +607,20 @@ function formulario(p,base){
     if(c.chk)return `<label class="chk ${c.cls||""}" style="margin:22px 0 10px"><input type="checkbox" name="${c.k}"${v?" checked":""}> ${c.t}</label>`;
     if(c.area)return `<label class="fd ${c.cls||""}"><span>${c.t}</span><textarea class="in" name="${c.k}" rows="2">${esc(v)}</textarea></label>`;
     return `<label class="fd ${c.cls||""}"><span>${c.t}</span><input class="in" name="${c.k}" ${c.tipo==="date"?'type="date"':""} ${c.n?'inputmode="decimal"':""} value="${esc(typeof v==="number"?String(v).replace(".",","):v)}" ${c.k==="sku"&&!nuevo?"readonly":""}></label>`;};
+  /* Los desplegables de clasificación salen de la plantilla de Finanzas: lo que
+     se elige acá es lo que la ficha acepta. Lo que ya estaba cargado no se
+     pierde aunque no figure en la lista. */
+  const CAMPOS_FORM=CAMPOS.map(c=>{
+    const l=LISTAS&&LISTAS[c.k];
+    if(!l)return c;
+    const v=p[c.k], op=["",...l];
+    if(v&&!op.includes(v))op.push(v);
+    return Object.assign({},c,{op});
+  });
   modal(`<div class="md-cab"><h1 class="pag">${nuevo?(copia?"Nuevo SKU (copia de "+esc(copia.copiaDe)+")":"Nuevo SKU"):"Editar SKU "+esc(p.sku)}</h1><button class="btn sm" data-x>✕ Cerrar</button></div>
     ${copia?`<div class="ctx-help success">⧉ Se copiaron los datos del SKU ${esc(copia.copiaDe)}. Completá el SKU nuevo, el EAN13 y el DUN14, y revisá la descripción y lo que cambie.</div>`:""}
     <div class="ctx-help">💡 Los cálculos (bultos por pallet, alto y peso del pallet) se actualizan mientras completás. Si el bulto va acostado, marcá la opción y el alto del pallet se calcula con el ancho.</div>
-    <form id="fm" novalidate><div class="grilla">${CAMPOS.map(campo).join("")}</div><div class="calc" id="calc"></div><div id="alertas"></div><ul class="errores" id="err"></ul>
+    <form id="fm" novalidate><div class="grilla">${CAMPOS_FORM.map(campo).join("")}</div><div class="calc" id="calc"></div><div id="alertas"></div><ul class="errores" id="err"></ul>
     <div class="acc"><button type="button" class="btn g" data-x>Cancelar</button><button type="submit" class="btn">${nuevo?"Crear SKU":"Guardar cambios"}</button></div></form>`);
   const f=$("#fm");
   const leer=()=>{const o={...p};CAMPOS.forEach(c=>{const el=f.elements[c.k];
@@ -1057,6 +1068,79 @@ function ponerCelda(xml,ref,valor){
   const nuevo=cuerpo.slice(0,donde)+celdaXml(ref,estilo,valor)+cuerpo.slice(donde);
   return xml.slice(0,f.index)+'<row r="'+fila+'"'+f[1]+'>'+nuevo+'</row>'+xml.slice(f.index+f[0].length);
 }
+/* Las listas de los desplegables salen de la propia plantilla: son las de la
+   hoja Parámetros, leídas de las validaciones del formulario. Así lo que se
+   elige en la app es exactamente lo que acepta la ficha, y si Finanzas cambia
+   una lista alcanza con subir la plantilla nueva (Claudia, 16/10/2026: lo que
+   se elige en la app tiene que quedar ya puesto en el Excel que recibe
+   Marianela). */
+let LISTAS=null;
+/** Celda del formulario -> campo de la app. */
+const CAMPO_DE_CELDA={B9:"tipoProducto",B10:"categoriaImpuesto",B11:"impuestoCV",
+  B12:"categoriaProducto",B13:"linea",E13:"sublinea",B14:"familia",B19:"umBase",B27:"umDestino"};
+
+function valoresDeHoja(xml,compartidas){
+  const doc=new DOMParser().parseFromString(xml,"application/xml");
+  const celdas={};
+  for(const c of doc.getElementsByTagName("c")){
+    const v=c.getElementsByTagName("v")[0], t=c.getAttribute("t");
+    let texto=null;
+    if(t==="inlineStr"){const i=c.getElementsByTagName("t")[0];texto=i?i.textContent:null;}
+    else if(v)texto=t==="s"?compartidas[Number(v.textContent)]:v.textContent;
+    if(texto!==null&&texto!=="")celdas[c.getAttribute("r")]=texto;
+  }
+  return celdas;
+}
+/** "Parámetros!$C$3:$C$7" -> ["C3","C4",…] */
+function refsDelRango(rango){
+  const m=/^(?:'?([^'!]+)'?!)?\$?([A-Z]+)\$?(\d+)(?::\$?([A-Z]+)\$?(\d+))?$/.exec(String(rango).trim());
+  if(!m)return [];
+  const refs=[];
+  const desde=Number(m[3]), hasta=m[5]?Number(m[5]):desde;
+  for(let f=desde;f<=hasta;f++)refs.push(m[2]+f);
+  return refs;
+}
+async function cargarListas(){
+  if(!window.JSZip||!PLANTILLA)return;
+  try{
+    const r=await fetch(API+"/plantilla",{credentials:"same-origin"});
+    if(!r.ok)return;
+    const zip=await JSZip.loadAsync(await r.arrayBuffer());
+    const libro=await zip.file("xl/workbook.xml").async("string");
+    const rels=await zip.file("xl/_rels/workbook.xml.rels").async("string");
+    const archivoDeHoja=nombre=>{
+      const id=new RegExp('<sheet[^>]*name="'+nombre+'"[^>]*r:id="([^"]+)"').exec(libro);
+      if(!id)return null;
+      const t=new RegExp('Id="'+id[1]+'"[^>]*Target="([^"]+)"').exec(rels);
+      return t?"xl/"+t[1].replace(/^\/?xl\//,""):null;
+    };
+    const ss=zip.file("xl/sharedStrings.xml");
+    const compartidas=ss?[...new DOMParser().parseFromString(await ss.async("string"),"application/xml")
+      .getElementsByTagName("si")].map(si=>[...si.getElementsByTagName("t")].map(t=>t.textContent).join("")):[];
+    const alta=archivoDeHoja("ALTA PRODUCTO"), parametros=archivoDeHoja("Parámetros");
+    if(!alta||!parametros)return;
+    const valores=valoresDeHoja(await zip.file(parametros).async("string"),compartidas);
+    const doc=new DOMParser().parseFromString(await zip.file(alta).async("string"),"application/xml");
+    const listas={};
+    const agregar=(celdas,rango)=>{
+      const vals=refsDelRango(rango).map(ref=>valores[ref]).filter(v=>v!==undefined&&v!=="");
+      if(!vals.length)return;
+      String(celdas).trim().split(/\s+/).forEach(ref=>{
+        const campo=CAMPO_DE_CELDA[ref.replace(/\$/g,"").split(":")[0]];
+        if(campo)listas[campo]=[...new Set(vals)];
+      });
+    };
+    // Las que Excel guarda en la extensión (las que apuntan a otra hoja)
+    for(const dv of doc.getElementsByTagNameNS("*","dataValidation")){
+      const f=dv.getElementsByTagNameNS("*","f")[0]||dv.getElementsByTagName("formula1")[0];
+      const sq=dv.getElementsByTagNameNS("*","sqref")[0];
+      const celdas=sq?sq.textContent:dv.getAttribute("sqref");
+      if(f&&celdas)agregar(celdas,f.textContent.replace(/^=/,""));
+    }
+    if(Object.keys(listas).length)LISTAS=listas;
+  }catch(e){console.error("No se pudieron leer las listas de la plantilla:",e);}
+}
+
 async function libroDesdePlantilla(p){
   if(!window.JSZip||!PLANTILLA)return null;
   const r=await fetch(API+"/plantilla",{credentials:"same-origin"});
@@ -1134,6 +1218,7 @@ async function generarYSubirFicha(p){
   await cargarProductos();
   await cargarHistorial();
   await estadoPlantilla();
+  await cargarListas();
   arrancar();
 })();
 </script>
