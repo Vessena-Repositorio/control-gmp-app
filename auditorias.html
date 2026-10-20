@@ -502,6 +502,30 @@ const exigeCapa=(cls,cfg)=>{const c=cfg.classifications.find(x=>x.id===cls);retu
 const estadoInicial=(cls,cfg)=>exigeCapa(cls,cfg)
   ? (cfg.statuses?.[0]||"Abierto")
   : ((cfg.statuses||[]).find(s=>/no\s*aplica/i.test(s))||"No aplica");
+/* Un hallazgo y sus planes de acción cuentan la misma historia: el hallazgo
+   está cerrado cuando no le queda ningún plan por cumplir. Antes había que
+   acordarse de tocar las dos pantallas y quedaban diciendo cosas distintas.
+   Ahora el estado del hallazgo lo deciden sus planes, y sólo se recalcula
+   cuando alguno cambia de estado: si alguien reabre el hallazgo a mano, no se
+   lo vuelve a cerrar por editarle la descripción a una acción. */
+const RESUELTOS=["Cerrado","No aplica","Evaluada — No implementar"];
+const estaResuelto=(s)=>RESUELTOS.includes(s);
+/* Al dar por cerrado un hallazgo que todavía tiene planes abiertos, se ofrece
+   cerrarlos: si no, las dos pantallas quedan diciendo cosas distintas. */
+function cerrarPlanesDe(f,estado,acciones,setActions,setLogs,usuario){
+  const abiertas=(acciones||[]).filter(a=>a.findingId===f.id&&!estaResuelto(a.status));
+  if(!abiertas.length||!setActions)return;
+  if(!confirm(`${f.code} queda en "${estado}" y tiene ${abiertas.length} plan(es) de acción sin cerrar:\n${abiertas.map(a=>"• "+a.code).join("\n")}\n\n¿Cerrarlos también?`))return;
+  setActions(acciones.map(a=>(a.findingId===f.id&&!estaResuelto(a.status))?{...a,status:estado}:a));
+  alog(setLogs,"CAMBIO ESTADO","Acción",`${abiertas.map(a=>a.code).join(", ")} → ${estado} (al cerrar ${f.code})`,usuario);
+}
+function estadoSegunAcciones(hallazgo,suyas){
+  if(!suyas.length)return hallazgo.status;            // sin plan: lo maneja la persona
+  if(suyas.every(a=>estaResuelto(a.status)))return "Cerrado";
+  if(estaResuelto(hallazgo.status))return "En proceso";          // se reabrió alguno
+  if(hallazgo.status==="Abierto"&&suyas.some(a=>a.status==="En proceso"))return "En proceso";
+  return hallazgo.status;
+}
 function SBg({s}){const m={Abierto:[K.red,K.redL],"En proceso":[K.wrn,K.wrnL],Cerrado:[K.grn,K.grnL],Vencido:["#991B1B","#FEE2E2"],"No aplica":["#6B7280","#F3F4F6"],"Evaluada — No implementar":["#7C3AED","#F5F3FF"]};const[c,b]=m[s]||[K.txM,"#F1F5F9"];return <Bg color={c} bg={b}>{s}</Bg>;}
 function PhaseBg({phase,ext}){const p=phaseOf(phase,ext);return <span className="aud-phase" style={{color:p.color,background:p.bg}}>{p.icon} {p.label}</span>;}
 function Fd({l,children}){return <div style={{marginBottom:12}}><label style={sL}>{l}</label>{children}</div>;}
@@ -1512,8 +1536,13 @@ function AuditDetail({audit,data,cfg,canEdit,onClose,onSave,onDelete}){
     {edHal&&<FichaHallazgo hallazgo={edHal} cfg={cfg} auditoriaFija={`${fm.code} — ${fm.name||""}`}
       onClose={()=>sEdHal(null)}
       onGuardar={(nf)=>{
+        const pv=(data.findings||[]).find(x=>x.id===nf.id);
         data.setFindings(p=>p.map(x=>x.id===nf.id?{...x,...nf}:x));
-        alog(data.setLogs,"EDITAR","Hallazgo",nf.code,data.currentUser?.name);
+        if(pv&&pv.status!==nf.status){
+          alog(data.setLogs,"CAMBIO ESTADO","Hallazgo",`${nf.code}: ${pv.status} → ${nf.status}`,data.currentUser?.name);
+          if(estaResuelto(nf.status)&&!estaResuelto(pv.status))
+            cerrarPlanesDe(nf,nf.status,data.actions,data.setActions,data.setLogs,data.currentUser?.name);
+        }else alog(data.setLogs,"EDITAR","Hallazgo",nf.code,data.currentUser?.name);
         sEdHal(null);
       }}
       onEliminar={(nf)=>{
@@ -1596,7 +1625,8 @@ function AuditList({data,cfg,canEdit,openAudit}){
 /* ── HALLAZGOS ── */
 function Findings({data,cfg,canEdit}){const{findings,setFindings,audits,setLogs,currentUser}=data;const[sh,sSh]=useState(false);const[ed,sEd]=useState(null);const[fc,sFc]=useState("Todos");
   const bl={auditId:"",clauseRef:"",classification:cfg.classifications[0]?.id||"",description:"",evidence:"",capaType:cfg.capaTypes[0]||"",rootCause:"",status:cfg.statuses[0]||"Abierto"};const[fm,sFm]=useState(bl);
-  const save=(fm)=>{if(ed){const pv=findings.find(x=>x.id===ed.id);setFindings(p=>p.map(x=>x.id===ed.id?{...x,...fm}:x));if(pv.status!==fm.status)alog(setLogs,"CAMBIO ESTADO","Hallazgo",`${ed.code}: ${pv.status} → ${fm.status}`,currentUser.name);else alog(setLogs,"EDITAR","Hallazgo",ed.code,currentUser.name);}else{const allF=data.allFindings||findings;const code=`HAL-${String(allF.length+1).padStart(4,"0")}`;const audit=data.audits.find(a=>a.id===fm.auditId);setFindings(p=>[...p,{...fm,id:gid(),code,year:audit?.year||2026,createdAt:new Date().toISOString()}]);alog(setLogs,"CREAR","Hallazgo",code,currentUser.name);}sSh(false);sEd(null);};
+  const cerrarSusPlanes=(f,estado)=>cerrarPlanesDe(f,estado,data.allActions||data.actions||[],data.setActions,setLogs,currentUser.name);
+  const save=(fm)=>{if(ed){const pv=findings.find(x=>x.id===ed.id);setFindings(p=>p.map(x=>x.id===ed.id?{...x,...fm}:x));if(pv.status!==fm.status){alog(setLogs,"CAMBIO ESTADO","Hallazgo",`${ed.code}: ${pv.status} → ${fm.status}`,currentUser.name);if(estaResuelto(fm.status)&&!estaResuelto(pv.status))cerrarSusPlanes(ed,fm.status);}else alog(setLogs,"EDITAR","Hallazgo",ed.code,currentUser.name);}else{const allF=data.allFindings||findings;const code=`HAL-${String(allF.length+1).padStart(4,"0")}`;const audit=data.audits.find(a=>a.id===fm.auditId);setFindings(p=>[...p,{...fm,id:gid(),code,year:audit?.year||2026,createdAt:new Date().toISOString()}]);alog(setLogs,"CREAR","Hallazgo",code,currentUser.name);}sSh(false);sEd(null);};
   const open=f=>{sFm(f||bl);sEd(f);sSh(true);};const cls=cfg.classifications.find(x=>x.id===fm.classification);
   const[fiAud,sFiAud]=useState("Todos");
   const auditNames=[...new Set(findings.map(f=>{const aud=audits.find(a=>a.id===f.auditId);return aud?aud.name:"Sin auditoría";}).filter(Boolean))];
@@ -1629,7 +1659,29 @@ function Findings({data,cfg,canEdit}){const{findings,setFindings,audits,setLogs,
 /* ── ACCIONES ── */
 function Actions({data,cfg,canEdit}){const{actions,setActions,findings,setLogs,currentUser}=data;const[sh,sSh]=useState(false);const[ed,sEd]=useState(null);
   const bl={findingId:"",description:"",responsible:"",responsibleEmail:"",dueDate:"",status:cfg.statuses[0]||"Abierto",verification:"",effectiveness:"",followupResp:"",followupEmail:""};const[fm,sFm]=useState(bl);
-  const save=()=>{if(ed){const pv=actions.find(a=>a.id===ed.id);setActions(p=>p.map(a=>a.id===ed.id?{...a,...fm}:a));if(pv.status!==fm.status)alog(setLogs,"CAMBIO ESTADO","Acción",`${ed.code}: ${pv.status} → ${fm.status}`,currentUser.name);else alog(setLogs,"EDITAR","Acción",ed.code,currentUser.name);}else{const allA=data.allActions||actions;const code=`ACC-${String(allA.length+1).padStart(4,"0")}`;const fin=findings.find(f=>f.id===fm.findingId);setActions(p=>[...p,{...fm,id:gid(),code,year:fin?.year||2026,createdAt:new Date().toISOString()}]);alog(setLogs,"CREAR","Acción",code,currentUser.name);}sSh(false);sEd(null);};
+  /* El estado del hallazgo sale de sus planes: al cerrar el último queda
+     cerrado, y al reabrir uno vuelve a estar en proceso. Se recalcula sobre la
+     lista completa, no sobre la del año que se está mirando. */
+  const sincronizar=(todas,fId)=>{
+    if(!fId||!data.setFindings)return;
+    const f=(data.allFindings||findings).find(x=>x.id===fId);
+    if(!f)return;
+    const nuevo=estadoSegunAcciones(f,todas.filter(a=>a.findingId===fId));
+    if(nuevo===f.status)return;
+    data.setFindings(p=>p.map(x=>x.id===fId?{...x,status:nuevo}:x));
+    alog(setLogs,"CAMBIO ESTADO","Hallazgo",`${f.code}: ${f.status} → ${nuevo} (por sus planes de acción)`,currentUser.name);
+  };
+  const save=()=>{const base=data.allActions||actions;
+    if(ed){const pv=actions.find(a=>a.id===ed.id);const todas=base.map(a=>a.id===ed.id?{...a,...fm}:a);setActions(todas);
+      if(pv.status!==fm.status){alog(setLogs,"CAMBIO ESTADO","Acción",`${ed.code}: ${pv.status} → ${fm.status}`,currentUser.name);
+        sincronizar(todas,fm.findingId);
+        if(pv.findingId&&pv.findingId!==fm.findingId)sincronizar(todas,pv.findingId);
+      }else alog(setLogs,"EDITAR","Acción",ed.code,currentUser.name);
+    }else{const code=`ACC-${String(base.length+1).padStart(4,"0")}`;const fin=findings.find(f=>f.id===fm.findingId);
+      const nueva={...fm,id:gid(),code,year:fin?.year||2026,createdAt:new Date().toISOString()};
+      const todas=[...base,nueva];setActions(todas);alog(setLogs,"CREAR","Acción",code,currentUser.name);
+      sincronizar(todas,nueva.findingId);
+    }sSh(false);sEd(null);};
   const autoD=fId=>{const fn=findings.find(x=>x.id===fId);if(fn){const c=cfg.classifications.find(x=>x.id===fn.classification);if(c&&c.deadline>0)sFm(p=>({...p,dueDate:addMo(fn.createdAt||tdy(),c.deadline)}));}};
   const open=a=>{sFm(a||bl);sEd(a);sSh(true);};const lk=findings.find(x=>x.id===fm.findingId);const cls=lk?cfg.classifications.find(x=>x.id===lk.classification):null;
   const daysLeft=(d)=>{if(!d)return 999;return Math.ceil((new Date(d)-new Date())/86400000);};
@@ -1707,7 +1759,7 @@ function Trail({logs}){const[q,sQ]=useState("");const ls=q?logs.filter(l=>Object
 /* ── REPORTES ── */
 function Reports({data,cfg}){const{audits,findings,actions}=data;
   const yr=data.year||2026;
-  const resolved=["Cerrado","No aplica","Evaluada — No implementar"];
+  const resolved=RESUELTOS;
   const planificadas=audits.length;
   const ejecutadas=audits.filter(a=>{const i=phaseIdx(a.phase,isExternal(a));return i>=2;}).length;
   const conInforme=audits.filter(a=>{const i=phaseIdx(a.phase,isExternal(a));return i>=3;}).length;
@@ -2319,8 +2371,8 @@ function App(){
       </div>}
       {pg==="prog"&&<ProgramaIntegrado data={yData} cfg={cfg} canEdit={canEdit} openAudit={openAudit}/>}
       {pg==="aud"&&<AuditList data={{...yData,setAudits,setLogs}} cfg={cfg} canEdit={canEdit} openAudit={(a)=>sAudDet(a)}/>}
-      {pg==="hal"&&<Findings data={{...yData,setFindings,setLogs}} cfg={cfg} canEdit={canEdit}/>}
-      {pg==="acc"&&<Actions data={{...yData,setActions,setLogs}} cfg={cfg} canEdit={canEdit}/>}
+      {pg==="hal"&&<Findings data={{...yData,setFindings,setActions,setLogs}} cfg={cfg} canEdit={canEdit}/>}
+      {pg==="acc"&&<Actions data={{...yData,setActions,setFindings,setLogs}} cfg={cfg} canEdit={canEdit}/>}
       {pg==="autoinsp"&&<Autoinspecciones data={{...yData,setLogs,currentUser:cu}} cfg={cfg} canEdit={canEdit}/>}
       {pg==="trail"&&<Trail logs={logs}/>}
       {pg==="rep"&&<Reports data={yData} cfg={cfg}/>}
