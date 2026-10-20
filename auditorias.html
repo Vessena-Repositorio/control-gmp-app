@@ -521,6 +521,44 @@ function cerrarPlanesDe(f,estado,acciones,setActions,setLogs,usuario){
   setActions(acciones.map(a=>(a.findingId===f.id&&!estaResuelto(a.status))?{...a,status:estado}:a));
   alog(setLogs,"CAMBIO ESTADO","Acción",`${abiertas.map(a=>a.code).join(", ")} → ${estado} (al cerrar ${f.code})`,usuario);
 }
+/* La plantilla CAPA viaja al auditado y vuelve completada. Va con punto y
+   coma, que es lo que espera el Excel en español, y con la línea "sep=;"
+   adelante: sin ella el Excel que tiene la coma como separador de listas mete
+   todo el renglón en una sola columna. Al importar se saltea esa línea. */
+const COLS_CAPA=["CODIGO","CLASIFICACION","DESCRIPCION","CAUSA_RAIZ",
+  "CORRECCION","CORRECCION_RESPONSABLE","CORRECCION_FECHA",
+  "ACCION_CORRECTIVA","AC_RESPONSABLE","AC_FECHA_IMPL","AC_FECHA_REALIZADO",
+  "AC_EVIDENCIA","AC_ESTADO","VERIF_EFICACIA_METODO","VERIF_EFICACIA_FECHA",
+  "VERIF_EFICACIA_RESPONSABLE","RESULTADO"];
+/* El punto y coma y los saltos de línea de una descripción romperían el
+   renglón: se reemplazan por espacios, como se venía haciendo. */
+const celdaCSV=(v)=>String(v??"").replace(/;/g,",").replace(/[\r\n]+/g," ").replace(/\s{2,}/g," ").trim();
+function bajarCSV(nombre,filas){
+  const texto="sep=;\r\n"+filas.map(f=>f.map(celdaCSV).join(";")).join("\r\n")+"\r\n";
+  const b=new Blob(["﻿"+texto],{type:"text/csv;charset=utf-8"});
+  const u=URL.createObjectURL(b);const a=document.createElement("a");
+  a.href=u;a.download=nombre;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);
+}
+/* Las fechas vuelven como las escribe el Excel -1/12/2026-, no como las
+   guarda la app. Si vienen así se pasan a ISO; si ya vienen en ISO o en
+   cualquier otra forma, se dejan como están. */
+const fechaCSV=(v)=>{
+  const s=String(v||"").trim();
+  const m=s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+  if(!m)return s;
+  const a=m[3].length===2?"20"+m[3]:m[3];
+  return `${a}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`;
+};
+/* Un renglón por hallazgo, en el orden de COLS_CAPA. Lo que ya está cargado
+   en el plan de acción viaja completado; el resto lo llena el auditado. */
+function filaCAPA(f,cfg,acc){
+  const cl=cfg.classifications.find(x=>x.id===f.classification);
+  return [f.code,cl?.label||"",f.description||"",f.rootCause||"",
+    "","","",
+    acc?.description||"",acc?.responsible||"",acc?.dueDate||"","",
+    acc?.verification||"",acc?.status||"",acc?.effectiveness||"","",
+    acc?.followupResp||"",""];
+}
 function estadoSegunAcciones(hallazgo,suyas){
   if(!suyas.length)return hallazgo.status;            // sin plan: lo maneja la persona
   if(suyas.every(a=>estaResuelto(a.status)))return "Cerrado";
@@ -1364,8 +1402,8 @@ function AuditDetail({audit,data,cfg,canEdit,onClose,onSave,onDelete}){
               alog(data.setLogs,"CAMBIO ESTADO","Hallazgo",`${fm.code}: ${abiertas.length} observaciones a No aplica`,data.currentUser?.name);
             }}>Observaciones → No aplica ({abiertas.length})</button>;
           })()}
-          {canEdit&&<button style={{...sB("g"),color:"#0891B2"}} onClick={()=>{const afCapa=af.filter(f=>exigeCapa(f.classification,cfg));const h="CODIGO;CLASIFICACION;DESCRIPCION;CAUSA_RAIZ;CORRECCION;CORRECCION_RESPONSABLE;CORRECCION_FECHA;ACCION_CORRECTIVA;AC_RESPONSABLE;AC_FECHA_IMPL;AC_FECHA_REALIZADO;AC_EVIDENCIA;AC_ESTADO;VERIF_EFICACIA_METODO;VERIF_EFICACIA_FECHA;VERIF_EFICACIA_RESPONSABLE;RESULTADO\n";const r=afCapa.length>0?afCapa.map(f=>{const cl=cfg.classifications.find(x=>x.id===f.classification);const existAcc=data.actions.find(a=>a.findingId===f.id);return`${f.code};${cl?.label||""};${f.description.replace(/;/g,",").replace(/\n/g," ")};${f.rootCause||""};${existAcc?"":""};;${existAcc?"":""};;${existAcc?.dueDate||""};;${existAcc?"":""};;${existAcc?.responsible||""};${existAcc?.status||""};;;;;`;}).join("\n"):";;;;;;;;;;;;;;;;";const b=new Blob(["\uFEFF"+h+r],{type:"text/csv;charset=utf-8"});const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=`Plantilla_CAPA_${fm.code}.csv`;a.click();}}>📥 Plantilla CAPA ({af.filter(f=>exigeCapa(f.classification,cfg)).length})</button>}
-          {canEdit&&<label style={{...sB("g"),color:K.grn,cursor:"pointer"}}>📤 Importar CAPA<input type="file" accept=".csv,.txt" style={{display:"none"}} onChange={e=>{const file=e.target.files[0];if(!file)return;const rd=new FileReader();rd.onload=ev=>{try{const ls=ev.target.result.split("\n").filter(l=>l.trim());if(ls.length<2)return alert("Vacío");const hd=ls[0].split(";").map(h=>h.trim());
+          {canEdit&&<button style={{...sB("g"),color:"#0891B2"}} onClick={()=>{const afCapa=af.filter(f=>exigeCapa(f.classification,cfg));const filas=[COLS_CAPA,...(afCapa.length?afCapa.map(f=>filaCAPA(f,cfg,data.actions.find(a=>a.findingId===f.id))):[COLS_CAPA.map(()=>"")])];bajarCSV(`Plantilla_CAPA_${fm.code}.csv`,filas);}}>📥 Plantilla CAPA ({af.filter(f=>exigeCapa(f.classification,cfg)).length})</button>}
+          {canEdit&&<label style={{...sB("g"),color:K.grn,cursor:"pointer"}}>📤 Importar CAPA<input type="file" accept=".csv,.txt" style={{display:"none"}} onChange={e=>{const file=e.target.files[0];if(!file)return;const rd=new FileReader();rd.onload=ev=>{try{const ls=ev.target.result.split(/\r?\n/).filter(l=>l.trim());if(/^sep=/i.test(ls[0]))ls.shift();if(ls.length<2)return alert("Vacío");const hd=ls[0].split(";").map(h=>h.trim());
             const iC=hd.indexOf("CODIGO"),iCa=hd.indexOf("CAUSA_RAIZ"),iAC=hd.indexOf("ACCION_CORRECTIVA"),iAR=hd.indexOf("AC_RESPONSABLE"),iAF=hd.indexOf("AC_FECHA_IMPL"),iCo=hd.indexOf("CORRECCION"),iCR=hd.indexOf("CORRECCION_RESPONSABLE"),iVM=hd.indexOf("VERIF_EFICACIA_METODO"),iVF=hd.indexOf("VERIF_EFICACIA_FECHA"),iVR=hd.indexOf("VERIF_EFICACIA_RESPONSABLE"),iAFR=hd.indexOf("AC_FECHA_REALIZADO"),iAEV=hd.indexOf("AC_EVIDENCIA"),iAST=hd.indexOf("AC_ESTADO"),iRES=hd.indexOf("RESULTADO");
             let uF=0,cA=0,uA=0;const nA=[];
             for(let i=1;i<ls.length;i++){const c=ls[i].split(";").map(x=>x.trim());const code=c[iC]||"";const fin=data.findings.find(f=>f.code===code);if(!fin)continue;
@@ -1376,8 +1414,8 @@ function AuditDetail({audit,data,cfg,canEdit,onClose,onSave,onDelete}){
                 const updates={};
                 if(ac&&ac.toLowerCase()!=="no aplica")updates.description=desc;
                 if(c[iAR])updates.responsible=c[iAR];
-                if(c[iAF])updates.dueDate=c[iAF];
-                if(iAFR>=0&&c[iAFR])updates.completedDate=c[iAFR];
+                if(c[iAF])updates.dueDate=fechaCSV(c[iAF]);
+                if(iAFR>=0&&c[iAFR])updates.completedDate=fechaCSV(c[iAFR]);
                 if(iAEV>=0&&c[iAEV])updates.verification=c[iAEV];
                 if(iAST>=0&&c[iAST]&&c[iAST].toLowerCase()!=="")updates.status=c[iAST];
                 if(c[iVM])updates.effectiveness=(c[iVM]||"")+(c[iVR]?" — "+c[iVR]:"")+(c[iVF]?" — "+c[iVF]:"");
@@ -1385,7 +1423,7 @@ function AuditDetail({audit,data,cfg,canEdit,onClose,onSave,onDelete}){
                 if(iRES>=0&&c[iRES])updates.resultNote=c[iRES];
                 if(Object.keys(updates).length>0){data.setActions(p=>p.map(a=>a.id===existAcc.id?{...a,...updates}:a));uA++;}
               }else if(ac&&ac.toLowerCase()!=="no aplica"){
-                nA.push({id:gid(),code:`ACC-${String(data.actions.length+nA.length+1).padStart(4,"0")}`,year:fin.year||2026,findingId:fin.id,description:desc,responsible:c[iAR]||"",dueDate:c[iAF]||"",status:iAST>=0&&c[iAST]?c[iAST]:"En proceso",verification:iAEV>=0&&c[iAEV]?c[iAEV]:"",effectiveness:(c[iVM]||"")+(c[iVR]?" — "+c[iVR]:""),followupResp:c[iVR]||"",createdAt:new Date().toISOString()});cA++;
+                nA.push({id:gid(),code:`ACC-${String(data.actions.length+nA.length+1).padStart(4,"0")}`,year:fin.year||2026,findingId:fin.id,description:desc,responsible:c[iAR]||"",dueDate:fechaCSV(c[iAF]),status:iAST>=0&&c[iAST]?c[iAST]:"En proceso",verification:iAEV>=0&&c[iAEV]?c[iAEV]:"",effectiveness:(c[iVM]||"")+(c[iVR]?" — "+c[iVR]:""),followupResp:c[iVR]||"",createdAt:new Date().toISOString()});cA++;
               }else if(co&&co.toLowerCase()!=="no aplica"){
                 nA.push({id:gid(),code:`ACC-${String(data.actions.length+nA.length+1).padStart(4,"0")}`,year:fin.year||2026,findingId:fin.id,description:"Corrección: "+co,responsible:c[iCR]||"",dueDate:"",status:"En proceso",verification:"",effectiveness:c[iVM]||"",followupResp:c[iVR]||"",createdAt:new Date().toISOString()});cA++;
               }
