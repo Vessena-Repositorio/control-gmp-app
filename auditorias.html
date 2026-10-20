@@ -450,9 +450,9 @@ async function apiAud(ruta,op){
   if(!r.ok||d.ok===false){const e=new Error(d.error||('error '+r.status));e.status=r.status;e.actual=d.actual;throw e;}
   return d;
 }
-async function guardarColeccion(col,datos){
+async function guardarColeccion(col,datos,detalle){
   try{
-    const d=await apiAud('/coleccion/'+col,{method:'PUT',body:JSON.stringify({version:SRV.vers[col],datos})});
+    const d=await apiAud('/coleccion/'+col,{method:'PUT',body:JSON.stringify({version:SRV.vers[col],datos,detalle})});
     SRV.vers[col]=d.version; SRV.datos[col]=datos;
   }catch(e){
     if(e.status===409){
@@ -471,8 +471,10 @@ function useLS(k,i){
   // sin tener que volver a importar nada.
   if(col==='config'&&inicial&&typeof inicial==='object'&&!Array.isArray(inicial))inicial={...i,...inicial};
   const[v,sV]=useState(inicial);
-  const s=useCallback(fn=>{sV(p=>{const n=typeof fn==="function"?fn(p):fn;
-    if(col)guardarColeccion(col,n); else LS.set(k,n);
+  /* `detalle` es lo que queda escrito en el audit trail del servidor. Sin él
+     la bitácora dice sólo "GUARDAR hallazgos · 14 registro(s)". */
+  const s=useCallback((fn,detalle)=>{sV(p=>{const n=typeof fn==="function"?fn(p):fn;
+    if(col)guardarColeccion(col,n,detalle); else LS.set(k,n);
     return n;});},[k,col]);
   return[v,s];
 }
@@ -1867,7 +1869,56 @@ function Reports({data,cfg}){const{audits,findings,actions}=data;
 }
 
 /* ── CONFIG (simplified) ── */
-function ConfigMod({cfg,setCfg,setLogs,currentUser}){
+/* Una pasada para los hallazgos que quedaron desalineados de antes: hasta que
+   el estado del hallazgo lo decidieron sus planes, cada pantalla iba por su
+   lado. Primero muestra qué cambiaría y recién después se aplica; lo que se
+   cambia queda escrito en el audit trail con el detalle de cada hallazgo. */
+function AlinearEstados({findings,actions,setFindings,setLogs,currentUser}){
+  const[vista,sVista]=useState(null);
+  const calcular=()=>{
+    const cambios=[];
+    for(const f of (findings||[])){
+      const suyas=(actions||[]).filter(a=>a.findingId===f.id);
+      if(!suyas.length)continue;
+      const nuevo=estadoSegunAcciones(f,suyas);
+      if(nuevo!==f.status)cambios.push({id:f.id,code:f.code,de:f.status,a:nuevo,n:suyas.length});
+    }
+    sVista(cambios);
+  };
+  const aplicar=()=>{
+    if(!vista||!vista.length)return;
+    if(!confirm(`Se ajustan ${vista.length} hallazgo(s) al estado de sus planes de acción.\n\n¿Confirmás?`))return;
+    const porId=new Map(vista.map(c=>[c.id,c.a]));
+    // el audit trail del servidor guarda 500 caracteres: si son muchos, se
+    // nombran los primeros y se cuenta el resto en vez de cortar a la mitad.
+    const lista=vista.slice(0,12).map(c=>`${c.code} ${c.de}→${c.a}`).join(", ")
+      +(vista.length>12?` y ${vista.length-12} más`:"");
+    setFindings(p=>p.map(x=>porId.has(x.id)?{...x,status:porId.get(x.id)}:x),
+      `ALINEAR ${vista.length} hallazgo(s) con sus planes: ${lista}`);
+    alog(setLogs,"ALINEAR","Hallazgos",`${vista.length} hallazgo(s) ajustados al estado de sus planes de acción`,currentUser.name);
+    sVista([]);
+  };
+  return(<div className="cfg-section"><h3><span>🔗</span>Alinear hallazgos con sus planes de acción</h3>
+    <p className="cfg-desc">Revisa todos los hallazgos y les pone el estado que les corresponde según sus planes:
+      cerrado cuando no le queda ninguno por cumplir, en proceso si alguno sigue abierto. Los hallazgos sin plan de
+      acción no se tocan. Se usa una vez, para los que quedaron desalineados de antes.</p>
+    <div style={{display:"flex",gap:8}}>
+      <button style={sB("g")} onClick={calcular}>Revisar</button>
+      {vista&&vista.length>0&&<button style={sB("pri")} onClick={aplicar}>Aplicar a {vista.length} hallazgo(s)</button>}
+    </div>
+    {vista&&(vista.length===0
+      ? <p style={{fontSize:12.5,color:K.grn,marginTop:10,marginBottom:0}}>✓ Todos los hallazgos están alineados con sus planes de acción.</p>
+      : <div style={{marginTop:10}}>
+          {vista.map(c=><div key={c.id} className="cfg-item">
+            <span style={{fontFamily:"monospace",fontWeight:700,color:K.pri,fontSize:12}}>{c.code}</span>
+            <span style={{flex:1,fontSize:12,color:K.txS}}>{c.n} plan(es) de acción</span>
+            <SBg s={c.de}/><span style={{color:K.txM}}>→</span><SBg s={c.a}/>
+          </div>)}
+        </div>)}
+  </div>);
+}
+
+function ConfigMod({cfg,setCfg,setLogs,currentUser,findings,actions,setFindings}){
   const logC=d=>alog(setLogs,"CONFIG","Configuración",d,currentUser.name);
   function LE({title,icon,items,onUpdate}){const[v,sV]=useState("");const add=()=>{if(v.trim()&&!items.includes(v.trim())){onUpdate([...items,v.trim()]);logC(`+ "${v.trim()}" en ${title}`);sV("");}};const rm=i=>{logC(`- "${items[i]}" de ${title}`);onUpdate(items.filter((_,j)=>j!==i));};
     return(<div className="cfg-section"><h3><span>{icon}</span>{title}</h3>{items.map((it,i)=><div key={i} className="cfg-item"><span style={{flex:1,fontSize:13}}>{it}</span><button style={{...sB("sm"),color:K.red}} onClick={()=>rm(i)}>✕</button></div>)}<div style={{display:"flex",gap:8,marginTop:8}}><input style={{...sI,flex:1}} value={v} onChange={e=>sV(e.target.value)} placeholder="Agregar..." onKeyDown={e=>e.key==="Enter"&&add()}/><button style={sB("pri")} onClick={add}>+</button></div></div>);}
@@ -1930,6 +1981,7 @@ function ConfigMod({cfg,setCfg,setLogs,currentUser}){
         </div>)}
       </div>);
     })()}
+    <AlinearEstados findings={findings} actions={actions} setFindings={setFindings} setLogs={setLogs} currentUser={currentUser}/>
     <div className="cfg-section" style={{borderColor:K.red+"30",background:K.redL}}><h3 style={{color:K.red}}>🔄 Restaurar</h3><button style={sB("red")} onClick={()=>{if(confirm("¿Restaurar?")){setCfg(DEF_CONFIG);logC("Restaurado");}}}>Restaurar todo</button></div>
   </div>);
 }
@@ -2377,7 +2429,7 @@ function App(){
       {pg==="trail"&&<Trail logs={logs}/>}
       {pg==="rep"&&<Reports data={yData} cfg={cfg}/>}
       {pg==="guide"&&<GuidePage goTo={sPg}/>}
-      {pg==="cfg"&&canAdmin&&<ConfigMod cfg={cfg} setCfg={setCfg} setLogs={setLogs} currentUser={cu}/>}
+      {pg==="cfg"&&canAdmin&&<ConfigMod cfg={cfg} setCfg={setCfg} setLogs={setLogs} currentUser={cu} findings={findings} actions={actions} setFindings={setFindings}/>}
     </div>
     {audDet&&<AuditDetail audit={audDet} data={{...dt,setFindings,setActions,setLogs,currentUser:cu}} cfg={cfg} canEdit={canEdit} onClose={()=>sAudDet(null)} onSave={saveAudit} onDelete={(id)=>{
       if(confirm("¿Eliminar esta auditoría? Los hallazgos vinculados no se eliminarán pero perderán la vinculación.")){
