@@ -559,6 +559,112 @@ function filaCAPA(f,cfg,acc){
     acc?.verification||"",acc?.status||"",acc?.effectiveness||"","",
     acc?.followupResp||"",""];
 }
+/* La respuesta del auditado llega como viene: la plantilla en Excel, el mismo
+   CSV o, lo más común hasta ahora, un PDF con el informe de respuesta. Las
+   tres entradas terminan en la misma tabla, con una columna por campo de la
+   plantilla, y antes de tocar nada se muestra lo que se entendió. */
+const CDN_XLSX='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+const CDN_PDF='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+/* Las librerías pesan: se traen cuando hace falta, no al abrir la pantalla. */
+function cargarScript(url){
+  return new Promise((ok,err)=>{
+    if([...document.scripts].some(s=>s.src===url))return ok();
+    const s=document.createElement('script');s.src=url;
+    s.onload=()=>ok();s.onerror=()=>err(new Error('No se pudo cargar '+url));
+    document.head.appendChild(s);
+  });
+}
+/* El encabezado puede volver con acentos, minúsculas o espacios: se compara
+   sin eso, así "Acción correctiva" entra igual que ACCION_CORRECTIVA. */
+const normEncabezado=(s)=>String(s||"").trim().toUpperCase()
+  .normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^A-Z0-9]+/g,"_").replace(/^_|_$/g,"");
+function filasDesdeTabla(tabla){
+  const hd=(tabla[0]||[]).map(normEncabezado);
+  if(hd.indexOf("CODIGO")<0)throw new Error("El archivo no tiene la columna CODIGO. Usá la plantilla que baja esta pantalla.");
+  return tabla.slice(1)
+    .filter(f=>(f||[]).some(c=>String(c??"").trim()))
+    .map(f=>{const o={};COLS_CAPA.forEach(k=>{const i=hd.indexOf(k);o[k]=i>=0?String(f[i]??"").trim():"";});return o;})
+    .filter(o=>o.CODIGO);
+}
+async function tablaDesdeCSV(file){
+  const texto=await file.text();
+  const ls=texto.replace(/^\uFEFF/,"").split(/\r?\n/).filter(l=>l.trim());
+  if(/^sep=/i.test(ls[0]))ls.shift();
+  const sep=(ls[0].match(/;/g)||[]).length>=(ls[0].match(/,/g)||[]).length?";":",";
+  return ls.map(l=>l.split(sep).map(x=>x.trim()));
+}
+async function tablaDesdeExcel(file){
+  await cargarScript(CDN_XLSX);
+  const wb=XLSX.read(await file.arrayBuffer(),{type:"array",cellDates:true});
+  const hoja=wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(hoja,{header:1,raw:false,defval:""});
+}
+async function textoDesdePDF(file){
+  await cargarScript(CDN_PDF);
+  pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const doc=await pdfjsLib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
+  let texto="";
+  for(let i=1;i<=doc.numPages;i++){
+    const t=await (await doc.getPage(i)).getTextContent();
+    texto+=t.items.map(x=>x.str).join(" ")+"\n";
+  }
+  return texto.replace(/\s{2,}/g," ");
+}
+/* Del PDF no se puede esperar una tabla: se busca cada hallazgo por su código
+   -el nuestro o el que le puso el cliente al principio de la descripción- y,
+   dentro del pedazo de texto que le corresponde, los rótulos habituales. Lo
+   que salga de acá se revisa antes de aplicarse. */
+const ETIQUETAS=[
+  [/causa\s*(ra[ií]z|b[aá]sica)?\s*[:\-]/i,"CAUSA_RAIZ"],
+  [/correcci[oó]n(\s*inmediata)?\s*[:\-]/i,"CORRECCION"],
+  [/(acci[oó]n(es)?\s*correctiv[ao]s?|plan\s*de\s*acci[oó]n|acci[oó]n\s*propuesta)\s*[:\-]/i,"ACCION_CORRECTIVA"],
+  [/responsable\s*[:\-]/i,"AC_RESPONSABLE"],
+  [/fecha\s*(de\s*)?(implementaci[oó]n|compromiso|l[ií]mite|cumplimiento)?\s*[:\-]/i,"AC_FECHA_IMPL"],
+  [/evidencia\s*[:\-]/i,"AC_EVIDENCIA"],
+  [/estado\s*[:\-]/i,"AC_ESTADO"],
+];
+const codigoCliente=(f)=>{const m=String(f.description||"").match(/^\s*([A-Z]{2,4}\s?-?\s?\d{1,3})\b/);return m?m[1].replace(/\s+/g,""):"";};
+function filasDesdeTexto(texto,hallazgos){
+  const marcas=[];
+  for(const f of hallazgos){
+    for(const cod of [f.code,codigoCliente(f)].filter(Boolean)){
+      // "HAL-0013" tiene que encontrar también "HAL 0013" o "HAL0013"
+      const partes=cod.split(/[\s-]+/).filter(Boolean).map(p=>p.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"));
+      const re=new RegExp(partes.join("\\s*-?\\s*"),"gi");
+      let m;while((m=re.exec(texto)))marcas.push({pos:m.index,f});
+    }
+  }
+  marcas.sort((a,b)=>a.pos-b.pos);
+  const vistos=new Set();const filas=[];
+  for(let i=0;i<marcas.length;i++){
+    const {pos,f}=marcas[i];
+    if(vistos.has(f.id))continue;
+    const hasta=i+1<marcas.length?marcas[i+1].pos:texto.length;
+    const trozo=texto.slice(pos,hasta);
+    const o={};COLS_CAPA.forEach(k=>o[k]="");
+    o.CODIGO=f.code;
+    let algo=false;
+    for(const [re,campo] of ETIQUETAS){
+      const m=trozo.match(re);if(!m)continue;
+      const desde=m.index+m[0].length;
+      let fin=trozo.length;
+      for(const [re2] of ETIQUETAS){
+        const m2=trozo.slice(desde).match(re2);
+        if(m2&&desde+m2.index<fin&&m2.index>0)fin=desde+m2.index;
+      }
+      const v=trozo.slice(desde,fin).trim().replace(/\s{2,}/g," ").slice(0,500);
+      if(v){o[campo]=campo==="AC_FECHA_IMPL"?fechaCSV(v.split(/\s/)[0]):v;algo=true;}
+    }
+    if(algo){filas.push(o);vistos.add(f.id);}
+  }
+  return filas;
+}
+async function filasDesdeArchivo(file,hallazgos){
+  const n=(file.name||"").toLowerCase();
+  if(/\.pdf$/.test(n)||file.type==='application/pdf')return filasDesdeTexto(await textoDesdePDF(file),hallazgos);
+  if(/\.xlsx?$/.test(n)||/sheet|excel/i.test(file.type||""))return filasDesdeTabla(await tablaDesdeExcel(file));
+  return filasDesdeTabla(await tablaDesdeCSV(file));
+}
 function estadoSegunAcciones(hallazgo,suyas){
   if(!suyas.length)return hallazgo.status;            // sin plan: lo maneja la persona
   if(suyas.every(a=>estaResuelto(a.status)))return "Cerrado";
@@ -1294,6 +1400,101 @@ ${firmasHtml?'<h2>• EQUIPO AUDITOR</h2>'+firmasHtml:''}
   w.document.close();
 }
 
+/* Aplica lo que el auditado respondió. Lo mismo para las tres entradas: el
+   archivo ya se convirtió en una fila por hallazgo con las columnas de la
+   plantilla. */
+function aplicarCAPA(filas,data){
+  let uF=0,cA=0,uA=0;const nA=[];
+  const noAplica=(v)=>String(v||"").trim().toLowerCase()==="no aplica";
+  for(const c of filas){
+    const fin=data.findings.find(f=>f.code===c.CODIGO);
+    if(!fin)continue;
+    if(c.CAUSA_RAIZ){
+      const nuevo=c.AC_ESTADO&&c.AC_ESTADO.toLowerCase()!=="en proceso"
+        ? c.AC_ESTADO
+        : (c.ACCION_CORRECTIVA&&!noAplica(c.ACCION_CORRECTIVA)?"En proceso":null);
+      data.setFindings(p=>p.map(f=>f.code===c.CODIGO?{...f,rootCause:c.CAUSA_RAIZ,status:nuevo||f.status}:f));
+      uF++;
+    }
+    const ac=c.ACCION_CORRECTIVA||"",co=c.CORRECCION||"";
+    const desc=(co&&!noAplica(co)?"Corrección: "+co+". ":"")+ac;
+    const exist=data.actions.find(a=>a.findingId===fin.id);
+    const eficacia=c.VERIF_EFICACIA_METODO
+      ? c.VERIF_EFICACIA_METODO+(c.VERIF_EFICACIA_RESPONSABLE?" — "+c.VERIF_EFICACIA_RESPONSABLE:"")
+        +(c.VERIF_EFICACIA_FECHA?" — "+c.VERIF_EFICACIA_FECHA:"")
+      : "";
+    if(exist){
+      const u={};
+      if(ac&&!noAplica(ac))u.description=desc;
+      if(c.AC_RESPONSABLE)u.responsible=c.AC_RESPONSABLE;
+      if(c.AC_FECHA_IMPL)u.dueDate=fechaCSV(c.AC_FECHA_IMPL);
+      if(c.AC_FECHA_REALIZADO)u.completedDate=fechaCSV(c.AC_FECHA_REALIZADO);
+      if(c.AC_EVIDENCIA)u.verification=c.AC_EVIDENCIA;
+      if(c.AC_ESTADO)u.status=c.AC_ESTADO;
+      if(eficacia)u.effectiveness=eficacia;
+      if(c.VERIF_EFICACIA_RESPONSABLE)u.followupResp=c.VERIF_EFICACIA_RESPONSABLE;
+      if(c.RESULTADO)u.resultNote=c.RESULTADO;
+      if(Object.keys(u).length){data.setActions(p=>p.map(a=>a.id===exist.id?{...a,...u}:a));uA++;}
+    }else if((ac&&!noAplica(ac))||(co&&!noAplica(co))){
+      nA.push({id:gid(),code:`ACC-${String(data.actions.length+nA.length+1).padStart(4,"0")}`,
+        year:fin.year||2026,findingId:fin.id,
+        description:desc||("Corrección: "+co),
+        responsible:c.AC_RESPONSABLE||c.CORRECCION_RESPONSABLE||"",
+        dueDate:fechaCSV(c.AC_FECHA_IMPL||c.CORRECCION_FECHA||""),
+        status:c.AC_ESTADO||"En proceso",verification:c.AC_EVIDENCIA||"",
+        effectiveness:eficacia,followupResp:c.VERIF_EFICACIA_RESPONSABLE||"",
+        createdAt:new Date().toISOString()});
+      cA++;
+    }
+  }
+  if(nA.length)data.setActions(p=>[...p,...nA]);
+  return {uF,cA,uA};
+}
+
+/* Lo que se entendió del archivo, antes de tocar nada: de un PDF nunca sale
+   perfecto y conviene corregirlo acá y no después, hallazgo por hallazgo. */
+function PreviaCAPA({filas,hallazgos,origen,onCancel,onAplicar}){
+  const[fs,sFs]=useState(filas);
+  const u=(i,k,v)=>sFs(p=>p.map((f,j)=>j===i?{...f,[k]:v}:f));
+  const conocido=(c)=>hallazgos.some(h=>h.code===c);
+  const validas=fs.filter(f=>conocido(f.CODIGO));
+  const campo=(i,f,k,l)=><div style={{marginBottom:6}}>
+    <label style={{...sL,fontSize:10}}>{l}</label>
+    <textarea style={{...sI,minHeight:k==="CAUSA_RAIZ"||k==="ACCION_CORRECTIVA"?46:32,resize:"vertical",fontSize:12}}
+      value={f[k]||""} onChange={e=>u(i,k,e.target.value)}/>
+  </div>;
+  return(<Md title={`Revisar lo que llegó — ${origen}`} onClose={onCancel} wide>
+    {fs.length===0
+      ? <CtxHelp type="warn">No se reconoció ningún hallazgo en el archivo. Si es un PDF, fijate que mencione el
+          código de cada hallazgo (HAL-00xx o el código del cliente) y los rótulos «Causa raíz», «Acción
+          correctiva», «Responsable» y «Fecha».</CtxHelp>
+      : <CtxHelp>Se reconocieron <b>{validas.length}</b> hallazgo(s). Corregí lo que haga falta antes de aplicar:
+          lo que quede vacío no pisa lo que ya está cargado.</CtxHelp>}
+    {fs.map((f,i)=>{
+      const ok=conocido(f.CODIGO);
+      return <div key={i} style={{border:`1px solid ${ok?K.brd:K.red+"60"}`,borderRadius:8,padding:12,marginBottom:10,background:ok?"#fff":K.redL}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+          <span style={{fontFamily:"monospace",fontWeight:700,color:K.pri}}>{f.CODIGO||"(sin código)"}</span>
+          {!ok&&<Bg color={K.red} bg={K.redL}>no está en esta auditoría — se omite</Bg>}
+          <span style={{flex:1,fontSize:11.5,color:K.txS}}>{hallazgos.find(h=>h.code===f.CODIGO)?.description?.slice(0,90)||""}</span>
+        </div>
+        {ok&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <div>{campo(i,f,"CAUSA_RAIZ","Causa raíz")}{campo(i,f,"CORRECCION","Corrección")}</div>
+          <div>{campo(i,f,"ACCION_CORRECTIVA","Acción correctiva")}
+            <G2>{campo(i,f,"AC_RESPONSABLE","Responsable")}{campo(i,f,"AC_FECHA_IMPL","Fecha compromiso")}</G2>
+            <G2>{campo(i,f,"AC_EVIDENCIA","Evidencia")}{campo(i,f,"AC_ESTADO","Estado")}</G2>
+          </div>
+        </div>}
+      </div>;
+    })}
+    <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:6}}>
+      <button style={sB("g")} onClick={onCancel}>Cancelar</button>
+      <button style={sB("pri")} disabled={!validas.length} onClick={()=>onAplicar(validas)}>
+        Aplicar a {validas.length} hallazgo(s)</button>
+    </div>
+  </Md>);
+}
+
 function AuditDetail({audit,data,cfg,canEdit,onClose,onSave,onDelete}){
   const{findings,actions}=data;
   const[fm,sFm]=useState(audit||{});
@@ -1308,6 +1509,7 @@ function AuditDetail({audit,data,cfg,canEdit,onClose,onSave,onDelete}){
   const initTab=tabForPhase(fm.phase)||(ext?"xi":"plan");
   const[tab,sTab]=useState(initTab);
   const[pegar,sPegar]=useState(false);
+  const[previa,sPrevia]=useState(null);const[leyendo,sLeyendo]=useState(null);
   const[edHal,sEdHal]=useState(null);
   const activeTab=tab||initTab;
   const nextP=()=>{if(ci<phases.length-1){const np=phases[ci+1].id;sFm(p=>({...p,phase:np}));sTab(tabForPhase(np));}};
@@ -1403,35 +1605,18 @@ function AuditDetail({audit,data,cfg,canEdit,onClose,onSave,onDelete}){
             }}>Observaciones → No aplica ({abiertas.length})</button>;
           })()}
           {canEdit&&<button style={{...sB("g"),color:"#0891B2"}} onClick={()=>{const afCapa=af.filter(f=>exigeCapa(f.classification,cfg));const filas=[COLS_CAPA,...(afCapa.length?afCapa.map(f=>filaCAPA(f,cfg,data.actions.find(a=>a.findingId===f.id))):[COLS_CAPA.map(()=>"")])];bajarCSV(`Plantilla_CAPA_${fm.code}.csv`,filas);}}>📥 Plantilla CAPA ({af.filter(f=>exigeCapa(f.classification,cfg)).length})</button>}
-          {canEdit&&<label style={{...sB("g"),color:K.grn,cursor:"pointer"}}>📤 Importar CAPA<input type="file" accept=".csv,.txt" style={{display:"none"}} onChange={e=>{const file=e.target.files[0];if(!file)return;const rd=new FileReader();rd.onload=ev=>{try{const ls=ev.target.result.split(/\r?\n/).filter(l=>l.trim());if(/^sep=/i.test(ls[0]))ls.shift();if(ls.length<2)return alert("Vacío");const hd=ls[0].split(";").map(h=>h.trim());
-            const iC=hd.indexOf("CODIGO"),iCa=hd.indexOf("CAUSA_RAIZ"),iAC=hd.indexOf("ACCION_CORRECTIVA"),iAR=hd.indexOf("AC_RESPONSABLE"),iAF=hd.indexOf("AC_FECHA_IMPL"),iCo=hd.indexOf("CORRECCION"),iCR=hd.indexOf("CORRECCION_RESPONSABLE"),iVM=hd.indexOf("VERIF_EFICACIA_METODO"),iVF=hd.indexOf("VERIF_EFICACIA_FECHA"),iVR=hd.indexOf("VERIF_EFICACIA_RESPONSABLE"),iAFR=hd.indexOf("AC_FECHA_REALIZADO"),iAEV=hd.indexOf("AC_EVIDENCIA"),iAST=hd.indexOf("AC_ESTADO"),iRES=hd.indexOf("RESULTADO");
-            let uF=0,cA=0,uA=0;const nA=[];
-            for(let i=1;i<ls.length;i++){const c=ls[i].split(";").map(x=>x.trim());const code=c[iC]||"";const fin=data.findings.find(f=>f.code===code);if(!fin)continue;
-              if(c[iCa]){const newSt=c[iAST]&&c[iAST].toLowerCase()!=="en proceso"?c[iAST]:(c[iAC]&&c[iAC].toLowerCase()!=="no aplica"?"En proceso":null);data.setFindings(p=>p.map(f=>f.code===code?{...f,rootCause:c[iCa],status:newSt||f.status}:f));uF++;}
-              const ac=c[iAC]||"";const co=c[iCo]||"";const desc=(co&&co.toLowerCase()!=="no aplica"?"Corrección: "+co+". ":"")+ac;
-              const existAcc=data.actions.find(a=>a.findingId===fin.id);
-              if(existAcc){
-                const updates={};
-                if(ac&&ac.toLowerCase()!=="no aplica")updates.description=desc;
-                if(c[iAR])updates.responsible=c[iAR];
-                if(c[iAF])updates.dueDate=fechaCSV(c[iAF]);
-                if(iAFR>=0&&c[iAFR])updates.completedDate=fechaCSV(c[iAFR]);
-                if(iAEV>=0&&c[iAEV])updates.verification=c[iAEV];
-                if(iAST>=0&&c[iAST]&&c[iAST].toLowerCase()!=="")updates.status=c[iAST];
-                if(c[iVM])updates.effectiveness=(c[iVM]||"")+(c[iVR]?" — "+c[iVR]:"")+(c[iVF]?" — "+c[iVF]:"");
-                if(c[iVR])updates.followupResp=c[iVR];
-                if(iRES>=0&&c[iRES])updates.resultNote=c[iRES];
-                if(Object.keys(updates).length>0){data.setActions(p=>p.map(a=>a.id===existAcc.id?{...a,...updates}:a));uA++;}
-              }else if(ac&&ac.toLowerCase()!=="no aplica"){
-                nA.push({id:gid(),code:`ACC-${String(data.actions.length+nA.length+1).padStart(4,"0")}`,year:fin.year||2026,findingId:fin.id,description:desc,responsible:c[iAR]||"",dueDate:fechaCSV(c[iAF]),status:iAST>=0&&c[iAST]?c[iAST]:"En proceso",verification:iAEV>=0&&c[iAEV]?c[iAEV]:"",effectiveness:(c[iVM]||"")+(c[iVR]?" — "+c[iVR]:""),followupResp:c[iVR]||"",createdAt:new Date().toISOString()});cA++;
-              }else if(co&&co.toLowerCase()!=="no aplica"){
-                nA.push({id:gid(),code:`ACC-${String(data.actions.length+nA.length+1).padStart(4,"0")}`,year:fin.year||2026,findingId:fin.id,description:"Corrección: "+co,responsible:c[iCR]||"",dueDate:"",status:"En proceso",verification:"",effectiveness:c[iVM]||"",followupResp:c[iVR]||"",createdAt:new Date().toISOString()});cA++;
-              }
-            }
-            if(nA.length>0)data.setActions(p=>[...p,...nA]);
-            alog(data.setLogs,"IMPORTAR CAPA","Auditoría",`${fm.code}: ${uF} hallazgos, ${cA} nuevas, ${uA} actualizadas`,data.currentUser.name);
-            alert(`Importación completada:\n• ${uF} hallazgo(s) actualizados\n• ${cA} acción(es) nueva(s)\n• ${uA} acción(es) actualizada(s)`);
-          }catch(er){alert("Error: "+er.message);}e.target.value="";};rd.readAsText(file,"UTF-8");}}/></label>}
+          {canEdit&&<label style={{...sB("g"),color:K.grn,cursor:"pointer"}}>📤 Importar CAPA
+            <input type="file" accept=".csv,.txt,.xlsx,.xls,.pdf" style={{display:"none"}} onChange={async e=>{
+              const file=e.target.files[0];e.target.value="";if(!file)return;
+              sLeyendo(file.name);
+              try{
+                const filas=await filasDesdeArchivo(file,af);
+                sPrevia({filas,origen:file.name});
+              }catch(er){alert("No se pudo leer el archivo: "+er.message);}
+              sLeyendo(null);
+            }}/></label>}
+          {leyendo&&<span style={{fontSize:12,color:K.txS,alignSelf:"center"}}>Leyendo {leyendo}…</span>}
+
         </div>
         {af.length>0?<table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5}}><thead><tr><th style={sTh}>Código</th><th style={sTh}>Descripción</th><th style={sTh}>Clasif.</th><th style={sTh}>Estado</th>{canEdit&&<th style={sTh}></th>}</tr></thead><tbody>{af.map(f=><tr key={f.id}><td style={{...sTd,fontFamily:"monospace",fontWeight:700,color:K.pri}}>{f.code}</td><td style={sTd}>{f.description}</td><td style={sTd}><CBg cls={f.classification} cfg={cfg}/></td><td style={sTd}><SBg s={f.status}/></td>{canEdit&&<td style={sTd}><button style={sB("sm")} onClick={()=>sEdHal(f)}>Editar</button></td>}</tr>)}</tbody></table>:<Em icon="📝" t="Sin hallazgos"/>}
       </div>
@@ -1571,6 +1756,16 @@ function AuditDetail({audit,data,cfg,canEdit,onClose,onSave,onDelete}){
       <div style={{fontSize:11,color:"#92400E",marginTop:2}}>Fecha de postergación: {fd(fm.postponedDate)}</div>
     </div>}
     {pegar&&<PegarHallazgos fm={fm} data={data} cfg={cfg} onClose={()=>sPegar(false)}/>}
+    {previa&&<PreviaCAPA filas={previa.filas} hallazgos={af} origen={previa.origen}
+      onCancel={()=>sPrevia(null)}
+      onAplicar={(fs)=>{
+        const r=aplicarCAPA(fs,data);
+        alog(data.setLogs,"IMPORTAR CAPA","Auditoría",
+          `${fm.code} · ${previa.origen}: ${r.uF} hallazgo(s), ${r.cA} acción(es) nueva(s), ${r.uA} actualizada(s)`,
+          data.currentUser?.name);
+        sPrevia(null);
+        alert(`Importación completada:\n• ${r.uF} hallazgo(s) actualizados\n• ${r.cA} acción(es) nueva(s)\n• ${r.uA} acción(es) actualizada(s)`);
+      }}/>}
     {/* La ficha del hallazgo, acá adentro: la redacción se corrige mirando el
         informe, sin ir a otra pantalla. */}
     {edHal&&<FichaHallazgo hallazgo={edHal} cfg={cfg} auditoriaFija={`${fm.code} — ${fm.name||""}`}
@@ -2206,8 +2401,8 @@ function GuidePage({goTo}){
       steps:["Click en '+ Nuevo' y seleccioná la auditoría (solo las que están en ejecución o posterior)","Elegí la clasificación — el sistema muestra la descripción y el plazo de cierre","Completá: descripción, evidencia objetiva, análisis de causa raíz","Seleccioná el tipo CAPA: Correctiva, Preventiva o Corrección","Filtrá por clasificación con los botones de colores","Los hallazgos aparecen automáticamente en el informe de la auditoría"]},
     {icon:"📌",title:"Planes de Acción",id:"acc",content:"Cada hallazgo debe tener un plan de acción. La fecha límite se calcula automáticamente según el plazo de la clasificación del hallazgo.",
       steps:["Click en '+ Nueva' y vinculá al hallazgo correspondiente","La fecha límite se calcula sola (Grave=3 meses, Crítica/Menor=6 meses, etc.)","Indicá responsable de la acción y responsable de seguimiento","Completá verificación de implementación y verificación de eficacia","Las acciones vencidas se resaltan en rojo con ⚠","Cambiá el estado conforme avanza: Abierto → En proceso → Cerrado"]},
-    {icon:"📥",title:"Importar / Exportar CAPA",id:"aud",content:"Sistema de plantillas CSV para intercambiar planes de acción con proveedores y clientes auditados.",
-      steps:["Dentro de una auditoría interna/proveedor (pestaña Informe): '📥 Descargar plantilla CAPA' genera un CSV con los hallazgos prellenados","Enviá el CSV al proveedor/auditado para que complete: causa raíz, corrección, acción correctiva, responsable, fechas, verificación de eficacia","Cuando te lo devuelvan completado: '📤 Importar respuesta CAPA' lee el CSV y crea los registros automáticamente","Para auditorías externas (pestaña Informe cliente): '📥 Descargar plantilla hallazgos' genera CSV para cargar los hallazgos del cliente","'📤 Importar hallazgos del cliente' crea hallazgos + planes de acción automáticamente con plazos calculados"]},
+    {icon:"📥",title:"Importar / Exportar CAPA",id:"aud",content:"La plantilla sale en Excel y la respuesta del auditado vuelve en Excel, CSV o PDF. Antes de aplicarse se muestra lo que se entendió, para corregirlo.",
+      steps:["Dentro de una auditoría interna/proveedor (pestaña Informe): '📥 Descargar plantilla CAPA' genera un CSV con los hallazgos prellenados","Enviá el CSV al proveedor/auditado para que complete: causa raíz, corrección, acción correctiva, responsable, fechas, verificación de eficacia","Cuando te la devuelvan completada: '📤 Importar CAPA' acepta Excel (.xlsx), CSV y PDF","Del PDF se reconocen los hallazgos por su código y los rótulos «Causa raíz», «Corrección», «Acción correctiva», «Responsable», «Fecha» y «Evidencia»","Antes de aplicar nada se abre una revisión con lo que se entendió, hallazgo por hallazgo: ahí se corrige lo que haga falta","Para auditorías externas (pestaña Informe cliente): '📥 Descargar plantilla hallazgos' genera CSV para cargar los hallazgos del cliente","'📤 Importar hallazgos del cliente' crea hallazgos + planes de acción automáticamente con plazos calculados"]},
     {icon:"📜",title:"Audit Trail",id:"trail",content:"Registro automático e inmutable de todas las operaciones del sistema, incluyendo nombre de usuario, fecha/hora y detalle de cada cambio.",
       steps:["Todo se registra automáticamente: crear, editar, eliminar, cambiar fase, cambiar estado, importar CAPA, iniciar/cerrar sesión, cambios de configuración","Usá el buscador para filtrar por cualquier campo","Los registros no se pueden editar ni eliminar — garantiza trazabilidad","No se filtra por año — muestra el histórico completo"]},
     {icon:"📊",title:"Reportes",id:"rep",content:"Métricas clave del año seleccionado y descarga de reporte completo en formato texto.",
@@ -2298,7 +2493,7 @@ function GuidePage({goTo}){
           {l:"Códigos automáticos",d:"AUD-0001, HAL-0001, ACC-0001 se asignan automáticamente."},
           {l:"Plazos automáticos",d:"Al vincular acción a hallazgo, la fecha límite se calcula por clasificación."},
           {l:"Exportar informes",d:"'📄 Exportar' genera el REG-035-C imprimible con tabla de firmas."},
-          {l:"Importar CAPA",d:"Plantillas CSV para intercambiar planes de acción con proveedores."},
+          {l:"Importar CAPA",d:"La respuesta del auditado entra en Excel, CSV o PDF."},
           {l:"Eliminar auditorías",d:"Botón '🗑 Eliminar' abajo a la izquierda en el detalle. Pide confirmación."},
           {l:"Audit Trail",d:"Todo queda registrado con usuario, fecha, hora y detalle. No se borra."},
           {l:"Externas vs Internas",d:"Al seleccionar tipo 'Externa', las fases y pestañas cambian automáticamente."},
