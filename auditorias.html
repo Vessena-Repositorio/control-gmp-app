@@ -530,15 +530,21 @@ const COLS_CAPA=["CODIGO","CLASIFICACION","DESCRIPCION","CAUSA_RAIZ",
   "ACCION_CORRECTIVA","AC_RESPONSABLE","AC_FECHA_IMPL","AC_FECHA_REALIZADO",
   "AC_EVIDENCIA","AC_ESTADO","VERIF_EFICACIA_METODO","VERIF_EFICACIA_FECHA",
   "VERIF_EFICACIA_RESPONSABLE","RESULTADO"];
-/* El punto y coma y los saltos de línea de una descripción romperían el
-   renglón: se reemplazan por espacios, como se venía haciendo. */
-const celdaCSV=(v)=>String(v??"").replace(/;/g,",").replace(/[\r\n]+/g," ").replace(/\s{2,}/g," ").trim();
-function bajarCSV(nombre,filas){
-  const texto="sep=;\r\n"+filas.map(f=>f.map(celdaCSV).join(";")).join("\r\n")+"\r\n";
-  const b=new Blob(["﻿"+texto],{type:"text/csv;charset=utf-8"});
-  const u=URL.createObjectURL(b);const a=document.createElement("a");
-  a.href=u;a.download=nombre;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);
+/* Se bajaba un CSV y no habia forma de que el Excel lo abriera bien: con la
+   marca de codificacion adelante partia los acentos -"AprobaciA3n"- porque al
+   ver la linea "sep=;" deja de mirarla, y sin esa linea metia todo el renglon
+   en una sola columna. Un .xlsx no tiene ninguno de los dos problemas, y es el
+   formato en el que se les va a pedir la respuesta. */
+async function bajarExcel(nombre,filas,anchos,hoja){
+  await cargarScript(CDN_XLSX);
+  const ws=XLSX.utils.aoa_to_sheet(filas);
+  if(anchos)ws["!cols"]=anchos.map(w=>({wch:w}));
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,hoja||"CAPA");
+  XLSX.writeFile(wb,nombre);
 }
+const ANCHOS_CAPA=[12,14,70,45,35,20,16,45,20,16,16,32,14,30,16,24,18];
+
 /* Las fechas vuelven como las escribe el Excel -1/12/2026-, no como las
    guarda la app. Si vienen así se pasan a ISO; si ya vienen en ISO o en
    cualquier otra forma, se dejan como están. */
@@ -1604,7 +1610,7 @@ function AuditDetail({audit,data,cfg,canEdit,onClose,onSave,onDelete}){
               alog(data.setLogs,"CAMBIO ESTADO","Hallazgo",`${fm.code}: ${abiertas.length} observaciones a No aplica`,data.currentUser?.name);
             }}>Observaciones → No aplica ({abiertas.length})</button>;
           })()}
-          {canEdit&&<button style={{...sB("g"),color:"#0891B2"}} onClick={()=>{const afCapa=af.filter(f=>exigeCapa(f.classification,cfg));const filas=[COLS_CAPA,...(afCapa.length?afCapa.map(f=>filaCAPA(f,cfg,data.actions.find(a=>a.findingId===f.id))):[COLS_CAPA.map(()=>"")])];bajarCSV(`Plantilla_CAPA_${fm.code}.csv`,filas);}}>📥 Plantilla CAPA ({af.filter(f=>exigeCapa(f.classification,cfg)).length})</button>}
+          {canEdit&&<button style={{...sB("g"),color:"#0891B2"}} onClick={()=>{const afCapa=af.filter(f=>exigeCapa(f.classification,cfg));const filas=[COLS_CAPA,...(afCapa.length?afCapa.map(f=>filaCAPA(f,cfg,data.actions.find(a=>a.findingId===f.id))):[COLS_CAPA.map(()=>"")])];bajarExcel(`Plantilla_CAPA_${fm.code}.xlsx`,filas,ANCHOS_CAPA).catch(er=>alert("No se pudo armar el Excel: "+er.message));}}>📥 Plantilla CAPA ({af.filter(f=>exigeCapa(f.classification,cfg)).length})</button>}
           {canEdit&&<label style={{...sB("g"),color:K.grn,cursor:"pointer"}}>📤 Importar CAPA
             <input type="file" accept=".csv,.txt,.xlsx,.xls,.pdf" style={{display:"none"}} onChange={async e=>{
               const file=e.target.files[0];e.target.value="";if(!file)return;
@@ -1680,19 +1686,24 @@ function AuditDetail({audit,data,cfg,canEdit,onClose,onSave,onDelete}){
               estaba en las planillas de seguimiento de auditorías pasadas. */}
           {canEdit&&<button style={{...sB("g"),color:K.red}} onClick={()=>sPegar(true)}>📋 Pegar hallazgos</button>}
           {canEdit&&<button style={{...sB("g"),color:"#0891B2"}} onClick={()=>{
-            const h="CODIGO_CLIENTE;CLASIFICACION;DESCRIPCION;CLAUSULA;EVIDENCIA\n";
-            const ex="NC-01;Mayor;Descripción del hallazgo encontrado por el cliente;Cap.4;Evidencia objetiva\nOBS-01;Observación;Descripción de la observación;Cap.7;\nOPM-01;Oportunidad de Mejora;Descripción de la oportunidad;;";
-            const b=new Blob(["\uFEFF"+h+ex],{type:"text/csv;charset=utf-8"});const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=`Plantilla_Hallazgos_Cliente_${fm.code}.csv`;a.click();
+                        const filas=[["CODIGO_CLIENTE","CLASIFICACION","DESCRIPCION","CLAUSULA","EVIDENCIA"],
+              ["NC-01","Mayor","Descripcion del hallazgo encontrado por el cliente","Cap.4","Evidencia objetiva"],
+              ["OBS-01","Observacion","Descripcion de la observacion","Cap.7",""],
+              ["OPM-01","Oportunidad de Mejora","Descripcion de la oportunidad","",""]];
+            bajarExcel(`Plantilla_Hallazgos_Cliente_${fm.code}.xlsx`,filas,[18,22,70,16,40],"Hallazgos")
+              .catch(er=>alert("No se pudo armar el Excel: "+er.message));
           }}>📥 Descargar plantilla hallazgos</button>}
-          {canEdit&&<label style={{...sB("g"),color:K.grn,cursor:"pointer"}}>📤 Importar hallazgos del cliente<input type="file" accept=".csv,.txt" style={{display:"none"}} onChange={e=>{
-            const file=e.target.files[0];if(!file)return;const rd=new FileReader();rd.onload=ev=>{try{
-              const ls=ev.target.result.split("\n").filter(l=>l.trim());if(ls.length<2)return alert("Archivo vacío");
-              const hd=ls[0].split(";").map(h=>h.trim());
+          {canEdit&&<label style={{...sB("g"),color:K.grn,cursor:"pointer"}}>📤 Importar hallazgos del cliente<input type="file" accept=".csv,.txt,.xlsx,.xls" style={{display:"none"}} onChange={async e=>{
+            const file=e.target.files[0];e.target.value="";if(!file)return;
+            try{
+              const tabla=/\.xlsx?$/i.test(file.name)?await tablaDesdeExcel(file):await tablaDesdeCSV(file);
+              if(tabla.length<2)return alert("Archivo vacío");
+              const hd=(tabla[0]||[]).map(normEncabezado);
               const iCod=hd.indexOf("CODIGO_CLIENTE"),iCls=hd.indexOf("CLASIFICACION"),iDesc=hd.indexOf("DESCRIPCION"),iClau=hd.indexOf("CLAUSULA"),iEv=hd.indexOf("EVIDENCIA");
               const newF=[];const newA=[];
               const clsMap={};cfg.classifications.forEach(c=>{clsMap[c.label.toLowerCase()]=c;});
-              for(let i=1;i<ls.length;i++){
-                const c=ls[i].split(";").map(x=>x.trim());
+              for(let i=1;i<tabla.length;i++){
+                const c=(tabla[i]||[]).map(x=>String(x??"").trim());
                 if(!c[iDesc])continue;
                 const clsLabel=(c[iCls]||"").toLowerCase();
                 const cls=clsMap[clsLabel]||cfg.classifications.find(x=>x.label.toLowerCase().includes(clsLabel))||cfg.classifications[0];
@@ -1710,7 +1721,7 @@ function AuditDetail({audit,data,cfg,canEdit,onClose,onSave,onDelete}){
               if(newF.length>0){data.setFindings(p=>[...p,...newF]);data.setActions(p=>[...p,...newA]);}
               alog(data.setLogs,"IMPORTAR HALLAZGOS CLIENTE","Auditoría",`${fm.code}: ${newF.length} hallazgos + ${newA.length} planes de acción creados`,data.currentUser.name);
               alert(`Importación completada:\n• ${newF.length} hallazgo(s) creado(s)\n• ${newA.length} plan(es) de acción generado(s) automáticamente\n\nRevisá Hallazgos/CAPA y Planes de Acción para completar causa raíz, responsables y acciones correctivas.`);
-            }catch(er){alert("Error: "+er.message);}e.target.value="";};rd.readAsText(file,"UTF-8");
+            }catch(er){alert("No se pudo leer el archivo: "+er.message);}
           }}/></label>}
         </div>
         <CtxHelp>Al importar hallazgos del cliente, se crean automáticamente los registros de hallazgos (HAL) vinculados a esta auditoría Y los planes de acción (ACC) con los plazos calculados según la clasificación. Solo resta completar causa raíz, acción correctiva y responsable.</CtxHelp>
