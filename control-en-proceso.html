@@ -491,7 +491,7 @@ const LIMP_DEFECTS=[
   <div class="fs"><div class="st">📋 Órdenes de envasado — registro REG SOP LCC 200</div>
     <div style="font-size:14px;color:var(--text2);margin-bottom:10px">Cada orden se aprueba una vez, con la firma del supervisor, y se imprime para el dossier. Al aprobar, la orden queda arriba con el botón para imprimirla.</div>
     <div class="ord-filtros">
-      <input id="ordBuscar" class="ord-buscar" placeholder="🔍 Buscar por orden o lote…" oninput="pintarOrdenes()">
+      <input id="ordBuscar" class="ord-buscar" placeholder="🔍 Buscar por N° de orden, lote, producto o analista…" oninput="pintarOrdenes()">
       <div class="ord-seg">
         <button data-f="pend" class="on" onclick="filtroOrdenes('pend')">Pendientes <b id="nPend"></b></button>
         <button data-f="aprob" onclick="filtroOrdenes('aprob')">Aprobadas</button>
@@ -1120,20 +1120,31 @@ function filtroOrdenes(f){ORD_FILTRO=f;document.querySelectorAll('.ord-seg butto
 function pintarOrdenes(){
   const el=document.getElementById('ordList');
   const viejas=document.getElementById('ordViejas').checked;
-  const q=String(document.getElementById('ordBuscar').value||'').trim().toLowerCase();
+  const q=String(document.getElementById('ordBuscar').value||'').trim();
   // El contador de la pestaña cuenta solo lo cargado en la app: las ordenes de
   // la planilla anterior nunca tuvieron aprobacion.
   const pendApp=ORDENES.filter(o=>o.deApp&&!o.aprobada).length;
   const badge=document.getElementById('ordCount');badge.textContent=pendApp||'';badge.style.display=pendApp?'':'none';
   let l=ORDENES.filter(o=>viejas||o.deApp||RECIEN.has(o.orden));
   document.getElementById('nPend').textContent='('+l.filter(o=>!o.aprobada).length+')';
-  if(ORD_FILTRO==='pend')l=l.filter(o=>!o.aprobada||RECIEN.has(o.orden));
-  if(ORD_FILTRO==='aprob')l=l.filter(o=>o.aprobada);
-  if(q)l=l.filter(o=>String(o.orden).toLowerCase().includes(q)||String(o.lote).toLowerCase().includes(q));
+  // Buscar es buscar en todo el periodo: si se escribio algo, los filtros de
+  // arriba se dejan de lado. Un lote que esta en una orden ya aprobada o de la
+  // planilla anterior tiene que aparecer igual, que es justo cuando se lo busca
+  // -para imprimir el registro- (Claudia, 21/10/2026). Se compara sin signos ni
+  // espacios ("L 25-100" encuentra "L25100"), por N° de orden, lote, producto,
+  // maquina y analista.
+  const k=comoClave(q);
+  if(k)l=ORDENES.filter(o=>[o.orden,o.lote,o.presentacion,o.maquina,o.analistas].some(v=>comoClave(v).includes(k)));
+  else{
+    if(ORD_FILTRO==='pend')l=l.filter(o=>!o.aprobada||RECIEN.has(o.orden));
+    if(ORD_FILTRO==='aprob')l=l.filter(o=>o.aprobada);
+  }
   l.sort((a,b)=>(RECIEN.has(b.orden)?1:0)-(RECIEN.has(a.orden)?1:0));
-  if(!l.length){el.innerHTML='<div class="ord-vacio">'+(q?'Ninguna orden coincide con «'+esc(q)+'».':ORD_FILTRO==='pend'?'✅ No hay órdenes pendientes de aprobar.':'No hay órdenes en este período.')+(!viejas?'<br><span style="font-size:13px">Las órdenes de la planilla anterior se ven marcando «Incluir las de la planilla anterior».</span>':'')+'</div>';return}
+  if(!l.length){el.innerHTML='<div class="ord-vacio">'+(k?'Ninguna orden coincide con «'+esc(q)+'». Probá con otro número de lote o de orden, o ampliá el período.':ORD_FILTRO==='pend'?'✅ No hay órdenes pendientes de aprobar.':'No hay órdenes en este período.')+(!viejas&&!k?'<br><span style="font-size:13px">Las órdenes de la planilla anterior se ven marcando «Incluir las de la planilla anterior».</span>':'')+'</div>';return}
   const arg=o=>'\''+String(o.orden).replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\'';
-  el.innerHTML=l.map(o=>{
+  // Cuando se busca conviene decir en que se busco: la lista no respeta los
+  // filtros de arriba, y si no se avisa parece que el filtro no anduvo.
+  el.innerHTML=(k?'<div class="ord-vacio" style="text-align:left;margin-bottom:10px">🔍 '+l.length+' orden'+(l.length===1?'':'es')+' con «'+esc(q)+'» — se busca en todo el período, incluidas las aprobadas y las de la planilla anterior.</div>':'')+l.map(o=>{
     const recien=RECIEN.has(o.orden);
     const estado=o.aprobada
       ?'<span class="ord-estado ok">✅ Aprobada'+(o.aprobadaPor?' por '+esc(o.aprobadaPor):'')+(o.aprobadaEn?' · '+esc(fechaCorta(o.aprobadaEn)):'')+'</span>'
@@ -1152,7 +1163,7 @@ function pintarOrdenes(){
       '<div class="ord-cab"><div><div class="ord-num">Orden '+esc(o.orden)+'</div>'+
       '<div class="ord-prod">'+esc(o.maquina)+(o.presentacion?' · '+esc(o.presentacion):'')+'</div></div>'+
       '<div class="ord-fecha">'+esc(fechaCorta(o.hasta))+'</div></div>'+
-      '<div class="ord-det">Lote <b>'+esc(o.lote||'—')+'</b> · '+o.controles+' control'+(o.controles===1?'':'es')+' · 👤 '+esc(o.analistas||'—')+'</div>'+
+      '<div class="ord-det">'+(String(o.lote||'').includes(',')?'Lotes ':'Lote ')+'<b>'+esc(o.lote||'—')+'</b> · '+o.controles+' control'+(o.controles===1?'':'es')+' · 👤 '+esc(o.analistas||'—')+'</div>'+
       '<div class="ord-tags">'+estado+extra+'</div>'+botones+'</div>';
   }).join('');
 }

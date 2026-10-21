@@ -470,7 +470,9 @@ rutasFabulosoCaptura.get('/ordenes', leer, async (req, res, next) => {
                     min(m.registrado_en)                         AS desde,
                     max(m.registrado_en)                         AS hasta,
                     max(m.codigo_pt)                             AS producto,
-                    max(m.lote)                                  AS lote,
+                    -- Todos los lotes de la orden, no uno solo: la pantalla busca
+                    -- por numero de lote (Claudia, 21/10/2026).
+                    string_agg(DISTINCT nullif(trim(m.lote), ''), ', ') AS lote,
                     max(m.linea)                                 AS linea,
                     string_agg(DISTINCT m.analista_nombre, ', ') AS analistas,
                     count(*) FILTER (WHERE m.estado = 'Rechazado')::int AS rechazados,
@@ -485,6 +487,20 @@ rutasFabulosoCaptura.get('/ordenes', leer, async (req, res, next) => {
              ORDER BY max(m.registrado_en) DESC`,
             [String(dias)]
         );
+        // El estado del rotulo de todas las ordenes en una sola consulta. Antes
+        // se pedia orden por orden (un viaje por fila): con el periodo de un
+        // año en la pantalla eso son cientos de viajes, y la lista no necesita
+        // mas que el estado -el detalle de la orden sigue trayendo el rotulo
+        // completo, con sus eventos- (21/10/2026).
+        const estadoRotulo = new Map();
+        if (rows.length) {
+            const { rows: rv } = await consultar(
+                `SELECT orden, estado FROM rotulo_verificaciones
+                 WHERE app = 'fabuloso' AND orden = ANY($1)`,
+                [rows.map((f) => f.orden)]
+            );
+            for (const v of rv) estadoRotulo.set(v.orden, v.estado);
+        }
         const ordenes = [];
         for (const f of rows) {
             ordenes.push({
@@ -500,7 +516,7 @@ rutasFabulosoCaptura.get('/ordenes', leer, async (req, res, next) => {
                 aprobada: Boolean(f.aprobada_por),
                 aprobadaPor: f.aprobada_por || '', aprobadaEn: f.aprobada_en || null,
                 notas: f.notas || '',
-                rotulo: await rotuloDe('fabuloso', f.orden),
+                rotulo: estadoRotulo.has(f.orden) ? { estado: estadoRotulo.get(f.orden) } : null,
             });
         }
         res.json({ ok: true, ordenes });

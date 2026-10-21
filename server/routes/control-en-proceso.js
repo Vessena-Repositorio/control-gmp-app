@@ -606,7 +606,10 @@ rutasControlEnProceso.get('/ordenes', leer, async (req, res, next) => {
                     count(*) FILTER (WHERE c.has_dev)::int          AS con_desvio,
                     min(c.fecha)                                    AS desde,
                     max(c.fecha)                                    AS hasta,
-                    max(c.lote)                                     AS lote,
+                    -- Todos los lotes de la orden, no uno solo: la pantalla busca
+                    -- por numero de lote y con max() una orden con dos lotes solo
+                    -- se encontraba por uno de ellos (Claudia, 21/10/2026).
+                    string_agg(DISTINCT nullif(trim(c.lote), ''), ', ') AS lote,
                     max(c.maquina)                                  AS maquina,
                     max(c.presentacion)                             AS presentacion,
                     string_agg(DISTINCT c.analista, ', ')           AS analistas,

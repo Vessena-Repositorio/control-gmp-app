@@ -632,19 +632,18 @@ window.APP_CONFIG = {
     app.innerHTML = '<div class="card"><div class="muted small">Cargando órdenes…</div></div>';
     await cargarOrdenes();
     const puede = hasRole('Coordinador');
-    const pendientes = state.ordenes.filter(o => !o.aprobada && o.deApp);
-    const previas = state.ordenes.filter(o => !o.aprobada && !o.deApp);
-    const aprobadas = state.ordenes.filter(o => o.aprobada);
 
     const tarjeta = (o) => {
       const rot = o.rotulo ? (ESTADO_ROT[o.rotulo.estado] || '') : '';
       const alertas = (o.rechazados ? `<span class="chip danger">${o.rechazados} rechazado(s)</span>` : '')
         + (o.retenidos ? `<span class="chip warn">${o.retenidos} retenido(s)</span>` : '');
+      // El servidor manda todos los lotes de la orden, separados por coma.
+      const lotes = String(o.lote || '');
       return `<div class="card">
         <div class="row" style="justify-content:space-between;align-items:flex-start">
           <div>
             <strong>Orden ${esc(o.orden)}</strong>
-            <div class="muted small">${esc(o.producto || '')}${o.lote ? ' · lote ' + esc(o.lote) : ''}${o.linea ? ' · ' + esc(o.linea) : ''}</div>
+            <div class="muted small">${esc(o.producto || '')}${lotes ? (lotes.includes(',') ? ' · lotes ' : ' · lote ') + esc(lotes) : ''}${o.linea ? ' · ' + esc(o.linea) : ''}</div>
             <div class="muted small">${o.muestreos} muestreo(s) · ${esc(o.analistas || '')} · ${esc(fmtDate(o.hasta))}</div>
           </div>
           ${o.aprobada ? '<span class="chip ok">aprobada</span>' : '<span class="chip warn">sin aprobar</span>'}
@@ -661,21 +660,82 @@ window.APP_CONFIG = {
     app.innerHTML =
       `<div class="card">
          <h2>Órdenes de envasado</h2>
-         <div class="muted small">Últimos 60 días. ${puede
+         <div class="muted small">${puede
            ? 'Al aprobar, la orden queda cerrada y se puede imprimir para el dossier.'
            : 'Aprueban Antonella, Gloria o Claudia.'}</div>
-       </div>` +
-      `<h3>Para aprobar (${pendientes.length})</h3>` +
-      (pendientes.length ? pendientes.map(tarjeta).join('') : '<div class="card"><div class="muted small">No hay órdenes esperando aprobación.</div></div>') +
-      (previas.length ? `<h3>De la app anterior (${previas.length})</h3>
-         <div class="card"><div class="muted small">Se cargaron antes de la migración y no llevan esta aprobación.</div></div>`
-        + previas.slice(0, 20).map(tarjeta).join('') : '') +
-      (aprobadas.length ? `<h3>Aprobadas (${aprobadas.length})</h3>` + aprobadas.slice(0, 20).map(tarjeta).join('') : '');
+         <div class="filter mt8">
+           <input id="ord_search" placeholder="🔎 Buscar por N° de orden, lote, código PT o analista…" />
+           <select id="ord_dias" title="Período">
+             <option value="7">Última semana</option>
+             <option value="30">Último mes</option>
+             <option value="60" selected>Últimos 2 meses</option>
+             <option value="90">Últimos 3 meses</option>
+             <option value="365">Último año</option>
+           </select>
+         </div>
+       </div>
+       <div id="ordBox"></div>`;
 
-    app.querySelectorAll('[data-orden]').forEach(b =>
-      b.addEventListener('click', () => nav('order_detail', { orden: b.dataset.orden })));
-    app.querySelectorAll('[data-aprobar]').forEach(b =>
-      b.addEventListener('click', () => nav('order_detail', { orden: b.dataset.aprobar })));
+    // Esta pantalla se queda con su propia copia: el refresco automatico que
+    // mantiene el contador del menu recarga state.ordenes con los ultimos 60
+    // dias, y si la lista saliera de ahi pisaria el periodo elegido aca.
+    let lista = state.ordenes.slice();
+
+    // Se compara sin signos ni espacios, asi "L 25-100" encuentra "L25100"
+    // (Claudia, 21/10/2026: no se podia buscar una orden por su numero de lote).
+    const clave = (s) => String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]/g, '');
+    const coincide = (o, k) => [o.orden, o.lote, o.producto, o.linea, o.analistas]
+      .some(v => clave(v).includes(k));
+
+    function pintar() {
+      const q = (document.getElementById('ord_search').value || '').trim();
+      const k = clave(q);
+      // Buscando se miran todas las ordenes del periodo, aprobadas incluidas:
+      // es justo cuando se busca una, para volver a verla o imprimirla.
+      const l = k ? lista.filter(o => coincide(o, k)) : lista;
+      const pendientes = l.filter(o => !o.aprobada && o.deApp);
+      const previas = l.filter(o => !o.aprobada && !o.deApp);
+      const aprobadas = l.filter(o => o.aprobada);
+      // Sin buscar se muestran las ultimas 20 de cada grupo; buscando, todas
+      // las que coinciden, que para eso se busco.
+      const tope = k ? l.length : 20;
+      const box = document.getElementById('ordBox');
+      if (k && !l.length) {
+        box.innerHTML = `<div class="card"><div class="muted small">Ninguna orden coincide con «${esc(q)}». Probá con otro número de lote o de orden, o ampliá el período.</div></div>`;
+        return;
+      }
+      box.innerHTML =
+        (k ? `<div class="card"><div class="muted small">🔎 ${l.length} orden(es) con «${esc(q)}», aprobadas incluidas.</div></div>` : '') +
+        (pendientes.length || !k ? `<h3>Para aprobar (${pendientes.length})</h3>` : '') +
+        (pendientes.length ? pendientes.map(tarjeta).join('')
+          : (!k ? '<div class="card"><div class="muted small">No hay órdenes esperando aprobación.</div></div>' : '')) +
+        (previas.length ? `<h3>De la app anterior (${previas.length})</h3>
+           <div class="card"><div class="muted small">Se cargaron antes de la migración y no llevan esta aprobación.</div></div>`
+          + previas.slice(0, tope).map(tarjeta).join('') : '') +
+        (aprobadas.length ? `<h3>Aprobadas (${aprobadas.length})</h3>` + aprobadas.slice(0, tope).map(tarjeta).join('') : '');
+
+      box.querySelectorAll('[data-orden]').forEach(b =>
+        b.addEventListener('click', () => nav('order_detail', { orden: b.dataset.orden })));
+      box.querySelectorAll('[data-aprobar]').forEach(b =>
+        b.addEventListener('click', () => nav('order_detail', { orden: b.dataset.aprobar })));
+    }
+
+    async function recargar() {
+      const box = document.getElementById('ordBox');
+      box.innerHTML = '<div class="card"><div class="muted small">Cargando órdenes…</div></div>';
+      try {
+        const r = await api('listOrdenes', { dias: Number(document.getElementById('ord_dias').value) || 60 });
+        lista = r.ordenes || [];
+      } catch (e) {
+        box.innerHTML = `<div class="card"><div class="chip danger">${esc(e.message)}</div></div>`;
+        return;
+      }
+      pintar();
+    }
+
+    document.getElementById('ord_search').addEventListener('input', pintar);
+    document.getElementById('ord_dias').addEventListener('change', recargar);
+    pintar();
   }
 
   // ---------- RÓTULOS (segundo control de supervisión, lib/rotulos.js) ----------
