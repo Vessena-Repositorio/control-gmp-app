@@ -183,9 +183,13 @@ rutasAuditorias.post('/firmas', leer, async (req, res, next) => {
 rutasAuditorias.post('/avisar-accion', cargar, async (req, res, next) => {
     const codigo = String(req.body?.codigo || '').slice(0, 40);
     try {
-        const { para } = await avisarAccion({ codigo });
-        await enTransaccion((c) => registrar(c, req, 'AVISAR', 'Acción', `${codigo} → ${para.join(', ')}`));
-        res.json({ ok: true, para });
+        const { para, aceptados, rechazados } = await avisarAccion({
+            codigo, copiarA: req.usuario?.email || req.usuario?.usuario,
+        });
+        await enTransaccion((c) => registrar(c, req, 'AVISAR', 'Acción',
+            `${codigo} → ${(aceptados.length ? aceptados : para).join(', ')}` +
+            (rechazados.length ? ` · RECHAZADOS: ${rechazados.join(', ')}` : '')));
+        res.json({ ok: true, para, aceptados, rechazados });
     } catch (err) { responder(err, res, next); }
 });
 

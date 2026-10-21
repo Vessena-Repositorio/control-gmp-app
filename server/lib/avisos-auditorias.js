@@ -317,7 +317,7 @@ export function configAuditorias() {
  * Claudia y Gloria). Es el mismo correo que el recordatorio semanal pero de a
  * uno y cuando hace falta, no esperando al lunes.
  */
-export async function avisarAccion({ codigo }) {
+export async function avisarAccion({ codigo, copiarA }) {
     if (!hayCorreo) {
         const e = new Error('El correo no está configurado en el servidor');
         e.status = 400; throw e;
@@ -335,9 +335,12 @@ export async function avisarAccion({ codigo }) {
     const aud = auditorias.find((x) => x.id === h?.auditId);
     // La copia sale de los destinatarios configurados, no de un correo escrito
     // en el codigo: si manana cambia quien sigue las auditorias, cambia ahi.
-    const copia = (await supervisoresDe(RECURSO, 'acciones-vencidas'))
-        .filter((c) => c.toLowerCase() !== correo.toLowerCase());
-    const para = [correo, ...copia];
+    // Siempre copia a quien lo manda: pidio un aviso, tiene que quedarle el
+    // comprobante sin depender de estar en la lista de supervisores.
+    const copia = [...(await supervisoresDe(RECURSO, 'acciones-vencidas')), String(copiarA || '')]
+        .map((c) => String(c || '').trim().toLowerCase())
+        .filter((c) => c.includes('@') && c !== correo.toLowerCase());
+    const para = [correo, ...new Set(copia)];
 
     const hoy = await hoyISO();
     const vencido = a.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(a.dueDate) && a.dueDate < hoy;
@@ -357,9 +360,11 @@ export async function avisarAccion({ codigo }) {
       <p style="margin:14px 0 0">Por favor actualizá el estado y cargá la evidencia en la app.</p>`;
     const asunto = `[Vessena · Auditorías] Plan de acción ${a.code}` +
         (vencido ? ' — VENCIDO' : a.dueDate ? ` — vence ${a.dueDate}` : '');
-    await enviar({
+    const r = await enviar({
         para, asunto, texto: asunto,
         html: marco('Plan de acción', `SOP-AC-035 · ${esc(a.code || '')}`, cuerpo, vencido ? '#B91C1C' : NAV),
     });
-    return { para };
+    // El servidor de correo puede aceptar unos destinatarios y rechazar otros:
+    // el envio "sale bien" igual, asi que hay que mirar quienes quedaron fuera.
+    return { para, aceptados: r.aceptados || [], rechazados: r.rechazados || [] };
 }

@@ -996,6 +996,17 @@ ${firmasHtml}</table>
 }
 
 /* ── AUDIT DETAIL MODAL ── */
+/* Lo que contesta el servidor al mandar un aviso. Los rechazados se muestran
+   aparte: el envio "sale bien" aunque el servidor de correo rechace a alguno,
+   y si no se dice, uno se queda esperando un mail que nunca salio. */
+function avisoHecho(r){
+  const ok=(r.aceptados&&r.aceptados.length?r.aceptados:r.para)||[];
+  const mal=r.rechazados||[];
+  return "Aviso enviado a:\n"+ok.map(x=>"• "+x).join("\n")
+    +(mal.length?"\n\nRECHAZADOS por el servidor de correo:\n"+mal.map(x=>"• "+x).join("\n")
+      +"\n\nRevisá que la dirección esté bien escrita.":"");
+}
+
 /* Los planes de accion viven en su propia pantalla, pero se cargan desde acá:
    el hallazgo, su causa, lo que se hizo y lo que se va a hacer se piensan
    juntos. Lo que se toca acá es la misma lista de Planes de Acción, así que
@@ -1015,7 +1026,7 @@ function PlanesEnFicha({hallazgo,acciones,sAcciones,cfg,guardado}){
     if(!a.responsibleEmail){alert("Cargale el correo del responsable para poder avisarle.");return;}
     if(!confirm(`Se le manda el recordatorio de ${a.code} a ${a.responsible||a.responsibleEmail}, con copia a quienes siguen las auditorías.\n\n¿Mandar?`))return;
     try{const r=await apiAud('/avisar-accion',{method:'POST',body:JSON.stringify({codigo:a.code})});
-      alert("Aviso enviado a:\n"+(r.para||[]).join("\n"));
+      alert(avisoHecho(r));
     }catch(e){alert("No se pudo enviar: "+e.message);}
   };
   return(<div style={{border:`1px solid ${K.brd}`,borderRadius:9,padding:14,marginBottom:12,background:"#FAFBFC"}}>
@@ -2070,7 +2081,7 @@ function Actions({data,cfg,canEdit}){const{actions,setActions,findings,setLogs,c
     if(!a.responsibleEmail){alert("El plan no tiene cargado el correo del responsable.");return;}
     if(!confirm(`Se le manda el recordatorio de ${a.code} a ${a.responsible||a.responsibleEmail}, con copia a quienes siguen las auditorías.\n\n¿Mandar?`))return;
     try{const r=await apiAud('/avisar-accion',{method:'POST',body:JSON.stringify({codigo:a.code})});
-      alert("Aviso enviado a:\n"+(r.para||[]).join("\n"));
+      alert(avisoHecho(r));
     }catch(e){alert("No se pudo enviar: "+e.message);}
   };
 
