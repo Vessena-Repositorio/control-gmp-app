@@ -73,6 +73,10 @@ const DEF_CONFIG={
              "Health Canada GUI-0104 (2022) — BPF para ingredientes farmacéuticos activos (ICH Q7)",
              "EFfCI GMP for Cosmetic Ingredients, 5.ª ed. 2017-1 — Ingredientes cosméticos"],
   capaTypes:["Acción Correctiva","Acción Preventiva","Corrección"],
+  /* Las 6M del análisis de causa (Ishikawa). Es una lista de la configuración
+     y no una constante del código: si mañana se trabaja con otras categorías
+     -o alcanzan cuatro-, se cambian acá sin tocar la pantalla. */
+  rootCauseCats:["Mano de obra","Método","Máquina","Material","Medio ambiente","Medición"],
   statuses:["Abierto","En proceso","Cerrado","No aplica","Evaluada — No implementar","Vencido"],
   sectors:["Seguimiento Depósito y Distribución","Seguimiento LCC","Gestión Productiva (Fabricación)","Seguimiento Gestión Productiva (Envasado)","Gestión Productiva (Plásticos)","Gestión de Higiene y Sanitización","Seguimiento Depósito de Materias Primas","Depósito PT","Hipoclorito","Control de Calidad","Aseguramiento de Calidad","Dirección Técnica","Compras","Servicios/Agua/Tanques","Áreas auxiliares/Vestuarios","Imprimex (Proveedor)","Dimena (Proveedor)","Petropack (Proveedor)","Imprenta Grifelman (Proveedor)"],
   teams:[
@@ -557,9 +561,17 @@ const fechaCSV=(v)=>{
 };
 /* Un renglón por hallazgo, en el orden de COLS_CAPA. Lo que ya está cargado
    en el plan de acción viaja completado; el resto lo llena el auditado. */
+/* En la plantilla, las categorías marcadas van delante de la conclusión: el
+   auditado ve el análisis completo en una celda y, al volver, el texto entra
+   entero en la conclusión. */
+function causaTexto(f){
+  const m=f.rootCauseCats||{};
+  const partes=Object.keys(m).map(c=>m[c]?`${c}: ${m[c]}`:c);
+  return [...partes,f.rootCause||""].filter(Boolean).join(" · ");
+}
 function filaCAPA(f,cfg,acc){
   const cl=cfg.classifications.find(x=>x.id===f.classification);
-  return [f.code,cl?.label||"",f.description||"",f.rootCause||"",
+  return [f.code,cl?.label||"",f.description||"",causaTexto(f),
     f.correction||"",f.correctionResponsible||"",f.correctionDate||"",
     acc?.description||"",acc?.responsible||"",acc?.dueDate||"","",
     acc?.verification||"",acc?.status||"",acc?.effectiveness||"","",
@@ -1070,6 +1082,39 @@ function avisoHecho(r){
       +"\n\nRevisá que la dirección esté bien escrita.":"");
 }
 
+/* La causa raíz no se escribe en una hoja en blanco: se marca en cuál de las
+   6M está y recién ahí se explica. Marcar la categoría obliga a pensar dónde
+   está la causa, y después permite ver si se repiten -cuántos hallazgos son de
+   método, cuántos de capacitación- cosa que con un párrafo suelto no se podía.
+   El texto libre sigue estando: es la conclusión del análisis. */
+function CausaRaiz({fm,sFm,cfg}){
+  const cats=cfg.rootCauseCats||[];
+  const marcadas=fm.rootCauseCats||{};
+  const alternar=(c)=>sFm(p=>{
+    const m={...(p.rootCauseCats||{})};
+    if(c in m)delete m[c]; else m[c]="";
+    return {...p,rootCauseCats:m};
+  });
+  const detalle=(c,v)=>sFm(p=>({...p,rootCauseCats:{...(p.rootCauseCats||{}),[c]:v}}));
+  return(<div style={{border:`1px solid ${K.brd}`,borderRadius:9,padding:14,marginBottom:12,background:"#FAFBFC"}}>
+    <h3 style={{fontSize:13,fontWeight:700,margin:"0 0 4px"}}>🐟 Causa raíz</h3>
+    <p style={{fontSize:11.5,color:K.txS,margin:"0 0 10px"}}>Marcá en qué categoría está la causa y explicá cada una.</p>
+    <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
+      {cats.map(c=>{const on=c in marcadas;
+        return <button key={c} onClick={()=>alternar(c)} style={{...sB("g"),fontSize:12,
+          background:on?K.priL:"transparent",color:on?K.pri:K.txS,
+          borderColor:on?K.pri+"60":K.brd,fontWeight:on?700:600}}>{on?"☑":"☐"} {c}</button>;})}
+    </div>
+    {Object.keys(marcadas).map(c=><Fd key={c} l={c}>
+      <textarea style={{...sI,minHeight:36,resize:"vertical",fontSize:12.5}} value={marcadas[c]||""}
+        onChange={e=>detalle(c,e.target.value)} placeholder={`por qué, del lado de ${c.toLowerCase()}`}/>
+    </Fd>)}
+    <Fd l="Conclusión del análisis"><textarea style={{...sI,minHeight:45,resize:"vertical"}}
+      value={fm.rootCause||""} onChange={e=>sFm(p=>({...p,rootCause:e.target.value}))}
+      placeholder="la causa raíz, en una frase"/></Fd>
+  </div>);
+}
+
 /* Los planes de accion viven en su propia pantalla, pero se cargan desde acá:
    el hallazgo, su causa, lo que se hizo y lo que se va a hacer se piensan
    juntos. Lo que se toca acá es la misma lista de Planes de Acción, así que
@@ -1168,7 +1213,7 @@ function FichaHallazgo({hallazgo,auditorias,cfg,onGuardar,onEliminar,onClose,aud
     <Fd l="Descripción"><textarea style={{...sI,minHeight:90,resize:"vertical"}} value={fm.description||""} onChange={e=>sFm(p=>({...p,description:e.target.value}))}/></Fd>
     <Fd l="Evidencia"><textarea style={{...sI,minHeight:45,resize:"vertical"}} value={fm.evidence||""} onChange={e=>sFm(p=>({...p,evidence:e.target.value}))}/></Fd>
     <Adjuntos entidad="hallazgo" referencia={fm.code||""} titulo="Fotos y documentos del hallazgo" canEdit={true}/>
-    <Fd l="Causa raíz"><textarea style={{...sI,minHeight:45,resize:"vertical"}} value={fm.rootCause||""} onChange={e=>sFm(p=>({...p,rootCause:e.target.value}))}/></Fd>
+    <CausaRaiz fm={fm} sFm={sFm} cfg={cfg}/>
     {/* La corrección es lo que se hizo en el momento para contener el
         apartamiento: no lleva seguimiento, por eso va acá y no como plan. */}
     <div style={{border:`1px solid ${K.brd}`,borderRadius:9,padding:14,marginBottom:12,background:"#FAFBFC"}}>
@@ -2441,6 +2486,8 @@ function ConfigMod({cfg,setCfg,setLogs,currentUser,findings,actions,setFindings}
         </div>)}
       </div>);
     })()}
+    <LE title="Causa raíz — categorías (6M)" icon="🐟" items={cfg.rootCauseCats||[]}
+      onUpdate={v=>setCfg(p=>({...p,rootCauseCats:v}))}/>
     <AlinearEstados findings={findings} actions={actions} setFindings={setFindings} setLogs={setLogs} currentUser={currentUser}/>
     <div className="cfg-section" style={{borderColor:K.red+"30",background:K.redL}}><h3 style={{color:K.red}}>🔄 Restaurar</h3><button style={sB("red")} onClick={()=>{if(confirm("¿Restaurar?")){setCfg(DEF_CONFIG);logC("Restaurado");}}}>Restaurar todo</button></div>
   </div>);
