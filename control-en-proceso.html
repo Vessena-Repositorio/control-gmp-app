@@ -364,7 +364,10 @@ const LIMP_DEFECTS=[
       <div class="fd"><span class="fl">Máquina</span><select class="fi" id="cMaq" onchange="onMaq()"><option value="">Seleccionar...</option></select></div>
       <div class="fd"><span class="fl">Presentación</span><select class="fi" id="cPres" onchange="onPres()"><option value="">—</option></select></div>
       <div class="fd"><span class="fl">N° Lote</span><input class="fi" id="cLote" placeholder="—"/></div>
-      <div class="fd"><span class="fl">N° Orden</span><input class="fi" id="cOrden" placeholder="—" oninput="avisoPH()"/></div>
+      <div class="fd"><span class="fl">N° Orden</span><input class="fi" id="cOrden" placeholder="—" oninput="avisoPH()"/>
+        <label class="ord-check" style="margin-top:4px;font-size:12px;color:var(--text2)">
+          <input type="checkbox" id="cSinOP" onchange="sinOP()"> La orden todavía no se emitió</label>
+        <div id="cSinOPClave" style="display:none;font-size:11.5px;color:var(--text2);margin-top:2px"></div></div>
       <div class="fd"><span class="fl">F. Vencimiento</span><input class="fi" id="cVence" placeholder="—"/></div>
       <div class="fd"><span class="fl">Cód. Granel</span><input class="fi" id="cGranel" placeholder="G000000" oninput="mostrarEan()"/></div>
       <div class="fd"><span class="fl">Cód. PT</span><input class="fi" id="cCodPT" placeholder="—" oninput="mostrarEan()"/></div>
@@ -697,7 +700,8 @@ function showForm(){document.getElementById('newBtn').style.display='none';docum
 const now=new Date();document.getElementById('cHora').value=now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
 resetForm();avisoPH();document.getElementById('cForm').scrollIntoView({behavior:'smooth'})}
 function cancelForm(){document.getElementById('cForm').style.display='none';document.getElementById('newBtn').style.display='block'}
-function resetForm(){['cP1','cP2','cP3','cP4','cP5','cPH','cDevD','cDevQ','cObs','cLote','cOrden','cVence','cGranel','cCodPT'].forEach(id=>{const e=document.getElementById(id);if(e){e.value='';e.className='fi'}});
+function resetForm(){const sop=document.getElementById('cSinOP');if(sop){sop.checked=false;document.getElementById('cOrden').disabled=false;claveSinOP();}
+  ['cP1','cP2','cP3','cP4','cP5','cPH','cDevD','cDevQ','cObs','cLote','cOrden','cVence','cGranel','cCodPT'].forEach(id=>{const e=document.getElementById(id);if(e){e.value='';e.className='fi'}});
 document.getElementById('cProm').textContent='—';document.getElementById('cProm').style.color='var(--text)';
 document.getElementById('cMaq').value='';document.getElementById('cPres').innerHTML='<option value="">—</option>';
 document.querySelectorAll('#cChk .ci').forEach(c=>c.classList.remove('on'));
@@ -710,6 +714,32 @@ document.getElementById('limpControls').style.display='none';
 // Reset Limpiadores fields
 const dl=document.getElementById('limpDefList');if(dl)dl.innerHTML='';
 ['cLimpUds','cLimpMotivo','cLimpAccion'].forEach(id=>{const e=document.getElementById(id);if(e)e.value=''})}
+
+/* Sin orden de produccion, la clave la arma el codigo PT y el lote: antes se
+   escribia "S/OP" y todos los controles -de productos distintos- quedaban
+   dentro de una misma orden (Claudia, 21/10/2026). El servidor hace lo mismo;
+   aca se calcula para mostrarlo antes de guardar. */
+const SIN_ORDEN=new Set(['','sop','so','sn','sd','na','sinop','sinorden','ordensop','ordenso','sinnumero','sinnro','sinoc','0','00','000']);
+const comoClave=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+const esSinOrden=s=>SIN_ORDEN.has(comoClave(s));
+function ordenDe(orden,codPT,lote){
+  if(!esSinOrden(orden))return String(orden||'').trim();
+  return 'S/OP '+(String(codPT||'').trim()||'sin PT')+' · '+(String(lote||'').trim()||'sin lote');
+}
+/* La casilla deja el campo en blanco y muestra con que clave va a quedar. */
+function sinOP(){
+  const sin=document.getElementById('cSinOP').checked;
+  const campo=document.getElementById('cOrden');
+  campo.disabled=sin; if(sin)campo.value='';
+  claveSinOP(); avisoPH();
+}
+function claveSinOP(){
+  const el=document.getElementById('cSinOPClave');if(!el)return;
+  if(!document.getElementById('cSinOP').checked){el.style.display='none';return}
+  const k=ordenDe('',document.getElementById('cCodPT').value,document.getElementById('cLote').value);
+  el.style.display='block';
+  el.textContent='Se va a registrar como: '+k;
+}
 
 // Primer control de una orden: ninguno guardado (de cualquier día) ni pendiente en este equipo.
 // El servidor lo vuelve a verificar: acá solo se avisa antes de mandar.
@@ -758,8 +788,10 @@ function mostrarEan(){
 function avisoPH(){
   avisoRotulo();
   mostrarEan();
+  claveSinOP();
   const el=document.getElementById('phAviso');if(!el)return;
-  const orden=document.getElementById('cOrden').value.trim();
+  const orden=ordenDe(document.getElementById('cOrden').value,
+    document.getElementById('cCodPT').value,document.getElementById('cLote').value);
   const maq=document.getElementById('cMaq').value;
   if(maq==='Limpiadores'){el.textContent='';return}
   if(orden&&esPrimerControl(orden)){el.textContent='· obligatorio: es el primer control de esta orden';el.style.color='var(--red)'}
@@ -770,10 +802,14 @@ function saveCtrl(){
   const maq=document.getElementById('cMaq').value;if(!maq){toast('⚠️ Elegí máquina',true);return}
   const pres=document.getElementById('cPres').value;if(!pres){toast('⚠️ Elegí presentación',true);return}
   const lote=document.getElementById('cLote').value.trim();if(!lote){toast('⚠️ Ingresá N° Lote',true);return}
-  const orden=document.getElementById('cOrden').value.trim();if(!orden){toast('⚠️ Ingresá N° Orden',true);return}
+  const sinOrden=document.getElementById('cSinOP').checked;
+  const ordenEscrita=document.getElementById('cOrden').value.trim();
+  if(!sinOrden&&!ordenEscrita){toast('⚠️ Ingresá N° Orden, o marcá que todavía no se emitió',true);return}
   const vence=document.getElementById('cVence').value.trim();if(!vence){toast('⚠️ Ingresá Vencimiento',true);return}
   const granel=document.getElementById('cGranel').value.trim();if(!granel){toast('⚠️ Ingresá Cód. Granel',true);return}
   const codPT=document.getElementById('cCodPT').value.trim();if(!codPT){toast('⚠️ Ingresá Cód. PT',true);return}
+  // Sin orden emitida, la clave sale del PT y el lote: sin ellos no se puede.
+  const orden=ordenDe(ordenEscrita,codPT,lote);
   // Dos códigos escritos a mano que se confundieron entre sí: antes de guardar
   // se pregunta, para que no pase de largo un PT que no existe o un granel sin G.
   const dudas=[];
@@ -1417,7 +1453,8 @@ function rotuloDeOrden(orden){const o=String(orden||'').trim();return ROTULOS.fi
 // Cartel en el formulario de carga según el estado del rótulo de la orden
 function avisoRotulo(){
   const el=document.getElementById('rotAviso');if(!el)return;
-  const r=rotuloDeOrden(document.getElementById('cOrden').value);
+  const r=rotuloDeOrden(ordenDe(document.getElementById('cOrden').value,
+    document.getElementById('cCodPT').value,document.getElementById('cLote').value));
   if(!r||r.estado==='ok'){el.style.display='none';return}
   el.style.display='block';
   if(r.frenada){el.className='rot-aviso freno';el.innerHTML='⛔ <b>Falta el segundo control de supervisión.</b> Venció el plazo para el OK de rótulo ('+esc(r.plazo)+'): sin ese OK no se pueden cargar más controles de esta orden. <button class="ord-btn pri" style="margin-top:8px" onclick="solicitarRotulo(\''+esc(r.orden)+'\')">📣 Solicitar aprobación</button>'}

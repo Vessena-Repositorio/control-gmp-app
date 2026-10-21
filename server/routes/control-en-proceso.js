@@ -126,7 +126,7 @@ export function armarControl(d, { hoy, hora, analista, controlNum, fotos }) {
     return {
         fecha: hoy,
         analista,
-        orden: texto(d.orden, 60),
+        orden: ordenDe(d),
         lote: texto(d.lote, 60),
         vence: texto(d.vence, 30),
         maquina: texto(d.maquina, 60),
@@ -202,6 +202,26 @@ rutasControlEnProceso.get('/controles', leer, async (_req, res, next) => {
    Carga
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/* Cuando la orden de produccion todavia no se emitio, el control igual se
+   hace. El numero de orden es la clave con la que todo se agrupa, se aprueba y
+   se imprime, asi que escribir "S/OP" juntaba en una sola orden controles de
+   productos y lotes distintos (Claudia, 21/10/2026). En ese caso la clave la
+   arma el servidor: "S/OP <codigo PT> · <lote>", que es lo que de verdad
+   identifica a lo que se esta controlando. */
+const SIN_ORDEN = new Set([
+    '', 'sop', 'so', 'sn', 'sd', 'na', 'sinop', 'sinorden', 'ordensop',
+    'ordenso', 'sinnumero', 'sinnro', 'sinoc', '0', '00', '000',
+]);
+const comoClave = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const esSinOrden = (s) => SIN_ORDEN.has(comoClave(s));
+function ordenDe(d) {
+    const o = texto(d.orden, 60);
+    if (!esSinOrden(o)) return o;
+    const pt = texto(d.codPT, 60) || 'sin PT';
+    const lote = texto(d.lote, 60) || 'sin lote';
+    return `S/OP ${pt} · ${lote}`;
+}
+
 /** POST /api/control-en-proceso/controles */
 rutasControlEnProceso.post('/controles', cargar, async (req, res, next) => {
     const d = req.body || {};
@@ -211,7 +231,7 @@ rutasControlEnProceso.post('/controles', cargar, async (req, res, next) => {
     }
     const faltan = [
         ['maquina', 'la máquina'], ['presentacion', 'la presentación'], ['lote', 'el lote'],
-        ['orden', 'la orden'], ['vence', 'el vencimiento'], ['granel', 'el código de granel'],
+        ['vence', 'el vencimiento'], ['granel', 'el código de granel'],
         ['codPT', 'el código PT'],
     ].filter(([k]) => !texto(d[k])).map(([, n]) => n);
     if (faltan.length) {
@@ -246,7 +266,7 @@ rutasControlEnProceso.post('/controles', cargar, async (req, res, next) => {
 
             // Sin el OK de rotulo, desde el mediodia la orden no acepta mas
             // controles (lib/rotulos.js).
-            const freno = await frenoDe(c, 'proceso', texto(d.orden, 60));
+            const freno = await frenoDe(c, 'proceso', ordenDe(d));
             if (freno) throw fallo(409, freno);
 
             // Cada orden tiene que tener al menos un pH, y se exige en su primer
@@ -254,10 +274,10 @@ rutasControlEnProceso.post('/controles', cargar, async (req, res, next) => {
             if (numero(d.ph) === null) {
                 const { rows: antes } = await c.query(
                     'SELECT 1 FROM proceso_controles WHERE orden = $1 AND duplicado_de IS NULL LIMIT 1',
-                    [texto(d.orden, 60)]
+                    [ordenDe(d)]
                 );
                 if (!antes.length) {
-                    throw fallo(400, `Es el primer control de la orden ${texto(d.orden, 60)}: tiene que llevar pH`);
+                    throw fallo(400, `Es el primer control de la orden ${ordenDe(d)}: tiene que llevar pH`);
                 }
             }
 
