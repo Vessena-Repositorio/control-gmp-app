@@ -10,12 +10,15 @@
  * Lo que decide quien puede que: ver para mirar, cargar para escribir,
  * administrar para la configuracion y para importar el año.
  */
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { consultar, enTransaccion } from '../db.js';
 import { exigirPermiso } from '../lib/acceso.js';
 import { PERMISOS_POR_ROL } from '../lib/permisos.js';
 import { nombreComparable } from '../lib/firmas.js';
 import { avisarAccion } from '../lib/avisos-auditorias.js';
+import { guardar, abrir, extension, hayAlmacen, MAX_BYTES, TIPOS, TIPOS_PRUEBAS }
+    from '../lib/almacen-documentos.js';
+import { comprimirFoto } from '../lib/comprimir-foto.js';
 
 export const rutasAuditorias = Router();
 
@@ -36,6 +39,11 @@ const COLECCIONES = new Set([
 const SOLO_ADMIN = new Set(['config']);
 
 const quien = (req) => req.usuario.nombre || req.usuario.usuario;
+
+// La evidencia de un hallazgo puede ser una foto del celular, el PDF de un
+// certificado o el procedimiento que se redacto: se admiten los tres.
+const TIPOS_EVIDENCIA = { ...TIPOS, ...TIPOS_PRUEBAS, '.webp': 'image/webp' };
+const ENTIDADES = new Set(['hallazgo', 'accion', 'auditoria']);
 
 function fallo(status, mensaje) {
     const e = new Error(mensaje);
@@ -190,6 +198,111 @@ rutasAuditorias.post('/avisar-accion', cargar, async (req, res, next) => {
             `${codigo} → ${(aceptados.length ? aceptados : para).join(', ')}` +
             (rechazados.length ? ` · RECHAZADOS: ${rechazados.join(', ')}` : '')));
         res.json({ ok: true, para, aceptados, rechazados });
+    } catch (err) { responder(err, res, next); }
+});
+
+/**
+ * GET /api/auditorias/adjuntos[?entidad=&ref=]
+ * La evidencia cargada. Sin filtro devuelve todo: son pocos y la pantalla
+ * necesita saber cuales tienen adjunto para mostrar el clip.
+ */
+rutasAuditorias.get('/adjuntos', leer, async (req, res, next) => {
+    try {
+        const entidad = String(req.query.entidad || '');
+        const ref = String(req.query.ref || '');
+        const cond = [], args = [];
+        if (entidad) { args.push(entidad); cond.push(`entidad = $${args.length}`); }
+        if (ref) { args.push(ref); cond.push(`referencia = $${args.length}`); }
+        const { rows } = await consultar(
+            `SELECT id, entidad, referencia, nombre, mime, bytes, nota, subido_por, subido_en
+             FROM aud_adjuntos ${cond.length ? 'WHERE ' + cond.join(' AND ') : ''}
+             ORDER BY subido_en DESC LIMIT 2000`, args
+        );
+        res.json({ ok: true, adjuntos: rows });
+    } catch (err) { next(err); }
+});
+
+/**
+ * POST /api/auditorias/adjuntos?entidad=&ref=&nombre=&nota=
+ * El archivo va en el cuerpo, como application/octet-stream. Las fotos se
+ * comprimen antes de guardarlas, como en el resto de las apps.
+ */
+rutasAuditorias.post('/adjuntos',
+    express.raw({ type: 'application/octet-stream', limit: MAX_BYTES }),
+    cargar,
+    async (req, res, next) => {
+        try {
+            if (!hayAlmacen) throw fallo(503, 'Falta configurar dónde se guardan los archivos (DOC_DIR)');
+            const entidad = String(req.query.entidad || '');
+            if (!ENTIDADES.has(entidad)) throw fallo(400, 'Entidad desconocida');
+            const ref = String(req.query.ref || '').trim().slice(0, 40);
+            if (!ref) throw fallo(400, 'Falta a qué hallazgo o plan corresponde');
+            const nombre = String(req.query.nombre || '').slice(0, 200).split(/[\/]/).pop();
+            if (!nombre) throw fallo(400, 'Falta el nombre del archivo');
+            const ext = extension(nombre);
+            const mime = TIPOS_EVIDENCIA[ext];
+            if (!mime) throw fallo(400, `No se admiten archivos ${ext || 'sin extensión'}`);
+
+            let datos = req.body;
+            let tipo = mime;
+            let nombreFinal = nombre;
+            if (mime.startsWith('image/')) {
+                const c = await comprimirFoto(datos, mime);
+                if (c.tipo !== mime) nombreFinal = nombre.replace(/\.[^.]+$/, '') + '.webp';
+                datos = c.bytes; tipo = c.tipo;
+            }
+            const g = await guardar(datos, nombreFinal, TIPOS_EVIDENCIA);
+            const fila = await enTransaccion(async (c) => {
+                const { rows } = await c.query(
+                    `INSERT INTO aud_adjuntos (entidad, referencia, nombre, ruta, sha256, mime, bytes, nota, subido_por)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+                     RETURNING id, entidad, referencia, nombre, mime, bytes, nota, subido_por, subido_en`,
+                    [entidad, ref, nombreFinal, g.ruta, g.sha256, tipo, g.bytes,
+                     String(req.query.nota || '').slice(0, 300) || null, quien(req)]
+                );
+                await registrar(c, req, 'ADJUNTAR', entidad === 'accion' ? 'Acción' : 'Hallazgo',
+                    `${ref}: ${nombreFinal} (${Math.round(g.bytes / 1024)} KB)`);
+                return rows[0];
+            });
+            res.status(201).json({ ok: true, adjunto: fila });
+        } catch (err) { responder(err, res, next); }
+    });
+
+/** GET /api/auditorias/adjuntos/:id — el archivo, para abrirlo o bajarlo. */
+rutasAuditorias.get('/adjuntos/:id', leer, async (req, res, next) => {
+    try {
+        const { rows } = await consultar(
+            'SELECT nombre, ruta, mime, bytes FROM aud_adjuntos WHERE id = $1', [Number(req.params.id) || 0]
+        );
+        const a = rows[0];
+        if (!a) throw fallo(404, 'No existe ese archivo');
+        const { stream, bytes } = await abrir(a.ruta);
+        res.setHeader('Content-Type', a.mime);
+        res.setHeader('Content-Length', bytes);
+        res.setHeader('Content-Disposition',
+            `inline; filename*=UTF-8''${encodeURIComponent(a.nombre)}`);
+        stream.pipe(res);
+    } catch (err) { responder(err, res, next); }
+});
+
+/**
+ * DELETE /api/auditorias/adjuntos/:id
+ * Saca la ficha; el archivo queda en el volumen, igual que en Control de
+ * Documentos: lo que se subio como evidencia no se borra del disco.
+ */
+rutasAuditorias.delete('/adjuntos/:id', cargar, async (req, res, next) => {
+    try {
+        const id = Number(req.params.id) || 0;
+        const borrado = await enTransaccion(async (c) => {
+            const { rows } = await c.query(
+                'DELETE FROM aud_adjuntos WHERE id = $1 RETURNING entidad, referencia, nombre', [id]
+            );
+            if (!rows.length) throw fallo(404, 'No existe ese archivo');
+            await registrar(c, req, 'QUITAR ADJUNTO',
+                rows[0].entidad === 'accion' ? 'Acción' : 'Hallazgo', `${rows[0].referencia}: ${rows[0].nombre}`);
+            return rows[0];
+        });
+        res.json({ ok: true, quitado: borrado.nombre });
     } catch (err) { responder(err, res, next); }
 });
 

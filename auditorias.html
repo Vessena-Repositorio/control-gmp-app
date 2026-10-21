@@ -996,6 +996,69 @@ ${firmasHtml}</table>
 }
 
 /* ── AUDIT DETAIL MODAL ── */
+/* La evidencia: fotos de la no conformidad, el procedimiento que se redactó,
+   el certificado de la capacitación. Los archivos viven en el volumen del
+   servidor, no dentro de la lista de hallazgos: adjuntar una foto no choca con
+   alguien que está guardando la lista en ese momento. */
+const KB=(b)=>b>=1048576?(b/1048576).toFixed(1)+" MB":Math.max(1,Math.round(b/1024))+" KB";
+function Adjuntos({entidad,referencia,titulo,canEdit}){
+  const[lista,sLista]=useState(null);
+  const[subiendo,sSubiendo]=useState("");
+  const cargar=useCallback(()=>{
+    if(!referencia){sLista([]);return;}
+    apiAud(`/adjuntos?entidad=${entidad}&ref=${encodeURIComponent(referencia)}`)
+      .then(d=>sLista(d.adjuntos||[])).catch(()=>sLista([]));
+  },[entidad,referencia]);
+  useEffect(cargar,[cargar]);
+  const subir=async(files)=>{
+    for(const file of files){
+      sSubiendo(file.name);
+      try{
+        const q=new URLSearchParams({entidad,ref:referencia,nombre:file.name});
+        await apiAud(`/adjuntos?${q}`,{method:"POST",headers:{"Content-Type":"application/octet-stream"},body:file});
+      }catch(e){alert(`No se pudo subir ${file.name}: ${e.message}`);}
+    }
+    sSubiendo("");cargar();
+  };
+  const quitar=async(a)=>{
+    if(!confirm(`¿Quitar ${a.nombre}?`))return;
+    try{await apiAud(`/adjuntos/${a.id}`,{method:"DELETE"});cargar();}
+    catch(e){alert("No se pudo quitar: "+e.message);}
+  };
+  const esFoto=(m)=>String(m||"").startsWith("image/");
+  return(<div style={{marginBottom:12}}>
+    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+      <label style={sL}>{titulo||"Evidencia adjunta"}</label>
+      <div style={{flex:1}}/>
+      {canEdit&&referencia&&<label style={{...sB("sm"),cursor:"pointer",color:K.pri}}>
+        📎 Adjuntar
+        <input type="file" multiple style={{display:"none"}}
+          accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx"
+          onChange={e=>{const f=[...e.target.files];e.target.value="";if(f.length)subir(f);}}/>
+      </label>}
+    </div>
+    {!referencia
+      ? <p style={{fontSize:11.5,color:K.txM,margin:0}}>Guardá primero para poder adjuntar.</p>
+      : subiendo
+      ? <p style={{fontSize:11.5,color:K.txS,margin:0}}>Subiendo {subiendo}…</p>
+      : lista===null
+      ? <p style={{fontSize:11.5,color:K.txM,margin:0}}>…</p>
+      : lista.length===0
+      ? <p style={{fontSize:11.5,color:K.txM,margin:0}}>Sin archivos.</p>
+      : <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+          {lista.map(a=><div key={a.id} style={{display:"flex",alignItems:"center",gap:6,border:`1px solid ${K.brd}`,
+            borderRadius:7,padding:"5px 8px",background:"#fff",fontSize:11.5,maxWidth:"100%"}}>
+            <span>{esFoto(a.mime)?"🖼":a.mime==="application/pdf"?"📕":"📄"}</span>
+            <a href={`${API_AUD}/adjuntos/${a.id}`} target="_blank" rel="noopener"
+              style={{color:K.pri,fontWeight:600,textDecoration:"none",maxWidth:220,overflow:"hidden",
+                textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={`${a.nombre} · ${a.subido_por}`}>{a.nombre}</a>
+            <span style={{color:K.txM}}>{KB(a.bytes)}</span>
+            {canEdit&&<button style={{...sB("sm"),color:K.red,padding:"1px 6px"}} onClick={()=>quitar(a)}>✕</button>}
+          </div>)}
+        </div>}
+  </div>);
+}
+
 /* Lo que contesta el servidor al mandar un aviso. Los rechazados se muestran
    aparte: el envio "sale bien" aunque el servidor de correo rechace a alguno,
    y si no se dice, uno se queda esperando un mail que nunca salio. */
@@ -1061,6 +1124,8 @@ function PlanesEnFicha({hallazgo,acciones,sAcciones,cfg,guardado}){
           <Fd l="Seguimiento — verificación de implementación"><textarea style={{...sI,minHeight:38,resize:"vertical",fontSize:12.5}}
             value={a.verification||""} onChange={e=>u(a.id,"verification",e.target.value)}
             placeholder="qué se verificó y con qué evidencia"/></Fd>
+          <Adjuntos entidad="accion" referencia={guardado.some(x=>x.code===a.code)?a.code:""}
+            titulo="Evidencia del plan" canEdit={true}/>
           <G2>
             <Fd l="Verificación de eficacia"><textarea style={{...sI,minHeight:38,resize:"vertical",fontSize:12.5}}
               value={a.effectiveness||""} onChange={e=>u(a.id,"effectiveness",e.target.value)}/></Fd>
@@ -1102,6 +1167,7 @@ function FichaHallazgo({hallazgo,auditorias,cfg,onGuardar,onEliminar,onClose,aud
     {cls&&<div style={{padding:"8px 12px",background:cls.color+"12",borderRadius:6,marginBottom:12,fontSize:12,color:cls.color,border:`1px solid ${cls.color}20`}}><strong>{cls.label}:</strong> {cls.desc} — Plazo: {cls.deadline>0?cls.deadline+" meses":"sin plan de acción"}</div>}
     <Fd l="Descripción"><textarea style={{...sI,minHeight:90,resize:"vertical"}} value={fm.description||""} onChange={e=>sFm(p=>({...p,description:e.target.value}))}/></Fd>
     <Fd l="Evidencia"><textarea style={{...sI,minHeight:45,resize:"vertical"}} value={fm.evidence||""} onChange={e=>sFm(p=>({...p,evidence:e.target.value}))}/></Fd>
+    <Adjuntos entidad="hallazgo" referencia={fm.code||""} titulo="Fotos y documentos del hallazgo" canEdit={true}/>
     <Fd l="Causa raíz"><textarea style={{...sI,minHeight:45,resize:"vertical"}} value={fm.rootCause||""} onChange={e=>sFm(p=>({...p,rootCause:e.target.value}))}/></Fd>
     {/* La corrección es lo que se hizo en el momento para contener el
         apartamiento: no lleva seguimiento, por eso va acá y no como plan. */}
