@@ -560,7 +560,7 @@ const fechaCSV=(v)=>{
 function filaCAPA(f,cfg,acc){
   const cl=cfg.classifications.find(x=>x.id===f.classification);
   return [f.code,cl?.label||"",f.description||"",f.rootCause||"",
-    "","","",
+    f.correction||"",f.correctionResponsible||"",f.correctionDate||"",
     acc?.description||"",acc?.responsible||"",acc?.dueDate||"","",
     acc?.verification||"",acc?.status||"",acc?.effectiveness||"","",
     acc?.followupResp||"",""];
@@ -670,6 +670,43 @@ async function filasDesdeArchivo(file,hallazgos){
   if(/\.pdf$/.test(n)||file.type==='application/pdf')return filasDesdeTexto(await textoDesdePDF(file),hallazgos);
   if(/\.xlsx?$/.test(n)||/sheet|excel/i.test(file.type||""))return filasDesdeTabla(await tablaDesdeExcel(file));
   return filasDesdeTabla(await tablaDesdeCSV(file));
+}
+/* Guardar el hallazgo y sus planes en una sola pasada: los planes nuevos
+   reciben su codigo acá, los borrados se van, y el estado del hallazgo sale de
+   sus planes salvo que la persona lo haya cambiado a mano en la ficha. */
+function guardarHallazgoConPlanes({hallazgo,previo,planes,data,setLogs,usuario}){
+  const todas=data.allActions||data.actions||[];
+  const suyas=todas.filter(a=>a.findingId===hallazgo.id);
+  let n=todas.length;
+  const limpias=(planes||[]).filter(a=>String(a.description||"").trim()).map(a=>{
+    if(!a._nuevo)return a;
+    const {_nuevo,...resto}=a;
+    n+=1;
+    return {...resto,code:`ACC-${String(n).padStart(4,"0")}`,year:hallazgo.year||new Date().getFullYear()};
+  });
+  const cambiaron=limpias.length!==suyas.length
+    || limpias.some(a=>{const v=suyas.find(x=>x.id===a.id);return !v||JSON.stringify(v)!==JSON.stringify(a);});
+  if(cambiaron&&data.setActions){
+    data.setActions([...todas.filter(a=>a.findingId!==hallazgo.id),...limpias]);
+    const nuevas=limpias.filter(a=>!suyas.some(x=>x.id===a.id)).length;
+    const bajas=suyas.filter(a=>!limpias.some(x=>x.id===a.id)).length;
+    alog(setLogs,"EDITAR","Acción",
+      `${hallazgo.code}: ${limpias.length} plan(es)${nuevas?`, ${nuevas} nuevo(s)`:""}${bajas?`, ${bajas} quitado(s)`:""}`,usuario);
+  }
+  // Si tocó el estado del hallazgo, manda eso; si no, lo deciden sus planes.
+  let estado=hallazgo.status;
+  if(previo&&previo.status!==hallazgo.status){
+    alog(setLogs,"CAMBIO ESTADO","Hallazgo",`${hallazgo.code}: ${previo.status} → ${hallazgo.status}`,usuario);
+    if(estaResuelto(hallazgo.status)&&!estaResuelto(previo.status))
+      cerrarPlanesDe(hallazgo,hallazgo.status,[...todas.filter(a=>a.findingId!==hallazgo.id),...limpias],data.setActions,setLogs,usuario);
+  }else if(cambiaron){
+    const nuevo=estadoSegunAcciones(hallazgo,limpias);
+    if(nuevo!==estado){
+      alog(setLogs,"CAMBIO ESTADO","Hallazgo",`${hallazgo.code}: ${estado} → ${nuevo} (por sus planes de acción)`,usuario);
+      estado=nuevo;
+    }
+  }
+  return {...hallazgo,status:estado};
 }
 function estadoSegunAcciones(hallazgo,suyas){
   if(!suyas.length)return hallazgo.status;            // sin plan: lo maneja la persona
@@ -959,20 +996,89 @@ ${firmasHtml}</table>
 }
 
 /* ── AUDIT DETAIL MODAL ── */
+/* Los planes de accion viven en su propia pantalla, pero se cargan desde acá:
+   el hallazgo, su causa, lo que se hizo y lo que se va a hacer se piensan
+   juntos. Lo que se toca acá es la misma lista de Planes de Acción, así que
+   queda actualizado de los dos lados. */
+function PlanesEnFicha({hallazgo,acciones,sAcciones,cfg,guardado}){
+  const cls=cfg.classifications.find(x=>x.id===hallazgo.classification);
+  const agregar=()=>sAcciones(p=>[...p,{id:gid(),_nuevo:true,findingId:hallazgo.id,
+    capaType:hallazgo.capaType||cfg.capaTypes[0]||"Acción Correctiva",description:"",
+    responsible:"",responsibleEmail:"",
+    dueDate:cls&&cls.deadline>0?addMo(hallazgo.createdAt||tdy(),cls.deadline):"",
+    status:cfg.statuses[0]||"Abierto",verification:"",effectiveness:"",
+    followupResp:"",followupEmail:"",createdAt:new Date().toISOString()}]);
+  const u=(id,k,v)=>sAcciones(p=>p.map(a=>a.id===id?{...a,[k]:v}:a));
+  const quitar=(a)=>{if(confirm(`¿Quitar el plan ${a.code||"nuevo"}?`))sAcciones(p=>p.filter(x=>x.id!==a.id));};
+  const avisar=async(a)=>{
+    if(!guardado.some(x=>x.code===a.code)){alert("Guardá el hallazgo primero: el aviso se manda con lo que está guardado.");return;}
+    if(!a.responsibleEmail){alert("Cargale el correo del responsable para poder avisarle.");return;}
+    if(!confirm(`Se le manda el recordatorio de ${a.code} a ${a.responsible||a.responsibleEmail}, con copia a quienes siguen las auditorías.\n\n¿Mandar?`))return;
+    try{const r=await apiAud('/avisar-accion',{method:'POST',body:JSON.stringify({codigo:a.code})});
+      alert("Aviso enviado a:\n"+(r.para||[]).join("\n"));
+    }catch(e){alert("No se pudo enviar: "+e.message);}
+  };
+  return(<div style={{border:`1px solid ${K.brd}`,borderRadius:9,padding:14,marginBottom:12,background:"#FAFBFC"}}>
+    <div style={{display:"flex",alignItems:"center",marginBottom:acciones.length?10:0}}>
+      <h3 style={{fontSize:13,fontWeight:700,margin:0,flex:1}}>📌 Planes de acción ({acciones.length})</h3>
+      <button style={sB("g")} onClick={agregar}>+ Agregar</button>
+    </div>
+    {acciones.length===0
+      ? <p style={{fontSize:12,color:K.txS,margin:"8px 0 0"}}>Todavía no tiene. La corrección de arriba es lo inmediato;
+          acá va lo que ataca la causa, con responsable, fecha y seguimiento.</p>
+      : acciones.map(a=><div key={a.id} style={{border:`1px solid ${K.brd}`,borderRadius:8,padding:12,marginBottom:8,background:"#fff"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+            <span style={{fontFamily:"monospace",fontWeight:700,color:K.pri,fontSize:12}}>{a.code||"nuevo"}</span>
+            <select style={{...sS,width:"auto",fontSize:12,padding:"4px 8px"}} value={a.capaType||""}
+              onChange={e=>u(a.id,"capaType",e.target.value)}>{cfg.capaTypes.map(c=><option key={c}>{c}</option>)}</select>
+            <div style={{flex:1}}/>
+            <button style={{...sB("sm"),color:"#0891B2"}} onClick={()=>avisar(a)} title="Avisarle al responsable">✉ Avisar</button>
+            <button style={{...sB("sm"),color:K.red}} onClick={()=>quitar(a)}>🗑</button>
+          </div>
+          <Fd l="Qué se va a hacer"><textarea style={{...sI,minHeight:44,resize:"vertical",fontSize:12.5}}
+            value={a.description||""} onChange={e=>u(a.id,"description",e.target.value)}/></Fd>
+          <G2>
+            <Fd l="Responsable"><input style={sI} value={a.responsible||""} onChange={e=>u(a.id,"responsible",e.target.value)}/></Fd>
+            <Fd l="Correo del responsable"><input style={sI} type="email" value={a.responsibleEmail||""}
+              onChange={e=>u(a.id,"responsibleEmail",e.target.value)} placeholder="para poder avisarle"/></Fd>
+          </G2>
+          <G2>
+            <Fd l="Fecha comprometida"><input style={sI} type="date" value={a.dueDate||""} onChange={e=>u(a.id,"dueDate",e.target.value)}/></Fd>
+            <Fd l="Estado"><select style={sS} value={a.status||""} onChange={e=>u(a.id,"status",e.target.value)}>
+              {cfg.statuses.map(s=><option key={s}>{s}</option>)}</select></Fd>
+          </G2>
+          <Fd l="Seguimiento — verificación de implementación"><textarea style={{...sI,minHeight:38,resize:"vertical",fontSize:12.5}}
+            value={a.verification||""} onChange={e=>u(a.id,"verification",e.target.value)}
+            placeholder="qué se verificó y con qué evidencia"/></Fd>
+          <G2>
+            <Fd l="Verificación de eficacia"><textarea style={{...sI,minHeight:38,resize:"vertical",fontSize:12.5}}
+              value={a.effectiveness||""} onChange={e=>u(a.id,"effectiveness",e.target.value)}/></Fd>
+            <div>
+              <Fd l="Responsable del seguimiento"><input style={sI} value={a.followupResp||""} onChange={e=>u(a.id,"followupResp",e.target.value)}/></Fd>
+              <Fd l="Su correo"><input style={sI} type="email" value={a.followupEmail||""} onChange={e=>u(a.id,"followupEmail",e.target.value)}/></Fd>
+            </div>
+          </G2>
+        </div>)}
+  </div>);
+}
+
 /* ── FICHA DE UN HALLAZGO ─────────────────────────────────────────────────────
    La misma ficha se abre desde Hallazgos / CAPA y desde la auditoría, para que
    el texto se corrija donde uno lo está mirando y no haya dos formularios que
-   después se separen. */
-function FichaHallazgo({hallazgo,auditorias,cfg,onGuardar,onEliminar,onClose,auditoriaFija}){
+   después se separen. Desde acá se cargan también la corrección inmediata y
+   los planes de acción. */
+function FichaHallazgo({hallazgo,auditorias,cfg,onGuardar,onEliminar,onClose,auditoriaFija,acciones}){
   const[fm,sFm]=useState(hallazgo);
+  const guardado=(acciones||[]).filter(a=>a.findingId===hallazgo.id);
+  const[accs,sAccs]=useState(guardado);
   const cls=cfg.classifications.find(x=>x.id===fm.classification);
   const esNuevo=!fm.code;
-  return(<Md title={fm.code?`Editar ${fm.code}`:"Nuevo hallazgo"} onClose={onClose}>
+  return(<Md title={fm.code?`Editar ${fm.code}`:"Nuevo hallazgo"} onClose={onClose} wide>
     {!auditoriaFija&&<CtxHelp>Solo se pueden vincular hallazgos a auditorías que estén en fase "Ejecutada" o posterior.</CtxHelp>}
     <G2>
       {auditoriaFija
         ?<Fd l="Auditoría"><input style={{...sI,background:K.bg}} value={auditoriaFija} readOnly/></Fd>
-        :<Fd l="Auditoría"><select style={sS} value={fm.auditId||""} onChange={e=>sFm(p=>({...p,auditId:e.target.value}))}><option value="">—</option>{(auditorias||[]).map(a=><option key={a.id} value={a.id}>{a.code} — {a.name} ({phaseOf(a.phase,isExternal(a)).label})</option>)}</select></Fd>}
+        :<Fd l="Auditoría"><select style={sS} value={fm.auditId||""} onChange={e=>sFm(p=>({...p,auditId:e.target.value}))}><option value="">—</option>{(auditorias||[]).map(a=><option key={a.id} value={a.id}>{a.code} — {a.name}</option>)}</select></Fd>}
       <Fd l="Cláusula / requisito"><input style={sI} value={fm.clauseRef||""} onChange={e=>sFm(p=>({...p,clauseRef:e.target.value}))}/></Fd>
       {/* En un hallazgo nuevo, el estado sigue a la clasificación: la
           observación arranca en "No aplica" porque no lleva plan de acción. */}
@@ -982,20 +1088,37 @@ function FichaHallazgo({hallazgo,auditorias,cfg,onGuardar,onEliminar,onClose,aud
         ?<Fd l="Tipo CAPA"><select style={sS} value={fm.capaType||""} onChange={e=>sFm(p=>({...p,capaType:e.target.value}))}>{cfg.capaTypes.map(c=><option key={c}>{c}</option>)}</select></Fd>
         :<Fd l="Tipo CAPA"><input style={{...sI,background:K.bg,color:K.txM}} value="No requiere" readOnly/></Fd>}
     </G2>
-    {cls&&<div style={{padding:"8px 12px",background:cls.color+"12",borderRadius:6,marginBottom:12,fontSize:12,color:cls.color,border:`1px solid ${cls.color}20`}}><strong>{cls.label}:</strong> {cls.desc}{cls.deadline>0?` — Plazo: ${cls.deadline} meses`:" — No se exige plan de acción al auditado"}</div>}
+    {cls&&<div style={{padding:"8px 12px",background:cls.color+"12",borderRadius:6,marginBottom:12,fontSize:12,color:cls.color,border:`1px solid ${cls.color}20`}}><strong>{cls.label}:</strong> {cls.desc} — Plazo: {cls.deadline>0?cls.deadline+" meses":"sin plan de acción"}</div>}
     <Fd l="Descripción"><textarea style={{...sI,minHeight:90,resize:"vertical"}} value={fm.description||""} onChange={e=>sFm(p=>({...p,description:e.target.value}))}/></Fd>
     <Fd l="Evidencia"><textarea style={{...sI,minHeight:45,resize:"vertical"}} value={fm.evidence||""} onChange={e=>sFm(p=>({...p,evidence:e.target.value}))}/></Fd>
     <Fd l="Causa raíz"><textarea style={{...sI,minHeight:45,resize:"vertical"}} value={fm.rootCause||""} onChange={e=>sFm(p=>({...p,rootCause:e.target.value}))}/></Fd>
+    {/* La corrección es lo que se hizo en el momento para contener el
+        apartamiento: no lleva seguimiento, por eso va acá y no como plan. */}
+    <div style={{border:`1px solid ${K.brd}`,borderRadius:9,padding:14,marginBottom:12,background:"#FAFBFC"}}>
+      <h3 style={{fontSize:13,fontWeight:700,margin:"0 0 8px"}}>⚡ Corrección inmediata</h3>
+      <Fd l="Qué se hizo en el momento"><textarea style={{...sI,minHeight:40,resize:"vertical",fontSize:12.5}}
+        value={fm.correction||""} onChange={e=>sFm(p=>({...p,correction:e.target.value}))}
+        placeholder="la contención, sin plazo ni seguimiento"/></Fd>
+      <G2>
+        <Fd l="Quién la hizo"><input style={sI} value={fm.correctionResponsible||""} onChange={e=>sFm(p=>({...p,correctionResponsible:e.target.value}))}/></Fd>
+        <Fd l="Cuándo"><input style={sI} type="date" value={fm.correctionDate||""} onChange={e=>sFm(p=>({...p,correctionDate:e.target.value}))}/></Fd>
+      </G2>
+    </div>
+    {exigeCapa(fm.classification,cfg)&&!esNuevo&&
+      <PlanesEnFicha hallazgo={fm} acciones={accs} sAcciones={sAccs} cfg={cfg} guardado={guardado}/>}
+    {esNuevo&&exigeCapa(fm.classification,cfg)&&
+      <CtxHelp>Guardá el hallazgo y volvé a abrirlo para cargarle los planes de acción.</CtxHelp>}
     <Fd l="Estado"><select style={sS} value={fm.status||""} onChange={e=>sFm(p=>({...p,status:e.target.value}))}>{cfg.statuses.map(s=><option key={s}>{s}</option>)}</select></Fd>
     <div style={{display:"flex",gap:8,alignItems:"center",marginTop:14}}>
       {!esNuevo&&onEliminar&&<button style={sB("red")} onClick={()=>onEliminar(fm)}>🗑 Eliminar</button>}
       <div style={{display:"flex",gap:8,marginLeft:"auto"}}>
         <button style={sB("g")} onClick={onClose}>Cancelar</button>
-        <button style={sB("pri")} onClick={()=>onGuardar(fm)} disabled={!fm.description}>Guardar</button>
+        <button style={sB("pri")} onClick={()=>onGuardar(fm,accs)} disabled={!fm.description}>Guardar</button>
       </div>
     </div>
   </Md>);
 }
+
 
 /* ── PEGAR HALLAZGOS ──────────────────────────────────────────────────────────
    Un informe de auditoría trae veinte hallazgos; cargarlos de a uno en el
@@ -1415,15 +1538,21 @@ function aplicarCAPA(filas,data){
   for(const c of filas){
     const fin=data.findings.find(f=>f.code===c.CODIGO);
     if(!fin)continue;
-    if(c.CAUSA_RAIZ){
+    const co0=c.CORRECCION&&!noAplica(c.CORRECCION)?c.CORRECCION:"";
+    if(c.CAUSA_RAIZ||co0){
       const nuevo=c.AC_ESTADO&&c.AC_ESTADO.toLowerCase()!=="en proceso"
         ? c.AC_ESTADO
         : (c.ACCION_CORRECTIVA&&!noAplica(c.ACCION_CORRECTIVA)?"En proceso":null);
-      data.setFindings(p=>p.map(f=>f.code===c.CODIGO?{...f,rootCause:c.CAUSA_RAIZ,status:nuevo||f.status}:f));
+      data.setFindings(p=>p.map(f=>f.code===c.CODIGO?{...f,
+        rootCause:c.CAUSA_RAIZ||f.rootCause,
+        correction:co0||f.correction,
+        correctionResponsible:c.CORRECCION_RESPONSABLE||f.correctionResponsible,
+        correctionDate:fechaCSV(c.CORRECCION_FECHA)||f.correctionDate,
+        status:nuevo||f.status}:f));
       uF++;
     }
-    const ac=c.ACCION_CORRECTIVA||"",co=c.CORRECCION||"";
-    const desc=(co&&!noAplica(co)?"Corrección: "+co+". ":"")+ac;
+    const ac=c.ACCION_CORRECTIVA||"";
+    const desc=ac;
     const exist=data.actions.find(a=>a.findingId===fin.id);
     const eficacia=c.VERIF_EFICACIA_METODO
       ? c.VERIF_EFICACIA_METODO+(c.VERIF_EFICACIA_RESPONSABLE?" — "+c.VERIF_EFICACIA_RESPONSABLE:"")
@@ -1441,12 +1570,12 @@ function aplicarCAPA(filas,data){
       if(c.VERIF_EFICACIA_RESPONSABLE)u.followupResp=c.VERIF_EFICACIA_RESPONSABLE;
       if(c.RESULTADO)u.resultNote=c.RESULTADO;
       if(Object.keys(u).length){data.setActions(p=>p.map(a=>a.id===exist.id?{...a,...u}:a));uA++;}
-    }else if((ac&&!noAplica(ac))||(co&&!noAplica(co))){
+    }else if(ac&&!noAplica(ac)){
       nA.push({id:gid(),code:`ACC-${String(data.actions.length+nA.length+1).padStart(4,"0")}`,
         year:fin.year||2026,findingId:fin.id,
-        description:desc||("Corrección: "+co),
-        responsible:c.AC_RESPONSABLE||c.CORRECCION_RESPONSABLE||"",
-        dueDate:fechaCSV(c.AC_FECHA_IMPL||c.CORRECCION_FECHA||""),
+        description:desc,
+        responsible:c.AC_RESPONSABLE||"",
+        dueDate:fechaCSV(c.AC_FECHA_IMPL||""),
         status:c.AC_ESTADO||"En proceso",verification:c.AC_EVIDENCIA||"",
         effectiveness:eficacia,followupResp:c.VERIF_EFICACIA_RESPONSABLE||"",
         createdAt:new Date().toISOString()});
@@ -1780,15 +1909,14 @@ function AuditDetail({audit,data,cfg,canEdit,onClose,onSave,onDelete}){
     {/* La ficha del hallazgo, acá adentro: la redacción se corrige mirando el
         informe, sin ir a otra pantalla. */}
     {edHal&&<FichaHallazgo hallazgo={edHal} cfg={cfg} auditoriaFija={`${fm.code} — ${fm.name||""}`}
+      acciones={data.allActions||data.actions}
       onClose={()=>sEdHal(null)}
-      onGuardar={(nf)=>{
+      onGuardar={(nf,accs)=>{
         const pv=(data.findings||[]).find(x=>x.id===nf.id);
-        data.setFindings(p=>p.map(x=>x.id===nf.id?{...x,...nf}:x));
-        if(pv&&pv.status!==nf.status){
-          alog(data.setLogs,"CAMBIO ESTADO","Hallazgo",`${nf.code}: ${pv.status} → ${nf.status}`,data.currentUser?.name);
-          if(estaResuelto(nf.status)&&!estaResuelto(pv.status))
-            cerrarPlanesDe(nf,nf.status,data.actions,data.setActions,data.setLogs,data.currentUser?.name);
-        }else alog(data.setLogs,"EDITAR","Hallazgo",nf.code,data.currentUser?.name);
+        const fin=guardarHallazgoConPlanes({hallazgo:nf,previo:pv,planes:accs,data,
+          setLogs:data.setLogs,usuario:data.currentUser?.name});
+        data.setFindings(p=>p.map(x=>x.id===fin.id?{...x,...fin}:x));
+        if(pv&&pv.status===nf.status)alog(data.setLogs,"EDITAR","Hallazgo",nf.code,data.currentUser?.name);
         sEdHal(null);
       }}
       onEliminar={(nf)=>{
@@ -1871,8 +1999,10 @@ function AuditList({data,cfg,canEdit,openAudit}){
 /* ── HALLAZGOS ── */
 function Findings({data,cfg,canEdit}){const{findings,setFindings,audits,setLogs,currentUser}=data;const[sh,sSh]=useState(false);const[ed,sEd]=useState(null);const[fc,sFc]=useState("Todos");
   const bl={auditId:"",clauseRef:"",classification:cfg.classifications[0]?.id||"",description:"",evidence:"",capaType:cfg.capaTypes[0]||"",rootCause:"",status:cfg.statuses[0]||"Abierto"};const[fm,sFm]=useState(bl);
-  const cerrarSusPlanes=(f,estado)=>cerrarPlanesDe(f,estado,data.allActions||data.actions||[],data.setActions,setLogs,currentUser.name);
-  const save=(fm)=>{if(ed){const pv=findings.find(x=>x.id===ed.id);setFindings(p=>p.map(x=>x.id===ed.id?{...x,...fm}:x));if(pv.status!==fm.status){alog(setLogs,"CAMBIO ESTADO","Hallazgo",`${ed.code}: ${pv.status} → ${fm.status}`,currentUser.name);if(estaResuelto(fm.status)&&!estaResuelto(pv.status))cerrarSusPlanes(ed,fm.status);}else alog(setLogs,"EDITAR","Hallazgo",ed.code,currentUser.name);}else{const allF=data.allFindings||findings;const code=`HAL-${String(allF.length+1).padStart(4,"0")}`;const audit=data.audits.find(a=>a.id===fm.auditId);setFindings(p=>[...p,{...fm,id:gid(),code,year:audit?.year||2026,createdAt:new Date().toISOString()}]);alog(setLogs,"CREAR","Hallazgo",code,currentUser.name);}sSh(false);sEd(null);};
+  const save=(fm,accs)=>{if(ed){const pv=findings.find(x=>x.id===ed.id);
+    const fin=guardarHallazgoConPlanes({hallazgo:fm,previo:pv,planes:accs,data,setLogs,usuario:currentUser.name});
+    setFindings(p=>p.map(x=>x.id===ed.id?{...x,...fin}:x));
+    if(pv.status===fm.status)alog(setLogs,"EDITAR","Hallazgo",ed.code,currentUser.name);}else{const allF=data.allFindings||findings;const code=`HAL-${String(allF.length+1).padStart(4,"0")}`;const audit=data.audits.find(a=>a.id===fm.auditId);setFindings(p=>[...p,{...fm,id:gid(),code,year:audit?.year||2026,createdAt:new Date().toISOString()}]);alog(setLogs,"CREAR","Hallazgo",code,currentUser.name);}sSh(false);sEd(null);};
   const open=f=>{sFm(f||bl);sEd(f);sSh(true);};const cls=cfg.classifications.find(x=>x.id===fm.classification);
   const[fiAud,sFiAud]=useState("Todos");
   const auditNames=[...new Set(findings.map(f=>{const aud=audits.find(a=>a.id===f.auditId);return aud?aud.name:"Sin auditoría";}).filter(Boolean))];
@@ -1890,8 +2020,9 @@ function Findings({data,cfg,canEdit}){const{findings,setFindings,audits,setLogs,
     <div style={sC}>{ls.length===0?<Em icon="🔍" t="Sin hallazgos"/>:<table style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontSize:12.5}}><thead><tr><th style={sTh}>Código</th><th style={sTh}>Auditoría</th><th style={sTh}>Descripción</th><th style={sTh}>Clasificación</th><th style={sTh}>CAPA</th><th style={sTh}>Estado</th>{canEdit&&<th style={sTh}></th>}</tr></thead><tbody>{ls.map(f=><tr key={f.id}><td style={{...sTd,fontWeight:700,color:K.pri,fontFamily:"monospace"}}>{f.code}</td><td style={{...sTd,fontFamily:"monospace",fontSize:11.5}}>{audits.find(a=>a.id===f.auditId)?.code||"—"}</td><td style={{...sTd,fontSize:11,lineHeight:1.4}}>{f.description}</td><td style={sTd}><CBg cls={f.classification} cfg={cfg}/></td><td style={sTd}>{exigeCapa(f.classification,cfg)?<Bg color={K.vio} bg={K.vioL}>{f.capaType}</Bg>:<span style={{fontSize:11,color:K.txM}}>No requiere</span>}</td><td style={sTd}><SBg s={f.status}/></td>{canEdit&&<td style={sTd}><button style={sB("sm")} onClick={()=>open(f)}>Editar</button></td>}</tr>)}</tbody></table>}</div>
     {/* La misma ficha que se abre desde la auditoría. */}
     {sh&&<FichaHallazgo hallazgo={ed||bl} auditorias={infoAudits} cfg={cfg}
+      acciones={data.allActions||data.actions}
       onClose={()=>{sSh(false);sEd(null);}}
-      onGuardar={(nf)=>{save(nf);}}
+      onGuardar={(nf,accs)=>{save(nf,accs);}}
       onEliminar={ed?((nf)=>{
         const acc=(data.actions||[]).filter(a=>a.findingId===nf.id);
         if(!confirm(`¿Eliminar ${nf.code}?${acc.length?`\n\nSe elimina también su plan de acción (${acc.length}).`:""}\n\nNo se puede deshacer.`))return;
@@ -1932,8 +2063,16 @@ function Actions({data,cfg,canEdit}){const{actions,setActions,findings,setLogs,c
   const open=a=>{sFm(a||bl);sEd(a);sSh(true);};const lk=findings.find(x=>x.id===fm.findingId);const cls=lk?cfg.classifications.find(x=>x.id===lk.classification):null;
   const daysLeft=(d)=>{if(!d)return 999;return Math.ceil((new Date(d)-new Date())/86400000);};
   const urgLabel=(dl)=>{if(dl<0)return{txt:"⚠ VENCIDO",bg:K.redL,color:K.red};if(dl<=7)return{txt:"🔴 "+dl+"d",bg:"#FEF2F2",color:K.red};if(dl<=15)return{txt:"🟡 "+dl+"d",bg:K.wrnL,color:"#92400E"};return null;};
-  const sendReminder=(a)=>{const fin=findings.find(f=>f.id===a.findingId);const to=a.responsibleEmail||"";const cc=a.followupEmail||"";const subj="Recordatorio: Plan de Acción "+a.code+" — Vessena S.A.";const body="Estimado/a "+a.responsible+",\n\nLe recordamos que el plan de acción "+a.code+" vinculado al hallazgo "+(fin?fin.code:"")+" tiene fecha límite el "+fd(a.dueDate)+".\n\nDescripción: "+a.description+"\n\nPor favor, actualice el estado de la acción y envíe la evidencia correspondiente.\n\nSaludos cordiales,\nEquipo de Aseguramiento de Calidad\nVessena S.A.";
-    window.open("mailto:"+to+"?cc="+cc+"&subject="+encodeURIComponent(subj)+"&body="+encodeURIComponent(body));};
+  /* El aviso lo manda el servidor, igual que desde la ficha del hallazgo:
+     queda en la bitacora quien aviso y a quien, y no depende del cliente de
+     correo de quien lo pide. */
+  const avisar=async(a)=>{
+    if(!a.responsibleEmail){alert("El plan no tiene cargado el correo del responsable.");return;}
+    if(!confirm(`Se le manda el recordatorio de ${a.code} a ${a.responsible||a.responsibleEmail}, con copia a quienes siguen las auditorías.\n\n¿Mandar?`))return;
+    try{const r=await apiAud('/avisar-accion',{method:'POST',body:JSON.stringify({codigo:a.code})});
+      alert("Aviso enviado a:\n"+(r.para||[]).join("\n"));
+    }catch(e){alert("No se pudo enviar: "+e.message);}
+  };
 
   // Deadline alerts
   const upcoming=actions.filter(a=>a.status!=="Cerrado"&&daysLeft(a.dueDate)<=15).sort((a,b)=>daysLeft(a.dueDate)-daysLeft(b.dueDate));
@@ -1964,11 +2103,11 @@ function Actions({data,cfg,canEdit}){const{actions,setActions,findings,setLogs,c
         <span style={{flex:1,fontSize:12.5,color:K.txt}}>{a.description.slice(0,60)}</span>
         <span style={{fontSize:11.5,color:K.txS}}>{a.responsible}</span>
         <span style={{fontSize:11.5,fontWeight:600}}>{fd(a.dueDate)}</span>
-        {a.responsibleEmail&&<button style={{...sB("sm"),color:"#0891B2",fontSize:10}} onClick={()=>sendReminder(a)} title="Enviar recordatorio por email">✉ Recordar</button>}
+        {a.responsibleEmail&&<button style={{...sB("sm"),color:"#0891B2",fontSize:10}} onClick={()=>avisar(a)} title="Avisarle al responsable, con copia a quienes siguen las auditorías">✉ Recordar</button>}
       </div>;})}
     </div>}
 
-    <div style={sC}>{filtered.length===0?<Em icon="📌" t="Sin acciones con este filtro"/>:<table style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontSize:12.5}}><thead><tr><th style={sTh}>Código</th><th style={sTh}>Hallazgo</th><th style={sTh}>Descripción</th><th style={sTh}>Responsable</th><th style={sTh}>Vence</th><th style={sTh}>Estado</th>{canEdit&&<th style={sTh}></th>}</tr></thead><tbody>{filtered.map(a=>{const dl=daysLeft(a.dueDate);const ov=dl<0&&a.status!=="Cerrado";const warn=dl>=0&&dl<=15&&a.status!=="Cerrado";const urg=a.status!=="Cerrado"?urgLabel(dl):null;return <tr key={a.id} style={{background:ov?K.redL:warn?"#FFFBEB":"transparent"}}><td style={{...sTd,fontWeight:700,color:K.pri,fontFamily:"monospace"}}>{a.code}</td><td style={{...sTd,fontFamily:"monospace",fontSize:11.5}}>{findings.find(f=>f.id===a.findingId)?.code||"—"}</td><td style={{...sTd,fontSize:11,lineHeight:1.4}}>{a.description}</td><td style={sTd}><div>{a.responsible}</div>{a.responsibleEmail&&<div style={{fontSize:10,color:K.txS}}>{a.responsibleEmail}</div>}</td><td style={{...sTd,whiteSpace:"nowrap"}}>{fd(a.dueDate)} {urg&&<Bg color={urg.color} bg={urg.bg}>{urg.txt}</Bg>}</td><td style={sTd}><SBg s={a.status}/></td>{canEdit&&<td style={sTd}><div style={{display:"flex",gap:4}}><button style={sB("sm")} onClick={()=>open(a)}>Editar</button>{a.responsibleEmail&&a.status!=="Cerrado"&&<button style={{...sB("sm"),color:"#0891B2",padding:"2px 6px"}} onClick={()=>sendReminder(a)} title="Enviar recordatorio">✉</button>}</div></td>}</tr>;})}</tbody></table>}</div>
+    <div style={sC}>{filtered.length===0?<Em icon="📌" t="Sin acciones con este filtro"/>:<table style={{width:"100%",borderCollapse:"separate",borderSpacing:0,fontSize:12.5}}><thead><tr><th style={sTh}>Código</th><th style={sTh}>Hallazgo</th><th style={sTh}>Descripción</th><th style={sTh}>Responsable</th><th style={sTh}>Vence</th><th style={sTh}>Estado</th>{canEdit&&<th style={sTh}></th>}</tr></thead><tbody>{filtered.map(a=>{const dl=daysLeft(a.dueDate);const ov=dl<0&&a.status!=="Cerrado";const warn=dl>=0&&dl<=15&&a.status!=="Cerrado";const urg=a.status!=="Cerrado"?urgLabel(dl):null;return <tr key={a.id} style={{background:ov?K.redL:warn?"#FFFBEB":"transparent"}}><td style={{...sTd,fontWeight:700,color:K.pri,fontFamily:"monospace"}}>{a.code}</td><td style={{...sTd,fontFamily:"monospace",fontSize:11.5}}>{findings.find(f=>f.id===a.findingId)?.code||"—"}</td><td style={{...sTd,fontSize:11,lineHeight:1.4}}>{a.description}</td><td style={sTd}><div>{a.responsible}</div>{a.responsibleEmail&&<div style={{fontSize:10,color:K.txS}}>{a.responsibleEmail}</div>}</td><td style={{...sTd,whiteSpace:"nowrap"}}>{fd(a.dueDate)} {urg&&<Bg color={urg.color} bg={urg.bg}>{urg.txt}</Bg>}</td><td style={sTd}><SBg s={a.status}/></td>{canEdit&&<td style={sTd}><div style={{display:"flex",gap:4}}><button style={sB("sm")} onClick={()=>open(a)}>Editar</button>{a.responsibleEmail&&a.status!=="Cerrado"&&<button style={{...sB("sm"),color:"#0891B2",padding:"2px 6px"}} onClick={()=>avisar(a)} title="Avisarle al responsable, con copia a quienes siguen las auditorías">✉</button>}</div></td>}</tr>;})}</tbody></table>}</div>
     {sh&&<Md title={ed?"Editar "+ed.code:"Nueva Acción"} onClose={()=>sSh(false)}>
       <G2>
         <Fd l="Hallazgo"><select style={sS} value={fm.findingId} onChange={e=>{sFm(p=>({...p,findingId:e.target.value}));autoD(e.target.value);}}><option value="">—</option>{findings.map(x=><option key={x.id} value={x.id}>{x.code} — {x.description.slice(0,35)}</option>)}</select></Fd>

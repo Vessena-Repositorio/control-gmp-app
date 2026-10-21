@@ -15,6 +15,7 @@ import { consultar, enTransaccion } from '../db.js';
 import { exigirPermiso } from '../lib/acceso.js';
 import { PERMISOS_POR_ROL } from '../lib/permisos.js';
 import { nombreComparable } from '../lib/firmas.js';
+import { avisarAccion } from '../lib/avisos-auditorias.js';
 
 export const rutasAuditorias = Router();
 
@@ -169,6 +170,23 @@ rutasAuditorias.post('/firmas', leer, async (req, res, next) => {
         }
         res.json({ ok: true, firmas });
     } catch (err) { next(err); }
+});
+
+/**
+ * POST /api/auditorias/avisar-accion  { codigo }
+ *
+ * El recordatorio de un plan de accion, mandado a mano desde la ficha del
+ * hallazgo: va al responsable del plan con copia a quienes reciben los avisos
+ * de auditorias. Lo manda el servidor, no el cliente de correo de quien lo
+ * pide, para que quede en la bitacora quien avisó y a quien.
+ */
+rutasAuditorias.post('/avisar-accion', cargar, async (req, res, next) => {
+    const codigo = String(req.body?.codigo || '').slice(0, 40);
+    try {
+        const { para } = await avisarAccion({ codigo });
+        await enTransaccion((c) => registrar(c, req, 'AVISAR', 'Acción', `${codigo} → ${para.join(', ')}`));
+        res.json({ ok: true, para });
+    } catch (err) { responder(err, res, next); }
 });
 
 /** GET /api/auditorias/actividad — la bitácora de la app. */

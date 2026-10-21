@@ -310,3 +310,56 @@ export function configAuditorias() {
     return { hora: HORA, diasSinInforme: DIAS_SIN_INFORME, acciones: 'lunes', mes: 'primer día hábil',
         informes: 'lunes', autoinspecciones: 'primer día hábil de feb/may/ago/nov y los lunes con pendientes' };
 }
+
+/**
+ * El aviso que se manda a mano desde la ficha del hallazgo: al responsable del
+ * plan de accion, con copia a quienes reciben los avisos de auditorias (hoy
+ * Claudia y Gloria). Es el mismo correo que el recordatorio semanal pero de a
+ * uno y cuando hace falta, no esperando al lunes.
+ */
+export async function avisarAccion({ codigo }) {
+    if (!hayCorreo) {
+        const e = new Error('El correo no está configurado en el servidor');
+        e.status = 400; throw e;
+    }
+    const acciones = await coleccion('acciones');
+    const a = acciones.find((x) => String(x.code || '') === String(codigo || ''));
+    if (!a) { const e = new Error(`No existe el plan de acción ${codigo}`); e.status = 404; throw e; }
+    const correo = String(a.responsibleEmail || '').trim();
+    if (!correo) {
+        const e = new Error('El plan no tiene cargado el correo del responsable');
+        e.status = 400; throw e;
+    }
+    const [hallazgos, auditorias] = [await coleccion('hallazgos'), await coleccion('auditorias')];
+    const h = hallazgos.find((x) => x.id === a.findingId);
+    const aud = auditorias.find((x) => x.id === h?.auditId);
+    // La copia sale de los destinatarios configurados, no de un correo escrito
+    // en el codigo: si manana cambia quien sigue las auditorias, cambia ahi.
+    const copia = (await supervisoresDe(RECURSO, 'acciones-vencidas'))
+        .filter((c) => c.toLowerCase() !== correo.toLowerCase());
+    const para = [correo, ...copia];
+
+    const hoy = await hoyISO();
+    const vencido = a.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(a.dueDate) && a.dueDate < hoy;
+    const cuerpo = `<p style="margin:0 0 10px">Hola ${esc(a.responsible || '')}:</p>
+      <p style="margin:0 0 10px">Te recordamos el plan de acción <b>${esc(a.code || '')}</b>,
+      a tu cargo${aud ? `, de la auditoría ${esc(aud.code || '')} — ${esc(aud.name || '')}` : ''}.</p>
+      ${tabla(['Dato', 'Detalle'], [
+        ['Hallazgo', `<b>${esc(h?.code || '')}</b> · ${esc((h?.description || '').slice(0, 300))}`],
+        ['Causa raíz', esc(h?.rootCause || '—')],
+        ['Plan de acción', esc(a.description || '—')],
+        ['Fecha comprometida', a.dueDate
+            ? `${esc(a.dueDate)}${vencido ? ' <b style="color:#B91C1C">· vencida</b>' : ''}`
+            : 'sin fecha'],
+        ['Estado', esc(a.status || '—')],
+        ['Verificación de implementación', esc(a.verification || '—')],
+      ])}
+      <p style="margin:14px 0 0">Por favor actualizá el estado y cargá la evidencia en la app.</p>`;
+    const asunto = `[Vessena · Auditorías] Plan de acción ${a.code}` +
+        (vencido ? ' — VENCIDO' : a.dueDate ? ` — vence ${a.dueDate}` : '');
+    await enviar({
+        para, asunto, texto: asunto,
+        html: marco('Plan de acción', `SOP-AC-035 · ${esc(a.code || '')}`, cuerpo, vencido ? '#B91C1C' : NAV),
+    });
+    return { para };
+}
