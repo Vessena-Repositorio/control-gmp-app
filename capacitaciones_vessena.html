@@ -367,7 +367,7 @@ summary.leg-y:hover{background:var(--g50)!important}
   </div>
   <datalist id="dlp"></datalist>
   <div class="filters">
-    <input id="rs" placeholder="🔍 Buscar...">
+    <input id="rs" placeholder="🔍 Buscar en toda la historia…">
     <select id="rmf"><option value="">Todos los meses</option></select>
     <select id="rxf"><option value="">Todos los sectores</option></select>
     <select id="rtf"><option value="">Todos los temas</option></select>
@@ -878,6 +878,17 @@ function normTxt(s){
     .replace(/[ÁÀÄÂ]/g,'A').replace(/[ÉÈËÊ]/g,'E').replace(/[ÍÌÏÎ]/g,'I')
     .replace(/[ÓÒÖÔ]/g,'O').replace(/[ÚÙÜÛ]/g,'U').replace(/Ñ/g,'N');
 }
+
+/* La clave con la que se compara al buscar: minuscula, sin tildes, sin signos y
+   sin espacios, igual que fab_clave_busqueda en la base. Asi "pampillon"
+   encuentra "Pampillón" y "sop san 052" encuentra "SOP-SAN-052".
+   El orden importa: primero se le saca la tilde a la letra con normalize('NFD')
+   y despues se limpian los signos. Al revés la letra acentuada se perdia
+   entera -"Pampillón" quedaba "pampilln"- y el nombre no se encontraba nunca
+   (Claudia, 22/10/2026: "no veo los controles de setiembre"). */
+const claveBusqueda = (s) => String(s == null ? '' : s)
+  .normalize('NFD').replace(/[̀-ͯ]/g,'')
+  .toLowerCase().replace(/[^a-z0-9]/g,'');
 
 /* Que modulos de induccion cubre un registro.
  *
@@ -2848,10 +2859,47 @@ function renderDot(){
 
 // ══════════ REGISTRO ══════════
 let tempParts=[]; // participantes temporales para la sesión nueva
-function filt(){const sm=$('rs').value.toLowerCase(),fm=$('rmf').value,fs=$('rxf').value,ft=$('rtf').value,gy=parseInt($('global-year').value)||new Date().getFullYear();return R.filter(r=>{const ry=r.year||parseInt((r.fecha||'').slice(0,4))||2026;if(ry!==gy)return false;if(fm&&r.mes!==fm)return false;if(fs&&r.sec!==fs)return false;if(ft&&r.tema!==ft)return false;if(sm)return nomReg(r).toLowerCase().includes(sm)||String(r.desc||'').toLowerCase().includes(sm)||String(r.cod||'').toLowerCase().includes(sm)||String(r.resp||'').toLowerCase().includes(sm);return true})}
+/* Buscando se miran TODOS los años y todos los meses, sectores y temas, no el
+   año que quedo elegido arriba: antes el texto se aplicaba despues de filtrar
+   por `global-year`, asi que escribir el nombre de una persona encontraba solo
+   sus registros de ese año y los demas parecian no existir (Claudia,
+   22/10/2026: "no veo los controles de setiembre"). Pedirle a alguien que
+   adivine el año de la capacitacion que esta buscando no es buscar.
+   Sin texto, los filtros manejan la lista como siempre.
+   `filt.alcance` queda con lo que paso, para que V.reg lo diga en pantalla. */
+function filt(){
+  const sm=claveBusqueda($('rs').value);
+  const fm=$('rmf').value,fs=$('rxf').value,ft=$('rtf').value;
+  const gy=parseInt($('global-year').value)||new Date().getFullYear();
+  if(sm){
+    filt.alcance={q:$('rs').value.trim(),todo:true};
+    return R.filter(r=>claveBusqueda(nomReg(r)).includes(sm)
+      ||claveBusqueda(r.desc).includes(sm)
+      ||claveBusqueda(r.cod).includes(sm)
+      ||claveBusqueda(r.resp).includes(sm)
+      ||claveBusqueda(r.tema).includes(sm)
+      ||claveBusqueda(r.sec).includes(sm));
+  }
+  filt.alcance={q:'',todo:false};
+  return R.filter(r=>{
+    const ry=r.year||parseInt((r.fecha||'').slice(0,4))||2026;
+    if(ry!==gy)return false;
+    if(fm&&r.mes!==fm)return false;
+    if(fs&&r.sec!==fs)return false;
+    if(ft&&r.tema!==ft)return false;
+    return true;
+  });
+}
 V.reg=function(){
   const f=filt(),ss=sess(f);
-  $('rcnt').textContent=ss.length+' sesión'+(ss.length!==1?'es':'')+' · '+f.length+' asistencia'+(f.length!==1?'s':'');
+  /* Se dice con que alcance se armo la lista: buscando es toda la historia -sin
+     año ni filtros-, y sin buscar es el año elegido. Si no se dice, un recuento
+     chico se lee como "no hay mas" en vez de "hay mas, pero filtrado". */
+  const al=filt.alcance||{q:'',todo:false};
+  const cuenta=ss.length+(ss.length!==1?' sesiones':' sesión')+' · '+f.length+' asistencia'+(f.length!==1?'s':'');
+  $('rcnt').textContent=al.todo
+    ?'🔎 '+cuenta+' con «'+al.q+'» en toda la historia (sin año, mes, sector ni tema)'
+    :cuenta+' · año '+($('global-year').value||'')+(f.length?'':' — probá buscando, que mira toda la historia');
   if(!tV){$('vss').style.display='block';$('vtb').style.display='none';
     const IND_T=['REGLAMENTO','INDUCCION GMP','INDUCCION SEGURIDAD/SALUD'];
     // Separate induction sessions from regular
@@ -3359,7 +3407,9 @@ V.plan=function(){
   });
   if (PL.some((p,i)=>p.e!==estadosPrevios[i])) sv();
 
-  const q=$('psrch').value.toLowerCase();
+  // El plan anual SI es de un año -es el documento del año-, asi que aca el
+  // selector manda; lo que se arregla es la comparacion, que se come la tilde.
+  const q=claveBusqueda($('psrch').value);
   /* Las filas se mostraban en el orden en que estaban cargadas, asi que una
      ronda nueva aparecia ULTIMA, despues de las 24 partidas, lejos de la
      capacitacion de la que salio. Se veia la etiqueta "Ronda 1" en la original
@@ -3370,7 +3420,7 @@ V.plan=function(){
      correlativos (1..24) y las nuevas toman el maximo mas uno, ordenar por
      origen conserva el orden del plan y solo intercala las rondas donde
      corresponde. */
-  const f=PL.filter(p=>p.year===selYear&&(!q||p.t.toLowerCase().includes(q)||p.d.toLowerCase().includes(q)))
+  const f=PL.filter(p=>p.year===selYear&&(!q||claveBusqueda(p.t).includes(q)||claveBusqueda(p.d).includes(q)))
     .sort((a,b)=>{
       const oa=Number(a.origenId||a.id), ob=Number(b.origenId||b.id);
       if(oa!==ob) return oa-ob;
@@ -3994,7 +4044,7 @@ function persStats(){
   });
 }
 V.pers=function(){
-  const q=$('prsrch').value.toLowerCase();
+  const q=claveBusqueda($('prsrch').value);
   const secFlt=$('pers-sec-flt').value;
   const tipoFlt=$('pers-tipo-flt').value;
   const tagFlt=$('pers-tag-flt').value;
@@ -4236,7 +4286,10 @@ V.pers=function(){
   // Filter
   stats=stats.filter(x=>{
     const p=x.p;
-    if(q&&!p.n.toLowerCase().includes(q)&&!String(p.nro||"").includes(q)&&!String(p.ci||"").includes(q))return false;
+    // Se compara sin tildes ni signos: buscar "pampillon" tiene que encontrar a
+    // "Pampillón", y una CI escrita "1.234.567-8" tiene que encontrarse
+    // tecleando "12345678" (22/10/2026).
+    if(q&&!claveBusqueda(p.n).includes(q)&&!claveBusqueda(p.nro).includes(q)&&!claveBusqueda(p.ci).includes(q))return false;
     if(secFlt&&p.s!==secFlt)return false;
     if(tipoFlt&&(p.tipo||'VESSENA')!==tipoFlt)return false;
     if(tagFlt&&(!p.tags||!p.tags.includes(tagFlt)))return false;
@@ -5615,14 +5668,20 @@ V.hab = function(){
   $('hab-out').innerHTML = out;
 };
 V.audit=function(){
-  const q=$('audit-srch').value.toLowerCase();
+  const q=claveBusqueda($('audit-srch').value);
   const tipo=$('audit-flt-tipo').value;
   const gy=parseInt($('global-year').value)||new Date().getFullYear();
   let f=AUDIT.map((a,i)=>({...a,seq:i+1})).reverse();
-  f=f.filter(a=>{const ay=parseInt((a.ts||'').slice(0,4))||2026;return ay===gy});
-  if(q)f=f.filter(a=>(a.detalle+' '+a.usuario+' '+a.tipo).toLowerCase().includes(q));
+  /* Buscando se mira todo el historial, no el año elegido: cuando se busca
+     quien toco un registro, el año en que paso es justamente lo que no se sabe
+     (Claudia, 22/10/2026: "no veo los controles de setiembre").
+     Se compara sin tildes ni signos, como en el resto de las pantallas. */
+  if(q)f=f.filter(a=>claveBusqueda(a.detalle+' '+a.usuario+' '+a.tipo).includes(q));
+  else f=f.filter(a=>{const ay=parseInt((a.ts||'').slice(0,4))||2026;return ay===gy});
   if(tipo)f=f.filter(a=>a.tipo===tipo);
-  $('audit-cnt').textContent=f.length+' registros'+(AUDIT.length!==f.length?' de '+AUDIT.length+' totales':'');
+  $('audit-cnt').textContent=(q?'🔎 ':'')+f.length+' registros'
+    +(AUDIT.length!==f.length?' de '+AUDIT.length+' totales':'')
+    +(q?' — en todo el historial, sin filtro de año':' — año '+gy);
   if(!f.length){
     $('audit-tbl').innerHTML='<div style="padding:20px;text-align:center;color:var(--g400);font-size:12px">No hay registros de auditoría'+(AUDIT.length===0?' aún. Cada modificación quedará registrada automáticamente aquí.':'')+'</div>';
     return;
