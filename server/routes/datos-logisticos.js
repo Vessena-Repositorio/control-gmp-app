@@ -624,20 +624,51 @@ rutasDatosLogisticos.delete('/registros/:id', administrar, async (req, res, next
    Bitacora
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/** GET /api/datos-logisticos/actividad?sku=&dias=90 */
+/** GET /api/datos-logisticos/actividad?sku=&dias=90&q= */
 rutasDatosLogisticos.get('/actividad', leer, async (req, res, next) => {
     try {
         const sku = texto(req.query.sku, 60);
-        const dias = Math.min(Math.max(Number(req.query.dias) || 90, 1), 1095);
+        // `dias` 0 es "toda la historia": sin eso no habia forma de llegar a un
+        // movimiento de hace mas de tres años.
+        const pedidos = Number(req.query.dias);
+        const todo = pedidos === 0;
+        const dias = todo ? 0 : Math.min(Math.max(pedidos || 90, 1), 3650);
+
+        /* Buscando se mira TODA la tabla, sin fechas: cuando se busca quien
+         * tocó un SKU, la fecha es justamente lo que no se sabe (Claudia,
+         * 22/10/2026: "no veo los controles de setiembre"). Se compara sin
+         * tildes ni signos, igual que clave_busqueda en la base: primero se
+         * saca la tilde y después los signos, que al revés la letra acentuada
+         * se perdía entera y el nombre no se encontraba nunca. */
+        const q = String(req.query.q || '')
+            .normalize('NFD').replace(/[̀-ͯ]/g, '')
+            .toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 60);
+        const buscando = q !== '';
+        const limite = 1000;
+
+        // count(*) OVER () cuenta todo lo que coincide, antes del LIMIT: es lo
+        // que le permite a la pantalla avisar que hay mas de lo que muestra.
         const { rows } = await consultar(
-            `SELECT ts, usuario, rol, accion, sku, detalles
+            `SELECT ts, usuario, rol, accion, sku, detalles,
+                    count(*) OVER ()::int AS total_filtrado
                FROM dl_actividad
-              WHERE ts >= now() - ($1 || ' days')::interval
+              WHERE ($3 OR $4 OR ts >= now() - ($1 || ' days')::interval)
                 AND ($2 = '' OR sku = $2)
+                AND ($5 = '' OR clave_busqueda(accion)   LIKE '%' || $5 || '%'
+                             OR clave_busqueda(usuario)  LIKE '%' || $5 || '%'
+                             OR clave_busqueda(rol)      LIKE '%' || $5 || '%'
+                             OR clave_busqueda(sku)      LIKE '%' || $5 || '%'
+                             OR clave_busqueda(detalles) LIKE '%' || $5 || '%')
               ORDER BY ts DESC
-              LIMIT 500`,
-            [String(dias), sku]
+              LIMIT ${limite}`,
+            [String(dias), sku, buscando, todo, q]
         );
-        res.json({ ok: true, actividad: rows });
+        res.json({
+            ok: true,
+            actividad: rows,
+            total: rows.length ? rows[0].total_filtrado : 0,
+            limite, dias, buscando,
+            q: buscando ? String(req.query.q || '').trim().slice(0, 60) : '',
+        });
     } catch (err) { next(err); }
 });

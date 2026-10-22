@@ -207,10 +207,19 @@ async function cargarProductos(){
   const d=await api("/productos");
   productos=(d.productos||[]).map(dePantalla);
 }
-async function cargarHistorial(){
-  try{const d=await api("/actividad?dias=365");
+/* El historial trae una tanda, no la historia entera, y antes eso no se decía
+   en ningún lado: la pantalla prometía "todo lo que se cargó, cambió, aprobó o
+   mandó por correo queda acá" y mostraba, como mucho, 400 de los 500 del último
+   año (Claudia, 22/10/2026: "no veo los controles de setiembre"). Ahora hay
+   selector de período, el servidor dice cuántos hay en total y buscar busca en
+   toda la historia, sin fechas. */
+let histAlcance={total:0,limite:0,buscando:false,q:"",dias:365};
+async function cargarHistorial(dias,texto){
+  const d365=(dias===undefined?365:dias);
+  try{const d=await api("/actividad?dias="+d365+(texto?"&q="+encodeURIComponent(texto):""));
     logs=(d.actividad||[]).map(a=>({ts:a.ts,usuario:a.usuario,accion:a.accion,entidad:a.sku?"SKU "+a.sku:"",detalle:a.detalles||""}));
-  }catch(e){logs=[];}
+    histAlcance={total:d.total||logs.length,limite:d.limite||0,buscando:!!d.buscando,q:d.q||"",dias:d365};
+  }catch(e){logs=[];histAlcance={total:0,limite:0,buscando:false,q:"",dias:d365};}
 }
 /* El artefacto registraba cada cosa en su propia colección; acá lo hace el
    servidor en dl_actividad, así que no hay nada que escribir desde la pantalla. */
@@ -480,18 +489,48 @@ function vMsp(){
 }
 
 /* ---------- Historial ---------- */
+const PERIODOS_HIST=[[30,"Último mes"],[90,"Últimos 3 meses"],[365,"Último año"],[1095,"Últimos 3 años"],[0,"Toda la historia"]];
 function vTrail(){
   $("#main").innerHTML=`<h1 class="pag">Historial</h1>
     <p class="pag-sub">Todo lo que se cargó, cambió, aprobó o mandó por correo queda acá, con quién y cuándo. Lo registra el servidor.</p>
-    <div class="card"><input type="search" class="in" id="tq" placeholder="Buscar por SKU, acción o persona" style="max-width:360px;margin-bottom:10px">
+    <div class="card">
+      <div class="fila" style="gap:8px;margin-bottom:8px;flex-wrap:wrap">
+        <input type="search" class="in" id="tq" placeholder="Buscar en toda la historia por SKU, acción o persona" style="max-width:360px">
+        <select class="in" id="tper" style="max-width:180px" title="Período">
+          ${PERIODOS_HIST.map(([d,l])=>`<option value="${d}"${d===histAlcance.dias?" selected":""}>${l}</option>`).join("")}
+        </select>
+      </div>
+      <div class="pag-sub" id="tcnt" style="margin-bottom:8px"></div>
       <div style="max-height:600px;overflow:auto" id="tlista"></div></div>`;
-  const pint=()=>{const q=($("#tq").value||"").toLowerCase();
-    const l=logs.filter(x=>!q||[x.accion,x.entidad,x.detalle,x.usuario].some(v=>v&&String(v).toLowerCase().includes(q)));
-    $("#tlista").innerHTML=l.slice(0,400).map(l2=>`<div class="usr-row" style="padding:7px 0;align-items:flex-start">
+
+  /* Lo que se ve y lo que hay: si la tanda llegó al tope, se dice, porque si no
+     uno cree que lo que falta no existe (Claudia, 22/10/2026). */
+  const pint=()=>{
+    const a=histAlcance;
+    const recortado=a.total>logs.length?` · hay ${a.total} en total, acotá el período o la búsqueda para ver el resto`:"";
+    $("#tcnt").innerHTML=a.buscando
+      ?`🔎 ${logs.length} movimiento(s) con «${esc(a.q)}» en toda la historia, sin filtro de fecha${recortado}`
+      :`${logs.length} movimiento(s) · ${esc((PERIODOS_HIST.find(p=>p[0]===a.dias)||[0,""])[1].toLowerCase())}${recortado}`;
+    $("#tlista").innerHTML=logs.map(l2=>`<div class="usr-row" style="padding:7px 0;align-items:flex-start">
       <span style="font-size:12.5px"><b>${esc(l2.accion)}</b>${l2.entidad?" · "+esc(l2.entidad):""}${l2.detalle?"<br><span style='color:var(--txS)'>"+esc(l2.detalle)+"</span>":""}</span>
       <span style="font-size:11.5px;color:var(--txS);white-space:nowrap">${esc(l2.usuario)} · ${fdt(l2.ts)}</span></div>`).join("")
-      ||`<p class="pag-sub">No hay movimientos que coincidan.</p>`;};
-  pint();$("#tq").oninput=pint;
+      ||`<p class="pag-sub">${a.buscando?"No hay movimientos que coincidan en toda la historia.":"No hay movimientos en este período."}</p>`;
+  };
+
+  // Buscando no se filtra por fecha: lo que se busca puede ser de hace años, y
+  // pedirle a alguien que adivine el mes no es buscar. Lo filtra el servidor.
+  const recargar=async()=>{
+    const texto=($("#tq").value||"").trim();
+    const dias=Number($("#tper").value);
+    $("#tcnt").textContent="Cargando…";
+    await cargarHistorial(texto?0:dias,texto);
+    pint();
+  };
+  // Un pedido por tecleo serían decenas: se espera a que termine de escribir.
+  let t=null;
+  $("#tq").oninput=()=>{clearTimeout(t);t=setTimeout(recargar,350);};
+  $("#tper").onchange=recargar;
+  pint();
 }
 
 /* ---------- Guía ---------- */
