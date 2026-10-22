@@ -722,6 +722,10 @@ const dl=document.getElementById('limpDefList');if(dl)dl.innerHTML='';
 const SIN_ORDEN=new Set(['','sop','so','sn','sd','na','sinop','sinorden','ordensop','ordenso','sinnumero','sinnro','sinoc','0','00','000']);
 const comoClave=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
 const esSinOrden=s=>SIN_ORDEN.has(comoClave(s));
+// La clave con la que se compara al buscar. Aparte de comoClave -que reconoce
+// "S/OP"- porque esta ademas saca las tildes: sin eso "Pampillón" quedaba
+// "pampilln" y el analista no se encontraba (22/10/2026).
+const claveBusqueda=s=>String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
 function ordenDe(orden,codPT,lote){
   if(!esSinOrden(orden))return String(orden||'').trim();
   return 'S/OP '+(String(codPT||'').trim()||'sin PT')+' · '+(String(lote||'').trim()||'sin lote');
@@ -1133,8 +1137,8 @@ function pintarOrdenes(){
   // -para imprimir el registro- (Claudia, 21/10/2026). Se compara sin signos ni
   // espacios ("L 25-100" encuentra "L25100"), por N° de orden, lote, producto,
   // maquina y analista.
-  const k=comoClave(q);
-  if(k)l=ORDENES.filter(o=>[o.orden,o.lote,o.presentacion,o.maquina,o.analistas].some(v=>comoClave(v).includes(k)));
+  const k=claveBusqueda(q);
+  if(k)l=ORDENES.filter(o=>[o.orden,o.lote,o.presentacion,o.maquina,o.analistas].some(v=>claveBusqueda(v).includes(k)));
   else{
     if(ORD_FILTRO==='pend')l=l.filter(o=>!o.aprobada||RECIEN.has(o.orden));
     if(ORD_FILTRO==='aprob')l=l.filter(o=>o.aprobada);

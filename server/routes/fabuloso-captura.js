@@ -356,18 +356,39 @@ rutasFabulosoCaptura.get('/muestreos', leer, async (req, res, next) => {
     const desde = /^\d{4}-\d{2}-\d{2}$/.test(req.query.desde || '') ? req.query.desde : null;
     const hasta = /^\d{4}-\d{2}-\d{2}$/.test(req.query.hasta || '') ? req.query.hasta : null;
     const limite = Math.min(Math.max(entero(req.query.limit, 200), 1), 2000);
+    // Busca el servidor, no la pantalla: la lista trae una tanda de los mas
+    // recientes, asi que buscar en lo que quedo cargado no encontraba nada de
+    // un mes atras (Claudia, 22/10/2026: "no veo los controles de setiembre").
+    // Se compara sin signos ni espacios, como en el buscador de ordenes.
+    // Igual que fab_clave_busqueda en la base: primero se le saca la tilde a la
+    // letra y despues se limpia, si no "Pérez" quedaba "prez" y el nombre no se
+    // encontraba nunca.
+    const q = String(req.query.q || '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 60);
     try {
         // Desde y hasta son dias de Montevideo, los dos incluidos.
+        // count(*) OVER () cuenta todo lo que coincide, antes del LIMIT: es lo
+        // que le permite a la pantalla avisar que hay mas de lo que muestra.
         const { rows } = await consultar(
-            `SELECT * FROM fab_muestreos
+            `SELECT *, count(*) OVER ()::int AS total_filtrado FROM fab_muestreos
              WHERE ($1::date IS NULL OR (registrado_en AT TIME ZONE $3)::date >= $1::date)
                AND ($2::date IS NULL OR (registrado_en AT TIME ZONE $3)::date <= $2::date)
+               AND ($5 = '' OR fab_clave_busqueda(lote) LIKE '%' || $5 || '%'
+                            OR fab_clave_busqueda(orden_envasado) LIKE '%' || $5 || '%'
+                            OR fab_clave_busqueda(codigo_pt) LIKE '%' || $5 || '%'
+                            OR fab_clave_busqueda(analista_nombre) LIKE '%' || $5 || '%')
              ORDER BY registrado_en DESC
              LIMIT $4`,
-            [desde, hasta, ZONA, limite]
+            [desde, hasta, ZONA, limite, q]
         );
         const cerradas = await ordenesCerradas([...new Set(rows.map((f) => f.orden_envasado))]);
-        res.json({ ok: true, rows: rows.map((f) => filaAListado(f, cerradas.has(f.orden_envasado))) });
+        res.json({
+            ok: true,
+            rows: rows.map((f) => filaAListado(f, cerradas.has(f.orden_envasado))),
+            total: rows.length ? rows[0].total_filtrado : 0,
+            limite,
+        });
     } catch (err) {
         next(err);
     }

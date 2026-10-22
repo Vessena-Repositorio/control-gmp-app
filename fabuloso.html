@@ -348,6 +348,8 @@ window.APP_CONFIG = {
       if (p.limit) q.set('limit', p.limit);
       if (p.filter && p.filter.desde) q.set('desde', p.filter.desde);
       if (p.filter && p.filter.hasta) q.set('hasta', p.filter.hasta);
+      // El texto lo filtra el servidor, sobre toda la tabla.
+      if (p.q) q.set('q', p.q);
       return ['GET', '/muestreos?' + q.toString()];
     },
     getMuestreo: (p) => ['GET', '/muestreos/' + encodeURIComponent(p.id)],
@@ -683,7 +685,7 @@ window.APP_CONFIG = {
 
     // Se compara sin signos ni espacios, asi "L 25-100" encuentra "L25100"
     // (Claudia, 21/10/2026: no se podia buscar una orden por su numero de lote).
-    const clave = (s) => String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]/g, '');
+    const clave = (s) => claveBusqueda(s);
     const coincide = (o, k) => [o.orden, o.lote, o.producto, o.linea, o.analistas]
       .some(v => clave(v).includes(k));
 
@@ -2091,13 +2093,46 @@ window.APP_CONFIG = {
     return s;
   }
 
+  /* La clave con la que se compara al buscar: sin tildes, sin signos y sin
+     espacios, igual que fab_clave_busqueda en la base. Asi "L 25-100" encuentra
+     "L25100" y "ana perez" encuentra "Ana Pérez" (22/10/2026). */
+  const claveBusqueda = (s) => String(s == null ? '' : s)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]/g, '');
+
   // ---------- LIST ----------
+  /* La lista trae una tanda de los mas recientes, no la historia entera. Antes
+     eso no se decia en ningun lado y el buscador miraba solo esa tanda: los
+     controles de un mes atras no aparecian ni buscandolos (Claudia, 22/10/2026).
+     Ahora hay un selector de periodo, el servidor dice cuantos hay en total, y
+     buscar busca en toda la historia -sin fechas-, que es lo que uno espera
+     cuando escribe un numero de lote. */
+  const PERIODOS = {
+    hoy:   { etiqueta: 'Hoy',               dias: 0 },
+    s7:    { etiqueta: 'Última semana',     dias: 7 },
+    d30:   { etiqueta: 'Último mes',        dias: 30 },
+    d90:   { etiqueta: 'Últimos 3 meses',   dias: 90 },
+    d365:  { etiqueta: 'Último año',        dias: 365 },
+    todo:  { etiqueta: 'Toda la historia',  dias: null },
+  };
+  // Dias locales: el equipo esta en Montevideo, que es la zona con la que el
+  // servidor corta los dias.
+  function diaLocal(atras) {
+    const d = new Date();
+    d.setDate(d.getDate() - (atras || 0));
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
   async function renderList() {
     titleEl.textContent = 'Muestreos';
     app.innerHTML = `
       <div class="card">
         <div class="filter">
-          <input id="fl_search" placeholder="🔎 Buscar por lote, orden o código PT…" />
+          <input id="fl_search" placeholder="🔎 Buscar por lote, orden, código PT o analista…" />
+          <select id="fl_per" title="Período">
+            ${Object.entries(PERIODOS).map(([k, p]) =>
+              `<option value="${k}"${k === 'd30' ? ' selected' : ''}>${p.etiqueta}</option>`).join('')}
+          </select>
           <input id="fl_desde" type="date" title="Desde" />
           <input id="fl_hasta" type="date" title="Hasta" />
           <button class="secondary" id="fl_apply">Recargar</button>
@@ -2105,37 +2140,70 @@ window.APP_CONFIG = {
         <div id="listBox"><div class="muted small">Cargando…</div></div>
       </div>
     `;
-    let allRows = [];
-    function applyFilter() {
-      const q = (document.getElementById('fl_search').value || '').toLowerCase().trim();
-      let filtered = allRows;
-      if (q) filtered = filtered.filter(r =>
-        String(r.lote||'').toLowerCase().includes(q) ||
-        String(r.orden||'').toLowerCase().includes(q) ||
-        String(r.codigo_pt||'').toLowerCase().includes(q) ||
-        String(r.analista||'').toLowerCase().includes(q)
-      );
+
+    // Las fechas del periodo elegido, salvo que se hayan escrito a mano.
+    function rango() {
+      const desde = document.getElementById('fl_desde').value;
+      const hasta = document.getElementById('fl_hasta').value;
+      if (desde || hasta) return { desde, hasta };
+      const p = PERIODOS[document.getElementById('fl_per').value] || PERIODOS.d30;
+      if (p.dias === null) return { desde: '', hasta: '' };
+      // "Hoy" es hoy: con el hasta abierto entraba tambien lo que se cargue
+      // despues. Los demas periodos van hasta hoy por definicion.
+      return { desde: diaLocal(p.dias), hasta: p.dias === 0 ? diaLocal(0) : '' };
+    }
+
+    function pintar(r, q) {
       const box = document.getElementById('listBox');
-      if (!filtered.length) {
-        box.innerHTML = `<div class="muted small">${allRows.length ? 'No hay resultados para "' + esc(q) + '".' : 'Sin muestreos.'}</div>`;
+      const filas = r.rows || [];
+      const total = r.total || filas.length;
+      if (!filas.length) {
+        box.innerHTML = `<div class="muted small">${q
+          ? 'Ningún muestreo coincide con «' + esc(q) + '» en toda la historia.'
+          : 'No hay muestreos en este período.'}</div>`;
         return;
       }
-      box.innerHTML = `<div class="muted small mb8">${filtered.length} de ${allRows.length} muestreos${q?' (filtrado por "'+esc(q)+'")':''}</div>` + renderMuestreoTable(filtered);
+      // Si la tanda llego al tope hay mas de los que se ven: se dice, porque si
+      // no uno cree que lo que falta no existe.
+      const recortado = total > filas.length
+        ? ` · hay ${total} en total, acotá las fechas para ver el resto`
+        : '';
+      const titulo = q
+        ? `🔎 ${filas.length} muestreo(s) con «${esc(q)}» en toda la historia${recortado}`
+        : `${filas.length} muestreo(s)${recortado}`;
+      box.innerHTML = `<div class="muted small mb8">${titulo}</div>` + renderMuestreoTable(filas);
       wireMuestreoTableClicks_();
     }
+
     async function load() {
+      const q = (document.getElementById('fl_search').value || '').trim();
+      // Buscando no se filtra por fecha: el lote que se escribe puede ser de
+      // hace meses, y pedirle a alguien que adivine el mes no es buscar.
+      const { desde, hasta } = q ? { desde: '', hasta: '' } : rango();
       try {
         loading(true);
-        const desde = document.getElementById('fl_desde').value;
-        const hasta = document.getElementById('fl_hasta').value;
-        const r = await api('listMuestreos', { filter: { desde, hasta } });
-        allRows = r.rows || [];
-        applyFilter();
-      } catch(e) { document.getElementById('listBox').innerHTML = `<div class="chip danger">${esc(e.message)}</div>`; }
-      finally { loading(false); }
+        const r = await api('listMuestreos', { filter: { desde, hasta }, q, limit: 2000 });
+        pintar(r, q);
+      } catch (e) {
+        document.getElementById('listBox').innerHTML = `<div class="chip danger">${esc(e.message)}</div>`;
+      } finally { loading(false); }
     }
+
+    // Un pedido por tecleo serian decenas: se espera a que termine de escribir.
+    let timer = null;
+    const alEscribir = () => { clearTimeout(timer); timer = setTimeout(load, 350); };
+
     document.getElementById('fl_apply').addEventListener('click', load);
-    document.getElementById('fl_search').addEventListener('input', applyFilter);
+    // El periodo manda: si quedaron fechas escritas a mano, se limpian, porque
+    // si no el selector parecia no hacer nada.
+    document.getElementById('fl_per').addEventListener('change', () => {
+      document.getElementById('fl_desde').value = '';
+      document.getElementById('fl_hasta').value = '';
+      load();
+    });
+    document.getElementById('fl_desde').addEventListener('change', load);
+    document.getElementById('fl_hasta').addEventListener('change', load);
+    document.getElementById('fl_search').addEventListener('input', alEscribir);
     load();
   }
 
