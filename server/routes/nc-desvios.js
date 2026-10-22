@@ -175,15 +175,69 @@ rutasNcDesvios.get('/datos', leer, async (req, res, next) => {
         return res.status(400).json({ ok: false, error: 'año invalido' });
     }
 
+    /* Buscando se mira TODA la tabla, no el año que quedo elegido en la
+     * pantalla: el codigo de una NC que se esta buscando puede ser de hace dos
+     * años, y pedirle a alguien que adivine el año no es buscar (Claudia,
+     * 22/10/2026: "no veo los controles de setiembre"). Sin texto, el año
+     * manda como siempre.
+     *
+     * La clave se limpia igual que en la base (clave_busqueda, migracion 067):
+     * primero se saca la tilde y despues los signos. Al reves la letra
+     * acentuada se perdia entera y el nombre no se encontraba nunca. */
+    const q = String(req.query.q || '')
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 60);
+    const buscando = q !== '';
+    // Tope alto y con el total al lado: no es para esconder nada, es para que
+    // una busqueda de una letra no arrastre el expediente entero.
+    const TOPE = 1000;
+
+    // Los campos libres viven dentro de `datos`, asi que se los nombra uno por
+    // uno: buscar sobre el JSON entero haria que "sector" o "description"
+    // -nombres de clave- coincidieran con todos los registros.
+    const comoNc = `($2 = '' OR clave_busqueda(code) LIKE '%' || $2 || '%'
+                            OR clave_busqueda(sector) LIKE '%' || $2 || '%'
+                            OR clave_busqueda(source) LIKE '%' || $2 || '%'
+                            OR clave_busqueda(datos->>'description') LIKE '%' || $2 || '%'
+                            OR clave_busqueda(datos->>'openedBy') LIKE '%' || $2 || '%'
+                            OR clave_busqueda(datos->>'lot') LIKE '%' || $2 || '%'
+                            OR clave_busqueda(datos->>'associatedItem') LIKE '%' || $2 || '%'
+                            OR clave_busqueda(datos->>'rootCause') LIKE '%' || $2 || '%'
+                            OR clave_busqueda(datos->>'analysisNotes') LIKE '%' || $2 || '%')`;
+    const comoDev = `($2 = '' OR clave_busqueda(code) LIKE '%' || $2 || '%'
+                            OR clave_busqueda(sector) LIKE '%' || $2 || '%'
+                            OR clave_busqueda(decision) LIKE '%' || $2 || '%'
+                            OR clave_busqueda(datos->>'description') LIKE '%' || $2 || '%'
+                            OR clave_busqueda(datos->>'openedBy') LIKE '%' || $2 || '%'
+                            OR clave_busqueda(datos->>'lot') LIKE '%' || $2 || '%'
+                            OR clave_busqueda(datos->>'associatedItem') LIKE '%' || $2 || '%')`;
+    const comoCapa = `($2 = '' OR clave_busqueda(c.code) LIKE '%' || $2 || '%'
+                            OR clave_busqueda(c.tipo) LIKE '%' || $2 || '%'
+                            OR clave_busqueda(c.descripcion) LIKE '%' || $2 || '%'
+                            OR clave_busqueda(c.responsable) LIKE '%' || $2 || '%'
+                            OR clave_busqueda(c.responsable_email) LIKE '%' || $2 || '%'
+                            OR clave_busqueda(c.estado) LIKE '%' || $2 || '%'
+                            OR clave_busqueda(c.datos->>'verification') LIKE '%' || $2 || '%'
+                            OR clave_busqueda(c.datos->>'effectiveness') LIKE '%' || $2 || '%')`;
+
+    /* Con texto no se filtra por año; sin texto, solo el año. El año va igual
+     * en la consulta aunque no se use ($3 lo anula): si se lo sacara del texto
+     * de la consulta, $1 quedaria sin tipo y Postgres rechaza el pedido. */
+    const delAnio = '($3 OR anio = $1)';
+
     try {
         const [ncs, devs, capas, actividad, anios] = await Promise.all([
             consultar(
-                `SELECT * FROM ncd_nc WHERE anio = $1 ORDER BY open_date DESC, code DESC`,
-                [anio]
+                `SELECT *, count(*) OVER ()::int AS total_filtrado FROM ncd_nc
+                 WHERE ${delAnio} AND ${comoNc}
+                 ORDER BY open_date DESC, code DESC LIMIT ${TOPE}`,
+                [anio, q, buscando]
             ),
             consultar(
-                `SELECT * FROM ncd_desvios WHERE anio = $1 ORDER BY fecha DESC, code DESC`,
-                [anio]
+                `SELECT *, count(*) OVER ()::int AS total_filtrado FROM ncd_desvios
+                 WHERE ${delAnio} AND ${comoDev}
+                 ORDER BY fecha DESC, code DESC LIMIT ${TOPE}`,
+                [anio, q, buscando]
             ),
             consultar(
                 `SELECT c.*,
@@ -195,14 +249,16 @@ rutasNcDesvios.get('/datos', leer, async (req, res, next) => {
                                      ORDER BY a.subido_en DESC)
                              FROM ncd_adjuntos a WHERE a.capa_id = c.id),
                             '[]'::json) AS adjuntos
+                        , count(*) OVER ()::int AS total_filtrado
                  FROM ncd_capa c
                  LEFT JOIN ncd_nc      n ON n.id = c.nc_id
                  LEFT JOIN ncd_desvios d ON d.id = c.dev_id
-                 WHERE n.anio = $1 OR d.anio = $1
+                 WHERE ($3 OR n.anio = $1 OR d.anio = $1
                     OR (c.nc_id IS NULL AND c.dev_id IS NULL
-                        AND date_part('year', c.creado_en) = $1)
-                 ORDER BY c.code`,
-                [anio]
+                        AND date_part('year', c.creado_en) = $1))
+                   AND ${comoCapa}
+                 ORDER BY c.code LIMIT ${TOPE}`,
+                [anio, q, buscando]
             ),
             consultar(
                 `SELECT id, ts, usuario, accion, entidad, detalle
@@ -242,6 +298,17 @@ rutasNcDesvios.get('/datos', leer, async (req, res, next) => {
             }),
             actividad: actividad.rows,
             anios: anios.rows.map((f) => f.anio),
+            // Que alcance tiene lo que se devuelve y cuantos hay en total antes
+            // del tope, para que la pantalla pueda decirlo en vez de mostrar
+            // una lista corta que se lee como "no hay mas".
+            buscando,
+            q: buscando ? String(req.query.q || '').trim().slice(0, 60) : '',
+            totales: {
+                ncs: ncs.rows.length ? ncs.rows[0].total_filtrado : 0,
+                devs: devs.rows.length ? devs.rows[0].total_filtrado : 0,
+                capas: capas.rows.length ? capas.rows[0].total_filtrado : 0,
+            },
+            tope: TOPE,
         });
     } catch (err) {
         next(err);

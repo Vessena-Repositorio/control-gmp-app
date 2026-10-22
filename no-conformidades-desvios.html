@@ -346,28 +346,46 @@ function SinConexion({detalle,onReintentar}){
   </div></div>);
 }
 
+/* Con qué alcance se armó la lista: buscando es toda la historia, sin buscar es
+   el año elegido. Si no se dice, una lista corta se lee como "no hay más" en vez
+   de "hay más, pero filtrado" (Claudia, 22/10/2026). Si el total que informó el
+   servidor es mayor que lo que llegó, también se avisa. */
+function Alcance({data,cuantos,clave,nombre}){
+  const a=data.alcance||{};
+  const total=(a.totales||{})[clave];
+  const recortado=total>cuantos?` · hay ${total} en total, acotá la búsqueda para ver el resto`:"";
+  return <div style={{fontSize:11.5,color:K.txS,marginBottom:8}}>
+    {a.buscando
+      ?`🔎 ${cuantos} ${nombre} con «${a.q}» en toda la historia, sin filtro de año${recortado}`
+      :`${cuantos} ${nombre} · año ${data.yr}${recortado}`}
+  </div>;
+}
+
 /* ══════════════════════════════════════════════════════
    NO CONFORMIDADES — LIST
    ══════════════════════════════════════════════════════ */
 function NCList({data,canEdit,openNC}){
-  const{ncs}=data;const[q,sQ]=useState("");const[fCls,sFCls]=useState("");const[fPh,sFPh]=useState("");
+  /* El texto no se filtra acá: lo filtra el servidor sobre toda la tabla, que
+     es lo que permite encontrar una NC de otro año. Lo que queda en memoria
+     son los filtros de clasificación y fase, que sí son del listado a la vista. */
+  const{ncs,busq,sBusq}=data;const[fCls,sFCls]=useState("");const[fPh,sFPh]=useState("");
   let ls=ncs;
-  if(q){const ql=q.toLowerCase();ls=ls.filter(n=>[n.code,n.description,n.sector,n.source,n.openedBy,n.lot,n.associatedItem,n.rootCause,n.analysisNotes].some(v=>v&&String(v).toLowerCase().includes(ql)));}
   if(fCls)ls=ls.filter(n=>n.classification===fCls);
   if(fPh)ls=ls.filter(n=>n.phase===fPh);
   return(<div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-      <div><h1 style={{fontSize:20,fontWeight:800}}>No Conformidades · {data.yr}</h1><p style={{color:K.txS,margin:"4px 0 0",fontSize:12.5}}>REG-SOP-AC-036-A — {ncs.length} registros</p></div>
+      <div><h1 style={{fontSize:20,fontWeight:800}}>No Conformidades · {data.alcance&&data.alcance.buscando?"toda la historia":data.yr}</h1><p style={{color:K.txS,margin:"4px 0 0",fontSize:12.5}}>REG-SOP-AC-036-A — {ncs.length} registros</p></div>
       {canEdit&&<button style={sB("pri")} onClick={()=>openNC(null)}>+ Nueva NC</button>}
     </div>
     {!canEdit&&<VBanner/>}
     <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
-      <input style={{...sI,maxWidth:250}} placeholder="Buscar..." value={q} onChange={e=>sQ(e.target.value)}/>
+      <input style={{...sI,maxWidth:250}} placeholder="Buscar en toda la historia…" value={busq} onChange={e=>sBusq(e.target.value)}/>
       <select style={{...sS,maxWidth:160}} value={fCls} onChange={e=>sFCls(e.target.value)}><option value="">Todas las clasif.</option>{CLASSIFICATIONS.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}</select>
       <select style={{...sS,maxWidth:160}} value={fPh} onChange={e=>sFPh(e.target.value)}><option value="">Todas las fases</option>{NC_PHASES.map(p=><option key={p.id} value={p.id}>{p.label}</option>)}</select>
     </div>
+    <Alcance data={data} cuantos={ls.length} clave="ncs" nombre="no conformidad(es)"/>
     <div style={sC}>
-      {ls.length===0?<Em icon="⚠️" t="Sin no conformidades registradas"/>:
+      {ls.length===0?<Em icon="⚠️" t={data.alcance&&data.alcance.buscando?`Ninguna NC coincide con «${data.alcance.q}» en toda la historia`:"Sin no conformidades registradas"}/>:
       <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5}}><thead><tr>
         <th style={sTh}>Código</th><th style={sTh}>Fecha</th><th style={sTh}>Sector</th><th style={sTh}>Descripción</th><th style={sTh}>Clasif.</th><th style={sTh}>Fase</th><th style={sTh}>Fuente</th>
       </tr></thead><tbody>{ls.map(n=><tr key={n.id} style={{cursor:"pointer"}} onClick={()=>openNC(n)}>
@@ -583,17 +601,20 @@ function NCDetail({nc,data,canEdit,canAdmin,onClose,onSave,onDelete}){
    DESVÍOS — LIST
    ══════════════════════════════════════════════════════ */
 function DevList({data,canEdit,openDev}){
-  const{devs}=data;const[q,sQ]=useState("");
-  let ls=q?devs.filter(d=>[d.code,d.description,d.sector,d.openedBy,d.lot,d.associatedItem,d.decision].some(v=>v&&String(v).toLowerCase().includes(q.toLowerCase()))):devs;
+  // El texto lo filtra el servidor sobre toda la tabla, no esta pantalla sobre
+  // el año que se trajo (Claudia, 22/10/2026).
+  const{devs,busq,sBusq}=data;
+  const ls=devs;
   return(<div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-      <div><h1 style={{fontSize:20,fontWeight:800}}>Notas de Desvío · {data.yr}</h1><p style={{color:K.txS,margin:"4px 0 0",fontSize:12.5}}>REG-SOP-AC-036-B — {devs.length} registros</p></div>
+      <div><h1 style={{fontSize:20,fontWeight:800}}>Notas de Desvío · {data.alcance&&data.alcance.buscando?"toda la historia":data.yr}</h1><p style={{color:K.txS,margin:"4px 0 0",fontSize:12.5}}>REG-SOP-AC-036-B — {devs.length} registros</p></div>
       {canEdit&&<button style={sB("pri")} onClick={()=>openDev(null)}>+ Nuevo Desvío</button>}
     </div>
     {!canEdit&&<VBanner/>}
-    <input style={{...sI,maxWidth:300,marginBottom:12}} placeholder="Buscar..." value={q} onChange={e=>sQ(e.target.value)}/>
+    <input style={{...sI,maxWidth:300,marginBottom:4}} placeholder="Buscar en toda la historia…" value={busq} onChange={e=>sBusq(e.target.value)}/>
+    <Alcance data={data} cuantos={ls.length} clave="devs" nombre="desvío(s)"/>
     <div style={sC}>
-      {ls.length===0?<Em icon="↩️" t="Sin desvíos registrados"/>:
+      {ls.length===0?<Em icon="↩️" t={data.alcance&&data.alcance.buscando?`Ningún desvío coincide con «${data.alcance.q}» en toda la historia`:"Sin desvíos registrados"}/>:
       <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5}}><thead><tr>
         <th style={sTh}>Nº</th><th style={sTh}>Fecha</th><th style={sTh}>Sector</th><th style={sTh}>Descripción</th><th style={sTh}>Clasif.</th><th style={sTh}>Decisión</th><th style={sTh}>Fase</th>
       </tr></thead><tbody>{ls.map(d=><tr key={d.id} style={{cursor:"pointer"}} onClick={()=>openDev(d)}>
@@ -970,8 +991,8 @@ function Evidencia({capa,canEdit,canAdmin,avisar,onCambio}){
 }
 
 function CAPAList({data,canEdit}){
-  const{capas,ncs,devs,guardarCapa,borrarCapa,avisar,canAdmin}=data;
-  const[sh,sSh]=useState(false);const[ed,sEd]=useState(null);const[q,sQ]=useState("");
+  const{capas,ncs,devs,guardarCapa,borrarCapa,avisar,canAdmin,busq,sBusq}=data;
+  const[sh,sSh]=useState(false);const[ed,sEd]=useState(null);
   const[guardando,sGuardando]=useState(false);
   const bl={ncId:"",devId:"",type:"Acción Correctiva",description:"",responsible:"",responsibleEmail:"",dueDate:"",status:"Abierto",verification:"",effectiveness:"",followupResp:"",followupEmail:""};
   const[fm,sFm]=useState(bl);
@@ -1014,8 +1035,8 @@ function CAPAList({data,canEdit}){
   };
   const lkNC=fm.ncId?ncs.find(x=>x.id===fm.ncId):null;
   const cls=lkNC?CLASSIFICATIONS.find(x=>x.id===lkNC.classification):null;
-  let ls=capas;
-  if(q){const ql=q.toLowerCase();ls=ls.filter(c=>[c.code,c.description,c.responsible,c.responsibleEmail,c.type,c.status,c.verification,c.effectiveness].some(v=>v&&String(v).toLowerCase().includes(ql)));}
+  // El texto lo filtra el servidor sobre toda la tabla (Claudia, 22/10/2026).
+  const ls=capas;
   const urgLabel=(dl)=>{if(dl<0)return{txt:"⚠ VENCIDO",bg:K.redL,color:K.red};if(dl<=7)return{txt:"🔴 "+dl+"d",bg:"#FEF2F2",color:K.red};if(dl<=15)return{txt:"🟡 "+dl+"d",bg:K.wrnL,color:"#92400E"};return null;};
   const sendReminder=(a)=>{const nc=ncs.find(n=>n.id===a.ncId);const to=a.responsibleEmail||"";const cc=a.followupEmail||"";const subj="Recordatorio: CAPA "+a.code+" — Vessena S.A.";const body="Estimado/a "+a.responsible+",\n\nLe recordamos que la acción "+a.code+" vinculada a la NC "+(nc?nc.code:"")+" tiene fecha límite el "+fd(a.dueDate)+".\n\nDescripción: "+a.description+"\n\nSaludos cordiales,\nAseguramiento de Calidad\nVessena S.A.";window.open("mailto:"+to+"?cc="+cc+"&subject="+encodeURIComponent(subj)+"&body="+encodeURIComponent(body));};
   const upcoming=capas.filter(c=>c.status!=="Cerrado"&&daysLeft(c.dueDate)<=15).sort((a,b)=>daysLeft(a.dueDate)-daysLeft(b.dueDate));
@@ -1037,7 +1058,8 @@ function CAPAList({data,canEdit}){
         {a.responsibleEmail&&<button style={{...sB("sm"),color:"#0891B2",fontSize:10}} onClick={()=>sendReminder(a)} title="Recordar">✉</button>}
       </div>;})}
     </div>}
-    <input style={{...sI,maxWidth:300,marginBottom:12}} placeholder="Buscar..." value={q} onChange={e=>sQ(e.target.value)}/>
+    <input style={{...sI,maxWidth:300,marginBottom:4}} placeholder="Buscar en toda la historia…" value={busq} onChange={e=>sBusq(e.target.value)}/>
+    <Alcance data={data} cuantos={ls.length} clave="capas" nombre="acción(es)"/>
     <div style={sC}>
       {ls.length===0?<Em icon="📋" t="Sin acciones CAPA"/>:
       <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5}}><thead><tr>
@@ -1105,7 +1127,11 @@ function CAPAList({data,canEdit}){
    escondería justo el movimiento que se está buscando. */
 function Trail({logs}){
   const[q,sQ]=useState("");
-  const ls=q?logs.filter(l=>Object.values(l).some(v=>String(v).toLowerCase().includes(q.toLowerCase()))):logs;
+  /* Se compara sin tildes ni signos, como en el resto del portal: si no,
+     "Pampillón" no se encuentra escribiendo "pampillon" (22/10/2026). */
+  const cl=s=>String(s==null?"":s).normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/[^a-z0-9]/g,"");
+  const qc=cl(q);
+  const ls=qc?logs.filter(l=>Object.values(l).some(v=>cl(v).includes(qc))):logs;
   const color=a=>a.includes("CREAR")||a.includes("CARGA")?[K.grn,K.grnL]
     :a.includes("CAMBIO")?[K.wrn,K.wrnL]
     :a.includes("ELIMINAR")?[K.red,K.redL]
@@ -1651,6 +1677,11 @@ function App(){
   const[logs,setLogs]=useState([]);
   const[anios,sAnios]=useState([]);
   const[cargandoDatos,sCargandoDatos]=useState(false);
+  /* El texto del buscador vive acá arriba, no en cada lista: es lo que decide
+     si el servidor mira un año o toda la tabla, así que tiene que llegar al
+     pedido. `alcance` es lo que contestó el servidor sobre lo que devolvió. */
+  const[busq,sBusq]=useState("");
+  const[alcance,sAlcance]=useState({buscando:false,q:"",totales:{},tope:0});
 
   const[pg,sPg]=useState("rep");
   const[col,sCol]=useState(false);
@@ -1693,12 +1724,18 @@ function App(){
      Se recargan enteros al cambiar de año. Son unos cientos de registros: pedir
      de nuevo es más simple y más seguro que mantener cachés por año que pueden
      quedar viejas si otra persona cargó algo mientras tanto. */
-  const cargarDatos=useCallback(async(anio)=>{
+  const cargarDatos=useCallback(async(anio,texto)=>{
     sCargandoDatos(true);
     try{
-      const d=await api(`/datos?anio=${anio}`);
+      /* Con texto el servidor busca sobre TODA la tabla y deja de lado el año:
+         antes el buscador filtraba en memoria lo que se había traído del año
+         elegido, así que una NC de otro año no aparecía ni buscándola por
+         código y nada decía que la búsqueda miró un solo año (Claudia,
+         22/10/2026: "no veo los controles de setiembre"). */
+      const d=await api(`/datos?anio=${anio}`+(texto?`&q=${encodeURIComponent(texto)}`:""));
       setNCs(d.ncs);setDevs(d.devs);setCapas(d.capas);setLogs(d.actividad);
       sAnios(d.anios||[]);
+      sAlcance({buscando:!!d.buscando,q:d.q||"",totales:d.totales||{},tope:d.tope||0});
     }catch(e){
       avisar("No se pudieron cargar los datos: "+e.message,"error");
     }finally{
@@ -1706,7 +1743,12 @@ function App(){
     }
   },[avisar]);
 
-  useEffect(()=>{if(estado==="listo")cargarDatos(yr);},[estado,yr,cargarDatos]);
+  /* Un pedido por tecleo serían decenas: se espera a que termine de escribir. */
+  useEffect(()=>{
+    if(estado!=="listo")return;
+    const t=setTimeout(()=>cargarDatos(yr,busq.trim()),busq.trim()?350:0);
+    return ()=>clearTimeout(t);
+  },[estado,yr,busq,cargarDatos]);
 
   const logout=async()=>{
     // Se cierra en el servidor: borrar solo el estado local dejaría la sesión
@@ -1830,7 +1872,8 @@ function App(){
   const data={
     ncs,devs,capas,logs,yr,currentUser:cu,
     guardarCapa,borrarCapa,avisar,canAdmin,
-    recargar:()=>cargarDatos(yr),
+    busq,sBusq,alcance,
+    recargar:()=>cargarDatos(yr,busq.trim()),
   };
   const nv=[...NAV];if(canAdmin)nv.push({k:"users",l:"Accesos",i:"👥"});
 
