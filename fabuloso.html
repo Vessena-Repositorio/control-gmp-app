@@ -698,9 +698,6 @@ window.APP_CONFIG = {
       const pendientes = l.filter(o => !o.aprobada && o.deApp);
       const previas = l.filter(o => !o.aprobada && !o.deApp);
       const aprobadas = l.filter(o => o.aprobada);
-      // Sin buscar se muestran las ultimas 20 de cada grupo; buscando, todas
-      // las que coinciden, que para eso se busco.
-      const tope = k ? l.length : 20;
       const box = document.getElementById('ordBox');
       if (k && !l.length) {
         box.innerHTML = `<div class="card"><div class="muted small">Ninguna orden coincide con «${esc(q)}». Probá con otro número de lote o de orden, o ampliá el período.</div></div>`;
@@ -713,8 +710,12 @@ window.APP_CONFIG = {
           : (!k ? '<div class="card"><div class="muted small">No hay órdenes esperando aprobación.</div></div>' : '')) +
         (previas.length ? `<h3>De la app anterior (${previas.length})</h3>
            <div class="card"><div class="muted small">Se cargaron antes de la migración y no llevan esta aprobación.</div></div>`
-          + previas.slice(0, tope).map(tarjeta).join('') : '') +
-        (aprobadas.length ? `<h3>Aprobadas (${aprobadas.length})</h3>` + aprobadas.slice(0, tope).map(tarjeta).join('') : '');
+          + previas.map(tarjeta).join('') : '') +
+        // Todas las del período, no las ultimas 20 de cada grupo: con diez
+        // ordenes por dia esas 20 eran siempre del mes corriente y el mes
+        // anterior no aparecia (Claudia, 22/10/2026: "en ordenes veo solo
+        // octubre"). Lo que acota la lista es el período, que esta a la vista.
+        (aprobadas.length ? `<h3>Aprobadas (${aprobadas.length})</h3>` + aprobadas.map(tarjeta).join('') : '');
 
       box.querySelectorAll('[data-orden]').forEach(b =>
         b.addEventListener('click', () => nav('order_detail', { orden: b.dataset.orden })));
