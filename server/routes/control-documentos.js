@@ -971,6 +971,21 @@ rutasControlDocumentos.post('/versiones/:id/sesiones', capacitar, async (req, re
     try {
         const horas = Number(b.horas) || 4;
         if (horas < 1 || horas > 72) throw fallo(400, 'la sesión dura entre 1 y 72 horas');
+        // El entrenamiento que ya se dio en papel se carga con su fecha
+        // (Claudia, 26/10/2026). Hacia adelante no se acepta: una capacitacion
+        // no se registra antes de darla.
+        const fecha = texto(b.fecha) || null;
+        if (fecha && !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) throw fallo(400, 'la fecha va como aaaa-mm-dd');
+        if (fecha) {
+            // 31/02 pasa el formato pero no existe: la base lo rechazaria con un
+            // error feo, asi que se compara contra lo que se escribio.
+            const [y, m, d] = fecha.split('-').map(Number);
+            const p = new Date(Date.UTC(y, m - 1, d));
+            if (p.getUTCFullYear() !== y || p.getUTCMonth() !== m - 1 || p.getUTCDate() !== d) {
+                throw fallo(400, 'esa fecha no existe');
+            }
+            if (fecha > hoyIso()) throw fallo(400, 'la fecha de la capacitación no puede ser posterior a hoy');
+        }
         const s = await enTransaccionAuditada(req, 'sesión de capacitación con QR', async (c) => {
             const { rows: [v] } = await c.query('SELECT estado, pdf_ruta FROM dc_versiones WHERE id = $1', [req.params.id]);
             if (!v) throw fallo(404, 'version inexistente');
@@ -978,9 +993,10 @@ rutasControlDocumentos.post('/versiones/:id/sesiones', capacitar, async (req, re
             // Sin PDF igual se puede capacitar en grupo y tomar asistencia; lo que
             // no anda es la lectura por QR, que lo avisa en la pagina.
             const { rows: [n] } = await c.query(
-                `INSERT INTO dc_sesiones (version_id, token, lugar, abierta_por_id, vence_en)
-                 VALUES ($1,$2,$3,$4, now() + ($5 || ' hours')::interval) RETURNING id, token, vence_en`,
-                [req.params.id, nuevoToken(), texto(b.lugar) || null, req.usuario.id, String(horas)]);
+                `INSERT INTO dc_sesiones (version_id, token, lugar, abierta_por_id, vence_en, fecha_dictada)
+                 VALUES ($1,$2,$3,$4, now() + ($5 || ' hours')::interval, $6)
+                 RETURNING id, token, vence_en, to_char(fecha_dictada, 'YYYY-MM-DD') AS fecha_dictada`,
+                [req.params.id, nuevoToken(), texto(b.lugar) || null, req.usuario.id, String(horas), fecha]);
             return n;
         });
         res.status(201).json({ ok: true, ...s, url: `/lectura.html?s=${s.token}` });
@@ -992,6 +1008,7 @@ rutasControlDocumentos.get('/versiones/:id/sesiones', capacitar, async (req, res
     try {
         const { rows: sesiones } = await consultar(
             `SELECT s.id, s.token, s.lugar, s.abierta_en, s.vence_en, s.cerrada_en, s.registros_creados,
+                    to_char(s.fecha_dictada, 'YYYY-MM-DD') AS fecha_dictada,
                     (s.cerrada_en IS NULL AND s.vence_en > now()) AS abierta, u.nombre AS abierta_por
              FROM dc_sesiones s JOIN usuarios u ON u.id = s.abierta_por_id
              WHERE s.version_id = $1 ORDER BY s.abierta_en DESC`, [req.params.id]);
@@ -1019,7 +1036,8 @@ rutasControlDocumentos.post('/sesiones/:id/cerrar', capacitar, async (req, res, 
         const evGrupo = ['NO APLICA', 'ORAL', 'PRACTICA', 'ESCRITA'].includes(b.evGrupo) ? b.evGrupo : 'NO APLICA';
         const r = await enTransaccionAuditada(req, 'cierre de sesión de capacitación', async (c) => {
             const { rows: [s] } = await c.query(
-                `SELECT s.*, v.numero, v.evaluacion, v.puntaje_minimo, d.codigo, d.titulo, d.capacitar_sectores,
+                `SELECT s.*, to_char(s.fecha_dictada, 'YYYY-MM-DD') AS dictada,
+                        v.numero, v.evaluacion, v.puntaje_minimo, d.codigo, d.titulo, d.capacitar_sectores,
                         coalesce(v.pdf_sha256, v.archivo_sha256) AS huella
                  FROM dc_sesiones s JOIN dc_versiones v ON v.id = s.version_id
                  JOIN dc_documentos d ON d.id = v.documento_id WHERE s.id = $1 FOR UPDATE OF s`, [req.params.id]);
@@ -1039,10 +1057,14 @@ rutasControlDocumentos.post('/sesiones/:id/cerrar', capacitar, async (req, res, 
             }
             const asistentes = todos.filter((a) => a.aprobado);
             const noAprobaron = todos.filter((a) => a.aprobado === false);
+            // La fecha del papel, si la sesion se cargo despues de dictada.
+            const fecha = s.dictada || hoyIso();
+            const retro = s.dictada && s.dictada !== hoyIso()
+                ? `capacitación dictada el ${s.dictada}, cargada hoy desde la lista firmada en papel; ` : '';
             const firma = await firmar(c, req, {
                 usuario: b.usuario, clave: b.clave, significado: 'capacitador',
                 recurso: RECURSO, tabla: 'dc_versiones', registroId: s.version_id, contenidoSha256: s.huella,
-                comentario: (`sesión ${s.id}, evaluación ${evGrupo.toLowerCase()}: aprobaron ${asistentes.length} — ` +
+                comentario: (retro + `sesión ${s.id}, evaluación ${evGrupo.toLowerCase()}: aprobaron ${asistentes.length} — ` +
                     asistentes.map((a) => a.persona_nombre).join(', ') +
                     (noAprobaron.length ? `; no aprobaron ${noAprobaron.length} — ${noAprobaron.map((a) => a.persona_nombre).join(', ')}` : '')).slice(0, 2000),
             });
@@ -1050,7 +1072,7 @@ rutasControlDocumentos.post('/sesiones/:id/cerrar', capacitar, async (req, res, 
                 asistentes, codigo: s.codigo, version: verTxt(s.numero), titulo: s.titulo,
                 resp: req.usuario.nombre || req.usuario.usuario, horas,
                 minimo: s.puntaje_minimo, evGrupo,
-                sectores: s.capacitar_sectores, fecha: hoyIso(),
+                sectores: s.capacitar_sectores, fecha,
             });
             await c.query(
                 `UPDATE dc_sesiones SET cerrada_en = now(), firma_id = $2, horas = $3, registros_creados = $4 WHERE id = $1`,

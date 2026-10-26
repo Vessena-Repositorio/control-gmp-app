@@ -567,9 +567,36 @@ async function guardarEvaluacion(){
 
 async function abrirSesion(vid){
   const lugar=prompt('¿Dónde es la capacitación? (opcional)','')??null;if(lugar===null)return;
-  const horas=Number(prompt('¿Cuántas horas queda abierto el QR?','4'));if(!horas)return;
-  try{await api(`/versiones/${vid}/sesiones`,{method:'POST',body:JSON.stringify({lugar,horas})});toast('Sesión abierta');cargarSesiones(vid)}
+  // La capacitacion que ya se dio en papel se carga con la fecha del papel: el
+  // registro de Capacitaciones tiene que decir el dia en que se dicto, no el
+  // dia en que se carga (Claudia, 26/10/2026).
+  const txt=prompt('¿Qué día se dictó? dd/mm/aaaa — dejalo vacío si es hoy','')??null;if(txt===null)return;
+  const fecha=fechaDePrompt(txt);
+  if(fecha===false){toast('No entendí la fecha: va como dd/mm/aaaa',true);return}
+  const horas=Number(prompt(fecha?'¿Cuántas horas queda abierto el QR? (para una carga en papel alcanza 1)':'¿Cuántas horas queda abierto el QR?',fecha?'1':'4'));if(!horas)return;
+  try{await api(`/versiones/${vid}/sesiones`,{method:'POST',body:JSON.stringify({lugar,horas,fecha})});
+    toast(fecha?'Sesión abierta con fecha '+dma(fecha):'Sesión abierta');cargarSesiones(vid)}
   catch(e){toast(e.message,true)}
+}
+
+/* dd/mm/aaaa (o aaaa-mm-dd) a ISO. "" = hoy, o sea sin fecha especial.
+   false = no se entiende, para no abrir la sesion con una fecha inventada. */
+function fechaDePrompt(txt){
+  const t=String(txt||'').trim();
+  if(!t)return null;
+  const iso=t.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const dma=t.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  let f=null;
+  if(iso)f=t;
+  else if(dma)f=dma[3]+'-'+String(dma[2]).padStart(2,'0')+'-'+String(dma[1]).padStart(2,'0');
+  else return false;
+  // 31/02 no existe: Date la corre a marzo en vez de rechazarla, asi que se
+  // comparan los componentes contra lo que se escribio.
+  const [y,m,dd]=f.split('-').map(Number);
+  const d=new Date(Date.UTC(y,m-1,dd));
+  if(d.getUTCFullYear()!==y||d.getUTCMonth()!==m-1||d.getUTCDate()!==dd)return false;
+  if(f>hoyISO())return false;
+  return f;
 }
 
 async function cargarSesiones(vid){
@@ -584,6 +611,7 @@ async function cargarSesiones(vid){
         <b>Sesión ${s.id}${s.lugar?' · '+esc(s.lugar):''}</b>
         <span class="chip ${s.cerrada_en?'ok':s.abierta?'info':'warn'}">${s.cerrada_en?'cerrada y firmada':s.abierta?'abierta hasta '+dmaHora(s.vence_en):'QR vencido, falta cerrar'}</span></div>
         <div class="muted">Abrió ${esc(s.abierta_por)} el ${dmaHora(s.abierta_en)}${s.cerrada_en?` · ${s.registros_creados} registro(s) en Capacitaciones`:''}</div>
+        ${s.fecha_dictada?`<div class="chip warn" style="margin-top:6px">Capacitación dictada el ${dma(s.fecha_dictada)} · cargada desde la lista firmada en papel</div>`:''}
         ${s.cerrada_en?'':`<div class="card" style="margin-top:10px;background:var(--pri-g)"><b>Tomar asistencia</b>
           <div class="muted">Pasá las credenciales por el lector (cada lectura entra sola) o elegí a la gente de la lista.</div>
           <input id="aC${s.id}" placeholder="Hacé clic acá y pasá la credencial por el lector" autocomplete="off" style="margin-top:6px;font-size:16px"
@@ -592,6 +620,7 @@ async function cargarSesiones(vid){
           <div class="fila"><button class="b sm" onclick="elegirDelPadron(${s.id},${vid})">Elegir de la lista del padrón</button>
             <button class="b sm" onclick="prepararPruebas(${s.id},${vid})">🖨️ Imprimir pruebas</button>
             <label class="b sm" style="display:inline-block;cursor:pointer">📥 Subir pruebas escaneadas<input type="file" accept=".pdf,image/*" multiple style="display:none" onchange="leerPruebas(${s.id},${vid},this.files);this.value=''"></label>
+            <label class="b sm" style="display:inline-block;cursor:pointer">📎 Subir la lista firmada<input type="file" accept=".pdf,image/*" multiple style="display:none" onchange="subirEvidencia(${s.id},${vid},this.files);this.value=''"></label>
             <button class="b sm" onclick="cargarSesiones(${vid})">Actualizar lista</button></div><div id="aPad${s.id}"></div><div id="pR${s.id}"></div></div>`}
         ${s.abierta?`<details style="margin-top:8px"><summary>QR para leer en tablet o celular (con evaluación en pantalla)</summary>
           <div class="fila" style="margin-top:10px;align-items:flex-start"><div id="qr${s.id}" style="background:#fff;padding:8px;border:1px solid var(--border);border-radius:8px"></div>
@@ -614,7 +643,7 @@ async function cargarSesiones(vid){
           <button class="b sm" onclick="document.querySelectorAll('.res${s.id}').forEach(x=>{if(!x.value)x.value='si'})">Marcar los pendientes como aprobados</button>
           <button class="b sm pri" onclick="guardarResultados(${s.id},${vid})">Guardar resultados</button>
           <span class="muted">Después de corregir la prueba en papel. Podés cerrar la sesión otro día.</span></div>`:''}
-        ${s.cerrada_en?'':`<div style="margin-top:10px"><b>Cerrar y firmar</b> <span class="muted">— ${aprob.length} aprobado(s) pasan a Capacitaciones con tu firma como capacitador/a${s.asistentes.some(a=>a.aprobado==null)?`; hay ${s.asistentes.filter(a=>a.aprobado==null).length} pendiente(s) de evaluación`:''}.</span>
+        ${s.cerrada_en?'':`<div style="margin-top:10px"><b>Cerrar y firmar</b> <span class="muted">— ${aprob.length} aprobado(s) pasan a Capacitaciones${s.fecha_dictada?` con fecha <b>${dma(s.fecha_dictada)}</b>, la del papel,`:''} con tu firma como capacitador/a${s.asistentes.some(a=>a.aprobado==null)?`; hay ${s.asistentes.filter(a=>a.aprobado==null).length} pendiente(s) de evaluación`:''}.</span>
           <div class="grid3"><div><label class="lb">Horas de capacitación</label><input id="sH${s.id}" type="number" step="0.25" min="0.25" value="0.5"></div>
           <div><label class="lb">Evaluación de los registrados por lector o lista</label><select id="sE${s.id}">
             <option value="NO APLICA">No aplica</option><option value="ORAL">Oral</option><option value="PRACTICA">Práctica</option><option value="ESCRITA">Escrita (en papel)</option></select></div><div></div>
@@ -789,6 +818,25 @@ async function leerHoja(cv,nPreg,nOps){
     if(o[1]&&o[0][0]<2*o[1][0]+0.05)return {r:o[0][1],duda:'más de una marcada'};
     return {r:o[0][1],duda:null}});
   return {qr,respuestas,llenado};
+}
+
+/* La lista de asistencia firmada en papel, o cualquier otro respaldo: se
+   guarda tal cual como evidencia de la sesion, con su huella sha256. No pasa
+   por la lectura de burbujas, que solo sirve para la prueba que imprime la app
+   (Claudia, 26/10/2026: los entrenamientos de los LCC ya estaban en papel). */
+async function subirEvidencia(sid,vid,files){
+  const box=document.getElementById('pR'+sid);
+  if(!files||!files.length)return;
+  box.innerHTML='<div class="aviso info" style="margin-top:8px">Subiendo…</div>';
+  const subidos=[];
+  try{
+    for(const f of files){
+      await api(`/sesiones/${sid}/pruebas?nombre=${encodeURIComponent(f.name)}`,
+        {method:'POST',headers:{'Content-Type':'application/octet-stream'},body:await f.arrayBuffer()});
+      subidos.push(f.name);
+    }
+    box.innerHTML=`<div class="aviso ok" style="margin-top:8px">Guardado como evidencia de la sesión: ${subidos.map(esc).join(', ')}</div>`;
+  }catch(e){box.innerHTML=`<div class="aviso crit" style="margin-top:8px">${esc(e.message)}${subidos.length?` (se habían guardado: ${subidos.map(esc).join(', ')})`:''}</div>`}
 }
 
 async function leerPruebas(sid,vid,files){
