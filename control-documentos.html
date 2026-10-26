@@ -847,19 +847,29 @@ let LOTE = null;
 /* El codigo del documento dentro del nombre del archivo. Se compara sin signos
    ni espacios y gana el codigo mas largo que aparezca: "REG-SOP-LCC-200 v2.pdf"
    tiene adentro "SOP-LCC-200" y "REG-SOP-LCC-200", y el bueno es el segundo. */
-function docDeArchivo(nombre){
-  const k=claveLote(nombre);
+/* De un texto -el nombre del archivo, o lo que se escriba en la columna- al
+   documento. Devuelve también los candidatos cuando no se puede decidir.
+
+   1. El código entero adentro del texto, y gana el más largo: "REG-SOP-LCC-200
+      v2.pdf" no cae en SOP-LCC-200.
+   2. Si no está entero, la cola: "lcc 046.pdf" es SOP-LCC-046, que es como se
+      nombran los escaneos (Claudia, 26/10/2026).
+   3. Si la cola da varios, casi siempre es un SOP con su anexo o su registro,
+      que comparten el número (SOP-LCC-046 y AX-SOP-LCC-046-A). Se capacita
+      sobre el procedimiento, así que si los demás cuelgan de uno, gana ese. */
+function resolverDoc(texto){
+  const k=claveLote(texto);
   let mejor=null;
   for(const d of S.docs){
     const c=claveLote(d.codigo);
     if(c&&k.includes(c)&&(!mejor||c.length>claveLote(mejor.codigo).length))mejor=d;
   }
-  if(mejor)return mejor;
-  // Los escaneos no se nombran con el código entero: "lcc 046.pdf" es
-  // SOP-LCC-046 (Claudia, 26/10/2026). Entonces se busca por la cola del
-  // código -las últimas letras y el número-, que es lo que la gente escribe.
-  const cands=candidatosPorCola(nombre);
-  return cands.length===1?cands[0]:null;
+  if(mejor)return {doc:mejor,posibles:[]};
+  const cands=candidatosPorCola(texto);
+  if(cands.length===1)return {doc:cands[0],posibles:[]};
+  const raices=cands.filter(d=>{const p=padreDe(d.codigo);return !p||!cands.some(x=>x.codigo===p)});
+  if(raices.length===1)return {doc:raices[0],posibles:[]};
+  return {doc:null,posibles:cands};
 }
 
 /* La cola de un código: el último grupo de letras con su número.
@@ -890,8 +900,8 @@ async function lotePapelArchivos(files){
   try{
     if(!S.personas){const r=await api('/puestos/personas');S.personas=r.personas||[]}
     const filas=[...files].map(f=>{
-      const d=docDeArchivo(f.name);
-      return {file:f,doc:d||null,posibles:d?[]:candidatosPorCola(f.name),
+      const r=resolverDoc(f.name);
+      return {file:f,doc:r.doc,posibles:r.posibles,
               fecha:'',horas:0.5,ev:'NO APLICA',gente:[],estado:'pendiente',msg:''};
     });
     LOTE={filas};
@@ -953,9 +963,9 @@ function loteCampo(i,campo,valor){
   pintarLote();
 }
 function loteDoc(i,codigo){
-  let d=S.docs.find(x=>claveLote(x.codigo)===claveLote(codigo));
-  if(!d){const c=candidatosPorCola(codigo);if(c.length===1)d=c[0]}
-  LOTE.filas[i].doc=d||null;
+  const r=resolverDoc(codigo);
+  LOTE.filas[i].doc=r.doc;
+  LOTE.filas[i].posibles=r.posibles;
   LOTE.filas[i].estado=LOTE.filas[i].estado==='ok'?'ok':'pendiente';
   pintarLote();
 }
