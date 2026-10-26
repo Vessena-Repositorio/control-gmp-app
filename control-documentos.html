@@ -122,6 +122,7 @@ ul.lst{margin:4px 0 0;padding-left:18px;font-size:13px}
       <p class="muted">Para cargar de una vez los entrenamientos que ya se dieron, con la lista de asistencia firmada.
         Elegí los escaneos: de cada nombre de archivo se busca el código del documento. Después completás la fecha del papel
         y quiénes firmaron —se puede copiar a todas las filas—, firmás una vez y se cargan todos.
+        Si en una lista firmaron en días distintos, «➕ otra fecha» parte ese escaneo en una fila por fecha.
         Cada documento queda con su propia sesión, su escaneo adjunto y su registro en Capacitaciones con la fecha en que se dictó.</p>
       <input type="file" id="lotePapel" accept=".pdf,image/*" multiple onchange="lotePapelArchivos(this.files);this.value=''">
       <div id="loteBox"></div>
@@ -913,20 +914,23 @@ function pintarLote(){
   const box=document.getElementById('loteBox');
   if(!LOTE){box.innerHTML='';return}
   const sectores=[...new Set(S.personas.map(p=>p.sector).filter(Boolean))].sort();
-  const chip=f=>f.estado==='ok'?'<span class="chip ok">cargado</span>'
+  const chip=(f,i)=>f.estado==='ok'?'<span class="chip ok">cargado</span>'
     :f.estado==='error'?`<span class="chip crit">${esc(f.msg)}</span>`
     :f.estado==='cargando'?'<span class="chip info">cargando…</span>'
     :!f.doc?`<span class="chip crit">${f.posibles&&f.posibles.length?'¿'+f.posibles.map(d=>esc(d.codigo)).join(' o ')+'?':'no reconocí el documento'}</span>`
     :!f.doc.vigente_id?'<span class="chip crit">sin versión vigente</span>'
     :!f.fecha?'<span class="chip warn">falta la fecha</span>'
     :!f.gente.length?'<span class="chip warn">falta quién firmó</span>'
+    :loteRepetidos(i).length?`<span class="chip crit">${esc(loteRepetidos(i)[0])} ya está en otra fecha de este documento</span>`
     :'<span class="chip info">listo para cargar</span>';
-  const listas=LOTE.filas.filter(f=>f.estado!=='ok'&&f.doc&&f.doc.vigente_id&&f.fecha&&f.gente.length).length;
+  const listas=LOTE.filas.filter((f,i)=>lista(f,i)).length;
   const cargadas=LOTE.filas.filter(f=>f.estado==='ok').length;
   box.innerHTML=`<div class="tabla" style="margin-top:10px"><table><thead><tr>
       <th>Escaneo</th><th>Documento</th><th>Día en que se dictó</th><th>Horas</th><th>Evaluación</th><th>Firmaron</th><th>Estado</th></tr></thead><tbody>
     ${LOTE.filas.map((f,i)=>`<tr>
-      <td style="font-size:12.5px">${esc(f.file.name)}</td>
+      <td style="font-size:12.5px">${esc(f.file.name)}
+        ${f.estado==='ok'?'':`<div style="margin-top:4px"><button class="b sm" style="padding:2px 6px;font-size:12px" onclick="loteOtraFecha(${i})" title="Si en esta lista firmaron en días distintos">➕ otra fecha</button>
+        ${LOTE.filas.filter(x=>x.file===f.file).length>1?`<button class="b sm" style="padding:2px 6px;font-size:12px" onclick="loteQuitar(${i})" title="Quitar esta fila">✕</button>`:''}</div>`}</td>
       <td><input list="loteCods" value="${esc(f.doc?f.doc.codigo:'')}" onchange="loteDoc(${i},this.value)" style="width:170px;padding:4px 6px" ${f.estado==='ok'?'disabled':''}>
         <div class="muted" style="font-size:12px">${esc(f.doc?f.doc.titulo:'')}</div></td>
       <td><input type="date" value="${esc(f.fecha)}" max="${hoyISO()}" onchange="loteCampo(${i},'fecha',this.value)" style="width:150px;padding:4px 6px" ${f.estado==='ok'?'disabled':''}></td>
@@ -935,7 +939,7 @@ function pintarLote(){
         ${['NO APLICA','ORAL','PRACTICA','ESCRITA'].map(v=>`<option value="${v}" ${f.ev===v?'selected':''}>${v==='NO APLICA'?'No aplica':v==='PRACTICA'?'Práctica':v==='ESCRITA'?'Escrita (papel)':'Oral'}</option>`).join('')}</select></td>
       <td><button class="b sm" onclick="loteGente(${i})" ${f.estado==='ok'?'disabled':''}>${f.gente.length?f.gente.length+' persona(s)':'Elegir'}</button>
         <div class="muted" style="font-size:12px;max-width:260px">${esc(f.gente.slice(0,3).join(', '))}${f.gente.length>3?' y '+(f.gente.length-3)+' más':''}</div></td>
-      <td style="white-space:nowrap">${chip(f)}</td></tr>`).join('')}
+      <td style="white-space:nowrap">${chip(f,i)}</td></tr>`).join('')}
     </tbody></table></div>
     <datalist id="loteCods">${S.docs.filter(d=>d.vigente_id).map(d=>`<option value="${esc(d.codigo)}">${esc(d.titulo)}</option>`).join('')}</datalist>
     <div class="fila" style="margin-top:8px">
@@ -956,6 +960,30 @@ function pintarLote(){
     </div>
     <div id="loteLog"></div>`;
 }
+
+/* Una sesión es una fecha. Si en la misma lista firmaron en días distintos
+   -pasa cuando el SOP se entrena de a poco- el escaneo se parte en una fila
+   por fecha (Claudia, 26/10/2026): cada una queda como su propia sesión, con
+   su gente y su firma, y todas llevan adjunto el mismo escaneo. */
+function loteOtraFecha(i){
+  const f=LOTE.filas[i];
+  LOTE.filas.splice(i+1,0,{file:f.file,doc:f.doc,posibles:f.posibles,
+    fecha:'',horas:f.horas,ev:f.ev,gente:[],estado:'pendiente',msg:''});
+  pintarLote();
+}
+function loteQuitar(i){LOTE.filas.splice(i,1);pintarLote()}
+
+/* La misma persona en dos fechas del mismo documento serían dos registros de
+   capacitación por lo mismo. Se avisa y esa fila no se carga hasta destildarla
+   de una de las dos. */
+function loteRepetidos(i){
+  const f=LOTE.filas[i];
+  if(!f.doc||!f.gente.length)return [];
+  const otros=new Set();
+  LOTE.filas.forEach((g,j)=>{if(j!==i&&g.doc&&g.doc.id===f.doc.id)g.gente.forEach(n=>otros.add(n))});
+  return f.gente.filter(n=>otros.has(n));
+}
+const lista=(f,i)=>f.estado!=='ok'&&f.doc&&f.doc.vigente_id&&f.fecha&&f.gente.length&&!loteRepetidos(i).length;
 
 function loteCampo(i,campo,valor){
   LOTE.filas[i][campo]=campo==='horas'?Number(valor)||0.5:valor;
@@ -1014,7 +1042,7 @@ async function loteCargar(){
   const clave=document.getElementById('loteC').value;
   const lugar=document.getElementById('loteL').value.trim()||null;
   if(!usuario||!clave)return toast('Poné tu usuario y clave para firmar',true);
-  const pendientes=LOTE.filas.filter(f=>f.estado!=='ok'&&f.doc&&f.doc.vigente_id&&f.fecha&&f.gente.length);
+  const pendientes=LOTE.filas.filter((f,i)=>lista(f,i));
   for(const f of pendientes){
     f.estado='cargando';f.msg='';pintarLote();
     let sid=null;
