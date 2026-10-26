@@ -909,6 +909,28 @@ function modulosDeRegistro(r){
 
 function esInduccion(r){ return modulosDeRegistro(r).length > 0; }
 
+/* Lo de arriba contesta "¿este registro cubre algún módulo de la inducción?",
+   y para eso conviene ser generoso: si alguien ya lo recibió, no se le vuelve a
+   pedir.
+
+   Esto contesta otra cosa: "¿este registro ES la inducción de ingreso?", y
+   sirve para sacarla de la cuenta de capacitación del año. Ahí ser generoso
+   hace daño: "SYSO" a secas es el tema con el que se cargan las charlas
+   corrientes de seguridad -autoelevadores, manipulación de cargas, extintores-,
+   que son capacitación y tienen que contar. Dándolas por inducción, quien solo
+   recibió charlas de seguridad aparecía en la lista de "personas activas sin
+   capacitación en el año" teniendo registros (Claudia, 26/10/2026: "aparece
+   Kevin, que si vas al legajo tiene capacitaciones registradas en 2026").
+
+   Entonces acá se pide que el registro diga inducción, o que sea el reglamento
+   o el manual de inducción GMP, que no se dictan fuera del ingreso. */
+function esInduccionDeIngreso(r){
+  const m = modulosDeRegistro(r);
+  if (!m.length) return false;
+  if (m.includes('REGLAMENTO') || m.includes('INDUCCION GMP')) return true;
+  return /INDUCCION/.test(normTxt(r.tema) + ' ' + normTxt(r.desc));
+}
+
 /* ── Alcance del control de inducción ────────────────────────────────────────
    Los registros arrancan en 2020. La inducción de quien ya trabajaba antes de
    esa fecha ocurrió y quedó en papel, pero no está en ninguna planilla y nunca
@@ -2090,10 +2112,10 @@ V.dash=function(){
   const actPE=PE.filter(p=>p.a!==false).length;
   
   // Split records and sessions
-  const capR=yearR.filter(r=>!esInduccion(r));
-  const indR=yearR.filter(r=>esInduccion(r));
-  const capSs=allSs.filter(s=>!esInduccion(s));
-  const indSs=allSs.filter(s=>esInduccion(s));
+  const capR=yearR.filter(r=>!esInduccionDeIngreso(r));
+  const indR=yearR.filter(r=>esInduccionDeIngreso(r));
+  const capSs=allSs.filter(s=>!esInduccionDeIngreso(s));
+  const indSs=allSs.filter(s=>esInduccionDeIngreso(s));
   
   // Capacitaciones KPIs
   const capH=capSs.reduce((s,se)=>s+horasDeTexto(se.hrs),0);
@@ -2247,7 +2269,7 @@ V.gerencia = function(){
 
   // ═══ KPI 2: COBERTURA DE PERSONAL ═══
   // Solo cuenta personas que HOY están activas (excluye bajas y externos sin match)
-  const capR = yearR.filter(r => !esInduccion(r));
+  const capR = yearR.filter(r => !esInduccionDeIngreso(r));
   const personasCap = new Set();
   capR.forEach(r => {
     const fp = findPerson(r.nom);
@@ -2437,8 +2459,8 @@ V.gerencia = function(){
 
   // ═══ FOCO DE ESTE MES ═══
   const delMesR = yearR.filter(r => r.mes === currentMonthName);
-  const capMes = delMesR.filter(r => !esInduccion(r));
-  const indMes = delMesR.filter(r => esInduccion(r));
+  const capMes = delMesR.filter(r => !esInduccionDeIngreso(r));
+  const indMes = delMesR.filter(r => esInduccionDeIngreso(r));
   const sesMes = sess(capMes).length;
   // Personas del mes: solo activas
   const persMesSet = new Set();
