@@ -1021,8 +1021,45 @@ function personaPadron(nombre){
   if(exacta)return exacta.nombre;
   const partes=String(nombre).split(/\s+/).map(claveLote).filter(x=>x.length>2);
   if(!partes.length)return null;
-  const cands=S.personas.filter(p=>{const kp=claveLote(p.nombre);return partes.every(x=>kp.includes(x))});
-  return cands.length===1?cands[0].nombre:null;
+  // Con las mismas palabras exactas gana esa: "Juan Pérez" es "PEREZ JUAN" y
+  // no "PEREZ JUANA", aunque el nombre y el apellido estén adentro de las dos.
+  const mismas=(p,cl,ps)=>{
+    const q=String(p.nombre).split(/\s+/).map(cl).filter(x=>x.length>2);
+    return q.length===ps.length&&q.every(x=>ps.includes(x));
+  };
+  let cands=S.personas.filter(p=>{const kp=claveLote(p.nombre);return partes.every(x=>kp.includes(x))});
+  if(cands.length===1)return cands[0].nombre;
+  if(cands.length>1){
+    const ex=cands.filter(p=>mismas(p,claveLote,partes));
+    if(ex.length===1)return ex[0].nombre;
+  }
+  if(!cands.length){
+    // Lo mismo pero sin las diferencias de escritura que no cambian como suena
+    // el nombre: "Mikaela" por "MICAELA", "Gonzalez" por "Gonzales", "Gimenez"
+    // por "Jimenez" (Claudia, 26/10/2026: "mikaela estaba").
+    const pf=partes.map(claveFon);
+    cands=S.personas.filter(p=>{const kp=claveFon(p.nombre);return pf.every(x=>kp.includes(x))});
+    if(cands.length===1)return cands[0].nombre;
+    if(cands.length>1){
+      const ex=cands.filter(p=>mismas(p,claveFon,pf));
+      if(ex.length===1)return ex[0].nombre;
+    }
+  }
+  return null;
+}
+
+/* La clave de arriba, además sin las variantes de escritura habituales. Las dos
+   partes se comparan igual, así que no importa que no sea fonética de verdad:
+   importa que "mikaela" y "micaela" terminen escritas iguales. */
+function claveFon(s){
+  return claveLote(s)
+    .replace(/ph/g,"f").replace(/h/g,"")
+    .replace(/qu/g,"c").replace(/k/g,"c")
+    .replace(/g([ei])/g,"j$1")
+    .replace(/z/g,"s").replace(/x/g,"s")
+    .replace(/v/g,"b").replace(/y/g,"i")
+    .replace(/ll/g,"i")
+    .replace(/(.)\1+/g,"$1");
 }
 
 /* Lo que dice el papel contra el padrón. Lo que ella corrige una vez vale
