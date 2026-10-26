@@ -902,7 +902,10 @@ async function lotePapelArchivos(files){
   if(!files||!files.length)return;
   box.innerHTML='<div class="aviso info" style="margin-top:8px">Leyendo los archivos…</div>';
   try{
-    if(!S.personas){const r=await api('/puestos/personas?todos=1');S.personas=r.personas||[]}
+    // Lista propia, con los de baja incluidos: la pantalla de Puestos guarda
+    // en S.personas solo a los activos, y antes esta la tomaba de ahi y la
+    // gente de baja no aparecia (Claudia, 26/10/2026: "no me aparece Mikaela").
+    if(!S.personasTodas){const r=await api('/puestos/personas?todos=1');S.personasTodas=r.personas||[]}
     const filas=[...files].map(f=>{
       const r=resolverDoc(f.name);
       return {file:f,doc:r.doc,posibles:r.posibles,versionId:r.doc?r.doc.vigente_id:null,
@@ -917,7 +920,7 @@ async function lotePapelArchivos(files){
 function pintarLote(){
   const box=document.getElementById('loteBox');
   if(!LOTE){box.innerHTML='';return}
-  const sectores=[...new Set(S.personas.map(p=>p.sector).filter(Boolean))].sort();
+  const sectores=[...new Set(S.personasTodas.map(p=>p.sector).filter(Boolean))].sort();
   const chip=(f,i)=>f.estado==='ok'?`<span class="chip ok">${f.msg?esc(f.msg):'cargado'}</span>`
     :f.estado==='error'?`<span class="chip crit">${esc(f.msg)}</span>`
     :f.estado==='cargando'?'<span class="chip info">cargando…</span>'
@@ -953,7 +956,7 @@ function pintarLote(){
         ${(f.faltantes||[]).map(n=>`<div style="margin-top:4px"><span class="muted" style="font-size:12px">«${esc(n)}» es:</span><br>
           <select onchange="loteMapear('${esc(n).replace(/\x27/g,"&#39;")}',this.value)" style="width:100%;max-width:240px;padding:3px 5px;font-size:12.5px">
             <option value="">— elegí a la persona —</option>
-            ${S.personas.map(p=>`<option value="${esc(p.nombre)}">${esc(p.nombre)}${p.activo===false?' (baja)':''}</option>`).join('')}
+            ${S.personasTodas.map(p=>`<option value="${esc(p.nombre)}">${esc(p.nombre)}${p.activo===false?' (baja)':''}</option>`).join('')}
             <option value="(sacar)">— no está: no registrar a esta persona —</option></select></div>`).join('')}</td>
       <td style="white-space:nowrap">${chip(f,i)}</td></tr>`).join('')}
     </tbody></table></div>
@@ -1017,7 +1020,7 @@ const evPlanilla=t=>/escrit/i.test(t)?'ESCRITA':/oral/i.test(t)?'ORAL':/practic|
 function personaPadron(nombre){
   const k=claveLote(nombre);
   if(!k)return null;
-  const exacta=S.personas.find(p=>claveLote(p.nombre)===k);
+  const exacta=S.personasTodas.find(p=>claveLote(p.nombre)===k);
   if(exacta)return exacta.nombre;
   const partes=String(nombre).split(/\s+/).map(claveLote).filter(x=>x.length>2);
   if(!partes.length)return null;
@@ -1027,7 +1030,7 @@ function personaPadron(nombre){
     const q=String(p.nombre).split(/\s+/).map(cl).filter(x=>x.length>2);
     return q.length===ps.length&&q.every(x=>ps.includes(x));
   };
-  let cands=S.personas.filter(p=>{const kp=claveLote(p.nombre);return partes.every(x=>kp.includes(x))});
+  let cands=S.personasTodas.filter(p=>{const kp=claveLote(p.nombre);return partes.every(x=>kp.includes(x))});
   if(cands.length===1)return cands[0].nombre;
   if(cands.length>1){
     const ex=cands.filter(p=>mismas(p,claveLote,partes));
@@ -1038,7 +1041,7 @@ function personaPadron(nombre){
     // el nombre: "Mikaela" por "MICAELA", "Gonzalez" por "Gonzales", "Gimenez"
     // por "Jimenez" (Claudia, 26/10/2026: "mikaela estaba").
     const pf=partes.map(claveFon);
-    cands=S.personas.filter(p=>{const kp=claveFon(p.nombre);return pf.every(x=>kp.includes(x))});
+    cands=S.personasTodas.filter(p=>{const kp=claveFon(p.nombre);return pf.every(x=>kp.includes(x))});
     if(cands.length===1)return cands[0].nombre;
     if(cands.length>1){
       const ex=cands.filter(p=>mismas(p,claveFon,pf));
@@ -1087,7 +1090,10 @@ async function loteDesdePlanilla(file){
   if(!file)return;
   box.innerHTML='<div class="aviso info" style="margin-top:8px">Leyendo la planilla…</div>';
   try{
-    if(!S.personas){const r=await api('/puestos/personas?todos=1');S.personas=r.personas||[]}
+    // Lista propia, con los de baja incluidos: la pantalla de Puestos guarda
+    // en S.personas solo a los activos, y antes esta la tomaba de ahi y la
+    // gente de baja no aparecia (Claudia, 26/10/2026: "no me aparece Mikaela").
+    if(!S.personasTodas){const r=await api('/puestos/personas?todos=1');S.personasTodas=r.personas||[]}
     const filas=await filasDePlanilla(file);
     if(filas.length<2)throw new Error('la planilla no tiene filas');
     const cab=filas[0].map(colPlan);
@@ -1249,7 +1255,7 @@ function loteATodas(campo){
    casi siempre es un sector entero el que se capacita. */
 function loteGente(i){
   const box=document.getElementById('loteGenteBox');
-  const sectores=[...new Set(S.personas.map(p=>p.sector).filter(Boolean))].sort();
+  const sectores=[...new Set(S.personasTodas.map(p=>p.sector).filter(Boolean))].sort();
   const sel=new Set(LOTE.filas[i].gente);
   box.innerHTML=`<div class="card" style="margin-top:10px"><b>¿Quiénes firmaron?</b>
     <span class="muted">— ${esc(LOTE.filas[i].doc?LOTE.filas[i].doc.codigo:LOTE.filas[i].file.name)}</span>
@@ -1264,7 +1270,7 @@ function loteGente(i){
 function pintarLoteGente(i,sel){
   const marcados=sel||new Set([...document.querySelectorAll('.lg:checked')].map(c=>c.value).concat(LOTE.filas[i].gente));
   const sec=document.getElementById('loteSec').value;
-  const lista=S.personas.filter(p=>!sec||p.sector===sec);
+  const lista=S.personasTodas.filter(p=>!sec||p.sector===sec);
   document.getElementById('loteGenteLista').innerHTML=`<div style="columns:2;margin-top:6px">${lista.map(p=>
     `<label style="display:block;font-size:13.5px"><input type="checkbox" class="lg" value="${esc(p.nombre)}" ${marcados.has(p.nombre)?'checked':''} style="width:auto"> ${esc(p.nombre)}<span class="muted"> · ${esc(p.sector||'')}</span></label>`).join('')}</div>`;
 }
