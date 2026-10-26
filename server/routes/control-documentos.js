@@ -989,7 +989,15 @@ rutasControlDocumentos.post('/versiones/:id/sesiones', capacitar, async (req, re
         const s = await enTransaccionAuditada(req, 'sesión de capacitación con QR', async (c) => {
             const { rows: [v] } = await c.query('SELECT estado, pdf_ruta FROM dc_versiones WHERE id = $1', [req.params.id]);
             if (!v) throw fallo(404, 'version inexistente');
-            if (!['vigente', 'en_entrenamiento'].includes(v.estado)) throw fallo(409, 'se capacita sobre una versión aprobada');
+            // Con la fecha del papel la version puede estar obsoleta hoy:
+            // cuando se dicto estaba vigente, y el registro tiene que quedar
+            // contra la version que se entreno (Claudia, 26/10/2026).
+            const admitidos = fecha ? ['vigente', 'en_entrenamiento', 'obsoleto'] : ['vigente', 'en_entrenamiento'];
+            if (!admitidos.includes(v.estado)) {
+                throw fallo(409, fecha
+                    ? 'esa versión nunca estuvo vigente'
+                    : 'se capacita sobre una versión aprobada');
+            }
             // Sin PDF igual se puede capacitar en grupo y tomar asistencia; lo que
             // no anda es la lectura por QR, que lo avisa en la pagina.
             const { rows: [n] } = await c.query(
@@ -1034,6 +1042,9 @@ rutasControlDocumentos.post('/sesiones/:id/cerrar', capacitar, async (req, res, 
         if (horas <= 0 || horas > 24) throw fallo(400, 'horas de capacitación inválidas');
         // Como se evaluo a quienes registro el capacitador (no contestaron en pantalla).
         const evGrupo = ['NO APLICA', 'ORAL', 'PRACTICA', 'ESCRITA'].includes(b.evGrupo) ? b.evGrupo : 'NO APLICA';
+        // Lo viejo lo dicto quien lo dicto -Antonella, Gloria- aunque lo cargue
+        // otra persona hoy. La firma electronica sigue siendo la de quien carga.
+        const responsable = texto(b.responsable).slice(0, 100) || null;
         const r = await enTransaccionAuditada(req, 'cierre de sesión de capacitación', async (c) => {
             const { rows: [s] } = await c.query(
                 `SELECT s.*, to_char(s.fecha_dictada, 'YYYY-MM-DD') AS dictada,
@@ -1060,7 +1071,8 @@ rutasControlDocumentos.post('/sesiones/:id/cerrar', capacitar, async (req, res, 
             // La fecha del papel, si la sesion se cargo despues de dictada.
             const fecha = s.dictada || hoyIso();
             const retro = s.dictada && s.dictada !== hoyIso()
-                ? `capacitación dictada el ${s.dictada}, cargada hoy desde la lista firmada en papel; ` : '';
+                ? `capacitación dictada el ${s.dictada}${responsable ? ` por ${responsable}` : ''}, `
+                  + 'cargada hoy desde la lista firmada en papel; ' : '';
             const firma = await firmar(c, req, {
                 usuario: b.usuario, clave: b.clave, significado: 'capacitador',
                 recurso: RECURSO, tabla: 'dc_versiones', registroId: s.version_id, contenidoSha256: s.huella,
@@ -1070,7 +1082,7 @@ rutasControlDocumentos.post('/sesiones/:id/cerrar', capacitar, async (req, res, 
             });
             const creados = await registrarEnCapacitaciones(c, {
                 asistentes, codigo: s.codigo, version: verTxt(s.numero), titulo: s.titulo,
-                resp: req.usuario.nombre || req.usuario.usuario, horas,
+                resp: responsable || req.usuario.nombre || req.usuario.usuario, horas,
                 minimo: s.puntaje_minimo, evGrupo,
                 sectores: s.capacitar_sectores, fecha,
             });
