@@ -117,6 +117,15 @@ ul.lst{margin:4px 0 0;padding-left:18px;font-size:13px}
       <div class="fila" style="margin-top:8px"><button class="b pri" onclick="cargarCodigos()">Cargar códigos</button><span class="muted" id="codigosResumen"></span></div>
       <div class="fila" style="margin-top:12px"><input id="probarCod" placeholder="Probar un código" style="max-width:260px"><button class="b sm" onclick="probarCodigo()">Probar</button><span id="probarRes"></span></div>
     </div>
+    <div class="card">
+      <h3>4 · Entrenamientos ya dados en papel</h3>
+      <p class="muted">Para cargar de una vez los entrenamientos que ya se dieron, con la lista de asistencia firmada.
+        Elegí los escaneos: de cada nombre de archivo se busca el código del documento. Después completás la fecha del papel
+        y quiénes firmaron —se puede copiar a todas las filas—, firmás una vez y se cargan todos.
+        Cada documento queda con su propia sesión, su escaneo adjunto y su registro en Capacitaciones con la fecha en que se dictó.</p>
+      <input type="file" id="lotePapel" accept=".pdf,image/*" multiple onchange="lotePapelArchivos(this.files);this.value=''">
+      <div id="loteBox"></div>
+    </div>
   </div>
 
   <div class="page" id="p3">
@@ -818,6 +827,182 @@ async function leerHoja(cv,nPreg,nOps){
     if(o[1]&&o[0][0]<2*o[1][0]+0.05)return {r:o[0][1],duda:'más de una marcada'};
     return {r:o[0][1],duda:null}});
   return {qr,respuestas,llenado};
+}
+
+// ------------------------------------------------- entrenamientos en papel, en lote
+/* Treinta documentos LCC entrenados en su momento, cada uno con su fecha y su
+   gente, y lo unico que hay son los escaneos firmados (Claudia, 26/10/2026).
+   Cargarlos de a uno es media jornada, asi que esta pantalla hace lo mismo que
+   la carga a mano -sesion, asistencia, escaneo, cierre firmado- pero para todos
+   los archivos de una vez, usando los mismos endpoints: cada documento termina
+   con su sesion, su firma y su registro en Capacitaciones.
+
+   Lo que se tipea es la fecha y quien firmo; el documento sale del nombre del
+   archivo y todo lo demas se puede copiar a las otras filas. */
+/* Se compara sin tildes ni signos: el nombre del archivo casi nunca respeta
+   los guiones del codigo. */
+const claveLote = s => String(s == null ? "" : s).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+let LOTE = null;
+
+/* El codigo del documento dentro del nombre del archivo. Se compara sin signos
+   ni espacios y gana el codigo mas largo que aparezca: "REG-SOP-LCC-200 v2.pdf"
+   tiene adentro "SOP-LCC-200" y "REG-SOP-LCC-200", y el bueno es el segundo. */
+function docDeArchivo(nombre){
+  const k=claveLote(nombre);
+  let mejor=null;
+  for(const d of S.docs){
+    const c=claveLote(d.codigo);
+    if(c&&k.includes(c)&&(!mejor||c.length>claveLote(mejor.codigo).length))mejor=d;
+  }
+  return mejor;
+}
+
+async function lotePapelArchivos(files){
+  const box=document.getElementById('loteBox');
+  if(!files||!files.length)return;
+  box.innerHTML='<div class="aviso info" style="margin-top:8px">Leyendo los archivos…</div>';
+  try{
+    if(!S.personas){const r=await api('/puestos/personas');S.personas=r.personas||[]}
+    const filas=[...files].map(f=>{
+      const d=docDeArchivo(f.name);
+      return {file:f,doc:d||null,fecha:'',horas:0.5,ev:'NO APLICA',gente:[],estado:'pendiente',msg:''};
+    });
+    LOTE={filas};
+    pintarLote();
+  }catch(e){box.innerHTML=`<div class="aviso crit" style="margin-top:8px">${esc(e.message)}</div>`}
+}
+
+function pintarLote(){
+  const box=document.getElementById('loteBox');
+  if(!LOTE){box.innerHTML='';return}
+  const sectores=[...new Set(S.personas.map(p=>p.sector).filter(Boolean))].sort();
+  const chip=f=>f.estado==='ok'?'<span class="chip ok">cargado</span>'
+    :f.estado==='error'?`<span class="chip crit">${esc(f.msg)}</span>`
+    :f.estado==='cargando'?'<span class="chip info">cargando…</span>'
+    :!f.doc?'<span class="chip crit">no reconocí el documento</span>'
+    :!f.doc.vigente_id?'<span class="chip crit">sin versión vigente</span>'
+    :!f.fecha?'<span class="chip warn">falta la fecha</span>'
+    :!f.gente.length?'<span class="chip warn">falta quién firmó</span>'
+    :'<span class="chip info">listo para cargar</span>';
+  const listas=LOTE.filas.filter(f=>f.estado!=='ok'&&f.doc&&f.doc.vigente_id&&f.fecha&&f.gente.length).length;
+  const cargadas=LOTE.filas.filter(f=>f.estado==='ok').length;
+  box.innerHTML=`<div class="tabla" style="margin-top:10px"><table><thead><tr>
+      <th>Escaneo</th><th>Documento</th><th>Día en que se dictó</th><th>Horas</th><th>Evaluación</th><th>Firmaron</th><th>Estado</th></tr></thead><tbody>
+    ${LOTE.filas.map((f,i)=>`<tr>
+      <td style="font-size:12.5px">${esc(f.file.name)}</td>
+      <td><input list="loteCods" value="${esc(f.doc?f.doc.codigo:'')}" onchange="loteDoc(${i},this.value)" style="width:170px;padding:4px 6px" ${f.estado==='ok'?'disabled':''}>
+        <div class="muted" style="font-size:12px">${esc(f.doc?f.doc.titulo:'')}</div></td>
+      <td><input type="date" value="${esc(f.fecha)}" max="${hoyISO()}" onchange="loteCampo(${i},'fecha',this.value)" style="width:150px;padding:4px 6px" ${f.estado==='ok'?'disabled':''}></td>
+      <td><input type="number" step="0.25" min="0.25" value="${f.horas}" onchange="loteCampo(${i},'horas',this.value)" style="width:70px;padding:4px 6px" ${f.estado==='ok'?'disabled':''}></td>
+      <td><select onchange="loteCampo(${i},'ev',this.value)" style="width:auto;padding:4px 6px" ${f.estado==='ok'?'disabled':''}>
+        ${['NO APLICA','ORAL','PRACTICA','ESCRITA'].map(v=>`<option value="${v}" ${f.ev===v?'selected':''}>${v==='NO APLICA'?'No aplica':v==='PRACTICA'?'Práctica':v==='ESCRITA'?'Escrita (papel)':'Oral'}</option>`).join('')}</select></td>
+      <td><button class="b sm" onclick="loteGente(${i})" ${f.estado==='ok'?'disabled':''}>${f.gente.length?f.gente.length+' persona(s)':'Elegir'}</button>
+        <div class="muted" style="font-size:12px;max-width:260px">${esc(f.gente.slice(0,3).join(', '))}${f.gente.length>3?' y '+(f.gente.length-3)+' más':''}</div></td>
+      <td style="white-space:nowrap">${chip(f)}</td></tr>`).join('')}
+    </tbody></table></div>
+    <datalist id="loteCods">${S.docs.filter(d=>d.vigente_id).map(d=>`<option value="${esc(d.codigo)}">${esc(d.titulo)}</option>`).join('')}</datalist>
+    <div class="fila" style="margin-top:8px">
+      <button class="b sm" onclick="loteATodas('fecha')">Copiar la fecha de la primera fila a todas</button>
+      <button class="b sm" onclick="loteATodas('gente')">Copiar quiénes firmaron a todas</button>
+      <button class="b sm" onclick="loteATodas('horas');loteATodas('ev')">Copiar horas y evaluación a todas</button>
+      <button class="b sm" onclick="LOTE=null;pintarLote()">Empezar de nuevo</button></div>
+    <div id="loteGenteBox"></div>
+    <div class="card" style="margin-top:10px;background:var(--pri-g)">
+      <b>Firmar y cargar</b> <span class="muted">— ${listas} fila(s) listas${cargadas?`, ${cargadas} ya cargada(s)`:''}.
+      Cada documento queda con su sesión firmada por vos como capacitador/a y su registro en Capacitaciones con la fecha del papel.</span>
+      <div class="grid3" style="margin-top:6px">
+        <div><label class="lb">Usuario</label><input id="loteU" value="${esc(S.usuario)}"></div>
+        <div><label class="lb">Clave</label><input id="loteC" type="password"></div>
+        <div><label class="lb">Lugar (opcional)</label><input id="loteL" placeholder="Sala de capacitación"></div></div>
+      <button class="b ok" style="margin-top:8px" onclick="loteCargar()" ${listas?'':'disabled'}>Firmar y cargar ${listas} entrenamiento(s)</button>
+      <div class="muted" style="margin-top:6px">Las filas se cargan de a una. Si alguna falla, las demás siguen y después se reintenta solo esa.</div>
+    </div>
+    <div id="loteLog"></div>`;
+}
+
+function loteCampo(i,campo,valor){
+  LOTE.filas[i][campo]=campo==='horas'?Number(valor)||0.5:valor;
+  if(LOTE.filas[i].estado==='error'){LOTE.filas[i].estado='pendiente';LOTE.filas[i].msg=''}
+  pintarLote();
+}
+function loteDoc(i,codigo){
+  const d=S.docs.find(x=>claveLote(x.codigo)===claveLote(codigo));
+  LOTE.filas[i].doc=d||null;
+  LOTE.filas[i].estado=LOTE.filas[i].estado==='ok'?'ok':'pendiente';
+  pintarLote();
+}
+/* Copia lo de la primera fila al resto. La gente del LCC se repite entre
+   documentos, asi que esto es casi todo el ahorro de tipeo. */
+function loteATodas(campo){
+  const v=LOTE.filas[0][campo];
+  LOTE.filas.forEach(f=>{if(f.estado!=='ok')f[campo]=campo==='gente'?[...v]:v});
+  pintarLote();
+}
+
+/* Quien firmo la lista, del padron activo. Se puede filtrar por sector porque
+   casi siempre es un sector entero el que se capacita. */
+function loteGente(i){
+  const box=document.getElementById('loteGenteBox');
+  const sectores=[...new Set(S.personas.map(p=>p.sector).filter(Boolean))].sort();
+  const sel=new Set(LOTE.filas[i].gente);
+  box.innerHTML=`<div class="card" style="margin-top:10px"><b>¿Quiénes firmaron?</b>
+    <span class="muted">— ${esc(LOTE.filas[i].doc?LOTE.filas[i].doc.codigo:LOTE.filas[i].file.name)}</span>
+    <div class="fila" style="margin-top:6px"><select id="loteSec" onchange="pintarLoteGente(${i})" style="width:auto">
+      <option value="">Todos los sectores</option>${sectores.map(s=>`<option value="${esc(s)}" ${s==='LCC'?'selected':''}>${esc(s)}</option>`).join('')}</select>
+      <button class="b sm" onclick="document.querySelectorAll('.lg').forEach(c=>c.checked=true)">Marcar todos los que se ven</button>
+      <button class="b sm" onclick="document.querySelectorAll('.lg').forEach(c=>c.checked=false)">Desmarcar</button></div>
+    <div id="loteGenteLista"></div>
+    <button class="b sm pri" style="margin-top:8px" onclick="loteGenteGuardar(${i})">Guardar quiénes firmaron</button></div>`;
+  pintarLoteGente(i,sel);
+}
+function pintarLoteGente(i,sel){
+  const marcados=sel||new Set([...document.querySelectorAll('.lg:checked')].map(c=>c.value).concat(LOTE.filas[i].gente));
+  const sec=document.getElementById('loteSec').value;
+  const lista=S.personas.filter(p=>!sec||p.sector===sec);
+  document.getElementById('loteGenteLista').innerHTML=`<div style="columns:2;margin-top:6px">${lista.map(p=>
+    `<label style="display:block;font-size:13.5px"><input type="checkbox" class="lg" value="${esc(p.nombre)}" ${marcados.has(p.nombre)?'checked':''} style="width:auto"> ${esc(p.nombre)}<span class="muted"> · ${esc(p.sector||'')}</span></label>`).join('')}</div>`;
+}
+function loteGenteGuardar(i){
+  LOTE.filas[i].gente=[...document.querySelectorAll('.lg:checked')].map(c=>c.value);
+  if(!LOTE.filas[i].gente.length)return toast('No marcaste a nadie',true);
+  pintarLote();
+}
+
+/* La carga: por cada fila, lo mismo que se hace a mano. En este orden, porque
+   el cierre es el que firma y crea el registro: si algo falla antes, la sesion
+   queda abierta y sin registro, que es un estado que se puede retomar. */
+async function loteCargar(){
+  const usuario=document.getElementById('loteU').value.trim();
+  const clave=document.getElementById('loteC').value;
+  const lugar=document.getElementById('loteL').value.trim()||null;
+  if(!usuario||!clave)return toast('Poné tu usuario y clave para firmar',true);
+  const pendientes=LOTE.filas.filter(f=>f.estado!=='ok'&&f.doc&&f.doc.vigente_id&&f.fecha&&f.gente.length);
+  for(const f of pendientes){
+    f.estado='cargando';f.msg='';pintarLote();
+    let sid=null;
+    try{
+      const s=await api(`/versiones/${f.doc.vigente_id}/sesiones`,
+        {method:'POST',body:JSON.stringify({lugar,horas:1,fecha:f.fecha})});
+      sid=s.id;
+      await api(`/sesiones/${s.id}/asistentes`,{method:'POST',body:JSON.stringify({nombres:f.gente})});
+      await api(`/sesiones/${s.id}/pruebas?nombre=${encodeURIComponent(f.file.name)}`,
+        {method:'POST',headers:{'Content-Type':'application/octet-stream'},body:await f.file.arrayBuffer()});
+      const r=await api(`/sesiones/${s.id}/cerrar`,
+        {method:'POST',body:JSON.stringify({usuario,clave,horas:f.horas,evGrupo:f.ev})});
+      f.estado='ok';f.msg=`sesión ${s.id}, ${r.registrados} registro(s)`;
+    }catch(e){
+      // Si la sesion ya se habia creado queda abierta y sin firmar -no genera
+      // registro-, pero conviene decir cual es: al reintentar se crea otra.
+      f.estado='error';f.msg=e.message+(sid?` · quedó abierta la sesión ${sid}, sin firmar`:'');
+    }
+    pintarLote();
+  }
+  const ok=LOTE.filas.filter(f=>f.estado==='ok').length,mal=LOTE.filas.filter(f=>f.estado==='error');
+  // El resumen se escribe al final y de nuevo: cada pintarLote() del bucle
+  // rehace la caja, asi que el elemento de antes ya no esta en la pagina.
+  document.getElementById('loteLog').innerHTML=`<div class="aviso ${mal.length?'warn':'ok'}" style="margin-top:8px">Cargados ${ok} de ${LOTE.filas.length}.
+    ${mal.length?`Quedaron ${mal.length} con error: corregí lo que falte y volvé a apretar «Firmar y cargar» —las ya cargadas no se repiten.`:'Mirá cada documento para ver la sesión, el escaneo y la firma.'}</div>`;
+  if(ok)cargar();
 }
 
 /* La lista de asistencia firmada en papel, o cualquier otro respaldo: se
