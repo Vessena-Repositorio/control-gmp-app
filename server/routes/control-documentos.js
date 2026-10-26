@@ -1152,12 +1152,21 @@ rutasControlDocumentos.post('/sesiones/:id/asistentes', capacitar, async (req, r
         } else {
             const pedidos = new Set((Array.isArray(b.nombres) ? b.nombres : []).map((n) => String(n).trim()).filter(Boolean));
             if (!pedidos.size) throw fallo(400, 'no se eligió a nadie');
+            // En una carga con fecha del papel puede aparecer alguien que no
+            // esta en el padron: se fue antes de que el padron existiera. La
+            // capacitacion ocurrio igual, y los registros viejos de
+            // Capacitaciones ya lo nombran. Se registra con el nombre tal cual
+            // vino, que es una decision explicita de quien carga; en una sesion
+            // de hoy sigue valiendo solo el padron (Claudia, 26/10/2026).
+            const fuera = s.fecha_dictada ? [...pedidos] : [];
             // Al cargar algo ya dictado puede haber gente que despues se fue:
             // la capacitacion ocurrio y el registro le corresponde igual. Para
             // una sesion de hoy sigue valiendo solo el padron activo.
             const padron = (await coleccionCapacitaciones('PE'))
                 .filter((p) => p && (s.fecha_dictada ? true : p.a !== false));
             personas = padron.filter((p) => pedidos.has(String(p.n)));
+            const hallados = new Set(personas.map((p) => String(p.n)));
+            for (const n of fuera) if (!hallados.has(n)) personas.push({ n, s: null, fueraDelPadron: true });
             identificador = 'lista del capacitador';
         }
 

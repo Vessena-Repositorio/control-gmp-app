@@ -957,7 +957,8 @@ function pintarLote(){
           <select onchange="loteMapear('${esc(n).replace(/\x27/g,"&#39;")}',this.value)" style="width:100%;max-width:240px;padding:3px 5px;font-size:12.5px">
             <option value="">— elegí a la persona —</option>
             ${S.personasTodas.map(p=>`<option value="${esc(p.nombre)}">${esc(p.nombre)}${p.activo===false?' (baja)':''}</option>`).join('')}
-            <option value="(sacar)">— no está: no registrar a esta persona —</option></select></div>`).join('')}</td>
+            <option value="(igual)">— no está en el padrón: registrar igual con este nombre —</option>
+            <option value="(sacar)">— no registrar a esta persona —</option></select></div>`).join('')}</td>
       <td style="white-space:nowrap">${chip(f,i)}</td></tr>`).join('')}
     </tbody></table></div>
     <datalist id="loteCods">${S.docs.filter(d=>d.vigente_id).map(d=>`<option value="${esc(d.codigo)}">${esc(d.titulo)}</option>`).join('')}</datalist>
@@ -1074,7 +1075,9 @@ function resolverGente(f){
   f.nombresPapel.forEach(n=>{
     const m=S.mapaPersonas[claveLote(n)];
     if(m==='(sacar)')return;
-    const p=m||personaPadron(n);
+    // (igual): la persona no está en el padrón -se fue hace años- y se
+    // registra con el nombre del papel. Solo vale en una carga con fecha.
+    const p=m==='(igual)'?String(n).trim():(m||personaPadron(n));
     if(p){if(!f.gente.includes(p))f.gente.push(p)}
     else f.faltantes.push(n);
   });
