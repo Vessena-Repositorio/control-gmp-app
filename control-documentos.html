@@ -918,7 +918,7 @@ function pintarLote(){
   const box=document.getElementById('loteBox');
   if(!LOTE){box.innerHTML='';return}
   const sectores=[...new Set(S.personas.map(p=>p.sector).filter(Boolean))].sort();
-  const chip=(f,i)=>f.estado==='ok'?'<span class="chip ok">cargado</span>'
+  const chip=(f,i)=>f.estado==='ok'?`<span class="chip ok">${f.msg?esc(f.msg):'cargado'}</span>`
     :f.estado==='error'?`<span class="chip crit">${esc(f.msg)}</span>`
     :f.estado==='cargando'?'<span class="chip info">cargando…</span>'
     :!f.doc?`<span class="chip crit">${f.posibles&&f.posibles.length?'¿'+f.posibles.map(d=>esc(d.codigo)).join(' o ')+'?':'no reconocí el documento'}</span>`
@@ -1089,6 +1089,7 @@ async function loteDesdePlanilla(file){
     LOTE={filas:nuevas};
     pintarLote();
     await resolverVersiones();
+    await marcarYaCargadas();
   }catch(e){box.innerHTML=`<div class="aviso crit" style="margin-top:8px">${esc(e.message)}</div>`}
 }
 
@@ -1137,6 +1138,23 @@ async function resolverVersiones(){
   });
   pintarLote();
 }
+/* Una capacitacion de la misma version y el mismo dia que ya tiene su sesion
+   cerrada es la misma: volver a cargar la planilla no tiene que duplicarla
+   (Claudia cargo 6 y despues volvio a cargar el CSV entero, 26/10/2026). */
+async function marcarYaCargadas(){
+  const ids=[...new Set(LOTE.filas.filter(f=>f.versionId&&f.estado!=='ok').map(f=>f.versionId))];
+  const ses={};
+  for(const id of ids){
+    try{const r=await api(`/versiones/${id}/sesiones`);ses[id]=r.sesiones||[]}catch(e){ses[id]=[]}
+  }
+  LOTE.filas.forEach(f=>{
+    if(!f.versionId||f.estado==='ok')return;
+    const s=(ses[f.versionId]||[]).find(x=>x.cerrada_en&&x.fecha_dictada===f.fecha);
+    if(s){f.estado='ok';f.msg=`ya estaba cargada · sesión ${s.id}`}
+  });
+  pintarLote();
+}
+
 function loteVersion(i,id){
   LOTE.filas[i].versionId=Number(id)||null;
   pintarLote();
