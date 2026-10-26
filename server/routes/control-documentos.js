@@ -1137,7 +1137,8 @@ rutasControlDocumentos.put('/sesiones/:id/resultados', capacitar, async (req, re
 rutasControlDocumentos.post('/sesiones/:id/asistentes', capacitar, async (req, res, next) => {
     const b = req.body || {};
     try {
-        const { rows: [s] } = await consultar('SELECT id, cerrada_en FROM dc_sesiones WHERE id = $1', [req.params.id]);
+        const { rows: [s] } = await consultar(
+            'SELECT id, cerrada_en, fecha_dictada FROM dc_sesiones WHERE id = $1', [req.params.id]);
         if (!s) throw fallo(404, 'sesión inexistente');
         if (s.cerrada_en) throw fallo(409, 'la sesión ya está cerrada');
 
@@ -1151,7 +1152,11 @@ rutasControlDocumentos.post('/sesiones/:id/asistentes', capacitar, async (req, r
         } else {
             const pedidos = new Set((Array.isArray(b.nombres) ? b.nombres : []).map((n) => String(n).trim()).filter(Boolean));
             if (!pedidos.size) throw fallo(400, 'no se eligió a nadie');
-            const padron = (await coleccionCapacitaciones('PE')).filter((p) => p && p.a !== false);
+            // Al cargar algo ya dictado puede haber gente que despues se fue:
+            // la capacitacion ocurrio y el registro le corresponde igual. Para
+            // una sesion de hoy sigue valiendo solo el padron activo.
+            const padron = (await coleccionCapacitaciones('PE'))
+                .filter((p) => p && (s.fecha_dictada ? true : p.a !== false));
             personas = padron.filter((p) => pedidos.has(String(p.n)));
             identificador = 'lista del capacitador';
         }
@@ -1426,15 +1431,19 @@ rutasControlDocumentos.post('/puestos/matriz/importar', administrar, async (req,
 });
 
 /** GET /api/control-documentos/puestos/personas — el padron activo, con el cargo de cada uno. */
-rutasControlDocumentos.get('/puestos/personas', capacitar, async (_req, res, next) => {
+rutasControlDocumentos.get('/puestos/personas', capacitar, async (req, res, next) => {
     try {
-        const personal = (await coleccionCapacitaciones('PE')).filter((p) => p && p.a !== false && p.n);
+        // Con ?todos=1 vienen tambien los que ya no estan: un entrenamiento de
+        // 2023 pudo ser de alguien que despues se fue, y ese registro existio
+        // igual (Claudia, 26/10/2026).
+        const todos = req.query.todos === '1';
+        const personal = (await coleccionCapacitaciones('PE')).filter((p) => p && p.n && (todos || p.a !== false));
         const { rows } = await consultar(
             `SELECT pc.persona_nombre, c.nombre AS cargo, pc.desde FROM dc_personal_cargos pc
              JOIN dc_cargos c ON c.id = pc.cargo_id WHERE pc.hasta IS NULL`);
         const cargoDe = new Map();
         for (const r of rows) (cargoDe.get(r.persona_nombre) || cargoDe.set(r.persona_nombre, []).get(r.persona_nombre)).push(r.cargo);
-        res.json({ ok: true, personas: personal.map((p) => ({ nombre: p.n, sector: p.s || '', ci: p.ci || '', cargos: cargoDe.get(String(p.n)) || [] }))
+        res.json({ ok: true, personas: personal.map((p) => ({ nombre: p.n, sector: p.s || '', ci: p.ci || '', activo: p.a !== false, cargos: cargoDe.get(String(p.n)) || [] }))
             .sort((a, b) => a.nombre.localeCompare(b.nombre)) });
     } catch (err) { next(err); }
 });
