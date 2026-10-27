@@ -6736,6 +6736,7 @@ async function histArchivos(files){
   try{
     const filas = [];
     const problemas = [];
+    const porArchivo = [];
     for(const f of files){
       const wb = XLSX.read(await f.arrayBuffer(), {type:'array', cellDates:true});
       let hojas = wb.SheetNames.filter(n => normTxt(n).includes('CAPACITACIONES DICTADAS'));
@@ -6765,6 +6766,7 @@ async function histArchivos(files){
           leidas++;
         }
       }
+      porArchivo.push({archivo:f.name, filas:leidas});
       if(!leidas) problemas.push({archivo:f.name, nom:'—', fecha:'', desc:'no encontré una hoja con columnas NOMBRE y FECHA'});
     }
 
@@ -6778,14 +6780,26 @@ async function histArchivos(files){
       vistos.add(k); nuevos.push(f);
     }
 
-    // Gente de las planillas que no está en el padrón: entra inactiva.
+    /* Gente con historia que no está en el padrón: entra inactiva.
+       Se mira TODO lo que traen las planillas -no solo los registros nuevos- y
+       además los registros que ya tiene la app: alguien puede tener sus
+       capacitaciones cargadas y no tener ficha, que es el caso que empezó todo
+       esto (Mikaela). Si no, no se la agregaría nunca. */
     const personasNuevas = new Map();
-    for(const f of nuevos){
-      if(personaHist(f.nom)) continue;
-      const p = personasNuevas.get(f.nom) || {n:f.nom, s:f.sec||'(sin sector)', primera:f.fecha};
-      if(f.fecha < p.primera) p.primera = f.fecha;
-      if(!p.s && f.sec) p.s = f.sec;
-      personasNuevas.set(f.nom, p);
+    const anotarFalta = (nom, sec, fecha) => {
+      const n = nomReg({nom});
+      if(!n || personaHist(n)) return;
+      const p = personasNuevas.get(n) || {n, s:sec||'', primera:fecha||'', deLaApp:false};
+      if(fecha && (!p.primera || fecha < p.primera)) p.primera = fecha;
+      if(!p.s && sec) p.s = sec;
+      personasNuevas.set(n, p);
+    };
+    for(const f of filas) anotarFalta(f.nom, f.sec, f.fecha);
+    for(const r of R){
+      const antes = personasNuevas.size;
+      anotarFalta(r.nom, r.sec, String(r.fecha||'').slice(0,10));
+      const p = personasNuevas.get(nomReg({nom:r.nom}));
+      if(p && personasNuevas.size !== antes) p.deLaApp = true;
     }
 
     // La cedula es el dato inequivoco y estas planillas no la traen: el cruce
@@ -6798,7 +6812,7 @@ async function histArchivos(files){
       if(p && p.n !== f.nom) porParecido.set(f.nom, p.n);
     }
     HIST = {nuevos, repetidos, personasNuevas:[...personasNuevas.values()], problemas,
-            porParecido:[...porParecido.entries()]};
+            porParecido:[...porParecido.entries()], porArchivo};
     histPreview();
   }catch(e){
     caja.innerHTML = '<div style="padding:10px;color:var(--red)">No se pudo leer: '+h(e.message)+'</div>';
@@ -6822,17 +6836,19 @@ function cajaHist(){
 
 function histPreview(){
   const caja = cajaHist();
-  const {nuevos, repetidos, personasNuevas, problemas, porParecido} = HIST;
+  const {nuevos, repetidos, personasNuevas, problemas, porParecido, porArchivo} = HIST;
   const porAnio = {};
   nuevos.forEach(r => { const a = r.fecha.slice(0,4); porAnio[a] = (porAnio[a]||0)+1; });
   const anios = Object.keys(porAnio).sort();
   caja.innerHTML =
     '<div style="font-weight:800;color:var(--navy);margin-bottom:6px">Lo que se va a agregar</div>' +
+    '<div style="font-size:11px;color:var(--g500);margin-bottom:6px">Leído: ' +
+      (porArchivo||[]).map(a => h(a.archivo)+' ('+a.filas+')').join(' · ') + '</div>' +
     '<div style="font-size:12px;margin-bottom:8px">' +
       '<b>'+nuevos.length+'</b> registro(s) nuevo(s)' +
       (anios.length ? ' — ' + anios.map(a => a+': '+porAnio[a]).join(' · ') : '') + '<br>' +
       '<b>'+repetidos.length+'</b> ya estaban en la app o repetidos entre planillas: se saltean.<br>' +
-      '<b>'+personasNuevas.length+'</b> persona(s) de las planillas que no están en el padrón: entran como <b>inactivas</b>, con la fecha de su primer registro.' +
+      '<b>'+personasNuevas.length+'</b> persona(s) con capacitaciones y sin ficha en el padrón: entran como <b>inactivas</b>, con la fecha de su primer registro.' +
     '</div>' +
     (personasNuevas.length ?
       '<details style="margin-bottom:8px"><summary style="cursor:pointer;font-size:12px;font-weight:700">Ver las personas que se agregan ('+personasNuevas.length+')</summary>' +
@@ -6852,17 +6868,21 @@ function histPreview(){
       problemas.slice(0,200).map(p => '<div style="padding:2px 0">'+h(p.archivo)+' · '+h(p.nom)+' · fecha «'+h(p.fecha)+'» · '+h(p.desc)+'</div>').join('') +
       '</div></details>' : '') +
     '<div style="font-size:11px;color:var(--g500);margin-bottom:8px">No se borra ni se da de baja nada: esto solo agrega.</div>' +
-    '<button class="btn btn-p" onclick="histAplicar()"'+(nuevos.length?'':' disabled')+'>Agregar '+nuevos.length+' registro(s)</button> ' +
+    '<button class="btn btn-p" onclick="histAplicar()"'+((nuevos.length||personasNuevas.length)?'':' disabled')+'>' +
+      (nuevos.length ? 'Agregar '+nuevos.length+' registro(s)' : '') +
+      (nuevos.length && personasNuevas.length ? ' y ' : '') +
+      (personasNuevas.length ? (nuevos.length?'':'Agregar ')+personasNuevas.length+' persona(s)' : '') +
+    '</button> ' +
     '<button class="btn btn-o" onclick="HIST=null;cajaHist().style.display=\'none\'">Cancelar</button>';
 }
 
 function histAplicar(){
-  if(!HIST || !HIST.nuevos.length) return;
+  if(!HIST || (!HIST.nuevos.length && !HIST.personasNuevas.length)) return;
   const {nuevos, personasNuevas} = HIST;
   personasNuevas.forEach(p => {
     if(personaHist(p.n)) return;
     // Inactiva: trabajó, tiene historia, pero no está en el padrón de hoy.
-    PE.push({n:p.n, s:p.s==='(sin sector)'?'':p.s, a:false, fechaAlta:p.primera, origen:'planillas históricas'});
+    PE.push({n:p.n, s:p.s || '', a:false, fechaAlta:p.primera || '', origen:'planillas históricas'});
   });
   nuevos.forEach(r => {
     const [a,m] = r.fecha.split('-').map(Number);
