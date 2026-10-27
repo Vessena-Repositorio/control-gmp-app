@@ -279,8 +279,11 @@ summary.leg-y:hover{background:var(--g50)!important}
       <button class="btn btn-o" id="btn-bulk-open" data-role="admin,editor" style="background:#f0f9ff;border-color:#7dd3fc;color:#075985" title="Importar múltiples capacitaciones desde un PDF escaneado o una foto">📂 Importar PDF/foto</button>
       <button class="btn btn-o" onclick="document.getElementById('reg-import').click()" data-role="admin,editor">📄 Importar CSV</button>
       <input type="file" id="reg-import" accept=".csv,.txt" style="display:none">
+      <button class="btn btn-o" onclick="document.getElementById('hist-import').click()" data-role="admin" title="Las planillas por año 2020-2025: solo agrega lo que falta">📚 Importar años anteriores</button>
+      <input type="file" id="hist-import" accept=".xlsx,.xls" multiple style="display:none" onchange="histArchivos(this.files);this.value=''">
     </div>
   </div>
+  <div id="hist-box" style="display:none;background:#f0f9ff;border:1px solid #bae6fd;border-radius:var(--r);padding:12px;margin-bottom:12px"></div>
   <div id="fc" style="display:none">
     <div class="form-card">
       <div style="font-size:14px;font-weight:700;color:var(--navy);margin-bottom:12px" id="ft">Nueva Sesión de Capacitación</div>
@@ -6625,6 +6628,206 @@ sv = function() {
   _originalSv();
   schedulePush();
 };
+
+
+// ══════════ IMPORTAR LOS AÑOS ANTERIORES (planillas 2020-2025) ══════════
+/* Las capacitaciones de 2020 a 2025 vivían en una planilla por año
+   (REG-SOP-AC-039-D y las anteriores). La app arrancó con una parte, así que
+   hay gente con historia que no figura y años incompletos: Mikaela tiene
+   entrenamientos en las planillas y no estaba en el padrón (Claudia,
+   27/10/2026: "que la app tome todos los entrenamientos y que luego tenga la
+   capa de activos y no activos, pero lo pasado no se borra").
+
+   Esto SOLO agrega. No borra registros, no da de baja a nadie y no toca a
+   quien ya está: lo que ya existe se saltea. La gente que aparece en las
+   planillas y no está en el padrón entra marcada como INACTIVA, con su fecha
+   de alta puesta en su primer registro: así la historia queda completa y los
+   indicadores de "personal activo" siguen midiendo a los de hoy. */
+
+const COLS_HIST = {
+  mes:'mes', fecha:'fecha', nombre:'nom', sector:'sec', tema:'tema',
+  descripcion:'desc', codigo:'cod', version:'ver', duracion:'hrs', tipo:'tipo',
+  evaluacion:'ev', responsable:'resp', cargo:'cargoResp',
+};
+const claveCol = h => normTxt(h).replace(/[^A-Z0-9]/g,'').toLowerCase();
+
+/* La fecha puede venir como texto dd/mm/aaaa, como fecha de Excel o como
+   número de serie. Lo que no se entiende no se carga: una fecha inventada en
+   un registro de capacitación es peor que una fila menos. */
+function fechaHist(v){
+  if(v == null || v === '') return '';
+  if(v instanceof Date && !isNaN(v))
+    return v.getFullYear()+'-'+String(v.getMonth()+1).padStart(2,'0')+'-'+String(v.getDate()).padStart(2,'0');
+  const t = String(v).trim();
+  const dmy = t.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+  if(dmy){
+    const a = dmy[3].length===2 ? 2000+Number(dmy[3]) : Number(dmy[3]);
+    const d = new Date(Date.UTC(a, Number(dmy[2])-1, Number(dmy[1])));
+    if(d.getUTCMonth()!==Number(dmy[2])-1 || d.getUTCDate()!==Number(dmy[1])) return '';
+    return a+'-'+String(dmy[2]).padStart(2,'0')+'-'+String(dmy[1]).padStart(2,'0');
+  }
+  if(/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0,10);
+  const n = Number(t);
+  if(Number.isFinite(n) && n > 20000 && n < 60000){     // serie de Excel
+    const d = new Date(Date.UTC(1899,11,30) + n*86400000);
+    return d.toISOString().slice(0,10);
+  }
+  return '';
+}
+
+/* Lo que identifica a un registro: la persona, el día y de qué se capacitó.
+   Con eso se saltea lo que ya está, se vuelva a importar el archivo que se
+   vuelva a importar. */
+function claveReg(r){
+  // El nombre se canoniza contra el padron: la planilla escribe "Lucia Gomez"
+  // y el registro de la app "GOMEZ LUCIA", y son la misma capacitacion.
+  const p = findPerson(r.nom);
+  return [
+    p ? p.n : normTxt(r.nom||''),
+    String(r.fecha||'').slice(0,10),
+    normTxt(String(r.cod||'').replace(/^N\/?A$/i,'')) || normTxt(r.desc||''),
+  ].join('|');
+}
+
+let HIST = null;
+
+async function histArchivos(files){
+  if(!files || !files.length) return;
+  const caja = cajaHist();
+  caja.style.display = '';
+  caja.innerHTML = '<div style="padding:10px;color:var(--g500)">Leyendo las planillas…</div>';
+  try{
+    const filas = [];
+    const problemas = [];
+    for(const f of files){
+      const wb = XLSX.read(await f.arrayBuffer(), {type:'array', cellDates:true});
+      let hojas = wb.SheetNames.filter(n => normTxt(n).includes('CAPACITACIONES DICTADAS'));
+      if(!hojas.length) hojas = wb.SheetNames;
+      let leidas = 0;
+      for(const nh of hojas){
+        const aoa = XLSX.utils.sheet_to_json(wb.Sheets[nh], {header:1, raw:true, defval:''});
+        if(!aoa.length) continue;
+        const cab = (aoa[0]||[]).map(h => COLS_HIST[claveCol(h)] || null);
+        if(!cab.includes('nom') || !cab.includes('fecha')) continue;   // no es la hoja
+        for(const fila of aoa.slice(1)){
+          const d = {};
+          cab.forEach((c,i) => { if(c) d[c] = fila[i]; });
+          const nom = String(d.nom==null?'':d.nom).trim();
+          if(!nom) continue;
+          const fecha = fechaHist(d.fecha);
+          if(!fecha){ problemas.push({archivo:f.name, nom, fecha:String(d.fecha||''), desc:String(d.desc||'')}); continue; }
+          filas.push({
+            fecha, nom: nomReg({nom}), sec: String(d.sec||'').trim().toUpperCase(),
+            tema: String(d.tema||'OTRO').trim().toUpperCase(),
+            desc: String(d.desc||'').trim() + (d.ver && !/^n\/?a$/i.test(String(d.ver)) ? ' (v'+String(d.ver).trim()+')' : ''),
+            cod: /^n\/?a$/i.test(String(d.cod||'').trim()) ? '' : String(d.cod||'').trim(),
+            hrs: String(d.hrs||'').trim(), tipo: String(d.tipo||'').trim().toUpperCase(),
+            ev: String(d.ev||'').trim().toUpperCase(), resp: String(d.resp||'').trim(),
+            archivo: f.name,
+          });
+          leidas++;
+        }
+      }
+      if(!leidas) problemas.push({archivo:f.name, nom:'—', fecha:'', desc:'no encontré una hoja con columnas NOMBRE y FECHA'});
+    }
+
+    // Lo que ya está en la app, y lo repetido entre planillas.
+    const yaEstan = new Set(R.map(claveReg));
+    const vistos = new Set();
+    const nuevos = [], repetidos = [];
+    for(const f of filas){
+      const k = claveReg(f);
+      if(yaEstan.has(k) || vistos.has(k)){ repetidos.push(f); continue; }
+      vistos.add(k); nuevos.push(f);
+    }
+
+    // Gente de las planillas que no está en el padrón: entra inactiva.
+    const personasNuevas = new Map();
+    for(const f of nuevos){
+      if(findPerson(f.nom)) continue;
+      const p = personasNuevas.get(f.nom) || {n:f.nom, s:f.sec||'(sin sector)', primera:f.fecha};
+      if(f.fecha < p.primera) p.primera = f.fecha;
+      if(!p.s && f.sec) p.s = f.sec;
+      personasNuevas.set(f.nom, p);
+    }
+
+    HIST = {nuevos, repetidos, personasNuevas:[...personasNuevas.values()], problemas};
+    histPreview();
+  }catch(e){
+    caja.innerHTML = '<div style="padding:10px;color:var(--red)">No se pudo leer: '+h(e.message)+'</div>';
+  }
+}
+
+/* La caja de la vista previa. Se busca y, si la vista se volvio a dibujar y
+   ya no esta, se crea arriba del registro: asi no depende del orden en que
+   se pinten las secciones. */
+function cajaHist(){
+  let c = document.getElementById('hist-box');
+  if(!c){
+    c = document.createElement('div');
+    c.id = 'hist-box';
+    c.style.cssText = 'background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px;margin-bottom:12px';
+    const sec = document.getElementById('sec-reg') || document.body;
+    sec.insertBefore(c, sec.firstChild);
+  }
+  return c;
+}
+
+function histPreview(){
+  const caja = cajaHist();
+  const {nuevos, repetidos, personasNuevas, problemas} = HIST;
+  const porAnio = {};
+  nuevos.forEach(r => { const a = r.fecha.slice(0,4); porAnio[a] = (porAnio[a]||0)+1; });
+  const anios = Object.keys(porAnio).sort();
+  caja.innerHTML =
+    '<div style="font-weight:800;color:var(--navy);margin-bottom:6px">Lo que se va a agregar</div>' +
+    '<div style="font-size:12px;margin-bottom:8px">' +
+      '<b>'+nuevos.length+'</b> registro(s) nuevo(s)' +
+      (anios.length ? ' — ' + anios.map(a => a+': '+porAnio[a]).join(' · ') : '') + '<br>' +
+      '<b>'+repetidos.length+'</b> ya estaban en la app o repetidos entre planillas: se saltean.<br>' +
+      '<b>'+personasNuevas.length+'</b> persona(s) de las planillas que no están en el padrón: entran como <b>inactivas</b>, con la fecha de su primer registro.' +
+    '</div>' +
+    (personasNuevas.length ?
+      '<details style="margin-bottom:8px"><summary style="cursor:pointer;font-size:12px;font-weight:700">Ver las personas que se agregan ('+personasNuevas.length+')</summary>' +
+      '<div style="max-height:220px;overflow:auto;font-size:12px;margin-top:6px">' +
+      personasNuevas.map(p => '<div style="padding:3px 0;border-bottom:1px solid var(--g100)">'+h(p.n)+
+        ' <span style="color:var(--g500)">· '+h(p.s)+' · desde '+h(p.primera)+'</span></div>').join('') +
+      '</div></details>' : '') +
+    (problemas.length ?
+      '<details style="margin-bottom:8px"><summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--red)">Filas que no se pueden cargar ('+problemas.length+')</summary>' +
+      '<div style="max-height:180px;overflow:auto;font-size:11px;margin-top:6px">' +
+      problemas.slice(0,200).map(p => '<div style="padding:2px 0">'+h(p.archivo)+' · '+h(p.nom)+' · fecha «'+h(p.fecha)+'» · '+h(p.desc)+'</div>').join('') +
+      '</div></details>' : '') +
+    '<div style="font-size:11px;color:var(--g500);margin-bottom:8px">No se borra ni se da de baja nada: esto solo agrega.</div>' +
+    '<button class="btn btn-p" onclick="histAplicar()"'+(nuevos.length?'':' disabled')+'>Agregar '+nuevos.length+' registro(s)</button> ' +
+    '<button class="btn btn-o" onclick="HIST=null;cajaHist().style.display=\'none\'">Cancelar</button>';
+}
+
+function histAplicar(){
+  if(!HIST || !HIST.nuevos.length) return;
+  const {nuevos, personasNuevas} = HIST;
+  personasNuevas.forEach(p => {
+    if(findPerson(p.n)) return;
+    // Inactiva: trabajó, tiene historia, pero no está en el padrón de hoy.
+    PE.push({n:p.n, s:p.s==='(sin sector)'?'':p.s, a:false, fechaAlta:p.primera, origen:'planillas históricas'});
+  });
+  nuevos.forEach(r => {
+    const [a,m] = r.fecha.split('-').map(Number);
+    R.push({
+      id: nuevoId(), fecha: r.fecha, mes: MS[m-1] || '', tema: r.tema || 'OTRO',
+      desc: r.desc, cod: r.cod, hrs: r.hrs, tipo: r.tipo, ev: r.ev || 'NO APLICA',
+      plan: 'NO', resp: r.resp, puntajeMin: 0, nom: r.nom, sec: r.sec, nota: '',
+      planId: 0, dirigido: r.sec, year: a, origen: 'planillas históricas ' + r.archivo,
+    });
+  });
+  limpiarCacheNombres();
+  sv();
+  logAudit('PERSONAL', 'Importación de planillas históricas: +'+nuevos.length+' registros, +'+personasNuevas.length+' personas inactivas');
+  alert('Listo:\n• '+nuevos.length+' registros agregados\n• '+personasNuevas.length+' personas nuevas (inactivas)\n\nNo se borró ni se dio de baja nada.');
+  HIST = null;
+  cajaHist().style.display = 'none';
+  V.reg(); V.pers(); V.dash();
+}
 
 // ══════════ FIN SYNC ══════════
 
