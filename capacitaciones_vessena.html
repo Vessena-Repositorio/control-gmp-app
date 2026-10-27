@@ -6681,12 +6681,49 @@ function fechaHist(v){
 function claveReg(r){
   // El nombre se canoniza contra el padron: la planilla escribe "Lucia Gomez"
   // y el registro de la app "GOMEZ LUCIA", y son la misma capacitacion.
-  const p = findPerson(r.nom);
+  const p = personaHist(r.nom);
   return [
     p ? p.n : normTxt(r.nom||''),
     String(r.fecha||'').slice(0,10),
     normTxt(String(r.cod||'').replace(/^N\/?A$/i,'')) || normTxt(r.desc||''),
   ].join('|');
+}
+
+/* La persona de una planilla vieja, contra el padron.
+
+   findPerson resuelve lo habitual -nombre exacto, alias, dos palabras en
+   comun-, pero no la escritura distinta de la misma palabra: "Mikaela
+   Rodriguez" no encontraba a "RODRIGUEZ DA SILVA MICAELA" y la importacion la
+   habria agregado de nuevo, partiendole la historia en dos.
+
+   Entonces, si no aparece, se prueba otra vez ignorando las variantes que no
+   cambian como suena el nombre (k/c, g/j, z/s, v/b, y/i, h muda, letras
+   dobles) y solo se acepta si encaja una sola persona. Estas planillas no
+   traen cedula -que es el dato inequivoco-, asi que todo lo que no sea
+   coincidencia exacta se muestra para revisar antes de confirmar. */
+function claveFonCap(s){
+  return normTxt(s).toLowerCase()
+    .replace(/ph/g,"f").replace(/h/g,"")
+    .replace(/qu/g,"c").replace(/k/g,"c")
+    .replace(/g([ei])/g,"j$1")
+    .replace(/z/g,"s").replace(/x/g,"s")
+    .replace(/v/g,"b").replace(/y/g,"i")
+    .replace(/ll/g,"i")
+    .replace(/(.)\1+/g,"$1")
+    .replace(/[^a-z0-9 ]/g," ").replace(/ +/g," ").trim();
+}
+const SIN_PESO = ['DE','DEL','LOS','LAS','LA','Y'];
+function personaHist(nom){
+  const p = findPerson(nom);
+  if(p) return p;
+  const partes = claveFonCap(nom).split(' ')
+    .filter(w => w.length > 2 && !SIN_PESO.includes(w.toUpperCase()));
+  if(partes.length < 2) return null;
+  const cands = PE.filter(x => {
+    const k = claveFonCap(x.n);
+    return partes.every(w => k.includes(w));
+  });
+  return cands.length === 1 ? cands[0] : null;
 }
 
 let HIST = null;
@@ -6744,14 +6781,24 @@ async function histArchivos(files){
     // Gente de las planillas que no está en el padrón: entra inactiva.
     const personasNuevas = new Map();
     for(const f of nuevos){
-      if(findPerson(f.nom)) continue;
+      if(personaHist(f.nom)) continue;
       const p = personasNuevas.get(f.nom) || {n:f.nom, s:f.sec||'(sin sector)', primera:f.fecha};
       if(f.fecha < p.primera) p.primera = f.fecha;
       if(!p.s && f.sec) p.s = f.sec;
       personasNuevas.set(f.nom, p);
     }
 
-    HIST = {nuevos, repetidos, personasNuevas:[...personasNuevas.values()], problemas};
+    // La cedula es el dato inequivoco y estas planillas no la traen: el cruce
+    // es por nombre y findPerson acepta parecidos (dos palabras iguales). Lo
+    // que no coincide exacto se muestra para revisar antes de confirmar, que
+    // es la regla que quedo del cruce de personal con planillas.
+    const porParecido = new Map();
+    for(const f of nuevos){
+      const p = personaHist(f.nom);
+      if(p && p.n !== f.nom) porParecido.set(f.nom, p.n);
+    }
+    HIST = {nuevos, repetidos, personasNuevas:[...personasNuevas.values()], problemas,
+            porParecido:[...porParecido.entries()]};
     histPreview();
   }catch(e){
     caja.innerHTML = '<div style="padding:10px;color:var(--red)">No se pudo leer: '+h(e.message)+'</div>';
@@ -6775,7 +6822,7 @@ function cajaHist(){
 
 function histPreview(){
   const caja = cajaHist();
-  const {nuevos, repetidos, personasNuevas, problemas} = HIST;
+  const {nuevos, repetidos, personasNuevas, problemas, porParecido} = HIST;
   const porAnio = {};
   nuevos.forEach(r => { const a = r.fecha.slice(0,4); porAnio[a] = (porAnio[a]||0)+1; });
   const anios = Object.keys(porAnio).sort();
@@ -6793,6 +6840,12 @@ function histPreview(){
       personasNuevas.map(p => '<div style="padding:3px 0;border-bottom:1px solid var(--g100)">'+h(p.n)+
         ' <span style="color:var(--g500)">· '+h(p.s)+' · desde '+h(p.primera)+'</span></div>').join('') +
       '</div></details>' : '') +
+    (porParecido.length ?
+      '<details style="margin-bottom:8px"><summary style="cursor:pointer;font-size:12px;font-weight:700;color:#92400e">Nombres resueltos por parecido — conviene revisarlos ('+porParecido.length+')</summary>' +
+      '<div style="max-height:200px;overflow:auto;font-size:12px;margin-top:6px">' +
+      porParecido.map(([pl,pa]) => '<div style="padding:3px 0;border-bottom:1px solid var(--g100)">'+h(pl)+
+        ' <span style="color:var(--g500)">→</span> <b>'+h(pa)+'</b></div>').join('') +
+      '</div><div style="font-size:11px;color:var(--g500);margin-top:4px">La planilla no trae cédula, así que el cruce es por nombre. Si alguno está mal, corregí el nombre en la planilla y volvé a importar.</div></details>' : '') +
     (problemas.length ?
       '<details style="margin-bottom:8px"><summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--red)">Filas que no se pueden cargar ('+problemas.length+')</summary>' +
       '<div style="max-height:180px;overflow:auto;font-size:11px;margin-top:6px">' +
@@ -6807,7 +6860,7 @@ function histAplicar(){
   if(!HIST || !HIST.nuevos.length) return;
   const {nuevos, personasNuevas} = HIST;
   personasNuevas.forEach(p => {
-    if(findPerson(p.n)) return;
+    if(personaHist(p.n)) return;
     // Inactiva: trabajó, tiene historia, pero no está en el padrón de hoy.
     PE.push({n:p.n, s:p.s==='(sin sector)'?'':p.s, a:false, fechaAlta:p.primera, origen:'planillas históricas'});
   });
