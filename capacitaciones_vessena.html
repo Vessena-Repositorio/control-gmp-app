@@ -6811,8 +6811,8 @@ async function histArchivos(files){
       const p = personaHist(f.nom);
       if(p && p.n !== f.nom) porParecido.set(f.nom, p.n);
     }
-    HIST = {nuevos, repetidos, personasNuevas:[...personasNuevas.values()], problemas,
-            porParecido:[...porParecido.entries()], porArchivo};
+    HIST = {nuevos, repetidos, personasNuevas:agruparFaltantes([...personasNuevas.values()]),
+            problemas, porParecido:[...porParecido.entries()], porArchivo};
     histPreview();
   }catch(e){
     caja.innerHTML = '<div style="padding:10px;color:var(--red)">No se pudo leer: '+h(e.message)+'</div>';
@@ -6832,6 +6832,40 @@ function cajaHist(){
     sec.insertBefore(c, sec.firstChild);
   }
   return c;
+}
+
+/* Las personas sin ficha, agrupadas entre ellas.
+
+   El padrón escribe de una manera y las planillas de seis años escriben de
+   todas: si se agregan los nombres tal cual, la misma persona queda con dos o
+   tres fichas y su historia vuelve a partirse. Entonces, antes de crear nada,
+   los nombres que no están en el padrón se agrupan entre sí: gana el nombre
+   más completo y los demás quedan como `alias`, que es lo que mira findPerson.
+
+   Se agrupa solo cuando todas las palabras de uno están dentro del otro
+   -"JUAN PEREZ" dentro de "PEREZ JUAN CARLOS"-, comparando sin las variantes
+   de escritura. "PEREZ JUAN" y "PEREZ JUANA" no se tocan: son palabras
+   distintas. */
+function palabrasFon(n){
+  return claveFonCap(n).split(' ').filter(w => w.length > 2 && !SIN_PESO.includes(w.toUpperCase()));
+}
+function agruparFaltantes(lista){
+  const dentro = (largo, corto) => corto.length && corto.every(w => largo.includes(w));
+  const grupos = [];
+  // Los nombres más completos primero: así el grupo queda con el mejor nombre.
+  for(const p of [...lista].sort((a,b) => palabrasFon(b.n).length - palabrasFon(a.n).length || b.n.length - a.n.length)){
+    const w = palabrasFon(p.n);
+    if(!w.length) continue;
+    const g = grupos.find(x => dentro(x.w, w) || dentro(w, x.w));
+    if(g){
+      g.variantes.push(p.n);
+      if(p.primera && (!g.primera || p.primera < g.primera)) g.primera = p.primera;
+      if(!g.s && p.s) g.s = p.s;
+    } else {
+      grupos.push({n:p.n, s:p.s, primera:p.primera, w, variantes:[]});
+    }
+  }
+  return grupos;
 }
 
 function histPreview(){
@@ -6854,7 +6888,9 @@ function histPreview(){
       '<details style="margin-bottom:8px"><summary style="cursor:pointer;font-size:12px;font-weight:700">Ver las personas que se agregan ('+personasNuevas.length+')</summary>' +
       '<div style="max-height:220px;overflow:auto;font-size:12px;margin-top:6px">' +
       personasNuevas.map(p => '<div style="padding:3px 0;border-bottom:1px solid var(--g100)">'+h(p.n)+
-        ' <span style="color:var(--g500)">· '+h(p.s)+' · desde '+h(p.primera)+'</span></div>').join('') +
+        ' <span style="color:var(--g500)">· '+h(p.s||'sin sector')+' · desde '+h(p.primera||'—')+'</span>' +
+        (p.variantes.length ? '<div style="color:#92400e;font-size:11px">también escrito: '+p.variantes.map(h).join(' · ')+'</div>' : '') +
+        '</div>').join('') +
       '</div></details>' : '') +
     (porParecido.length ?
       '<details style="margin-bottom:8px"><summary style="cursor:pointer;font-size:12px;font-weight:700;color:#92400e">Nombres resueltos por parecido — conviene revisarlos ('+porParecido.length+')</summary>' +
@@ -6882,7 +6918,8 @@ function histAplicar(){
   personasNuevas.forEach(p => {
     if(personaHist(p.n)) return;
     // Inactiva: trabajó, tiene historia, pero no está en el padrón de hoy.
-    PE.push({n:p.n, s:p.s || '', a:false, fechaAlta:p.primera || '', origen:'planillas históricas'});
+    PE.push({n:p.n, s:p.s || '', a:false, fechaAlta:p.primera || '',
+             alias:(p.variantes||[]).filter(v => v !== p.n), origen:'planillas históricas'});
   });
   nuevos.forEach(r => {
     const [a,m] = r.fecha.split('-').map(Number);
