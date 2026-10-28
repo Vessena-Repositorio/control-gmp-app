@@ -25,7 +25,7 @@ import { hayCorreo, enviar } from '../lib/correo.js';
 import { supervisoresDe } from '../lib/destinatarios.js';
 import { descargar, aFecha, aTexto, aEnteroSeguro } from '../lib/origen.js';
 import { guardarControl, sincronizarEnvases } from '../sync/sync-envases.js';
-import { firmaDe } from '../lib/firmas.js';
+import { firmaDe, nombreComparable } from '../lib/firmas.js';
 
 export const rutasEnvasesCaptura = Router();
 
@@ -355,6 +355,66 @@ rutasEnvasesCaptura.get('/lcc/:id/impresion', leer, async (req, res, next) => {
         await enTransaccion((c) => registrar(c, req, 'lcc_impreso', 'envases', req.params.id, `aprobado por ${r.aprobado_por}`));
         res.json({
             ok: true, control: r.raw, firmas,
+            impreso: { por: quien(req), en: new Date().toISOString() },
+        });
+    } catch (err) { next(err); }
+});
+
+
+/**
+ * GET /api/envases-captura/ordenes/:id/impresion?producto=envases|tapas
+ *
+ * El registro de la orden de soplado para el dossier: la orden, todos sus
+ * controles -arranque y en proceso- y la firma de cada analista que los hizo
+ * (Claudia, 28/10/2026: habia impresion del control LCC pero no de los
+ * controles en proceso).
+ *
+ * Los controles de orden guardan el nombre del analista, no su usuario: la
+ * firma se busca por nombre, con la misma comparacion que usa el resto de la
+ * app, y la que no se encuentra sale como "sin firma registrada" en vez de
+ * quedar en blanco sin explicacion. Cada impresion queda en envases_actividad.
+ */
+rutasEnvasesCaptura.get('/ordenes/:id/impresion', leer, async (req, res, next) => {
+    const id = Number(req.params.id);
+    const producto = req.query.producto === 'tapas' ? 'tapas' : 'envases';
+    try {
+        const { rows: ordenes } = await consultar(
+            `SELECT raw FROM ordenes WHERE id = $1 AND producto = $2 AND eliminado_en IS NULL`,
+            [id, producto]
+        );
+        if (!ordenes.length) return res.status(404).json({ error: 'Orden no encontrada' });
+        const { rows: controles } = await consultar(
+            `SELECT raw, analista, ts FROM controles
+             WHERE orden_id = $1 AND producto = $2 AND origen = 'orden' AND eliminado_en IS NULL
+             ORDER BY ts`,
+            [id, producto]
+        );
+        if (!controles.length) return res.status(409).json({ error: 'La orden todavía no tiene controles' });
+
+        // Una firma por analista: el mismo analista firma todos sus controles.
+        const { rows: usuarios } = await consultar('SELECT id, nombre FROM usuarios');
+        const porNombre = new Map(usuarios.map((u) => [nombreComparable(u.nombre), u.id]));
+        const firmas = [];
+        const vistos = new Set();
+        for (const c of controles) {
+            const nombre = c.analista || c.raw?.analista || '';
+            const clave = nombreComparable(nombre);
+            if (!clave || vistos.has(clave)) continue;
+            vistos.add(clave);
+            const uid = porNombre.get(clave) || null;
+            const f = uid ? await firmaDe(uid, c.ts, nombre) : null;
+            firmas.push({
+                rol: 'Analista', nombre, firmadoEn: c.ts,
+                sinFirma: !f, deLaPlanilla: !uid, ...(f || {}),
+            });
+        }
+        await enTransaccion((c) => registrar(c, req, 'orden_impresa', producto, id,
+            `${controles.length} control(es)`));
+        res.json({
+            ok: true,
+            orden: ordenes[0].raw,
+            controles: controles.map((c) => c.raw),
+            firmas,
             impreso: { por: quien(req), en: new Date().toISOString() },
         });
     } catch (err) { next(err); }
