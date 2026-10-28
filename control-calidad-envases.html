@@ -1730,30 +1730,72 @@
                     const reg = esFabulosoEnvase(o.envase) ? 'REG-SOP-PR-138-G' : 'REG-SOP-PR-138-B';
                     let oos = 0;
 
-                    // Un bloque por control, en orden de registro.
+                    /* Una fila por medición. No todas son numéricas: la mayoría de
+                       un control en proceso son atributos -coloración correcta,
+                       ausencia de quemaduras-, donde la especificación es el
+                       parámetro mismo y el estado es OK o NO (Claudia,
+                       28/10/2026). Se distinguen por cómo las guarda la pantalla:
+                       · arr_estetica_cavN_<defecto>: tildado = el defecto ESTÁ;
+                       · proc_<clave>_cavN booleano: el chequeo visual de tapas,
+                         tildado = cumple;
+                       · proc_<Parámetro> = ok|no, con obs_<Parámetro> al lado;
+                       · el resto, medición numérica contra la especificación. */
+                    const etiqueta = (k) => k.replace(/_/g, ' ')
+                        .replace(/cav(\d)/gi, 'Cav $1').replace(/\b\w/g, l => l.toUpperCase());
+                    const fila = (nombre, valor, especif, estado, malo, nota) =>
+                        `<tr${malo ? ' class="oos"' : ''}><td>${esc(nombre)}</td><td>${esc(valor)}</td>` +
+                        `<td>${esc(especif)}</td><td>${malo ? '<b>' + esc(estado) + '</b>' : esc(estado)}</td>` +
+                        `<td>${esc(nota || '')}</td></tr>`;
+
                     const bloques = controles.map((c) => {
-                        const filas = Object.entries(c.mediciones || {}).map(([key, value]) => {
-                            if (key.startsWith('_')) return '';
+                        const med = c.mediciones || {};
+                        const filas = Object.entries(med).map(([key, value]) => {
+                            if (key.startsWith('_') || key.startsWith('obs_') || key === 'num_cavidad') return '';
                             if (value === '' || value == null || (Array.isArray(value) && value.every(v => v === ''))) return '';
-                            const nombre = key.replace(/^(arranque_|proceso_)/, '').replace(/_/g, ' ')
-                                .replace(/cav(\d)/, 'Cav $1').replace(/\b\w/g, l => l.toUpperCase());
-                            const base = key.replace(/^(arranque_|proceso_)/, '').replace(/_cav\d$/, '');
+
+                            // Defectos estéticos del arranque: tildado es defecto.
+                            const est = key.match(/^arr_estetica_cav(\d+)_(.+)$/);
+                            if (est) {
+                                const hay = value === true || value === 'true';
+                                if (hay) oos++;
+                                return fila(`Estética Cav ${est[1]} · ${est[2]}`, hay ? 'Presente' : 'No',
+                                    'Sin defectos', hay ? 'No conforme' : 'Conforme', hay);
+                            }
+                            // Chequeo visual de tapas: tildado es que cumple.
+                            if (typeof value === 'boolean') {
+                                const m = key.match(/^proc_(.+?)_cav(\d+)$/);
+                                const ch = m && CHEQUEO_VISUAL_TAPAS.find(x => x.key === m[1]);
+                                const nombre = ch ? `${ch.label} · Cav ${m[2]}` : etiqueta(key.replace(/^proc_/, ''));
+                                return fila(nombre, value ? 'OK' : 'Sin marcar', ch ? ch.label : 'Cumple',
+                                    value ? 'Aprobado' : 'Sin marcar', false);
+                            }
+                            // Verificación visual del control en proceso: ok / no.
+                            if (key.startsWith('proc_') && (value === 'ok' || value === 'no')) {
+                                const nombre = key.slice(5);
+                                const malo = value === 'no';
+                                if (malo) oos++;
+                                return fila(nombre, value === 'ok' ? 'OK' : 'NO', nombre,
+                                    malo ? 'No conforme' : 'Aprobado', malo, med['obs_' + nombre]);
+                            }
+                            // Medición numérica.
+                            const base = key.replace(/_cav\d+$/, '').replace(/^(arr_|proc_)/, '');
                             const sp = spec?.parametros?.[base];
                             const vals = Array.isArray(value) ? value.filter(v => v !== '') : [value];
                             const nums = vals.map(v => parseFloat(v)).filter(v => !isNaN(v));
                             const fuera = sp ? nums.some(v => v < sp.min || v > sp.max) : false;
                             if (fuera) oos++;
                             const especif = sp ? `${sp.min} - ${sp.max} ${sp.unidad || ''}` : '';
-                            return `<tr${fuera ? ' class="oos"' : ''}><td>${esc(nombre)}</td><td>${esc(vals.join(', '))}</td><td>${esc(especif)}</td>` +
-                                `<td>${fuera ? '<b>OOS</b>' : (especif ? 'Conforme' : '')}</td></tr>`;
+                            return fila(etiqueta(key), vals.join(', '), especif,
+                                fuera ? 'OOS' : (especif ? 'Conforme' : ''), fuera);
                         }).join('');
                         const tipoTxt = c.tipo === 'arranque' ? 'Control de arranque de SKU' : 'Control en proceso';
                         const extra = [c.operador ? 'Operador ' + c.operador : '', c.turno ? 'Turno ' + c.turno : '',
-                                       c.analista ? 'Analista ' + c.analista : ''].filter(Boolean).join(' · ');
+                                       c.analista ? 'Analista ' + c.analista : '',
+                                       med.num_cavidad ? 'Cavidad controlada ' + med.num_cavidad : ''].filter(Boolean).join(' · ');
                         return `<h2>${esc(tipoTxt)} · ${esc(formatearFecha(c.fecha))}${c.hora ? ' ' + esc(c.hora) : ''}</h2>` +
                             (extra ? `<div class="sub">${esc(extra)}</div>` : '') +
                             (c.observaciones ? `<div class="obs"><b>Observaciones:</b> ${esc(c.observaciones)}</div>` : '') +
-                            (filas ? `<table><thead><tr><th>Parámetro</th><th>Valores</th><th>Especificación</th><th>Estado</th></tr></thead><tbody>${filas}</tbody></table>`
+                            (filas ? `<table><thead><tr><th>Parámetro</th><th>Valor</th><th>Especificación</th><th>Estado</th><th>Observación</th></tr></thead><tbody>${filas}</tbody></table>`
                                    : '<div class="sub">Sin mediciones cargadas.</div>');
                     }).join('');
 
@@ -1785,7 +1827,7 @@
                         <div class="cab"><div><h1>Vessena S.A. · Control en proceso de ${esModoTapas ? 'tapas' : 'envases'}</h1><div>SOP-PR-138 · Orden de soplado</div></div><div class="reg">${reg}</div></div>
                         <div class="datos">${dato('Orden', o.numeroOrden)}${dato('Envase', (spec?.nombre ? spec.nombre + ' · ' : '') + o.envase)}${dato('Fecha de la orden', formatearFecha(o.fecha))}
                         ${dato('Máquina', o.maquina)}${dato('Operador', o.operador)}${dato('Turno', o.turno)}
-                        ${dato('Controles', `${controles.length} (${controles.filter(c => c.tipo === 'arranque').length} de arranque)`)}${dato('Estado', o.estado)}${dato('Resultado', oos ? `${oos} medición(es) fuera de especificación` : 'Conforme')}</div>
+                        ${dato('Controles', `${controles.length} (${controles.filter(c => c.tipo === 'arranque').length} de arranque)`)}${dato('Estado', o.estado)}${dato('Resultado', oos ? `${oos} punto(s) fuera de especificación` : 'Conforme')}</div>
                         ${bloques}
                         <h2>Firmas</h2><div class="firmas">${(d.firmas || []).map(firma).join('')}</div>
                         <div class="pie">Impreso por ${esc(d.impreso?.por)} el ${esc(new Date(d.impreso?.en || Date.now()).toLocaleString('es-UY'))}</div>
