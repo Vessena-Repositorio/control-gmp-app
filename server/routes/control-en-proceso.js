@@ -222,12 +222,14 @@ const esSinOrden = (s) => {
     const k = comoClave(s);
     return SIN_ORDEN.has(k) || !/[1-9]/.test(k);
 };
+// Sin orden emitida, la clave es la maquina y el lote: es como la identifican
+// en planta (Claudia, 02/11/2026; antes era el codigo de PT, migracion 069).
 function ordenDe(d) {
     const o = texto(d.orden, 60);
     if (!esSinOrden(o)) return o;
-    const pt = texto(d.codPT, 60) || 'sin PT';
+    const maq = texto(d.maquina, 60) || 'sin máquina';
     const lote = texto(d.lote, 60) || 'sin lote';
-    return `S/OP ${pt} · ${lote}`;
+    return `S/OP ${maq} · ${lote}`;
 }
 
 /** POST /api/control-en-proceso/controles */

@@ -728,9 +728,10 @@ const esSinOrden=s=>{const k=comoClave(s);return SIN_ORDEN.has(k)||!/[1-9]/.test
 // "S/OP"- porque esta ademas saca las tildes: sin eso "Pampillón" quedaba
 // "pampilln" y el analista no se encontraba (22/10/2026).
 const claveBusqueda=s=>String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
-function ordenDe(orden,codPT,lote){
+// Sin orden emitida: la maquina y el lote, que es como se identifica en planta.
+function ordenDe(orden,maquina,lote){
   if(!esSinOrden(orden))return String(orden||'').trim();
-  return 'S/OP '+(String(codPT||'').trim()||'sin PT')+' · '+(String(lote||'').trim()||'sin lote');
+  return 'S/OP '+(String(maquina||'').trim()||'sin máquina')+' · '+(String(lote||'').trim()||'sin lote');
 }
 /* La casilla deja el campo en blanco y muestra con que clave va a quedar. */
 function sinOP(){
@@ -742,7 +743,7 @@ function sinOP(){
 function claveSinOP(){
   const el=document.getElementById('cSinOPClave');if(!el)return;
   if(!document.getElementById('cSinOP').checked){el.style.display='none';return}
-  const k=ordenDe('',document.getElementById('cCodPT').value,document.getElementById('cLote').value);
+  const k=ordenDe('',document.getElementById('cMaq').value,document.getElementById('cLote').value);
   el.style.display='block';
   el.textContent='Se va a registrar como: '+k;
 }
@@ -797,7 +798,7 @@ function avisoPH(){
   claveSinOP();
   const el=document.getElementById('phAviso');if(!el)return;
   const orden=ordenDe(document.getElementById('cOrden').value,
-    document.getElementById('cCodPT').value,document.getElementById('cLote').value);
+    document.getElementById('cMaq').value,document.getElementById('cLote').value);
   const maq=document.getElementById('cMaq').value;
   if(maq==='Limpiadores'){el.textContent='';return}
   if(orden&&esPrimerControl(orden)){el.textContent='· obligatorio: es el primer control de esta orden';el.style.color='var(--red)'}
@@ -814,8 +815,8 @@ function saveCtrl(){
   const vence=document.getElementById('cVence').value.trim();if(!vence){toast('⚠️ Ingresá Vencimiento',true);return}
   const granel=document.getElementById('cGranel').value.trim();if(!granel){toast('⚠️ Ingresá Cód. Granel',true);return}
   const codPT=document.getElementById('cCodPT').value.trim();if(!codPT){toast('⚠️ Ingresá Cód. PT',true);return}
-  // Sin orden emitida, la clave sale del PT y el lote: sin ellos no se puede.
-  const orden=ordenDe(ordenEscrita,codPT,lote);
+  // Sin orden emitida, la clave sale de la maquina y el lote.
+  const orden=ordenDe(ordenEscrita,maq,lote);
   // Dos códigos escritos a mano que se confundieron entre sí: antes de guardar
   // se pregunta, para que no pase de largo un PT que no existe o un granel sin G.
   const dudas=[];
@@ -1471,7 +1472,7 @@ function rotuloDeOrden(orden){const o=String(orden||'').trim();return ROTULOS.fi
 function avisoRotulo(){
   const el=document.getElementById('rotAviso');if(!el)return;
   const r=rotuloDeOrden(ordenDe(document.getElementById('cOrden').value,
-    document.getElementById('cCodPT').value,document.getElementById('cLote').value));
+    document.getElementById('cMaq').value,document.getElementById('cLote').value));
   if(!r||r.estado==='ok'){el.style.display='none';return}
   el.style.display='block';
   if(r.frenada){el.className='rot-aviso freno';el.innerHTML='⛔ <b>Falta el segundo control de supervisión.</b> Venció el plazo para el OK de rótulo ('+esc(r.plazo)+'): sin ese OK no se pueden cargar más controles de esta orden. <button class="ord-btn pri" style="margin-top:8px" onclick="solicitarRotulo(\''+esc(r.orden)+'\')">📣 Solicitar aprobación</button>'}
