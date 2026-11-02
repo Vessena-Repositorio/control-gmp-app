@@ -6757,12 +6757,20 @@ async function histArchivos(files){
           cab.forEach((c,i) => { if(c) d[c] = fila[i]; });
           const nom = String(d.nom==null?'':d.nom).trim();
           if(!nom) continue;
-          const fecha = fechaHist(d.fecha);
+          /* Un curso dictado en varios dias trae el rango en la fecha
+             -"01/12/2025-08/12/2025", el de incendio y primeros auxilios-:
+             vale el primer dia, que es cuando empezo, y el rango entero queda
+             escrito en la descripcion (Claudia, 02/11/2026). */
+          const cruda = String(d.fecha==null?'':d.fecha).trim();
+          const rango = cruda.match(/^(\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4})\s*(?:a|al|hasta|-|\u2013|\u2014)\s*(\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4})$/i);
+          const fecha = fechaHist(rango ? rango[1] : d.fecha);
           if(!fecha){ problemas.push({archivo:f.name, nom, fecha:String(d.fecha||''), desc:String(d.desc||'')}); continue; }
           filas.push({
             fecha, nom: nomReg({nom}), sec: String(d.sec||'').trim().toUpperCase(),
             tema: String(d.tema||'OTRO').trim().toUpperCase(),
-            desc: String(d.desc||'').trim() + (d.ver && !/^n\/?a$/i.test(String(d.ver)) ? ' (v'+String(d.ver).trim()+')' : ''),
+            desc: String(d.desc||'').trim()
+              + (d.ver && !/^n\/?a$/i.test(String(d.ver)) ? ' (v'+String(d.ver).trim()+')' : '')
+              + (rango ? ' (dictado del '+rango[1]+' al '+rango[2]+')' : ''),
             cod: /^n\/?a$/i.test(String(d.cod||'').trim()) ? '' : String(d.cod||'').trim(),
             hrs: String(d.hrs||'').trim(), tipo: String(d.tipo||'').trim().toUpperCase(),
             ev: String(d.ev||'').trim().toUpperCase(), resp: String(d.resp||'').trim(),
