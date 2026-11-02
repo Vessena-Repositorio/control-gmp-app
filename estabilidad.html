@@ -26,6 +26,17 @@ h2.st{font-size:15px;font-weight:700;margin:0 0 4px 0;color:var(--td);}.sd{font-
 .kpi .n{font-size:28px;font-weight:700;font-family:'IBM Plex Mono',monospace;}.kpi .lb{font-size:12px;color:var(--ink2);margin-top:2px;}
 .kpi.amber .n{color:var(--amber);}.kpi.red .n{color:var(--red);}.kpi.teal .n{color:var(--teal);}.kpi.green .n{color:var(--green);}
 table{width:100%;border-collapse:collapse;font-size:13px;}
+/* La tabla de resultados del informe: once columnas no entran a 13 px, asi
+   que va con ancho fijo, letra chica y el texto partido. Sin esto, en la
+   hoja impresa las ultimas columnas -las observaciones- se iban de la
+   pagina (Claudia, 02/11/2026). */
+table.res{table-layout:fixed;font-size:10.5px;}
+table.res th,table.res td{padding:3px 4px;word-break:break-word;overflow-wrap:anywhere;vertical-align:top;}
+table.res th:nth-child(1),table.res td:nth-child(1){width:34px;}
+table.res th:nth-child(2),table.res td:nth-child(2){width:30px;}
+table.res th:nth-child(3),table.res td:nth-child(3){width:64px;}
+table.res th:nth-child(4),table.res td:nth-child(4){width:84px;}
+@media print{table.res{font-size:9px;}table.res th,table.res td{padding:2px 3px;}}
 th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink2);padding:8px 10px;border-bottom:1px solid var(--line);}
 td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:middle;}tr:last-child td{border-bottom:none;}
 tr.ck{cursor:pointer;}tr.ck:hover{background:var(--grt);}
@@ -1177,13 +1188,8 @@ function renderInforme(){
     // El checkpoint inicial de los estudios viejos no trae `mes` y salia
     // "undefined" en el informe; su codigo ya dice que es el mes 0.
     const mes=(cp.mes===0||cp.mes)?cp.mes:(/^0/.test(String(cp.codigo||''))?0:'—');
-    // La fecha del analisis y la que estaba programada. Las dos, porque es lo
-    // que deja ver un error de carga: el T0 del 0066 tenia la fecha del dia en
-    // que se cargaron los resultados y no la del analisis, y en el informe no
-    // habia forma de notarlo (Claudia, 02/11/2026).
     const fecha=cp.fechaReal?fmt(cp.fechaReal):'—';
-    const prog=cp.fechaProgramada?fmt(cp.fechaProgramada):'—';
-    const arm=(cond,d)=>({cod:cp.codigo,mes,fecha,prog,cond,
+    const arm=(cond,d)=>({cod:cp.codigo,mes,fecha,cond,
       vals:fRep.map(x=>String(d[x.k]==null?'':d[x.k]).trim()||'—'),
       ok:okTxt(d.cumple),obs:String(d.observaciones||'').trim()});
     const conDato=d=>fRep.some(x=>String(d[x.k]==null?'':d[x.k]).trim())||d.cumple||String(d.observaciones||'').trim();
@@ -1198,11 +1204,10 @@ function renderInforme(){
   });
   const hayObs=filasRep.some(r=>r.obs);
   const tablaRep=filasRep.length
-    ? `<table><thead><tr><th>Cód</th><th>Mes</th><th>Fecha análisis</th><th>Prog.</th><th>Condición</th>`
+    ? `<table class="res"><thead><tr><th>Cód</th><th>Mes</th><th>Fecha</th><th>Condición</th>`
       + fRep.map(x=>`<th>${E(x.l)}</th>`).join('')
       + `<th>Cumple</th>${hayObs?'<th>Observaciones</th>':''}</tr></thead><tbody>`
-      + filasRep.map(r=>`<tr><td>${E(r.cod)}</td><td>${E(String(r.mes))}</td><td>${E(r.fecha)}</td>`
-          + `<td${r.fecha!=='—'&&r.prog!=='—'&&r.fecha!==r.prog?' style="color:var(--amber)"':''}>${E(r.prog)}</td><td>${E(r.cond)}</td>`
+      + filasRep.map(r=>`<tr><td>${E(r.cod)}</td><td>${E(String(r.mes))}</td><td>${E(r.fecha)}</td><td>${E(r.cond)}</td>`
           + r.vals.map(v=>`<td>${E(v)}</td>`).join('')
           + `<td>${E(r.ok)}</td>${hayObs?`<td>${E(r.obs||'—')}</td>`:''}</tr>`).join('')
       + `</tbody></table>`
