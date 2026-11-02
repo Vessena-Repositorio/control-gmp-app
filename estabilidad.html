@@ -30,6 +30,16 @@ table{width:100%;border-collapse:collapse;font-size:13px;}
    que va con ancho fijo, letra chica y el texto partido. Sin esto, en la
    hoja impresa las ultimas columnas -las observaciones- se iban de la
    pagina (Claudia, 02/11/2026). */
+/* Recuadros de firma del informe: la imagen de la firma sobre una linea, con
+   el nombre y el cargo debajo. Lo que no tiene firma cargada deja el renglon
+   para firmar a mano, que es lo que se hacia antes con los tres renglones. */
+.firmas-rep{margin-top:30px;display:grid;grid-template-columns:1fr 1fr;gap:30px;page-break-inside:avoid;}
+.firma-box{text-align:center;}
+.firma-slot{border-bottom:1px solid var(--ink);height:70px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:2px;}
+.firma-slot img{max-height:64px;max-width:220px;object-fit:contain;}
+.firma-vacia{font-size:10px;color:var(--ink2);font-style:italic;align-self:center;padding-bottom:8px;}
+.firma-cap{font-size:11.5px;margin-top:5px;color:var(--ink2);}
+.firma-cap b{color:var(--ink);}
 table.res{table-layout:fixed;font-size:10.5px;}
 table.res th,table.res td{padding:3px 4px;word-break:break-word;overflow-wrap:anywhere;vertical-align:top;}
 table.res th:nth-child(1),table.res td:nth-child(1){width:34px;}
@@ -952,7 +962,10 @@ function renderDetail(){
   const ap2=q('#bAp');if(ap2)ap2.onclick=async()=>{
     if(!confirm('¿Aprobar este estudio como Dir. Técnica?'))return;
     const beforeState=s.rechazado?'Rechazado':'Etapa '+s.stage;
+    // Quien aprueba queda en el estudio: es lo que despues firma el informe.
     s.approvedManually=true;s.fechaAprobacion=td2();s.stage=5;s.rechazado=false;
+    s.aprobadoPor=(currentUser&&(currentUser.nombre||currentUser.usuario))||'';
+    s.aprobadoEn=new Date().toISOString();
     await saveOneStudy(s);
     await logAudit('aprobacion',s.id,s.producto+' (Lote '+s.lote+')',beforeState,'Aprobado');
     // Email al analista
@@ -1228,8 +1241,40 @@ function renderInforme(){
   <h3>8. Conclusión</h3><p style="white-space:pre-line">${E(s.conclusion||'—')}</p>
   <h3>9. Rotulación</h3><p style="white-space:pre-line">${E(s.rotulacion||'No aplica')}</p>
   <h3>10. Aprobación</h3><div class="kv"><div class="k">Estado</div><div>${E(SG[s.stage].l)}</div></div><div class="kv"><div class="k">Dir. Técnica</div><div>${s.stage===5?'Aprobado':'Pendiente'}</div></div>
-  <div style="margin-top:40px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:30px;font-size:12px;color:var(--ink2)"><div style="border-top:1px solid var(--line);padding-top:6px">Preparado por<br><br></div><div style="border-top:1px solid var(--line);padding-top:6px">Revisado por<br><br></div><div style="border-top:1px solid var(--line);padding-top:6px">Aprobado por<br><br></div></div></div>`;
+  <div class="firmas-rep" id="firmasRep"><div class="firma-box" style="grid-column:1/-1;font-size:11.5px;color:var(--ink2)">Cargando firmas…</div></div></div>`;
   q('#rS').onchange=e=>{selRep=e.target.value;render();};q('#bP').onclick=()=>window.print();
+  pintarFirmasRep(s.id);
+}
+
+/* Las firmas del informe: la de quien analizo y la de quien aprobo. Vienen del
+   servidor, que es donde estan las imagenes de firma y quien puede resolver el
+   nombre contra los usuarios. Si no hay firma cargada, queda el renglon para
+   firmar a mano: una hoja sin ese renglon no se puede firmar. */
+async function pintarFirmasRep(idEstudio){
+  const caja=document.getElementById('firmasRep');
+  if(!caja)return;
+  let d=null;
+  try{
+    const r=await fetch('/api/estabilidad/firmas/'+encodeURIComponent(idEstudio),{credentials:'same-origin'});
+    d=await r.json();
+    if(!r.ok)throw new Error(d&&d.error?d.error:'error '+r.status);
+  }catch(e){
+    caja.innerHTML='<div class="firma-box" style="grid-column:1/-1;font-size:11.5px;color:var(--red)">No se pudieron traer las firmas: '+E(e.message)+'</div>';
+    return;
+  }
+  caja.innerHTML=(d.firmas||[]).map(f=>{
+    const img=f.imagen
+      ? '<img src="'+E(f.imagen)+'" alt="firma">'
+      : '<span class="firma-vacia">'+(f.pendiente?'Pendiente de aprobación':'Sin firma registrada — firmar aquí')+'</span>';
+    const cuando=f.firmadoEn?new Date(f.firmadoEn).toLocaleDateString('es-UY',{day:'2-digit',month:'2-digit',year:'numeric'}):'';
+    return '<div class="firma-box"><div class="firma-slot">'+img+'</div>'
+      +'<div class="firma-cap"><b>'+E(f.rol)+'</b>'
+      +(f.nombre?'<br>'+E(f.nombre):'')
+      +(f.cargo?'<br>'+E(f.cargo):'')
+      +(cuando?'<br>'+E(cuando):'')
+      +(f.posterior?'<br><i>Firma registrada después de la aprobación</i>':'')
+      +'</div></div>';
+  }).join('');
 }
 
 /* RECHAZADOS */

@@ -16,6 +16,7 @@ import { consultar, enTransaccion } from '../db.js';
 import { exigirPermiso } from '../lib/acceso.js';
 import { enviar, hayCorreo } from '../lib/correo.js';
 import { supervisoresDe, unir } from '../lib/destinatarios.js';
+import { firmaDe, nombreComparable } from '../lib/firmas.js';
 
 export const rutasEstabilidad = Router();
 
@@ -252,6 +253,72 @@ rutasEstabilidad.post('/auditoria', escribir, async (req, res, next) => {
             return lista.length;
         });
         res.json({ ok: true, total });
+    } catch (err) {
+        next(err);
+    }
+});
+
+
+/**
+ * GET /api/estabilidad/firmas/:id — las firmas del informe de un estudio.
+ *
+ * El informe se imprime y se archiva: tiene que llevar la firma de quien
+ * analizo y la de quien aprobo (Claudia, 02/11/2026). Hasta ahora salian tres
+ * renglones en blanco para firmar a mano.
+ *
+ * De donde sale cada una:
+ * · Analista: el responsable del estudio.
+ * · Aprobado por: quien aprobo. Los estudios aprobados antes de hoy no guardan
+ *   el nombre -solo la fecha-, asi que se busca en el registro de auditoria,
+ *   donde el servidor anota quien hizo cada cosa.
+ *
+ * El nombre se cruza contra los usuarios con la misma comparacion que el resto
+ * de la app, y la firma es la vigente en el momento de la aprobacion. La que no
+ * se encuentra se devuelve igual, marcada: en la hoja sale el renglon para
+ * firmar a mano en vez de un recuadro vacio sin explicacion.
+ */
+rutasEstabilidad.get('/firmas/:id', leer, async (req, res, next) => {
+    const id = String(req.params.id);
+    try {
+        const { rows } = await consultar(
+            "SELECT clave, valor FROM estabilidad_datos WHERE clave IN ('studies', 'auditLog')"
+        );
+        const por = {};
+        for (const f of rows) {
+            try { por[f.clave] = typeof f.valor === 'string' ? JSON.parse(f.valor) : f.valor; }
+            catch { por[f.clave] = []; }
+        }
+        const estudios = Array.isArray(por.studies) ? por.studies : [];
+        const s = estudios.find((x) => x && String(x.id) === id);
+        if (!s) return res.status(404).json({ error: 'Estudio no encontrado' });
+
+        const aprobado = s.stage === 5 || s.approvedManually === true;
+        let quienAprobo = s.aprobadoPor || '';
+        let cuandoAprobo = s.aprobadoEn || s.fechaAprobacion || null;
+        if (aprobado && !quienAprobo) {
+            const log = Array.isArray(por.auditLog) ? por.auditLog : [];
+            const ev = log.filter((e) => e && e.tipo === 'aprobacion' && String(e.id) === id).pop();
+            if (ev) {
+                quienAprobo = ev.registradoPor || ev.user || '';
+                cuandoAprobo = ev.registradoEn || ev.ts || cuandoAprobo;
+            }
+        }
+
+        const { rows: usuarios } = await consultar('SELECT id, nombre FROM usuarios');
+        const porNombre = new Map(usuarios.map((u) => [nombreComparable(u.nombre), u.id]));
+        const armar = async (rol, nombre, instante) => {
+            const limpio = String(nombre || '').trim();
+            if (!limpio) return { rol, nombre: '', sinFirma: true, pendiente: true };
+            const uid = porNombre.get(nombreComparable(limpio)) || null;
+            const f = uid ? await firmaDe(uid, instante, limpio) : null;
+            return { rol, nombre: limpio, firmadoEn: instante || null, sinFirma: !f, ...(f || {}) };
+        };
+
+        const firmas = [
+            await armar('Analista', s.responsable, s.fechaInicio || cuandoAprobo),
+            await armar('Aprobado por · Dirección Técnica', aprobado ? quienAprobo : '', cuandoAprobo),
+        ];
+        res.json({ ok: true, aprobado, firmas });
     } catch (err) {
         next(err);
     }
