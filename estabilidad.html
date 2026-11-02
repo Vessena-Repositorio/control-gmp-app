@@ -1270,6 +1270,7 @@ async function pintarFirmasRep(idEstudio){
     return '<div class="firma-box"><div class="firma-slot">'+img+'</div>'
       +'<div class="firma-cap"><b>'+E(f.rol)+'</b>'
       +(f.nombre?'<br>'+E(f.nombre):'')
+      +(f.comoFigura?'<br><span style="font-size:10px">(en el estudio: '+E(f.comoFigura)+')</span>':'')
       +(f.cargo?'<br>'+E(f.cargo):'')
       +(cuando?'<br>'+E(cuando):'')
       +(f.posterior?'<br><i>Firma registrada después de la aprobación</i>':'')

@@ -304,14 +304,59 @@ rutasEstabilidad.get('/firmas/:id', leer, async (req, res, next) => {
             }
         }
 
+        /* Del nombre escrito en el estudio al usuario, para poder traer su firma.
+           Graneles guarda el id del usuario en el registro, asi que ahi la firma
+           sale derecho; aca solo hay un nombre escrito a mano, y las firmas son
+           las mismas -la tabla `firmas`, por usuario-. Entonces se cruza el
+           nombre: igual, despues sin tildes ni signos, y por ultimo sin las
+           variantes de escritura que no cambian como suena (k/c, g/j, z/s, v/b,
+           y/i, h muda, letras dobles), aceptando solo si encaja uno solo.
+
+           Resuelto el usuario, la firma se pide con el nombre del usuario y no
+           con el del estudio: firmaDe exige que coincidan, y quien firma es la
+           persona, no como la escribieron en el estudio. */
+        const fon = (s) => nombreComparable(s)
+            .replace(/ph/g, 'f').replace(/h/g, '')
+            .replace(/qu/g, 'c').replace(/k/g, 'c')
+            .replace(/g([ei])/g, 'j$1')
+            .replace(/z/g, 's').replace(/x/g, 's')
+            .replace(/v/g, 'b').replace(/y/g, 'i')
+            .replace(/ll/g, 'i')
+            .replace(/(.)\1+/g, '$1');
         const { rows: usuarios } = await consultar('SELECT id, nombre FROM usuarios');
-        const porNombre = new Map(usuarios.map((u) => [nombreComparable(u.nombre), u.id]));
+        const usuarioDe = (nombre) => {
+            const k = nombreComparable(nombre);
+            if (!k) return null;
+            const exacto = usuarios.find((u) => nombreComparable(u.nombre) === k);
+            if (exacto) return exacto;
+            const partes = String(nombre).trim().split(/\s+/).map(nombreComparable).filter((x) => x.length > 2);
+            if (!partes.length) return null;
+            let cands = usuarios.filter((u) => {
+                const ku = nombreComparable(u.nombre);
+                return partes.every((x) => ku.includes(x));
+            });
+            if (cands.length !== 1) {
+                const pf = partes.map(fon);
+                cands = usuarios.filter((u) => {
+                    const ku = fon(u.nombre);
+                    return pf.every((x) => ku.includes(x));
+                });
+            }
+            return cands.length === 1 ? cands[0] : null;
+        };
         const armar = async (rol, nombre, instante) => {
             const limpio = String(nombre || '').trim();
             if (!limpio) return { rol, nombre: '', sinFirma: true, pendiente: true };
-            const uid = porNombre.get(nombreComparable(limpio)) || null;
-            const f = uid ? await firmaDe(uid, instante, limpio) : null;
-            return { rol, nombre: limpio, firmadoEn: instante || null, sinFirma: !f, ...(f || {}) };
+            const u = usuarioDe(limpio);
+            const f = u ? await firmaDe(u.id, instante, u.nombre) : null;
+            return {
+                rol, nombre: u ? u.nombre : limpio, firmadoEn: instante || null,
+                sinFirma: !f, sinUsuario: !u,
+                // Si el estudio lo escribe distinto que el portal, se dice: en la
+                // hoja firmada tiene que poder verse de donde salio la firma.
+                comoFigura: u && nombreComparable(u.nombre) !== nombreComparable(limpio) ? limpio : '',
+                ...(f || {}),
+            };
         };
 
         const firmas = [
