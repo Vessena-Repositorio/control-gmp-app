@@ -279,7 +279,7 @@ summary.leg-y:hover{background:var(--g50)!important}
       <button class="btn btn-o" id="btn-bulk-open" data-role="admin,editor" style="background:#f0f9ff;border-color:#7dd3fc;color:#075985" title="Importar múltiples capacitaciones desde un PDF escaneado o una foto">📂 Importar PDF/foto</button>
       <button class="btn btn-o" onclick="document.getElementById('reg-import').click()" data-role="admin,editor">📄 Importar CSV</button>
       <input type="file" id="reg-import" accept=".csv,.txt" style="display:none">
-      <button class="btn btn-o" onclick="document.getElementById('hist-import').click()" data-role="admin" title="Las planillas por año 2020-2025: solo agrega lo que falta">📚 Importar años anteriores</button>
+      <button class="btn btn-o" onclick="document.getElementById('hist-import').click()" data-role="admin" title="Las planillas por año 2020-2025. Se pueden elegir todas juntas o de a una: lo leido se va sumando. Solo agrega lo que falta">📚 Importar años anteriores</button>
       <input type="file" id="hist-import" accept=".xlsx,.xls" multiple style="display:none" onchange="histArchivos(this.files);this.value=''">
     </div>
   </div>
@@ -6734,10 +6734,15 @@ async function histArchivos(files){
   caja.style.display = '';
   caja.innerHTML = '<div style="padding:10px;color:var(--g500)">Leyendo las planillas…</div>';
   try{
-    const filas = [];
-    const problemas = [];
-    const porArchivo = [];
+    // Lo leido se acumula: si ya habia planillas cargadas, las nuevas se suman
+    // a esas. Asi se pueden elegir de a una -que es como salio en la practica-
+    // sin perder lo anterior (Claudia, 02/11/2026).
+    const filas = (HIST && HIST.crudas) ? [...HIST.crudas] : [];
+    const problemas = (HIST && HIST.problemas) ? [...HIST.problemas] : [];
+    const porArchivo = (HIST && HIST.porArchivo) ? [...HIST.porArchivo] : [];
+    const yaLeidos = new Set(porArchivo.map(a => a.archivo));
     for(const f of files){
+      if(yaLeidos.has(f.name)) continue;      // la misma planilla dos veces, no
       const wb = XLSX.read(await f.arrayBuffer(), {type:'array', cellDates:true});
       let hojas = wb.SheetNames.filter(n => normTxt(n).includes('CAPACITACIONES DICTADAS'));
       if(!hojas.length) hojas = wb.SheetNames;
@@ -6811,7 +6816,8 @@ async function histArchivos(files){
       const p = personaHist(f.nom);
       if(p && p.n !== f.nom) porParecido.set(f.nom, p.n);
     }
-    HIST = {nuevos, repetidos, personasNuevas:agruparFaltantes([...personasNuevas.values()]),
+    HIST = {crudas:filas, nuevos, repetidos,
+            personasNuevas:agruparFaltantes([...personasNuevas.values()]),
             problemas, porParecido:[...porParecido.entries()], porArchivo};
     histPreview();
   }catch(e){
@@ -6876,6 +6882,7 @@ function histPreview(){
   const anios = Object.keys(porAnio).sort();
   caja.innerHTML =
     '<div style="font-weight:800;color:var(--navy);margin-bottom:6px">Lo que se va a agregar</div>' +
+    '<div style="font-size:11px;color:var(--g500);margin-bottom:6px">Podés volver a apretar «📚 Importar años anteriores» y elegir otra planilla: se suma a esta lista. Confirmá recién cuando estén las seis.</div>' +
     '<div style="font-size:11px;color:var(--g500);margin-bottom:6px">Leído: ' +
       (porArchivo||[]).map(a => h(a.archivo)+' ('+a.filas+')').join(' · ') + '</div>' +
     '<div style="font-size:12px;margin-bottom:8px">' +
@@ -6904,6 +6911,7 @@ function histPreview(){
       problemas.slice(0,200).map(p => '<div style="padding:2px 0">'+h(p.archivo)+' · '+h(p.nom)+' · fecha «'+h(p.fecha)+'» · '+h(p.desc)+'</div>').join('') +
       '</div></details>' : '') +
     '<div style="font-size:11px;color:var(--g500);margin-bottom:8px">No se borra ni se da de baja nada: esto solo agrega.</div>' +
+    '<button class="btn btn-o" onclick="HIST=null;cajaHist().style.display=\x27none\x27" style="margin-right:6px">Empezar de nuevo</button> ' +
     '<button class="btn btn-p" onclick="histAplicar()"'+((nuevos.length||personasNuevas.length)?'':' disabled')+'>' +
       (nuevos.length ? 'Agregar '+nuevos.length+' registro(s)' : '') +
       (nuevos.length && personasNuevas.length ? ' y ' : '') +
@@ -6915,8 +6923,15 @@ function histPreview(){
 function histAplicar(){
   if(!HIST || (!HIST.nuevos.length && !HIST.personasNuevas.length)) return;
   const {nuevos, personasNuevas} = HIST;
+  // Si una ficha la creo esta misma importacion y ahora aparece un registro mas
+  // viejo, se corrige su fecha de alta. La de alguien que ya estaba en el padron
+  // no se toca: esa la pone Personal, no esto.
   personasNuevas.forEach(p => {
-    if(personaHist(p.n)) return;
+    const ya = personaHist(p.n);
+    if(ya){
+      if(ya.origen === 'planillas históricas' && p.primera && (!ya.fechaAlta || p.primera < ya.fechaAlta)) ya.fechaAlta = p.primera;
+      return;
+    }
     // Inactiva: trabajó, tiene historia, pero no está en el padrón de hoy.
     PE.push({n:p.n, s:p.s || '', a:false, fechaAlta:p.primera || '',
              alias:(p.variantes||[]).filter(v => v !== p.n), origen:'planillas históricas'});
