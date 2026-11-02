@@ -6650,7 +6650,10 @@ sv = function() {
    cobertura (Claudia, 02/11/2026: "tendriamos que hacer una seccion para
    transportistas externos"). Si manana hay otro sector externo, se agrega
    aca y nada mas. */
-const SECTORES_EXTERNOS = ['TRANSPORTISTA', 'EXTERNO', 'CLEANWAY'];
+const SECTORES_EXTERNOS = ['TRANSPORTISTA', 'EXTERNO', 'CLEANWAY', 'LIMPIEZA',
+  // En una planilla quedo el nombre de la persona escrito en la columna
+  // sector; Claudia confirmo que tambien es externa (02/11/2026).
+  'PAOLA HORNOZ'];
 const esSectorExterno = (s) => SECTORES_EXTERNOS.includes(normTxt(s).trim());
 
 const COLS_HIST = {
