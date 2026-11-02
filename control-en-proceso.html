@@ -721,7 +721,9 @@ const dl=document.getElementById('limpDefList');if(dl)dl.innerHTML='';
    aca se calcula para mostrarlo antes de guardar. */
 const SIN_ORDEN=new Set(['','sop','so','sn','sd','na','sinop','sinorden','ordensop','ordenso','sinnumero','sinnro','sinoc','0','00','000']);
 const comoClave=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
-const esSinOrden=s=>SIN_ORDEN.has(comoClave(s));
+// Un numero de orden siempre tiene digitos: cualquier texto sin digitos es
+// que no hay orden. La misma regla que el servidor (02/11/2026).
+const esSinOrden=s=>{const k=comoClave(s);return SIN_ORDEN.has(k)||!/[1-9]/.test(k)};
 // La clave con la que se compara al buscar. Aparte de comoClave -que reconoce
 // "S/OP"- porque esta ademas saca las tildes: sin eso "Pampillón" quedaba
 // "pampilln" y el analista no se encontraba (22/10/2026).

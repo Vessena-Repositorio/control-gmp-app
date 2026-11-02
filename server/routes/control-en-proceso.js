@@ -213,7 +213,15 @@ const SIN_ORDEN = new Set([
     'ordenso', 'sinnumero', 'sinnro', 'sinoc', '0', '00', '000',
 ]);
 const comoClave = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-const esSinOrden = (s) => SIN_ORDEN.has(comoClave(s));
+// Un numero de orden siempre tiene digitos: cualquier texto sin digitos
+// -"sin orden", "no tiene", "s/op aun"- es que no hay orden, igual que la
+// lista de arriba. Con la lista sola, lo que no estuviera escrito exactamente
+// asi se guardaba tal cual y esos controles se agrupaban todos juntos, que es
+// el problema que esto vino a resolver (Claudia, 02/11/2026).
+const esSinOrden = (s) => {
+    const k = comoClave(s);
+    return SIN_ORDEN.has(k) || !/[1-9]/.test(k);
+};
 function ordenDe(d) {
     const o = texto(d.orden, 60);
     if (!esSinOrden(o)) return o;
