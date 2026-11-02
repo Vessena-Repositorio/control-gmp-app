@@ -1249,14 +1249,20 @@
                     return;
                 }
 
-                // Verificación anti-duplicado: si el último control de esta orden
-                // es del mismo tipo y se guardó hace menos de 15 segundos, bloquear
+                /* Anti-duplicado: si el ultimo control de esta orden es del mismo
+                   tipo y se guardo hace menos de 15 segundos, se frena.
+
+                   `hace` negativo no es un duplicado: quiere decir que ese control
+                   se guardo con una hora POSTERIOR a la de este equipo, porque los
+                   relojes no coinciden. Antes tambien caia en el `< 15000` y la
+                   pantalla quedaba trabada hasta que el reloj alcanzara al otro
+                   -"hace -368 segundos" (Claudia, 02/11/2026)-. */
                 const ordenActual = ordenesSoplado.find(o => o.id === ordenSeleccionada.id);
                 if (ordenActual && ordenActual.controles && ordenActual.controles.length > 0) {
                     const ult = ordenActual.controles[ordenActual.controles.length - 1];
                     if (ult.tipo === tipoControlSoplado && ult.timestamp) {
                         const hace = Date.now() - new Date(ult.timestamp).getTime();
-                        if (hace < 15000) {
+                        if (hace >= 0 && hace < 15000) {
                             setMensaje({
                                 tipo: 'warning',
                                 texto: `⚠ Ya guardaste un control de ${tipoControlSoplado} hace ${Math.round(hace/1000)} segundos. Si es realmente un control nuevo, esperá unos segundos y volvé a intentar.`
@@ -1394,8 +1400,9 @@
                         && ult.envase === nuevoControlLCC.envase
                         && ult.analista === usuarioLogueado.nombre
                         && ult.timestamp) {
+                        // Igual que arriba: negativo es diferencia de relojes, no duplicado.
                         const hace = Date.now() - new Date(ult.timestamp).getTime();
-                        if (hace < 15000) {
+                        if (hace >= 0 && hace < 15000) {
                             setMensaje({
                                 tipo: 'warning',
                                 texto: `⚠ Ya guardaste un control LCC ${tipoControlLCC} de ${nuevoControlLCC.envase} hace ${Math.round(hace/1000)} segundos.`
