@@ -1177,8 +1177,13 @@ function renderInforme(){
     // El checkpoint inicial de los estudios viejos no trae `mes` y salia
     // "undefined" en el informe; su codigo ya dice que es el mes 0.
     const mes=(cp.mes===0||cp.mes)?cp.mes:(/^0/.test(String(cp.codigo||''))?0:'—');
+    // La fecha del analisis y la que estaba programada. Las dos, porque es lo
+    // que deja ver un error de carga: el T0 del 0066 tenia la fecha del dia en
+    // que se cargaron los resultados y no la del analisis, y en el informe no
+    // habia forma de notarlo (Claudia, 02/11/2026).
     const fecha=cp.fechaReal?fmt(cp.fechaReal):'—';
-    const arm=(cond,d)=>({cod:cp.codigo,mes,fecha,cond,
+    const prog=cp.fechaProgramada?fmt(cp.fechaProgramada):'—';
+    const arm=(cond,d)=>({cod:cp.codigo,mes,fecha,prog,cond,
       vals:fRep.map(x=>String(d[x.k]==null?'':d[x.k]).trim()||'—'),
       ok:okTxt(d.cumple),obs:String(d.observaciones||'').trim()});
     const conDato=d=>fRep.some(x=>String(d[x.k]==null?'':d[x.k]).trim())||d.cumple||String(d.observaciones||'').trim();
@@ -1193,10 +1198,11 @@ function renderInforme(){
   });
   const hayObs=filasRep.some(r=>r.obs);
   const tablaRep=filasRep.length
-    ? `<table><thead><tr><th>Cód</th><th>Mes</th><th>Fecha</th><th>Condición</th>`
+    ? `<table><thead><tr><th>Cód</th><th>Mes</th><th>Fecha análisis</th><th>Prog.</th><th>Condición</th>`
       + fRep.map(x=>`<th>${E(x.l)}</th>`).join('')
       + `<th>Cumple</th>${hayObs?'<th>Observaciones</th>':''}</tr></thead><tbody>`
-      + filasRep.map(r=>`<tr><td>${E(r.cod)}</td><td>${E(String(r.mes))}</td><td>${E(r.fecha)}</td><td>${E(r.cond)}</td>`
+      + filasRep.map(r=>`<tr><td>${E(r.cod)}</td><td>${E(String(r.mes))}</td><td>${E(r.fecha)}</td>`
+          + `<td${r.fecha!=='—'&&r.prog!=='—'&&r.fecha!==r.prog?' style="color:var(--amber)"':''}>${E(r.prog)}</td><td>${E(r.cond)}</td>`
           + r.vals.map(v=>`<td>${E(v)}</td>`).join('')
           + `<td>${E(r.ok)}</td>${hayObs?`<td>${E(r.obs||'—')}</td>`:''}</tr>`).join('')
       + `</tbody></table>`
