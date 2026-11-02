@@ -335,13 +335,17 @@ rutasEstabilidad.get('/firmas/:id', leer, async (req, res, next) => {
                 const ku = nombreComparable(u.nombre);
                 return partes.every((x) => ku.includes(x));
             });
-            if (cands.length !== 1) {
-                const pf = partes.map(fon);
-                cands = usuarios.filter((u) => {
-                    const ku = fon(u.nombre);
-                    return pf.every((x) => ku.includes(x));
-                });
-            }
+            const pf = partes.map(fon);
+            const fonCands = usuarios.filter((u) => {
+                const ku = fon(u.nombre);
+                return pf.every((x) => ku.includes(x));
+            });
+            if (cands.length !== 1) cands = fonCands;
+            // Con una sola palabra -"Micaela"- no alcanza con que sea unica tal
+            // cual escrita: "Micaela" y "Mikaela" son dos personas distintas que
+            // suenan igual, y firmar con el nombre equivocado es peor que dejar
+            // el renglon en blanco (Claudia, 02/11/2026).
+            if (partes.length === 1 && fonCands.length !== 1) return null;
             return cands.length === 1 ? cands[0] : null;
         };
         const armar = async (rol, nombre, instante) => {
