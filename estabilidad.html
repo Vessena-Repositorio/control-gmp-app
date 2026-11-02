@@ -964,7 +964,8 @@ function renderDetail(){
     const beforeState=s.rechazado?'Rechazado':'Etapa '+s.stage;
     // Quien aprueba queda en el estudio: es lo que despues firma el informe.
     s.approvedManually=true;s.fechaAprobacion=td2();s.stage=5;s.rechazado=false;
-    s.aprobadoPor=(currentUser&&(currentUser.nombre||currentUser.usuario))||'';
+    s.aprobadoPor=(sesionPortal&&sesionPortal.nombre)||'';
+    s.aprobadoUsuario=currentUser||'';
     s.aprobadoEn=new Date().toISOString();
     await saveOneStudy(s);
     await logAudit('aprobacion',s.id,s.producto+' (Lote '+s.lote+')',beforeState,'Aprobado');
@@ -1049,6 +1050,16 @@ function renderDetail(){
         s.checkpoints[i].condiciones[cond][f]=newValue;
       } else {
         s.checkpoints[i][f]=newValue;
+      }
+      /* Quien carga el resultado firma como analista: queda anotado el usuario
+         de la sesion, no un nombre escrito a mano (Claudia, 02/11/2026: "cuando
+         Monica entra y completa datos, que quede su firma en analista"). Se
+         guarda el usuario del portal, que es con lo que el servidor encuentra su
+         firma sin tener que adivinar por el nombre. */
+      if(f!=='fechaReal'&&sesionPortal){
+        s.checkpoints[i].cargadoPor=sesionPortal.nombre||'';
+        s.checkpoints[i].cargadoUsuario=currentUser||'';
+        s.checkpoints[i].cargadoEn=new Date().toISOString();
       }
       rS(s);
       await saveOneStudy(s);

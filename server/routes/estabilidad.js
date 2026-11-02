@@ -323,7 +323,7 @@ rutasEstabilidad.get('/firmas/:id', leer, async (req, res, next) => {
             .replace(/v/g, 'b').replace(/y/g, 'i')
             .replace(/ll/g, 'i')
             .replace(/(.)\1+/g, '$1');
-        const { rows: usuarios } = await consultar('SELECT id, nombre FROM usuarios');
+        const { rows: usuarios } = await consultar('SELECT id, usuario, nombre FROM usuarios');
         const usuarioDe = (nombre) => {
             const k = nombreComparable(nombre);
             if (!k) return null;
@@ -348,10 +348,15 @@ rutasEstabilidad.get('/firmas/:id', leer, async (req, res, next) => {
             if (partes.length === 1 && fonCands.length !== 1) return null;
             return cands.length === 1 ? cands[0] : null;
         };
-        const armar = async (rol, nombre, instante) => {
+        // Por usuario del portal: es exacto y no depende de como se escriba el
+        // nombre. Lo que no trae usuario -lo cargado antes de esto- cae al
+        // cruce por nombre.
+        const porUsuario = new Map(usuarios.map((u) => [String(u.usuario || '').toLowerCase(), u]));
+        const armar = async (rol, nombre, instante, usuario) => {
             const limpio = String(nombre || '').trim();
-            if (!limpio) return { rol, nombre: '', sinFirma: true, pendiente: true };
-            const u = usuarioDe(limpio);
+            const porLogin = usuario ? porUsuario.get(String(usuario).toLowerCase()) : null;
+            if (!limpio && !porLogin) return { rol, nombre: '', sinFirma: true, pendiente: true };
+            const u = porLogin || usuarioDe(limpio);
             const f = u ? await firmaDe(u.id, instante, u.nombre) : null;
             return {
                 rol, nombre: u ? u.nombre : limpio, firmadoEn: instante || null,
@@ -363,10 +368,30 @@ rutasEstabilidad.get('/firmas/:id', leer, async (req, res, next) => {
             };
         };
 
-        const firmas = [
-            await armar('Analista', s.responsable, s.fechaInicio || cuandoAprobo),
-            await armar('Aprobado por · Dirección Técnica', aprobado ? quienAprobo : '', cuandoAprobo),
-        ];
+        /* Analista: quien cargo los resultados, que es quien los firma. Si los
+           cargo mas de una persona, van todas, en el orden en que los cargaron.
+           Los estudios de antes no lo tienen anotado: ahi se usa el responsable
+           del estudio, que es lo unico que hay. */
+        const analistas = [];
+        for (const cp of (s.checkpoints || [])) {
+            const login = cp.cargadoUsuario || '';
+            const nombre = cp.cargadoPor || '';
+            if (!login && !nombre) continue;
+            const clave = (login || nombre).toLowerCase();
+            if (analistas.some((a) => a.clave === clave)) continue;
+            analistas.push({ clave, login, nombre, cuando: cp.cargadoEn || null });
+        }
+        const firmas = [];
+        if (analistas.length) {
+            for (const a of analistas) {
+                // El nombre ya va debajo de la firma: el rol no lo repite.
+                firmas.push(await armar('Analista', a.nombre, a.cuando, a.login));
+            }
+        } else {
+            firmas.push(await armar('Analista', s.responsable, s.fechaInicio || cuandoAprobo));
+        }
+        firmas.push(await armar('Aprobado por · Dirección Técnica',
+            aprobado ? quienAprobo : '', cuandoAprobo, aprobado ? s.aprobadoUsuario : ''));
         res.json({ ok: true, aprobado, firmas });
     } catch (err) {
         next(err);
