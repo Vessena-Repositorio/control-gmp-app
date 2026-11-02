@@ -566,7 +566,7 @@ summary.leg-y:hover{background:var(--g50)!important}
   <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:flex-end">
     <div class="fg" style="flex:1;min-width:200px"><label>Buscar por nombre</label><input id="prsrch" placeholder="🔍 Escribí un nombre..." autocomplete="off"></div>
     <div class="fg" style="min-width:180px"><label>Filtrar por sector</label><select id="pers-sec-flt"><option value="">Todos los sectores</option></select></div>
-    <div class="fg" style="min-width:130px"><label>Tipo</label><select id="pers-tipo-flt"><option value="">Todos</option><option value="VESSENA">Vessena</option><option value="MANPOWER">Manpower</option></select></div>
+    <div class="fg" style="min-width:130px"><label>Tipo</label><select id="pers-tipo-flt"><option value="">Todos</option><option value="VESSENA">Vessena</option><option value="MANPOWER">Manpower</option><option value="EXTERNO">Externos</option></select></div>
     <div class="fg" style="min-width:140px"><label>Función</label><select id="pers-tag-flt"><option value="">Todas</option></select></div>
     <div class="fg" style="min-width:120px"><label>Ordenar por</label><select id="pers-sort"><option value="nombre">Nombre A-Z</option><option value="caps-desc">Más capacitaciones</option><option value="caps-asc">Menos capacitaciones</option><option value="hrs-desc">Más horas</option><option value="sector">Sector</option><option value="tipo">Tipo</option></select></div>
   </div>
@@ -6644,6 +6644,15 @@ sv = function() {
    de alta puesta en su primer registro: así la historia queda completa y los
    indicadores de "personal activo" siguen midiendo a los de hoy. */
 
+/* Gente que no es de la planta: recibe capacitacion pero no es personal.
+   Entran al padron con tipo EXTERNO, que es el filtro "Externos" del listado
+   de Personal, y como inactivas, asi no cuentan en los indicadores de
+   cobertura (Claudia, 02/11/2026: "tendriamos que hacer una seccion para
+   transportistas externos"). Si manana hay otro sector externo, se agrega
+   aca y nada mas. */
+const SECTORES_EXTERNOS = ['TRANSPORTISTA', 'EXTERNO', 'CLEANWAY'];
+const esSectorExterno = (s) => SECTORES_EXTERNOS.includes(normTxt(s).trim());
+
 const COLS_HIST = {
   mes:'mes', fecha:'fecha', nombre:'nom', sector:'sec', tema:'tema',
   descripcion:'desc', codigo:'cod', version:'ver', duracion:'hrs', tipo:'tipo',
@@ -6898,6 +6907,9 @@ function histPreview(){
       (anios.length ? ' — ' + anios.map(a => a+': '+porAnio[a]).join(' · ') : '') + '<br>' +
       '<b>'+repetidos.length+'</b> ya estaban en la app o repetidos entre planillas: se saltean.<br>' +
       '<b>'+personasNuevas.length+'</b> persona(s) con capacitaciones y sin ficha en el padrón: entran como <b>inactivas</b>, con la fecha de su primer registro.' +
+      (personasNuevas.filter(p=>esSectorExterno(p.s)).length
+        ? '<br><b>'+personasNuevas.filter(p=>esSectorExterno(p.s)).length+'</b> de ellas son <b>externas</b> ('+SECTORES_EXTERNOS.join(', ')+'): quedan con tipo EXTERNO y se ven aparte en Personal.'
+        : '') +
     '</div>' +
     (personasNuevas.length ?
       '<details style="margin-bottom:8px"><summary style="cursor:pointer;font-size:12px;font-weight:700">Ver las personas que se agregan ('+personasNuevas.length+')</summary>' +
@@ -6942,6 +6954,7 @@ function histAplicar(){
     }
     // Inactiva: trabajó, tiene historia, pero no está en el padrón de hoy.
     PE.push({n:p.n, s:p.s || '', a:false, fechaAlta:p.primera || '',
+             tipo: esSectorExterno(p.s) ? 'EXTERNO' : '',
              alias:(p.variantes||[]).filter(v => v !== p.n), origen:'planillas históricas'});
   });
   nuevos.forEach(r => {
