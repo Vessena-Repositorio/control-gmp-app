@@ -1160,6 +1160,48 @@ function renderInforme(){
   selRep=selRep||selSt||(studies[0]&&studies[0].id);const s=studies.find(x=>x.id===selRep);
   const sel=`<div class="panel pp no-print"><div class="toolbar"><select id="rS">${studies.map(st=>`<option value="${st.id}" ${st.id===selRep?'selected':''}>${E(st.producto)} — ${E(st.lote)}</option>`).join('')}</select><div class="spacer"></div><button class="btn" id="bP">Imprimir / PDF</button></div></div>`;
   if(!s){document.getElementById('mc').innerHTML=sel+`<div class="panel pp"><div class="empty">Sin estudios.</div></div>`;return;}
+  /* Tabla de resultados (seccion 6).
+
+     Los checkpoints no son todos iguales: los de la etapa acelerada guardan sus
+     resultados en cuatro condiciones -40 °C, 4 °C, luz y patron- y los de la
+     natural, sueltos en el checkpoint. El informe leia solo los sueltos, asi que
+     un checkpoint acelerado salia entero en "—" aunque tuviera todo cargado
+     (Claudia, 02/11/2026, ensayo 0066).
+
+     Y las columnas salen de la categoria del producto, no de una lista fija: un
+     limpiador mide densidad y no viscosidad, y esa densidad no aparecia nunca. */
+  const fRep=getFields(s.categoria);
+  const okTxt=v=>v==='si'?'Sí':v==='no'?'No':'—';
+  const filasRep=[];
+  (s.checkpoints||[]).forEach(cp=>{
+    // El checkpoint inicial de los estudios viejos no trae `mes` y salia
+    // "undefined" en el informe; su codigo ya dice que es el mes 0.
+    const mes=(cp.mes===0||cp.mes)?cp.mes:(/^0/.test(String(cp.codigo||''))?0:'—');
+    const fecha=cp.fechaReal?fmt(cp.fechaReal):'—';
+    const arm=(cond,d)=>({cod:cp.codigo,mes,fecha,cond,
+      vals:fRep.map(x=>String(d[x.k]==null?'':d[x.k]).trim()||'—'),
+      ok:okTxt(d.cumple),obs:String(d.observaciones||'').trim()});
+    const conDato=d=>fRep.some(x=>String(d[x.k]==null?'':d[x.k]).trim())||d.cumple||String(d.observaciones||'').trim();
+    if(cp.condiciones){
+      // Si todavia no se cargo ninguna condicion, una sola fila: pendiente.
+      const algo=CONDS.some(cd=>conDato(cp.condiciones[cd.k]||{}));
+      if(algo)CONDS.forEach(cd=>filasRep.push(arm(cd.l,cp.condiciones[cd.k]||{})));
+      else filasRep.push(arm('4 condiciones — pendiente',{}));
+    } else {
+      filasRep.push(arm('—',cp));
+    }
+  });
+  const hayObs=filasRep.some(r=>r.obs);
+  const tablaRep=filasRep.length
+    ? `<table><thead><tr><th>Cód</th><th>Mes</th><th>Fecha</th><th>Condición</th>`
+      + fRep.map(x=>`<th>${E(x.l)}</th>`).join('')
+      + `<th>Cumple</th>${hayObs?'<th>Observaciones</th>':''}</tr></thead><tbody>`
+      + filasRep.map(r=>`<tr><td>${E(r.cod)}</td><td>${E(String(r.mes))}</td><td>${E(r.fecha)}</td><td>${E(r.cond)}</td>`
+          + r.vals.map(v=>`<td>${E(v)}</td>`).join('')
+          + `<td>${E(r.ok)}</td>${hayObs?`<td>${E(r.obs||'—')}</td>`:''}</tr>`).join('')
+      + `</tbody></table>`
+    : `<div class="empty">Sin muestreos cargados.</div>`;
+
   const z=ZONAS.find(z=>z.z===s.zonaClimatica)||{};const spt=(s.specParams||[]).map(p=>`<tr><td>${E(p.p)}</td><td>${E(p.e)}</td><td>${E(p.m)}</td><td>${E(p.lab)}</td><td>${E(p.f)}</td></tr>`).join('');
   document.getElementById('mc').innerHTML=`${sel}<div class="panel pp rd">
   <div class="print-only" style="text-align:center;font-size:11px;color:#666;margin-bottom:10px">SOP-LCC-049 V4.0 — REG-SOP-LCC-049-A</div>
@@ -1170,7 +1212,7 @@ function renderInforme(){
   <h3>3. Condiciones</h3><div class="kv"><div class="k">Zona</div><div>${E(s.zonaClimatica)} — ${E(z.d||'')}</div></div><div class="kv"><div class="k">Largo plazo</div><div>${E(z.l||'—')}</div></div><div class="kv"><div class="k">Acelerado</div><div>${E(z.a||'—')}</div></div><div class="kv"><div class="k">Norma</div><div>${E(norL(s.norma))}</div></div>
   <h3>4. Especificación</h3>${spt?`<table><thead><tr><th>Parámetro</th><th>Espec.</th><th>Método</th><th>Lab.</th><th>Frec.</th></tr></thead><tbody>${spt}</tbody></table>`:E(s.especificacion||'—')}
   <h3>5. Métodos</h3><p style="white-space:pre-line">${E(s.metodosAnaliticos||'—')}</p>
-  <h3>6. Resultados</h3><table><thead><tr><th>Cód</th><th>Mes</th><th>Fecha</th><th>Org.</th><th>pH</th><th>Activo</th><th>Visc.</th><th>Micro</th><th>Homog.</th><th>OK</th></tr></thead><tbody>${s.checkpoints.map(cp=>`<tr><td>${E(cp.codigo)}</td><td>${cp.mes}</td><td>${cp.fechaReal?fmt(cp.fechaReal):'—'}</td><td>${E(cp.organoleptico||'—')}</td><td>${E(cp.ph||'—')}</td><td>${E(cp.activo||'—')}</td><td>${E(cp.viscosidad||'—')}</td><td>${E(cp.microbiologia||'—')}</td><td>${E(cp.homogeneidad||'—')}</td><td>${cp.cumple==='si'?'Sí':cp.cumple==='no'?'No':'—'}</td></tr>`).join('')}</tbody></table>
+  <h3>6. Resultados</h3>${tablaRep}
   <h3>7. Criterios</h3><p style="white-space:pre-line">${E(s.criteriosAceptacion||'—')}</p>
   <h3>8. Conclusión</h3><p style="white-space:pre-line">${E(s.conclusion||'—')}</p>
   <h3>9. Rotulación</h3><p style="white-space:pre-line">${E(s.rotulacion||'No aplica')}</p>
