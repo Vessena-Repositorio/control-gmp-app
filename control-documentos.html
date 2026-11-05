@@ -157,7 +157,7 @@ function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&l
    se le saca la tilde a la letra y después se limpian los signos; al revés la
    letra acentuada se perdía entera —"Validación" quedaba "validacin"— y el
    documento no se encontraba nunca (22/10/2026). */
-const claveBusqueda=s=>String(s==null?'':s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+const claveBusqueda=s=>String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
 function toast(m,err){const t=document.getElementById('toast');t.textContent=m;t.className='toast on'+(err?' err':'');clearTimeout(t._t);t._t=setTimeout(()=>t.className='toast',5000)}
 function dma(f){return f?String(f).slice(8,10)+'/'+String(f).slice(5,7)+'/'+String(f).slice(0,4):'—'}
 function dmaHora(v){if(!v)return'—';const d=new Date(v);if(isNaN(d))return String(v);const p=n=>String(n).padStart(2,'0');
@@ -1717,7 +1717,7 @@ const CARGO_POR_SECTOR={
   'ADMINISTRACION PLANTA':'Administracion','COMPRAS':'Asistente de Compras','PLANIFICACION':'Administrativo de Planta/Planificador',
   'LIMPIEZA':'Proveedores de limpieza','CLEANWAY':'Proveedores de limpieza',
 };
-const normCargo=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+const normCargo=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
 
 // --- Importacion del listado de personal con roles (PERSONAL_ACTIVO_ULTIMO,
 // 15/10/2026): la primera columna dice "SECTOR-ROL" ("LCC-ANALISTA",
@@ -1940,7 +1940,7 @@ async function importarMatriz(file){
 // un "Título" escrito distinto no tiene que dejar la columna afuera.
 const COLS={tipo:'tipo',prefijo:'prefijo',sufijo:'sufijo',codigo:'codigo',ver:'ver',titulo:'titulo',status:'status',
   redacta:'redacta',revisa:'revisa',aprueba:'aprueba','fecha entrada en vigencia':'vigencia','fecha proxima revision':'proxima',observaciones:'observaciones'};
-const clave=h=>String(h).normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim().toLowerCase();
+const clave=h=>String(h).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim().toLowerCase();
 let IMP=null;
 
 // La huella de la planilla queda en dc_importaciones. crypto.subtle no existe

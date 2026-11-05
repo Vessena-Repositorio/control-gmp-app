@@ -85,6 +85,11 @@ const CLASE={vigente:'ok',proximo_a_vencer:'warn',vencido:'crit',fuera_de_stock:
 let S={permisos:[],hoy:'',nombre:'',estandares:[],filtro:{q:'',tipo:'',estado:''},abierto:null,historialImportado:false};
 
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+/* La clave con la que se compara al buscar: minuscula, sin tildes, sin signos
+   y sin espacios, igual que clave_busqueda en la base. Primero se saca la tilde
+   y despues los signos; al reves la letra acentuada se perdia entera y el
+   estandar no se encontraba nunca (22/10/2026). */
+const claveBusqueda=s=>String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
 function toast(m,err){const t=document.getElementById('toast');t.textContent=m;t.className='toast on'+(err?' err':'');clearTimeout(t._t);t._t=setTimeout(()=>t.className='toast',4500)}
 function dma(f){return f?String(f).slice(8,10)+'/'+String(f).slice(5,7)+'/'+String(f).slice(0,4):'—'}
 function dmaHora(v){if(!v)return'—';const d=new Date(v);if(isNaN(d))return String(v);const p=n=>String(n).padStart(2,'0');
@@ -124,8 +129,13 @@ async function cargar(){
 /* ── Panel ── */
 function pintarPanel(){
   const c=k=>S.estandares.filter(e=>e.estado===k).length;
+  /* Están todos los vencidos y próximos a vencer, del más urgente al menos.
+     Antes se cortaban en 15 sin decirlo: los KPI de arriba daban el total y la
+     tabla mostraba menos, y el que no entraba era un estándar vencido que no
+     figuraba en el panel que existe justamente para eso (Claudia, 22/10/2026:
+     "no veo los controles de setiembre"). */
   const porVencer=S.estandares.filter(e=>e.estado==='proximo_a_vencer'||e.estado==='vencido')
-    .sort((a,b)=>a.vencimiento<b.vencimiento?-1:1).slice(0,15);
+    .sort((a,b)=>a.vencimiento<b.vencimiento?-1:1);
   document.getElementById('panel').innerHTML=
     '<div class="kpis">'+
     kpi('Total en stock',S.estandares.length,'',' ')+
@@ -155,8 +165,11 @@ function pintarLista(){
   const items=S.estandares.filter(e=>{
     if(f.tipo&&e.tipo!==f.tipo)return false;
     if(f.estado&&e.estado!==f.estado)return false;
-    if(f.q){const h=(e.codigo+' '+e.nombre+' '+(e.proveedor||'')+' '+(e.lote_proveedor||'')+' '+(e.lote_interno||'')).toLowerCase();
-      if(!h.includes(f.q.toLowerCase()))return false}
+    // Se compara sin tildes ni signos: "solucion" tiene que encontrar
+    // "Solución" y "L 1234" el lote "L-1234" (22/10/2026).
+    if(f.q){const fq=claveBusqueda(f.q);
+      const h=claveBusqueda(e.codigo+' '+e.nombre+' '+(e.proveedor||'')+' '+(e.lote_proveedor||'')+' '+(e.lote_interno||''));
+      if(fq&&!h.includes(fq))return false}
     return true;
   });
   document.getElementById('lista').innerHTML=
@@ -169,8 +182,11 @@ function pintarLista(){
     (puede('cargar')?'<div style="align-self:flex-end;display:flex;gap:8px"><button class="b pri" onclick="formNuevo()">➕ Nuevo estándar</button>'+
       '<button class="b" onclick="formPapel()">📄 Leer bitácora escaneada</button></div>':'')+
     '</div></div>'+
-    '<div class="card"><h3>Listado de stock · REG-SOP-LCC-071-C ('+items.length+')</h3>'+
-    (items.length?tabla(items):'<div class="muted">Sin resultados.</div>')+'</div>';
+    // Cuántos se ven de cuántos hay: un listado corto es el filtro, no el
+    // final de los datos (Claudia, 22/10/2026).
+    '<div class="card"><h3>Listado de stock · REG-SOP-LCC-071-C ('+items.length+' de '+S.estandares.length+')</h3>'+
+    (items.length?tabla(items)
+      :'<div class="muted">'+(f.q?'Ningún estándar coincide con «'+esc(f.q)+'» en todo el stock.':'Sin resultados.')+'</div>')+'</div>';
   document.getElementById('fq').oninput=e=>{S.filtro.q=e.target.value;pintarLista();document.getElementById('fq').focus()};
   document.getElementById('ft').onchange=e=>{S.filtro.tipo=e.target.value;pintarLista()};
   document.getElementById('fs').onchange=e=>{S.filtro.estado=e.target.value;pintarLista()};

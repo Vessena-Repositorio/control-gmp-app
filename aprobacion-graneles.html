@@ -1669,7 +1669,7 @@ const valorOGuion = (x) => (x === null || x === undefined || x === "" ? "—" : 
    quedaba "pampilln"— y el analista no se encontraba nunca
    (Claudia, 22/10/2026: "no veo los controles de setiembre"). */
 const claveBusqueda = (s) => String(s == null ? "" : s)
-  .normalize("NFD").replace(/[̀-ͯ]/g, "")
+  .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
   .toLowerCase().replace(/[^a-z0-9]/g, "");
 
 function htmlRegistro({ registro, muestra: m, firmas, impreso }) {

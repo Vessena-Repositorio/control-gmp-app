@@ -887,7 +887,7 @@ function normTxt(s){
    entera -"Pampillón" quedaba "pampilln"- y el nombre no se encontraba nunca
    (Claudia, 22/10/2026: "no veo los controles de setiembre"). */
 const claveBusqueda = (s) => String(s == null ? '' : s)
-  .normalize('NFD').replace(/[̀-ͯ]/g,'')
+  .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
   .toLowerCase().replace(/[^a-z0-9]/g,'');
 
 /* Que modulos de induccion cubre un registro.

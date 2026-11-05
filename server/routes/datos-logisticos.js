@@ -641,7 +641,7 @@ rutasDatosLogisticos.get('/actividad', leer, async (req, res, next) => {
          * saca la tilde y después los signos, que al revés la letra acentuada
          * se perdía entera y el nombre no se encontraba nunca. */
         const q = String(req.query.q || '')
-            .normalize('NFD').replace(/[̀-ͯ]/g, '')
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
             .toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 60);
         const buscando = q !== '';
         const limite = 1000;

@@ -854,6 +854,16 @@
             const [filtroEstado, setFiltroEstado] = useState('todas');
             const [busqueda, setBusqueda] = useState('');
             const [mostrarAlertasOOS, setMostrarAlertasOOS] = useState(false);
+            /* La clave con la que se compara al buscar: minúscula, sin tildes,
+               sin signos y sin espacios, igual que clave_busqueda en la base.
+               Así "ramirez" encuentra al operador "Ramírez" y "OS 1234"
+               encuentra la orden "OS-1234". El orden importa: primero se le
+               saca la tilde a la letra y después se limpian los signos; al
+               revés la letra acentuada se perdía entera y el nombre no se
+               encontraba nunca (Claudia, 22/10/2026). */
+            const claveBusqueda = (s) => String(s == null ? '' : s)
+                .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                .toLowerCase().replace(/[^a-z0-9]/g, '');
 
             // === CONFIGURACIÓN DE REGLAS DE PROCESO ===
             // Turnos fijos: mañana 06-14, tarde 14-22, noche 22-06 (ver getTurnoActual)
@@ -3593,9 +3603,9 @@
                                             const ordenesFiltradas = ordenesSoplado.filter(orden => {
                                                 if (filtroEnvase && orden.envase !== filtroEnvase) return false;
                                                 if (busqueda) {
-                                                    const q = busqueda.toLowerCase();
-                                                    if (!String(orden.numeroOrden).toLowerCase().includes(q) &&
-                                                        !String(orden.operador || '').toLowerCase().includes(q)) return false;
+                                                    const q = claveBusqueda(busqueda);
+                                                    if (q && !claveBusqueda(orden.numeroOrden).includes(q) &&
+                                                        !claveBusqueda(orden.operador).includes(q)) return false;
                                                 }
                                                 return true;
                                             });
@@ -3903,9 +3913,9 @@
                                             const lccFiltrados = controlesLCC.filter(c => {
                                                 if (filtroEnvase && c.envase !== filtroEnvase) return false;
                                                 if (busqueda) {
-                                                    const q = busqueda.toLowerCase();
-                                                    if (!String(c.operador || '').toLowerCase().includes(q) &&
-                                                        !String(c.tipo || '').toLowerCase().includes(q)) return false;
+                                                    const q = claveBusqueda(busqueda);
+                                                    if (q && !claveBusqueda(c.operador).includes(q) &&
+                                                        !claveBusqueda(c.tipo).includes(q)) return false;
                                                 }
                                                 return true;
                                             });

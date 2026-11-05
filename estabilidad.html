@@ -488,7 +488,7 @@ const bind=(s,ev,fn)=>document.querySelectorAll(s).forEach(el=>el.addEventListen
    primero se le saca la tilde a la letra y después se limpian los signos; al
    revés la letra acentuada se perdía entera y el producto no se encontraba
    nunca (Claudia, 22/10/2026: "no veo los controles de setiembre"). */
-const claveBusqueda=s=>String(s==null?'':s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+const claveBusqueda=s=>String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
 function cS(s){if(s.stage===5)return 5;if(s.approvedManually)return 5;const hs=!!(s.especificacion&&s.especificacion.trim());const any=s.checkpoints.some(c=>c.fechaReal);const all=s.checkpoints.length>0&&s.checkpoints.every(c=>c.fechaReal);const hc=!!(s.conclusion&&s.conclusion.trim());if(hc&&all)return 4;if(all)return 3;if(any)return 2;if(hs)return 1;return 0;}
 function rS(s){const p=s.stage;s.stage=cS(s);if(s.stage!==p)saveStudies();}
 function xT(t,s){const z=ZONAS.find(z=>z.z===s.zonaClimatica)||{};const tl=s.tipoEstudio==='acelerada'?'acelerada':'larga duración';return t.replace(/\{\{p\}\}/g,s.producto||'').replace(/\{\{l\}\}/g,s.lote||'').replace(/\{\{c\}\}/g,catL(s.categoria)).replace(/\{\{te\}\}/g,tl).replace(/\{\{z\}\}/g,s.zonaClimatica||'').replace(/\{\{zd\}\}/g,z.d||'').replace(/\{\{vu\}\}/g,s.vidaUtilMeses||'__').replace(/\{\{cond\}\}/g,s.condAlm||'[completar]');}

@@ -185,7 +185,7 @@ rutasNcDesvios.get('/datos', leer, async (req, res, next) => {
      * primero se saca la tilde y despues los signos. Al reves la letra
      * acentuada se perdia entera y el nombre no se encontraba nunca. */
     const q = String(req.query.q || '')
-        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
         .toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 60);
     const buscando = q !== '';
     // Tope alto y con el total al lado: no es para esconder nada, es para que

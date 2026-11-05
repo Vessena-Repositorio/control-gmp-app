@@ -2448,7 +2448,11 @@ function renderComparison(h){
       }).join("");
     };
 
-    const rows = recurSkus.slice(0,30).map(s => `
+    /* Están todos los SKU que coinciden, no los primeros 30: el subtítulo ya
+       decía el total y la tabla mostraba menos, así que un SKU recurrente podía
+       quedar fuera del análisis sin que nada lo dijera (Claudia, 22/10/2026:
+       "no veo los controles de setiembre"). */
+    const rows = recurSkus.map(s => `
       <tr>
         <td class="sku-code">${s.codigo}</td>
         <td class="prod" title="${(s.producto||'').replace(/"/g,'&quot;')}">${s.producto||'—'}</td>

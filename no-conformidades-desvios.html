@@ -1129,7 +1129,7 @@ function Trail({logs}){
   const[q,sQ]=useState("");
   /* Se compara sin tildes ni signos, como en el resto del portal: si no,
      "Pampillón" no se encuentra escribiendo "pampillon" (22/10/2026). */
-  const cl=s=>String(s==null?"":s).normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/[^a-z0-9]/g,"");
+  const cl=s=>String(s==null?"":s).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]/g,"");
   const qc=cl(q);
   const ls=qc?logs.filter(l=>Object.values(l).some(v=>cl(v).includes(qc))):logs;
   const color=a=>a.includes("CREAR")||a.includes("CARGA")?[K.grn,K.grnL]
