@@ -689,19 +689,27 @@ function formulario(p,base){
       e?el.setAttribute("aria-invalid","true"):el.removeAttribute("aria-invalid");};
     el.addEventListener("input",ver);ver();};
   chequeo("ean",[13],"EAN13");chequeo("dun",[14],"DUN14");
-  // Familia: si está vacía se completa con la opción de la lista que coincida con la marca; se puede cambiar a mano y nunca pisa lo elegido
+  /* Familia: si está vacía se completa con la opción de la lista que coincida con la marca; se puede cambiar a mano.
+     Si la familia era la de la marca anterior, sigue a la marca nueva: al copiar un SKU de Clean Day y pasarlo a
+     Cristal quedaba CLEAN DAY (Claudia, 05/11/2026). Si quedan dos marcas distintas, avisa pero no bloquea. */
   const elFam=f.elements.familia, elMarca=f.elements.marca, notaFam=document.createElement("small");
   notaFam.style.cssText="display:block;font-size:11px;color:var(--txS);margin-top:2px;text-transform:none;letter-spacing:0;font-weight:400";
   elFam.parentNode.appendChild(notaFam);
-  let famAuto=false;
+  const FAM_NO_MARCA=["MARCASPROPIAS","OTROS","PLASTICOS"];
+  const famDe=marca=>{const m=claveMarca(marca);return m?[...elFam.options].find(x=>claveMarca(x.value)===m):null;};
+  let famAuto=false, marcaAntes=elMarca.value;
+  const notaDeFam=()=>{
+    const o=famDe(elMarca.value), fv=elFam.value;
+    const choca=o&&fv&&fv!==o.value&&!FAM_NO_MARCA.includes(claveMarca(fv));
+    notaFam.textContent=choca?`⚠ La marca es ${elMarca.value.trim()} y la familia ${fv}: revisá.`:famAuto?"Completada desde la marca. Se puede cambiar.":"";
+    notaFam.style.color=choca?"var(--red)":"var(--txS)";};
   const autoFam=()=>{
-    if(elFam.value&&!famAuto)return;
-    const m=claveMarca(elMarca.value), o=m&&[...elFam.options].find(x=>claveMarca(x.value)===m);
-    elFam.value=o?o.value:"";famAuto=!!o;
-    notaFam.textContent=o?"Completada desde la marca. Se puede cambiar.":"";};
+    const ant=famDe(marcaAntes);marcaAntes=elMarca.value;
+    if(!elFam.value||famAuto||(ant&&elFam.value===ant.value)){const o=famDe(elMarca.value), previa=elFam.value;elFam.value=o?o.value:"";famAuto=!!o&&(famAuto||elFam.value!==previa);}
+    notaDeFam();};
   // Al salir del campo y no al escribir: "Mas Color" no debe quedar en la familia MAS a mitad de camino
   elMarca.addEventListener("change",autoFam);
-  elFam.addEventListener("change",()=>{famAuto=false;notaFam.textContent="";});
+  elFam.addEventListener("change",()=>{famAuto=false;notaDeFam();});
   autoFam();
   f.addEventListener("input",e=>{if(["unx","porPiso","estiba"].includes(e.target.name)){unPalManual=false;autoUP();}});
   autoUP();
