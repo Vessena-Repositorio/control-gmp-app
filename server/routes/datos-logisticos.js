@@ -25,7 +25,7 @@ import { consultar, enTransaccion } from '../db.js';
 import { exigirPermiso } from '../lib/acceso.js';
 import { puede } from '../lib/permisos.js';
 import { guardar, abrir, extension, hayAlmacen, MAX_BYTES, TIPOS } from '../lib/almacen-documentos.js';
-import { avisarRevision, avisarFinanzas, avisarVentas, camposFicha, cambiosDeFicha, loQueFalta, DIAS_AVISO_MSP } from '../lib/avisos-datos-logisticos.js';
+import { avisarRevision, avisarFinanzas, avisarVentas, avisarMedidas, camposFicha, cambiosDeFicha, loQueFalta, DIAS_AVISO_MSP } from '../lib/avisos-datos-logisticos.js';
 
 export const rutasDatosLogisticos = Router();
 
@@ -354,6 +354,37 @@ rutasDatosLogisticos.post('/productos/:sku/revision', cargar, async (req, res, n
         const revision = await avisarRevision(sku);
         const { rows } = await consultar(`${SELECT_PRODUCTO} WHERE p.sku = $1`, [sku]);
         res.json({ ok: true, revision, producto: aPantalla(rows[0]) });
+    } catch (err) { responder(err, res, next); }
+});
+
+/**
+ * POST /api/datos-logisticos/productos/:sku/medidas  { nota }
+ * Le pide a Antonella que complete medidas y pesos: Gloria arma la ficha y esos
+ * datos los mide Control de Calidad (Claudia, 05/11/2026). Queda anotado en el
+ * producto a quien se le pidio y cuando, para que la pantalla lo muestre.
+ */
+rutasDatosLogisticos.post('/productos/:sku/medidas', cargar, async (req, res, next) => {
+    const sku = texto(req.params.sku, 60);
+    const nota = texto(req.body?.nota, 1000);
+    const quien = req.usuario.nombre || req.usuario.usuario;
+    try {
+        const { rows: ya } = await consultar('SELECT 1 FROM dl_productos WHERE sku = $1', [sku]);
+        if (!ya.length) throw fallo(404, 'No hay ningún producto con ese código');
+        const medidas = await avisarMedidas(sku, { pidio: quien, nota });
+        if (!medidas.enviado) throw fallo(409, `No se mandó el pedido: ${medidas.motivo || 'revisá la configuración de correo'}`);
+        await enTransaccion(async (c) => {
+            await c.query(
+                `UPDATE dl_productos
+                    SET extra = extra || jsonb_build_object('medidasPedidas',
+                                jsonb_build_object('por', $2::text, 'en', now(), 'para', $3::jsonb, 'faltan', $4::jsonb))
+                  WHERE sku = $1`,
+                [sku, quien, JSON.stringify(medidas.para), JSON.stringify(medidas.faltan)]
+            );
+            await registrar(c, req, 'medidas_pedidas', sku,
+                `a ${medidas.para.join(', ')} · ${medidas.faltan.join(', ')}${nota ? ` · ${nota}` : ''}`);
+        });
+        const { rows } = await consultar(`${SELECT_PRODUCTO} WHERE p.sku = $1`, [sku]);
+        res.json({ ok: true, medidas, producto: aPantalla(rows[0]) });
     } catch (err) { responder(err, res, next); }
 });
 

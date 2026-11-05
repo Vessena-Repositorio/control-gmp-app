@@ -185,6 +185,79 @@ export async function avisarRevision(sku) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   A Control de Calidad, para que complete medidas y pesos
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Los datos que mide Control de Calidad: medidas, pesos y paletizado. Gloria
+ * arma la ficha con lo que tiene y estos pueden quedar sin completar
+ * (Claudia, 05/11/2026). Columna, clave de la pantalla (la de "no aplica") y
+ * como se lee. La pantalla tiene la misma lista en DATOS_CALIDAD.
+ */
+export const DATOS_CALIDAD = [
+    ['peso_pt', 'pesoPT', 'Peso de la unidad (kg)'],
+    ['un_largo', 'uL', 'Largo de la unidad (cm)'],
+    ['un_ancho', 'uA', 'Ancho de la unidad (cm)'],
+    ['un_alto', 'uH', 'Alto de la unidad (cm)'],
+    ['unidades_caja', 'unx', 'Unidades por caja o funda'],
+    ['caja_largo', 'cL', 'Largo de la caja o funda (cm)'],
+    ['caja_ancho', 'cA', 'Ancho de la caja o funda (cm)'],
+    ['caja_alto', 'cH', 'Alto de la caja o funda (cm)'],
+    ['peso_caja', 'pesoCaja', 'Peso de la caja o funda vacía (kg)'],
+    ['por_piso', 'porPiso', 'Cajas o fundas por piso'],
+    ['estiba', 'estiba', 'Pisos'],
+    ['unidades_pallet', 'unPal', 'Unidades por pallet'],
+    ['separadores', 'sep', 'Separadores'],
+    ['film_unidad', 'filmU', 'Film stretch por unidad (kg)'],
+];
+
+/** Como en la pantalla: la caja vacía, los separadores y el film se piden solo a los nacionales. */
+const SOLO_NACIONALES = new Set(['peso_caja', 'separadores', 'film_unidad']);
+
+/** Los de DATOS_CALIDAD que el producto no tiene, salvo los marcados "no aplica". */
+export function faltanDeCalidad(p) {
+    const na = Array.isArray(p.extra?.noAplica) ? p.extra.noAplica : [];
+    return DATOS_CALIDAD.filter(([col, clave]) =>
+        (p[col] === null || p[col] === undefined || p[col] === '') && !na.includes(clave) &&
+        (p.grupo === 'Nacionales' || !SOLO_NACIONALES.has(col)));
+}
+
+/**
+ * Le pide a Antonella que complete los datos de medidas y pesos que faltan. Lo
+ * manda quien armó la ficha, con una nota si quiere. Destinatarios en la
+ * notificación 'medidas' (migración 070).
+ */
+export async function avisarMedidas(sku, { pidio, nota } = {}) {
+    const p = await productoDe(sku);
+    if (!p) return { enviado: false, motivo: 'el producto no existe' };
+    const faltan = faltanDeCalidad(p);
+    if (!faltan.length) return { enviado: false, motivo: 'no falta ningún dato de medidas o pesos' };
+    const para = await supervisoresDe('datos-logisticos', 'medidas');
+    if (!para.length) return { enviado: false, motivo: 'no hay a quién pedirle las medidas cargado' };
+
+    const titulo = `Completar medidas y pesos: ${p.sku}`;
+    const cargados = Object.fromEntries(DATOS_CALIDAD
+        .filter(([col]) => !faltan.some(([c]) => c === col))
+        .map(([col, , etiqueta]) => [etiqueta, String(p[col])]));
+    const html = marco({
+        titulo, color: '#6941c6',
+        intro: `${esc(pidio || 'Calidad')} armó la ficha del SKU <b>${esc(p.sku)}</b> — ${esc(p.descripcion || '')} ` +
+            'y faltan datos que mide Control de Calidad. Cargalos en la app con <b>✏ Editar</b> en la ficha del producto.',
+        cuerpo: (nota ? `<p style="background:#f4f3ff;border-radius:8px;padding:8px 10px;font-size:14px;margin:0 0 12px">📝 ${esc(nota)}</p>` : '') +
+            `<div style="background:#fef0c7;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:14px">
+               <b>Falta completar</b><ul style="margin:6px 0 0;padding-left:18px">${faltan
+                .map(([, , etiqueta]) => `<li>${esc(etiqueta)}</li>`).join('')}</ul></div>` +
+            (Object.keys(cargados).length
+                ? `<p style="font-size:13px;color:#475467;margin:0 0 4px">Lo que ya está cargado:</p>${tablaDatos(cargados)}`
+                : ''),
+    });
+    const texto = `${titulo}\n${p.descripcion || ''}\n\n${nota ? `Nota: ${nota}\n\n` : ''}Falta completar:\n` +
+        `${faltan.map(([, , e]) => `- ${e}`).join('\n')}\n\n${BASE}${PAGINA}\n`;
+    const enviado = await mandar(para, `[Calidad] ${titulo} — ${p.descripcion || ''}`, html, texto);
+    return { enviado, para, faltan: faltan.map(([, , e]) => e) };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    2 y 3. A Finanzas, cuando la ficha se aprueba
    ═══════════════════════════════════════════════════════════════════════════ */
 

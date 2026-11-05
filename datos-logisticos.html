@@ -325,7 +325,12 @@ function faltantesK(p){
   if (p.grupo === "Nacionales") req.push(["codCaja","código de caja o funda"],["pesoCaja","peso de caja o funda vacía"],["sep","separadores"],["filmU","film stretch"]);
   return req.filter(([k]) => SIN_DATO(p[k]));
 }
-const NOMBRE_CAMPO = k => (faltantesK({grupo:"Nacionales"}).find(x=>x[0]===k)||[k,k])[1];
+/* Los datos que mide Control de Calidad: si faltan, se le piden a Antonella
+   con un botón (Claudia, 05/11/2026). El servidor tiene la misma lista en
+   DATOS_CALIDAD (lib/avisos-datos-logisticos.js). */
+const DATOS_CALIDAD = ["pesoPT","uL","uA","uH","unx","cL","cA","cH","pesoCaja","porPiso","estiba","unPal","sep","filmU"];
+const faltanDeCalidad = p => faltantesK(p).filter(([k]) => DATOS_CALIDAD.includes(k) && !(p.noAplica||[]).includes(k));
+const NOMBRE_CAMPO = k =>(faltantesK({grupo:"Nacionales"}).find(x=>x[0]===k)||[k,k])[1];
 
 /* ---------- 6. Alertas de valores fuera de lo normal ---------- */
 const PESO_MAX_PALLET = 1000, ALTO_MAX_PALLET = 2.2, TOLERANCIA_BASE = 1.10;
@@ -818,7 +823,7 @@ const docVigente=(p,tipo)=>(p.documentos||[]).find(d=>d.tipo===tipo&&d.vigente);
 function ficha(sku){
   const p=productos.find(x=>x.sku===sku);if(!p)return;
   const cp=calc(p),f=faltantes(p),m=(a,b,c)=>(a||b||c)?`${fmt(a)} × ${fmt(b)} × ${fmt(c)}`:null;
-  const falta=loQueFaltaParaVentas(p);
+  const falta=loQueFaltaParaVentas(p), fCal=faltanDeCalidad(p), mp=p.medidasPedidas;
   modal(`<div class="md-cab"><div><div class="sku">${esc(p.sku)}</div><div style="font-weight:600;margin-top:4px">${esc(p.desc)}</div>
       <div class="pag-sub" style="margin:2px 0 0">${esc(p.grupo||"")}${p.cat?" · "+esc(p.cat):""} · vida útil ${fmt(p.vida)||"—"} meses ${p.activo===false?'· <span class="bg" style="background:var(--redL);color:var(--red)">Dado de baja</span>':""} ${sello(p)}</div></div>
       <button class="btn sm" data-x>✕ Cerrar</button></div>
@@ -869,6 +874,9 @@ function ficha(sku){
     ${f.length?`<div class="ctx-help warn" style="margin-top:14px;display:block">⚠ Datos pendientes: ${puedeEditar()?faltantesK(p).filter(([k])=>!(p.noAplica||[]).includes(k)).map(([k,t])=>`<span class="bg" style="background:var(--srf);color:var(--wrn);margin:2px">${esc(t)} <button class="btn sm" data-na="${k}" title="Marcar que este dato no corresponde a este producto">no aplica</button></span>`).join(" "):f.join(", ")}</div>`:""}
     ${(p.noAplica||[]).length?`<p class="pag-sub" style="margin:4px 0 8px">No aplica: ${(p.noAplica).map(k=>`${esc(NOMBRE_CAMPO(k))}${puedeEditar()?` <a href="#" data-sina="${k}">(restaurar)</a>`:""}`).join(", ")}</p>`:""}
     ${desestimadas(p).length?`<p class="pag-sub" style="margin:4px 0 8px">Alertas desestimadas: ${desestimadas(p).map(k=>`${esc(NOMBRE_ALERTA[k])}${puedeEditar()?` <a href="#" data-redes="${k}">(volver a mostrar)</a>`:""}`).join(", ")}</p>`:""}
+    ${fCal.length&&(puedeEditar()||mp)?`<div class="ctx-help" style="display:block;margin-top:10px">📏 Medidas y pesos que completa Control de Calidad: falta${fCal.length>1?"n":""} ${esc(fCal.map(([,t])=>t).join(", "))}.
+      ${mp&&mp.en?`<div style="margin-top:4px;font-size:12.5px;color:var(--txS)">Se le pidieron a ${esc((mp.para||[]).join(", ")||"Antonella")} el ${fdt(mp.en)}${mp.por?` (pidió ${esc(mp.por)})`:""}.</div>`:""}
+      ${puedeEditar()?`<div style="margin-top:6px"><button class="btn sm" id="pedirMedidas" style="background:var(--vio);color:#fff">📏 ${mp&&mp.en?"Volver a enviar a Antonella":"Enviar a Antonella para que los complete"}</button></div>`:""}</div>`:""}
     ${p.nota?`<div class="ctx-help">📝 ${esc(p.nota)}</div>`:""}
     ${p.actualizadoPor?`<p class="pag-sub">Última modificación: ${esc(p.actualizadoPor)} · ${fdt(p.actualizadoEn)}</p>`:""}
 
@@ -901,6 +909,7 @@ function ficha(sku){
   if($("#nuevoReg"))$("#nuevoReg").onclick=()=>formRegistro(p);
   if(puedeEditar()){$("#edit").onclick=()=>formulario(p);$("#dup").onclick=()=>formulario(null,p);$("#baja").onclick=()=>baja(p);}
   if($("#aRevision"))$("#aRevision").onclick=()=>mandarARevision(p);
+  if($("#pedirMedidas"))$("#pedirMedidas").onclick=()=>pedirMedidas(p);
   if($("#aprobar"))$("#aprobar").onclick=()=>aprobarFicha(p);
   if($("#devolver"))$("#devolver").onclick=()=>devolverFicha(p);
 }
@@ -934,6 +943,16 @@ async function mandarARevision(p){
       ?"Quedó esperando revisión y se avisó por correo a "+((r.para||[]).join(", ")||"quien revisa")+", con la ficha adjunta."
       :"Quedó esperando revisión, pero el correo no salió: "+(r.motivo||"revisá la configuración de correo")+". Avisale vos.",
       r.enviado?"success":"warn");
+  }catch(e){alert(e.message);}
+}
+async function pedirMedidas(p){
+  const faltan=faltanDeCalidad(p).map(([,t])=>t);
+  const nota=prompt(`Se le manda un correo a Antonella para que complete en el SKU ${p.sku}:\n${faltan.join(", ")}\n\nSi querés, agregá una nota (o dejalo vacío y Aceptar):`,"");
+  if(nota===null)return;
+  try{
+    const d=await api(`/productos/${encodeURIComponent(p.sku)}/medidas`,{method:"POST",body:JSON.stringify({nota})});
+    reemplazar(d.producto);cerrar();
+    aviso("Se le pidió por correo a "+((d.medidas&&d.medidas.para)||[]).join(", ")+" que complete las medidas y pesos del SKU "+p.sku+".","success");
   }catch(e){alert(e.message);}
 }
 async function aprobarFicha(p){
