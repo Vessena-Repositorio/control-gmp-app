@@ -577,7 +577,7 @@ const fila=(t,v,u)=>`<dt>${t}</dt><dd>${v===null||v===undefined||v===""?"—":es
 const LISTA_CATEGORIA=["","COMPONENTES","CONSUMIBLES","ENVASES PRODUCIDOS","FILMS","GRANELES","MATERIAS PRIMAS","PRODUCTOS TERMINADOS","RECURSO PRODUCCIÓN","TERCEROS"];
 const LISTA_LINEA=["","COSMETICA","HIGIENE","HIGIENE INDUSTRIAL","HIGIENE PERSONAL","MARCA PROPIA"];
 const LISTA_SUBLINEA=["","ALCOHOLES","DETER LAVAVAJILLA","ENVASES","ENVASES RETORNABLES","HIGIENE SANITARIO","JABON EN BARRA","JABON TOCADOR PAST","JABON TOCADOR LIQ","JABON LIQUIDO","JABON ROPA 3 EN 1","LIMPIADORES ESPECIFICOS","LIMPIADORES LIQUIDOS","PAÑALES INFANTILES","PAPEL HIGIENICO","PERFUMADORES","POLVO DE LAVAR","PROTECCIÓN FEMENINA","PULIDORES CREMOSO Y POLVO","SOLUCIÓN DE HIPOCLORITO","SUAVIZANTE DE ROPA"];
-const LISTA_FAMILIA=["","AXION","BREF","CLEAN DAY","CONEJO","CRISTAL","CLERMONT","DEFINITY","DEMAS","DEVOTO","EL DORADO","FABULOSO","KEEPER","LEADER PRICE","M MAX","MARCAS PROPIAS","MAS","NATURAL BABY","NATURALMENTE","OKEY","OTROS","PERSIL","PLASTICOS","PLUMA","PRECIO LIDER","SAPOLIO","SUPREMO HOGAR","TA-TA","TIENDA INGLESA","TITAN"];
+const LISTA_FAMILIA=["","AXION","BREF","CLEAN DAY","CONEJO","CRISTAL","CLERMONT","DEFINITY","DEMAS","DEVOTO","EL DORADO","FABULOSO","KEEPER","LEADER PRICE","M MAX","MARCAS PROPIAS","MAS","NATURAL BABY","NATURALMENTE","OKEY","OTROS","PERSIL","PLASTICOS","PLUMA","PRECIO LIDER","SAPOLIO","SOMAT","SUPREMO HOGAR","TA-TA","TIENDA INGLESA","TITAN"];
 const LISTA_UM=["","Unidad","CX3","CX4","CX5","CX6","CX7","CX8","CX10","CX12","CX15","CX18","CX20","CX24","CX28","CX30","CX32","CX36","CX48","CX60","CX72","CX80","FX1","FX2","FX3","FX4","FX6","FX8","FX9","FX12","FX15","FX16","FX18","FX24","FX32","DA","WD","GR","HR","KG","L","MO","WM","Mt","MG","ML","MJ","WK","EA"];
 const LISTA_TIPO_PRODUCTO=["","Artículo","Recurso","Servicio","Tipo de gasto"];
 const LISTA_IMPUESTO=["","IVA","IVA EN SUSPENSO","EVA EXPORTACIONES Y ASIMILADAS","IVA NO FACTURABLE","IVA OBRA CIVIL","IVA PERCIBIDO","IVA PORCENTUAL","IVA TASA MANUAL"];
@@ -598,6 +598,8 @@ const CAMPOS=[{k:"sku",t:"SKU"},{k:"desc",t:"Descripción",cls:"a2"},{k:"grupo",
   {k:"tipoProducto",t:"Tipo de producto",op:LISTA_TIPO_PRODUCTO},{k:"categoriaImpuesto",t:"Categoría del impuesto",op:LISTA_IMPUESTO},{k:"impuestoCV",t:"Impuesto compra/venta",op:LISTA_IMPUESTO_CV},
   {k:"msp",t:"Lleva habilitación MSP",op:["","Si","No"]},
   {k:"nota",t:"Nota",area:1,cls:"a3"}];
+/** Para comparar marca y familia sin mayúsculas, tildes, guiones ni espacios: "Ta Ta" = "TA-TA". */
+const claveMarca=t=>String(t||"").normalize("NFD").replace(/[^A-Za-z0-9]/g,"").toUpperCase();
 function formulario(p,base){
   const LIMPIAR=["sku","ean","dun","estadoAlta","altaFecha","altaPor","modificado","modificadoPor","packsLM","packsV3","msp","mspNum","mspVence"];
   const copia=base?(()=>{const c={...base};LIMPIAR.forEach(k=>delete c[k]);c.activo=true;c.copiaDe=base.sku;return c;})():null;
@@ -609,11 +611,13 @@ function formulario(p,base){
     return `<label class="fd ${c.cls||""}"><span>${c.t}</span><input class="in" name="${c.k}" ${c.tipo==="date"?'type="date"':""} ${c.n?'inputmode="decimal"':""} value="${esc(typeof v==="number"?String(v).replace(".",","):v)}" ${c.k==="sku"&&!nuevo?"readonly":""}></label>`;};
   /* Los desplegables de clasificación salen de la plantilla de Finanzas: lo que
      se elige acá es lo que la ficha acepta. Lo que ya estaba cargado no se
-     pierde aunque no figure en la lista. */
+     pierde aunque no figure en la lista. SOMAT se ofrece siempre, aunque la
+     plantilla no lo tenga (Claudia, 05/11/2026). */
   const CAMPOS_FORM=CAMPOS.map(c=>{
     const l=LISTAS&&LISTAS[c.k];
     if(!l)return c;
     const v=p[c.k], op=["",...l];
+    if(c.k==="familia"&&!op.includes("SOMAT")){op.push("SOMAT");op.sort((a,b)=>a.localeCompare(b,"es"));}
     if(v&&!op.includes(v))op.push(v);
     return Object.assign({},c,{op});
   });
@@ -646,6 +650,20 @@ function formulario(p,base){
       e?el.setAttribute("aria-invalid","true"):el.removeAttribute("aria-invalid");};
     el.addEventListener("input",ver);ver();};
   chequeo("ean",[13],"EAN13");chequeo("dun",[14],"DUN14");
+  // Familia: si está vacía se completa con la opción de la lista que coincida con la marca; se puede cambiar a mano y nunca pisa lo elegido
+  const elFam=f.elements.familia, elMarca=f.elements.marca, notaFam=document.createElement("small");
+  notaFam.style.cssText="display:block;font-size:11px;color:var(--txS);margin-top:2px;text-transform:none;letter-spacing:0;font-weight:400";
+  elFam.parentNode.appendChild(notaFam);
+  let famAuto=false;
+  const autoFam=()=>{
+    if(elFam.value&&!famAuto)return;
+    const m=claveMarca(elMarca.value), o=m&&[...elFam.options].find(x=>claveMarca(x.value)===m);
+    elFam.value=o?o.value:"";famAuto=!!o;
+    notaFam.textContent=o?"Completada desde la marca. Se puede cambiar.":"";};
+  // Al salir del campo y no al escribir: "Mas Color" no debe quedar en la familia MAS a mitad de camino
+  elMarca.addEventListener("change",autoFam);
+  elFam.addEventListener("change",()=>{famAuto=false;notaFam.textContent="";});
+  autoFam();
   f.addEventListener("input",e=>{if(["unx","porPiso","estiba"].includes(e.target.name)){unPalManual=false;autoUP();}});
   autoUP();
   const actAl=()=>{const a=alertas(leer());$("#alertas").innerHTML=a.length?`<div class="ctx-help warn">⚠ <span>Revisá: ${a.map(esc).join(" ")}</span></div>`:"";};
