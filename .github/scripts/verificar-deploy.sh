@@ -57,6 +57,16 @@ for i in $(seq 1 "$INTENTOS"); do
     [ -n "$ACTUAL" ] && VISTA="$ACTUAL"
 
     if [ "$ACTUAL" = "$ESPERADA" ]; then
+        # Una migracion frenada deja el sitio en pie pero sin avisos ni
+        # replicas, y el deploy daba verde igual: la 069 estuvo frenada del
+        # 02/11 al 05/11/2026 sin que nadie se enterara. Eso no se arregla
+        # esperando: se corta y se muestra el motivo.
+        MIGRA=$(printf '%s' "$SALUD" | sed -n 's/.*"migraciones":"\([^"]*\)".*/\1/p')
+        if [ "${MIGRA#error}" != "$MIGRA" ]; then
+            echo "FALLO — corriendo $ESPERADA, pero las migraciones no se aplicaron:"
+            echo "$MIGRA"
+            exit 1
+        fi
         # Recien con la version correcta arriba tiene sentido preguntar si esta
         # sana: preguntarselo al contenedor viejo no dice nada del nuevo.
         RESPUESTA=$(curl -s -w $'\n%{http_code}' --max-time 10 \

@@ -1,17 +1,10 @@
 -- ============================================================================
--- Datos Logisticos: el pedido de medidas vuelve a Gloria hasta terminar la prueba
+-- Sin efecto: la reemplaza la 074
 -- ============================================================================
 --
--- La 072 lo devolvio a Antonella antes de tiempo: Claudia (05/11/2026) queria
--- volver "cuando termine la prueba". Mismo cambio que la 071. Al terminar va
--- otra migracion al reves, como la 072.
+-- Pasaba el pedido de medidas de Datos Logisticos entre Antonella y Gloria
+-- (05/11/2026), pero elegia cualquier usuario con ese correo, y cada persona
+-- tiene uno por sistema del que vino. Nunca llego a aplicarse: la 069 frenaba
+-- todas las siguientes. La 074 hace el cambio eligiendo el usuario activo.
 
-UPDATE notificacion_supervisores s
-   SET usuario_id = g.id,
-       nota = 'prueba del 05/11/2026: en lugar de Antonella'
-  FROM usuarios a, usuarios g
- WHERE s.recurso = 'datos-logisticos'
-   AND s.notificacion = 'medidas'
-   AND s.usuario_id = a.id
-   AND lower(a.usuario) = 'antonella.nunez@vessena.com.uy'
-   AND lower(g.usuario) = 'gloria.nunez@vessena.com.uy';
+SELECT 1;

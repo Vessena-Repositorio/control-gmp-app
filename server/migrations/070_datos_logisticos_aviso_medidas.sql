@@ -8,10 +8,12 @@
 --
 -- El boton manda el aviso 'medidas' a quien este cargado aca.
 
+-- Un solo usuario: el activo de Antonella, el del portal si hay. Cada persona
+-- tiene un usuario por sistema del que vino (05/11/2026).
 INSERT INTO notificacion_supervisores (recurso, notificacion, usuario_id, nota)
-SELECT 'datos-logisticos', 'medidas', u.id, n.nota
-FROM (VALUES
-    ('antonella.nunez@vessena.com.uy', 'completa medidas y pesos')
-) AS n(usuario, nota)
-JOIN usuarios u ON lower(u.usuario) = n.usuario
+SELECT 'datos-logisticos', 'medidas', u.id, 'completa medidas y pesos'
+FROM usuarios u
+WHERE lower(u.usuario) = 'antonella.nunez@vessena.com.uy' AND u.activo
+ORDER BY (u.origen = 'vessena') DESC, u.id
+LIMIT 1
 ON CONFLICT (recurso, notificacion, usuario_id) DO NOTHING;

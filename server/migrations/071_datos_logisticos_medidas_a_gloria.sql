@@ -1,21 +1,10 @@
 -- ============================================================================
--- Datos Logisticos: el pedido de medidas le llega a Gloria, para probarlo
+-- Sin efecto: la reemplaza la 074
 -- ============================================================================
 --
--- Claudia (05/11/2026) quiere probar el boton "Enviar a Antonella" y Antonella
--- no trabaja hoy. Mientras tanto el aviso 'medidas' (migracion 070) va a
--- Gloria en lugar de Antonella.
---
--- Se cambia la persona y no se borra la fila: un DELETE en una migracion se
--- frena en el deploy. Para volver a Antonella va otra migracion que haga el
--- cambio al reves.
+-- Pasaba el pedido de medidas de Datos Logisticos entre Antonella y Gloria
+-- (05/11/2026), pero elegia cualquier usuario con ese correo, y cada persona
+-- tiene uno por sistema del que vino. Nunca llego a aplicarse: la 069 frenaba
+-- todas las siguientes. La 074 hace el cambio eligiendo el usuario activo.
 
-UPDATE notificacion_supervisores s
-   SET usuario_id = g.id,
-       nota = 'prueba del 05/11/2026: en lugar de Antonella'
-  FROM usuarios a, usuarios g
- WHERE s.recurso = 'datos-logisticos'
-   AND s.notificacion = 'medidas'
-   AND s.usuario_id = a.id
-   AND lower(a.usuario) = 'antonella.nunez@vessena.com.uy'
-   AND lower(g.usuario) = 'gloria.nunez@vessena.com.uy';
+SELECT 1;

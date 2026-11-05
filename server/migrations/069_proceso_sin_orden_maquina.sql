@@ -14,16 +14,21 @@ DO $$
 DECLARE
     afectados INT;
 BEGIN
+    -- Las que ya tienen la clave nueva se dejan afuera al armar la tabla. Antes
+    -- se sacaban despues con un borrado sobre esta tabla temporal, y el control
+    -- de migraciones destructivas no distingue una temporal: la frenaba y, con
+    -- ella, a todas las siguientes (05/11/2026).
     CREATE TEMP TABLE proceso_reorden_maq ON COMMIT DROP AS
-    SELECT id,
-           orden AS vieja,
-           lote,
-           'S/OP ' || coalesce(nullif(trim(maquina), ''), 'sin máquina')
-                   || ' · ' || coalesce(nullif(trim(lote), ''), 'sin lote') AS nueva
-    FROM proceso_controles
-    WHERE orden LIKE 'S/OP %';
-
-    DELETE FROM proceso_reorden_maq WHERE nueva = vieja;
+    SELECT * FROM (
+        SELECT id,
+               orden AS vieja,
+               lote,
+               'S/OP ' || coalesce(nullif(trim(maquina), ''), 'sin máquina')
+                       || ' · ' || coalesce(nullif(trim(lote), ''), 'sin lote') AS nueva
+        FROM proceso_controles
+        WHERE orden LIKE 'S/OP %'
+    ) t
+    WHERE nueva <> vieja;
 
     SELECT count(*) INTO afectados FROM proceso_reorden_maq;
     IF afectados = 0 THEN

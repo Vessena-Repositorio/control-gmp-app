@@ -1,16 +1,10 @@
 -- ============================================================================
--- Datos Logisticos: el pedido de medidas vuelve a Antonella
+-- Sin efecto: la reemplaza la 074
 -- ============================================================================
 --
--- Deshace la migracion 071, que lo habia pasado a Gloria para que Claudia
--- probara el boton (05/11/2026). Mismo cambio, al reves.
+-- Pasaba el pedido de medidas de Datos Logisticos entre Antonella y Gloria
+-- (05/11/2026), pero elegia cualquier usuario con ese correo, y cada persona
+-- tiene uno por sistema del que vino. Nunca llego a aplicarse: la 069 frenaba
+-- todas las siguientes. La 074 hace el cambio eligiendo el usuario activo.
 
-UPDATE notificacion_supervisores s
-   SET usuario_id = a.id,
-       nota = 'completa medidas y pesos'
-  FROM usuarios a, usuarios g
- WHERE s.recurso = 'datos-logisticos'
-   AND s.notificacion = 'medidas'
-   AND s.usuario_id = g.id
-   AND lower(g.usuario) = 'gloria.nunez@vessena.com.uy'
-   AND lower(a.usuario) = 'antonella.nunez@vessena.com.uy';
+SELECT 1;
