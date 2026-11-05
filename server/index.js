@@ -102,6 +102,12 @@ const HUELLA = (() => {
     }
 })();
 
+/* Como terminaron las migraciones al arrancar. Una que falla deja el sitio en
+ * pie pero sin avisos ni replicas, y solo se veia en el log del contenedor: el
+ * 05/11/2026 el pedido de medidas de Datos Logisticos seguia sin destinatario
+ * y desde afuera no habia forma de saber si la migracion se habia aplicado. */
+let MIGRACIONES = 'pendientes';
+
 const app = express();
 app.disable('x-powered-by');
 // 25mb y no 2: el snapshot mensual de devoluciones lleva el detalle por SKU, y
@@ -128,7 +134,7 @@ app.get('/api/salud', async (_req, res) => {
         await pool.query('SELECT 1');
         // 'fotos' dice si sharp esta disponible: sin el, las fotos se guardarian
         // sin comprimir y la base creceria al doble sin que nadie se entere.
-        res.json({ estado: 'ok', base: 'conectada', fotos: hayCompresion() ? 'comprimidas' : 'sin comprimir', ...HUELLA });
+        res.json({ estado: 'ok', base: 'conectada', fotos: hayCompresion() ? 'comprimidas' : 'sin comprimir', migraciones: MIGRACIONES, ...HUELLA });
     } catch (err) {
         res.status(503).json({
             estado: 'sitio ok, api degradada',
@@ -238,6 +244,7 @@ function arrancar() {
 
     migrar()
         .then(async () => {
+            MIGRACIONES = 'ok';
             // Un sync que estaba corriendo cuando se reinicio el contenedor
             // quedo con estado 'corriendo' y nadie lo va a cerrar. Como
             // /api/estado mira la ultima corrida de cada dominio, ese dominio
@@ -322,6 +329,7 @@ function arrancar() {
             );
         })
         .catch((err) => {
+            MIGRACIONES = `error: ${err.message}`;
             // Migracion fallida = la API queda inservible, pero el sitio sigue
             // sirviendo los .html. Se ve en GET /api/salud.
             console.error('[arranque] no se pudo preparar la base:', err.message);
