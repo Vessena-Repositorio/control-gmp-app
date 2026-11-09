@@ -25,7 +25,7 @@ import { consultar, enTransaccion } from '../db.js';
 import { exigirPermiso } from '../lib/acceso.js';
 import { puede } from '../lib/permisos.js';
 import { guardar, abrir, extension, hayAlmacen, MAX_BYTES, TIPOS } from '../lib/almacen-documentos.js';
-import { avisarRevision, avisarFinanzas, avisarVentas, camposFicha, cambiosDeFicha, loQueFalta, DIAS_AVISO_MSP } from '../lib/avisos-datos-logisticos.js';
+import { avisarRevision, avisarFinanzas, avisarVentas, avisarMedidas, camposFicha, cambiosDeFicha, loQueFalta, DIAS_AVISO_MSP } from '../lib/avisos-datos-logisticos.js';
 
 export const rutasDatosLogisticos = Router();
 
@@ -358,6 +358,37 @@ rutasDatosLogisticos.post('/productos/:sku/revision', cargar, async (req, res, n
 });
 
 /**
+ * POST /api/datos-logisticos/productos/:sku/medidas  { nota }
+ * Le pide a Antonella que complete medidas y pesos: Gloria arma la ficha y esos
+ * datos los mide Control de Calidad (Claudia, 05/11/2026). Queda anotado en el
+ * producto a quien se le pidio y cuando, para que la pantalla lo muestre.
+ */
+rutasDatosLogisticos.post('/productos/:sku/medidas', cargar, async (req, res, next) => {
+    const sku = texto(req.params.sku, 60);
+    const nota = texto(req.body?.nota, 1000);
+    const quien = req.usuario.nombre || req.usuario.usuario;
+    try {
+        const { rows: ya } = await consultar('SELECT 1 FROM dl_productos WHERE sku = $1', [sku]);
+        if (!ya.length) throw fallo(404, 'No hay ningún producto con ese código');
+        const medidas = await avisarMedidas(sku, { pidio: quien, nota });
+        if (!medidas.enviado) throw fallo(409, `No se mandó el pedido: ${medidas.motivo || 'revisá la configuración de correo'}`);
+        await enTransaccion(async (c) => {
+            await c.query(
+                `UPDATE dl_productos
+                    SET extra = extra || jsonb_build_object('medidasPedidas',
+                                jsonb_build_object('por', $2::text, 'en', now(), 'para', $3::jsonb, 'faltan', $4::jsonb))
+                  WHERE sku = $1`,
+                [sku, quien, JSON.stringify(medidas.para), JSON.stringify(medidas.faltan)]
+            );
+            await registrar(c, req, 'medidas_pedidas', sku,
+                `a ${medidas.para.join(', ')} · ${medidas.faltan.join(', ')}${nota ? ` · ${nota}` : ''}`);
+        });
+        const { rows } = await consultar(`${SELECT_PRODUCTO} WHERE p.sku = $1`, [sku]);
+        res.json({ ok: true, medidas, producto: aPantalla(rows[0]) });
+    } catch (err) { responder(err, res, next); }
+});
+
+/**
  * POST /api/datos-logisticos/productos/:sku/aprobar
  * La aprueba Antonella o Claudia. Manda la ficha a Finanzas en el momento; si
  * ya habia salido antes, va como actualizacion con el detalle de que cambio.
@@ -624,20 +655,51 @@ rutasDatosLogisticos.delete('/registros/:id', administrar, async (req, res, next
    Bitacora
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/** GET /api/datos-logisticos/actividad?sku=&dias=90 */
+/** GET /api/datos-logisticos/actividad?sku=&dias=90&q= */
 rutasDatosLogisticos.get('/actividad', leer, async (req, res, next) => {
     try {
         const sku = texto(req.query.sku, 60);
-        const dias = Math.min(Math.max(Number(req.query.dias) || 90, 1), 1095);
+        // `dias` 0 es "toda la historia": sin eso no habia forma de llegar a un
+        // movimiento de hace mas de tres años.
+        const pedidos = Number(req.query.dias);
+        const todo = pedidos === 0;
+        const dias = todo ? 0 : Math.min(Math.max(pedidos || 90, 1), 3650);
+
+        /* Buscando se mira TODA la tabla, sin fechas: cuando se busca quien
+         * tocó un SKU, la fecha es justamente lo que no se sabe (Claudia,
+         * 22/10/2026: "no veo los controles de setiembre"). Se compara sin
+         * tildes ni signos, igual que clave_busqueda en la base: primero se
+         * saca la tilde y después los signos, que al revés la letra acentuada
+         * se perdía entera y el nombre no se encontraba nunca. */
+        const q = String(req.query.q || '')
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 60);
+        const buscando = q !== '';
+        const limite = 1000;
+
+        // count(*) OVER () cuenta todo lo que coincide, antes del LIMIT: es lo
+        // que le permite a la pantalla avisar que hay mas de lo que muestra.
         const { rows } = await consultar(
-            `SELECT ts, usuario, rol, accion, sku, detalles
+            `SELECT ts, usuario, rol, accion, sku, detalles,
+                    count(*) OVER ()::int AS total_filtrado
                FROM dl_actividad
-              WHERE ts >= now() - ($1 || ' days')::interval
+              WHERE ($3 OR $4 OR ts >= now() - ($1 || ' days')::interval)
                 AND ($2 = '' OR sku = $2)
+                AND ($5 = '' OR clave_busqueda(accion)   LIKE '%' || $5 || '%'
+                             OR clave_busqueda(usuario)  LIKE '%' || $5 || '%'
+                             OR clave_busqueda(rol)      LIKE '%' || $5 || '%'
+                             OR clave_busqueda(sku)      LIKE '%' || $5 || '%'
+                             OR clave_busqueda(detalles) LIKE '%' || $5 || '%')
               ORDER BY ts DESC
-              LIMIT 500`,
-            [String(dias), sku]
+              LIMIT ${limite}`,
+            [String(dias), sku, buscando, todo, q]
         );
-        res.json({ ok: true, actividad: rows });
+        res.json({
+            ok: true,
+            actividad: rows,
+            total: rows.length ? rows[0].total_filtrado : 0,
+            limite, dias, buscando,
+            q: buscando ? String(req.query.q || '').trim().slice(0, 60) : '',
+        });
     } catch (err) { next(err); }
 });

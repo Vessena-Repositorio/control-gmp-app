@@ -976,26 +976,39 @@ function renderLista() {
   const filtroEstado = document.getElementById('filtroEstado').value;
   const filtroTipo   = document.getElementById('filtroTipo').value;
   const filtroCrit   = document.getElementById('filtroCriticidad').value;
-  const filtroBuscar = document.getElementById('filtroBuscar').value.toLowerCase();
+  /* Se compara sin tildes ni signos: "produccion" tiene que encontrar
+     "Producción" y "CC 2026 014" el cambio "CC-2026-014". Antes había que
+     acertarle a la tilde y al guión (Claudia, 22/10/2026: "no veo los
+     controles de setiembre"). */
+  const claveBusqueda = s => String(s == null ? '' : s)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]/g, '');
+  const filtroBuscar = claveBusqueda(document.getElementById('filtroBuscar').value);
 
   let ccs = db.ccs.filter(cc => {
     if (filtroEstado && cc.estado !== filtroEstado) return false;
     if (filtroTipo && cc.tipoCambio !== filtroTipo) return false;
     if (filtroCrit && cc.criticidad !== filtroCrit) return false;
     if (filtroBuscar) {
-      const h = ((cc.numero||'') + ' ' + (cc.titulo||'') + ' ' + (cc.departamento||'')).toLowerCase();
+      const h = claveBusqueda((cc.numero||'') + ' ' + (cc.titulo||'') + ' ' + (cc.departamento||''));
       if (!h.includes(filtroBuscar)) return false;
     }
     return true;
   });
 
   const list = document.getElementById('ccList');
+  /* Cuántos se ven de cuántos hay: una lista corta es el filtro, no el final
+     de los datos. El servidor manda todos los controles de cambio, de todos
+     los años (Claudia, 22/10/2026). */
+  const resumen = `<div class="cc-item-meta" style="padding:6px 10px">${filtroBuscar
+    ? `🔎 ${ccs.length} de ${db.ccs.length} cambio(s), buscando en todo el historial`
+    : `${ccs.length} de ${db.ccs.length} cambio(s)`}</div>`;
   if (ccs.length === 0) {
-    list.innerHTML = '<div class="cc-empty">Sin resultados.</div>';
+    list.innerHTML = resumen + '<div class="cc-empty">Sin resultados.</div>';
     return;
   }
 
-  list.innerHTML = ccs.map(cc => `
+  list.innerHTML = resumen + ccs.map(cc => `
     <div class="cc-item${cc.id === ccActivaId ? ' active' : ''}" onclick="abrirCC(${cc.id})">
       <div class="cc-item-num">${cc.numero}</div>
       <div class="cc-item-title">${cc.titulo || '—'}</div>

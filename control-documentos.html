@@ -152,6 +152,12 @@ const API='/api/control-documentos';
 const S={docs:[],permisos:[],filtro:'todos',sel:null,usuario:'',abiertos:new Set(),cerrados:new Set()};
 
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+/* La clave con la que se compara al buscar: minúscula, sin tildes, sin signos y
+   sin espacios, igual que clave_busqueda en la base. El orden importa: primero
+   se le saca la tilde a la letra y después se limpian los signos; al revés la
+   letra acentuada se perdía entera —"Validación" quedaba "validacin"— y el
+   documento no se encontraba nunca (22/10/2026). */
+const claveBusqueda=s=>String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
 function toast(m,err){const t=document.getElementById('toast');t.textContent=m;t.className='toast on'+(err?' err':'');clearTimeout(t._t);t._t=setTimeout(()=>t.className='toast',5000)}
 function dma(f){return f?String(f).slice(8,10)+'/'+String(f).slice(5,7)+'/'+String(f).slice(0,4):'—'}
 function dmaHora(v){if(!v)return'—';const d=new Date(v);if(isNaN(d))return String(v);const p=n=>String(n).padStart(2,'0');
@@ -275,7 +281,13 @@ function pintarListado(){
     +k('porvencer','warn','Vencen en 90 días',c.porvencer)+k('vencidos','crit','Vencidos',c.vencido)
     +k('curso','','En curso',c.curso)+(puede('administrar')?k('sinarch','','Vigentes sin archivo',c.sinarch):'');
 
-  const q=document.getElementById('buscar').value.trim().toLowerCase();
+  /* Se compara sin tildes ni signos: con 462 documentos, buscar "validacion"
+     tiene que encontrar "Validación" y "SOP SAN 052" tiene que encontrar
+     "SOP-SAN-052". Antes se comparaba en minúscula y nada más, así que había
+     que acertarle a la tilde y al guión (Claudia, 22/10/2026: "no veo los
+     controles de setiembre"). El helper es el mismo `normCargo` de más abajo,
+     con los signos también afuera. */
+  const q=claveBusqueda(document.getElementById('buscar').value);
   const area=document.getElementById('fArea').value,tipo=document.getElementById('fTipo').value;
   const lista=S.docs.filter(d=>{
     const s=situacion(d);
@@ -285,7 +297,7 @@ function pintarListado(){
     if(S.filtro==='curso'&&!d.en_curso_id)return false;
     if(S.filtro==='sinarch'&&!(d.vigente_id&&!d.vigente_con_archivo))return false;
     if(area&&d.area!==area)return false;if(tipo&&d.tipo!==tipo)return false;
-    return !q||d.codigo.toLowerCase().includes(q)||d.titulo.toLowerCase().includes(q);
+    return !q||claveBusqueda(d.codigo).includes(q)||claveBusqueda(d.titulo).includes(q);
   });
   // Agrupado por padre: el SOP (o la ESP) con sus registros, anexos,
   // listados y planes debajo. El padre se ve si coincide el o alguno de sus
@@ -315,10 +327,15 @@ function pintarListado(){
     filas+=fila(r,0,flecha).replace('</td><td>',hs.length?` <span class="chip mut" style="font-family:var(--f)">${hs.length}</span></td><td>`:'</td><td>');
     if(abierto)for(const h of (aMano||!filtrando?hs:hsVis))filas+=fila(h,1);
   }
-  document.getElementById('listado').innerHTML=n?`<div class="fila" style="justify-content:flex-end;margin-bottom:6px">
-      <button class="b sm" onclick="desplegarTodo(true)">Desplegar todo</button><button class="b sm" onclick="desplegarTodo(false)">Contraer todo</button></div>
+  /* Cuántos documentos coinciden de cuántos hay: un listado corto es el
+     filtro, no el final de los datos (Claudia, 22/10/2026). */
+  const resumen=`<div class="muted" style="font-size:11.5px">${q
+    ?`🔎 ${lista.length} de ${S.docs.length} documento(s), buscando «${esc(document.getElementById('buscar').value.trim())}» en todo el listado`
+    :`${lista.length} de ${S.docs.length} documento(s)`}</div>`;
+  document.getElementById('listado').innerHTML=n?`<div class="fila" style="justify-content:space-between;margin-bottom:6px">
+      ${resumen}<span><button class="b sm" onclick="desplegarTodo(true)">Desplegar todo</button><button class="b sm" onclick="desplegarTodo(false)">Contraer todo</button></span></div>
     <table><thead><tr><th>Código</th><th>Título</th><th>Versión</th><th>Vigencia</th><th>Vence</th><th>Situación</th></tr></thead><tbody>${filas}</tbody></table>`
-    :'<div class="muted">No hay documentos con ese filtro.</div>';
+    :`${resumen}<div class="muted">No hay documentos con ese filtro.</div>`;
 }
 
 // El padre de un derivado se lee del codigo: REG-SOP-AC-039-A -> SOP-AC-039,
@@ -1700,7 +1717,7 @@ const CARGO_POR_SECTOR={
   'ADMINISTRACION PLANTA':'Administracion','COMPRAS':'Asistente de Compras','PLANIFICACION':'Administrativo de Planta/Planificador',
   'LIMPIEZA':'Proveedores de limpieza','CLEANWAY':'Proveedores de limpieza',
 };
-const normCargo=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+const normCargo=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
 
 // --- Importacion del listado de personal con roles (PERSONAL_ACTIVO_ULTIMO,
 // 15/10/2026): la primera columna dice "SECTOR-ROL" ("LCC-ANALISTA",
@@ -1923,7 +1940,7 @@ async function importarMatriz(file){
 // un "Título" escrito distinto no tiene que dejar la columna afuera.
 const COLS={tipo:'tipo',prefijo:'prefijo',sufijo:'sufijo',codigo:'codigo',ver:'ver',titulo:'titulo',status:'status',
   redacta:'redacta',revisa:'revisa',aprueba:'aprueba','fecha entrada en vigencia':'vigencia','fecha proxima revision':'proxima',observaciones:'observaciones'};
-const clave=h=>String(h).normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim().toLowerCase();
+const clave=h=>String(h).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim().toLowerCase();
 let IMP=null;
 
 // La huella de la planilla queda en dc_importaciones. crypto.subtle no existe

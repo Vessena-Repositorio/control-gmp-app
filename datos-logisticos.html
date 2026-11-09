@@ -207,10 +207,19 @@ async function cargarProductos(){
   const d=await api("/productos");
   productos=(d.productos||[]).map(dePantalla);
 }
-async function cargarHistorial(){
-  try{const d=await api("/actividad?dias=365");
+/* El historial trae una tanda, no la historia entera, y antes eso no se decía
+   en ningún lado: la pantalla prometía "todo lo que se cargó, cambió, aprobó o
+   mandó por correo queda acá" y mostraba, como mucho, 400 de los 500 del último
+   año (Claudia, 22/10/2026: "no veo los controles de setiembre"). Ahora hay
+   selector de período, el servidor dice cuántos hay en total y buscar busca en
+   toda la historia, sin fechas. */
+let histAlcance={total:0,limite:0,buscando:false,q:"",dias:365};
+async function cargarHistorial(dias,texto){
+  const d365=(dias===undefined?365:dias);
+  try{const d=await api("/actividad?dias="+d365+(texto?"&q="+encodeURIComponent(texto):""));
     logs=(d.actividad||[]).map(a=>({ts:a.ts,usuario:a.usuario,accion:a.accion,entidad:a.sku?"SKU "+a.sku:"",detalle:a.detalles||""}));
-  }catch(e){logs=[];}
+    histAlcance={total:d.total||logs.length,limite:d.limite||0,buscando:!!d.buscando,q:d.q||"",dias:d365};
+  }catch(e){logs=[];histAlcance={total:0,limite:0,buscando:false,q:"",dias:d365};}
 }
 /* El artefacto registraba cada cosa en su propia colección; acá lo hace el
    servidor en dl_actividad, así que no hay nada que escribir desde la pantalla. */
@@ -316,7 +325,12 @@ function faltantesK(p){
   if (p.grupo === "Nacionales") req.push(["codCaja","código de caja o funda"],["pesoCaja","peso de caja o funda vacía"],["sep","separadores"],["filmU","film stretch"]);
   return req.filter(([k]) => SIN_DATO(p[k]));
 }
-const NOMBRE_CAMPO = k => (faltantesK({grupo:"Nacionales"}).find(x=>x[0]===k)||[k,k])[1];
+/* Los datos que mide Control de Calidad: si faltan, se le piden a Antonella
+   con un botón (Claudia, 05/11/2026). El servidor tiene la misma lista en
+   DATOS_CALIDAD (lib/avisos-datos-logisticos.js). */
+const DATOS_CALIDAD = ["pesoPT","uL","uA","uH","unx","cL","cA","cH","pesoCaja","porPiso","estiba","unPal","sep","filmU"];
+const faltanDeCalidad = p => faltantesK(p).filter(([k]) => DATOS_CALIDAD.includes(k) && !(p.noAplica||[]).includes(k));
+const NOMBRE_CAMPO = k =>(faltantesK({grupo:"Nacionales"}).find(x=>x[0]===k)||[k,k])[1];
 
 /* ---------- 6. Alertas de valores fuera de lo normal ---------- */
 const PESO_MAX_PALLET = 1000, ALTO_MAX_PALLET = 2.2, TOLERANCIA_BASE = 1.10;
@@ -480,18 +494,48 @@ function vMsp(){
 }
 
 /* ---------- Historial ---------- */
+const PERIODOS_HIST=[[30,"Último mes"],[90,"Últimos 3 meses"],[365,"Último año"],[1095,"Últimos 3 años"],[0,"Toda la historia"]];
 function vTrail(){
   $("#main").innerHTML=`<h1 class="pag">Historial</h1>
     <p class="pag-sub">Todo lo que se cargó, cambió, aprobó o mandó por correo queda acá, con quién y cuándo. Lo registra el servidor.</p>
-    <div class="card"><input type="search" class="in" id="tq" placeholder="Buscar por SKU, acción o persona" style="max-width:360px;margin-bottom:10px">
+    <div class="card">
+      <div class="fila" style="gap:8px;margin-bottom:8px;flex-wrap:wrap">
+        <input type="search" class="in" id="tq" placeholder="Buscar en toda la historia por SKU, acción o persona" style="max-width:360px">
+        <select class="in" id="tper" style="max-width:180px" title="Período">
+          ${PERIODOS_HIST.map(([d,l])=>`<option value="${d}"${d===histAlcance.dias?" selected":""}>${l}</option>`).join("")}
+        </select>
+      </div>
+      <div class="pag-sub" id="tcnt" style="margin-bottom:8px"></div>
       <div style="max-height:600px;overflow:auto" id="tlista"></div></div>`;
-  const pint=()=>{const q=($("#tq").value||"").toLowerCase();
-    const l=logs.filter(x=>!q||[x.accion,x.entidad,x.detalle,x.usuario].some(v=>v&&String(v).toLowerCase().includes(q)));
-    $("#tlista").innerHTML=l.slice(0,400).map(l2=>`<div class="usr-row" style="padding:7px 0;align-items:flex-start">
+
+  /* Lo que se ve y lo que hay: si la tanda llegó al tope, se dice, porque si no
+     uno cree que lo que falta no existe (Claudia, 22/10/2026). */
+  const pint=()=>{
+    const a=histAlcance;
+    const recortado=a.total>logs.length?` · hay ${a.total} en total, acotá el período o la búsqueda para ver el resto`:"";
+    $("#tcnt").innerHTML=a.buscando
+      ?`🔎 ${logs.length} movimiento(s) con «${esc(a.q)}» en toda la historia, sin filtro de fecha${recortado}`
+      :`${logs.length} movimiento(s) · ${esc((PERIODOS_HIST.find(p=>p[0]===a.dias)||[0,""])[1].toLowerCase())}${recortado}`;
+    $("#tlista").innerHTML=logs.map(l2=>`<div class="usr-row" style="padding:7px 0;align-items:flex-start">
       <span style="font-size:12.5px"><b>${esc(l2.accion)}</b>${l2.entidad?" · "+esc(l2.entidad):""}${l2.detalle?"<br><span style='color:var(--txS)'>"+esc(l2.detalle)+"</span>":""}</span>
       <span style="font-size:11.5px;color:var(--txS);white-space:nowrap">${esc(l2.usuario)} · ${fdt(l2.ts)}</span></div>`).join("")
-      ||`<p class="pag-sub">No hay movimientos que coincidan.</p>`;};
-  pint();$("#tq").oninput=pint;
+      ||`<p class="pag-sub">${a.buscando?"No hay movimientos que coincidan en toda la historia.":"No hay movimientos en este período."}</p>`;
+  };
+
+  // Buscando no se filtra por fecha: lo que se busca puede ser de hace años, y
+  // pedirle a alguien que adivine el mes no es buscar. Lo filtra el servidor.
+  const recargar=async()=>{
+    const texto=($("#tq").value||"").trim();
+    const dias=Number($("#tper").value);
+    $("#tcnt").textContent="Cargando…";
+    await cargarHistorial(texto?0:dias,texto);
+    pint();
+  };
+  // Un pedido por tecleo serían decenas: se espera a que termine de escribir.
+  let t=null;
+  $("#tq").oninput=()=>{clearTimeout(t);t=setTimeout(recargar,350);};
+  $("#tper").onchange=recargar;
+  pint();
 }
 
 /* ---------- Guía ---------- */
@@ -577,7 +621,7 @@ const fila=(t,v,u)=>`<dt>${t}</dt><dd>${v===null||v===undefined||v===""?"—":es
 const LISTA_CATEGORIA=["","COMPONENTES","CONSUMIBLES","ENVASES PRODUCIDOS","FILMS","GRANELES","MATERIAS PRIMAS","PRODUCTOS TERMINADOS","RECURSO PRODUCCIÓN","TERCEROS"];
 const LISTA_LINEA=["","COSMETICA","HIGIENE","HIGIENE INDUSTRIAL","HIGIENE PERSONAL","MARCA PROPIA"];
 const LISTA_SUBLINEA=["","ALCOHOLES","DETER LAVAVAJILLA","ENVASES","ENVASES RETORNABLES","HIGIENE SANITARIO","JABON EN BARRA","JABON TOCADOR PAST","JABON TOCADOR LIQ","JABON LIQUIDO","JABON ROPA 3 EN 1","LIMPIADORES ESPECIFICOS","LIMPIADORES LIQUIDOS","PAÑALES INFANTILES","PAPEL HIGIENICO","PERFUMADORES","POLVO DE LAVAR","PROTECCIÓN FEMENINA","PULIDORES CREMOSO Y POLVO","SOLUCIÓN DE HIPOCLORITO","SUAVIZANTE DE ROPA"];
-const LISTA_FAMILIA=["","AXION","BREF","CLEAN DAY","CONEJO","CRISTAL","CLERMONT","DEFINITY","DEMAS","DEVOTO","EL DORADO","FABULOSO","KEEPER","LEADER PRICE","M MAX","MARCAS PROPIAS","MAS","NATURAL BABY","NATURALMENTE","OKEY","OTROS","PERSIL","PLASTICOS","PLUMA","PRECIO LIDER","SAPOLIO","SUPREMO HOGAR","TA-TA","TIENDA INGLESA","TITAN"];
+const LISTA_FAMILIA=["","AXION","BREF","CLEAN DAY","CONEJO","CRISTAL","CLERMONT","DEFINITY","DEMAS","DEVOTO","EL DORADO","FABULOSO","KEEPER","LEADER PRICE","M MAX","MARCAS PROPIAS","MAS","NATURAL BABY","NATURALMENTE","OKEY","OTROS","PERSIL","PLASTICOS","PLUMA","PRECIO LIDER","SAPOLIO","SOMAT","SUPREMO HOGAR","TA-TA","TIENDA INGLESA","TITAN"];
 const LISTA_UM=["","Unidad","CX3","CX4","CX5","CX6","CX7","CX8","CX10","CX12","CX15","CX18","CX20","CX24","CX28","CX30","CX32","CX36","CX48","CX60","CX72","CX80","FX1","FX2","FX3","FX4","FX6","FX8","FX9","FX12","FX15","FX16","FX18","FX24","FX32","DA","WD","GR","HR","KG","L","MO","WM","Mt","MG","ML","MJ","WK","EA"];
 const LISTA_TIPO_PRODUCTO=["","Artículo","Recurso","Servicio","Tipo de gasto"];
 const LISTA_IMPUESTO=["","IVA","IVA EN SUSPENSO","EVA EXPORTACIONES Y ASIMILADAS","IVA NO FACTURABLE","IVA OBRA CIVIL","IVA PERCIBIDO","IVA PORCENTUAL","IVA TASA MANUAL"];
@@ -598,6 +642,8 @@ const CAMPOS=[{k:"sku",t:"SKU"},{k:"desc",t:"Descripción",cls:"a2"},{k:"grupo",
   {k:"tipoProducto",t:"Tipo de producto",op:LISTA_TIPO_PRODUCTO},{k:"categoriaImpuesto",t:"Categoría del impuesto",op:LISTA_IMPUESTO},{k:"impuestoCV",t:"Impuesto compra/venta",op:LISTA_IMPUESTO_CV},
   {k:"msp",t:"Lleva habilitación MSP",op:["","Si","No"]},
   {k:"nota",t:"Nota",area:1,cls:"a3"}];
+/** Para comparar marca y familia sin mayúsculas, tildes, guiones ni espacios: "Ta Ta" = "TA-TA". */
+const claveMarca=t=>String(t||"").normalize("NFD").replace(/[^A-Za-z0-9]/g,"").toUpperCase();
 function formulario(p,base){
   const LIMPIAR=["sku","ean","dun","estadoAlta","altaFecha","altaPor","modificado","modificadoPor","packsLM","packsV3","msp","mspNum","mspVence"];
   const copia=base?(()=>{const c={...base};LIMPIAR.forEach(k=>delete c[k]);c.activo=true;c.copiaDe=base.sku;return c;})():null;
@@ -609,11 +655,13 @@ function formulario(p,base){
     return `<label class="fd ${c.cls||""}"><span>${c.t}</span><input class="in" name="${c.k}" ${c.tipo==="date"?'type="date"':""} ${c.n?'inputmode="decimal"':""} value="${esc(typeof v==="number"?String(v).replace(".",","):v)}" ${c.k==="sku"&&!nuevo?"readonly":""}></label>`;};
   /* Los desplegables de clasificación salen de la plantilla de Finanzas: lo que
      se elige acá es lo que la ficha acepta. Lo que ya estaba cargado no se
-     pierde aunque no figure en la lista. */
+     pierde aunque no figure en la lista. SOMAT se ofrece siempre, aunque la
+     plantilla no lo tenga (Claudia, 05/11/2026). */
   const CAMPOS_FORM=CAMPOS.map(c=>{
     const l=LISTAS&&LISTAS[c.k];
     if(!l)return c;
     const v=p[c.k], op=["",...l];
+    if(c.k==="familia"&&!op.includes("SOMAT")){op.push("SOMAT");op.sort((a,b)=>a.localeCompare(b,"es"));}
     if(v&&!op.includes(v))op.push(v);
     return Object.assign({},c,{op});
   });
@@ -646,6 +694,28 @@ function formulario(p,base){
       e?el.setAttribute("aria-invalid","true"):el.removeAttribute("aria-invalid");};
     el.addEventListener("input",ver);ver();};
   chequeo("ean",[13],"EAN13");chequeo("dun",[14],"DUN14");
+  /* Familia: si está vacía se completa con la opción de la lista que coincida con la marca; se puede cambiar a mano.
+     Si la familia era la de la marca anterior, sigue a la marca nueva: al copiar un SKU de Clean Day y pasarlo a
+     Cristal quedaba CLEAN DAY (Claudia, 05/11/2026). Si quedan dos marcas distintas, avisa pero no bloquea. */
+  const elFam=f.elements.familia, elMarca=f.elements.marca, notaFam=document.createElement("small");
+  notaFam.style.cssText="display:block;font-size:11px;color:var(--txS);margin-top:2px;text-transform:none;letter-spacing:0;font-weight:400";
+  elFam.parentNode.appendChild(notaFam);
+  const FAM_NO_MARCA=["MARCASPROPIAS","OTROS","PLASTICOS"];
+  const famDe=marca=>{const m=claveMarca(marca);return m?[...elFam.options].find(x=>claveMarca(x.value)===m):null;};
+  let famAuto=false, marcaAntes=elMarca.value;
+  const notaDeFam=()=>{
+    const o=famDe(elMarca.value), fv=elFam.value;
+    const choca=o&&fv&&fv!==o.value&&!FAM_NO_MARCA.includes(claveMarca(fv));
+    notaFam.textContent=choca?`⚠ La marca es ${elMarca.value.trim()} y la familia ${fv}: revisá.`:famAuto?"Completada desde la marca. Se puede cambiar.":"";
+    notaFam.style.color=choca?"var(--red)":"var(--txS)";};
+  const autoFam=()=>{
+    const ant=famDe(marcaAntes);marcaAntes=elMarca.value;
+    if(!elFam.value||famAuto||(ant&&elFam.value===ant.value)){const o=famDe(elMarca.value), previa=elFam.value;elFam.value=o?o.value:"";famAuto=!!o&&(famAuto||elFam.value!==previa);}
+    notaDeFam();};
+  // Al salir del campo y no al escribir: "Mas Color" no debe quedar en la familia MAS a mitad de camino
+  elMarca.addEventListener("change",autoFam);
+  elFam.addEventListener("change",()=>{famAuto=false;notaDeFam();});
+  autoFam();
   f.addEventListener("input",e=>{if(["unx","porPiso","estiba"].includes(e.target.name)){unPalManual=false;autoUP();}});
   autoUP();
   const actAl=()=>{const a=alertas(leer());$("#alertas").innerHTML=a.length?`<div class="ctx-help warn">⚠ <span>Revisá: ${a.map(esc).join(" ")}</span></div>`:"";};
@@ -753,7 +823,7 @@ const docVigente=(p,tipo)=>(p.documentos||[]).find(d=>d.tipo===tipo&&d.vigente);
 function ficha(sku){
   const p=productos.find(x=>x.sku===sku);if(!p)return;
   const cp=calc(p),f=faltantes(p),m=(a,b,c)=>(a||b||c)?`${fmt(a)} × ${fmt(b)} × ${fmt(c)}`:null;
-  const falta=loQueFaltaParaVentas(p);
+  const falta=loQueFaltaParaVentas(p), fCal=faltanDeCalidad(p), mp=p.medidasPedidas;
   modal(`<div class="md-cab"><div><div class="sku">${esc(p.sku)}</div><div style="font-weight:600;margin-top:4px">${esc(p.desc)}</div>
       <div class="pag-sub" style="margin:2px 0 0">${esc(p.grupo||"")}${p.cat?" · "+esc(p.cat):""} · vida útil ${fmt(p.vida)||"—"} meses ${p.activo===false?'· <span class="bg" style="background:var(--redL);color:var(--red)">Dado de baja</span>':""} ${sello(p)}</div></div>
       <button class="btn sm" data-x>✕ Cerrar</button></div>
@@ -804,6 +874,9 @@ function ficha(sku){
     ${f.length?`<div class="ctx-help warn" style="margin-top:14px;display:block">⚠ Datos pendientes: ${puedeEditar()?faltantesK(p).filter(([k])=>!(p.noAplica||[]).includes(k)).map(([k,t])=>`<span class="bg" style="background:var(--srf);color:var(--wrn);margin:2px">${esc(t)} <button class="btn sm" data-na="${k}" title="Marcar que este dato no corresponde a este producto">no aplica</button></span>`).join(" "):f.join(", ")}</div>`:""}
     ${(p.noAplica||[]).length?`<p class="pag-sub" style="margin:4px 0 8px">No aplica: ${(p.noAplica).map(k=>`${esc(NOMBRE_CAMPO(k))}${puedeEditar()?` <a href="#" data-sina="${k}">(restaurar)</a>`:""}`).join(", ")}</p>`:""}
     ${desestimadas(p).length?`<p class="pag-sub" style="margin:4px 0 8px">Alertas desestimadas: ${desestimadas(p).map(k=>`${esc(NOMBRE_ALERTA[k])}${puedeEditar()?` <a href="#" data-redes="${k}">(volver a mostrar)</a>`:""}`).join(", ")}</p>`:""}
+    ${fCal.length&&(puedeEditar()||mp)?`<div class="ctx-help" style="display:block;margin-top:10px">📏 Medidas y pesos que completa Control de Calidad: falta${fCal.length>1?"n":""} ${esc(fCal.map(([,t])=>t).join(", "))}.
+      ${mp&&mp.en?`<div style="margin-top:4px;font-size:12.5px;color:var(--txS)">Se le pidieron a ${esc((mp.para||[]).join(", ")||"Antonella")} el ${fdt(mp.en)}${mp.por?` (pidió ${esc(mp.por)})`:""}.</div>`:""}
+      ${puedeEditar()?`<div style="margin-top:6px"><button class="btn sm" id="pedirMedidas" style="background:var(--vio);color:#fff">📏 ${mp&&mp.en?"Volver a enviar a Antonella":"Enviar a Antonella para que los complete"}</button></div>`:""}</div>`:""}
     ${p.nota?`<div class="ctx-help">📝 ${esc(p.nota)}</div>`:""}
     ${p.actualizadoPor?`<p class="pag-sub">Última modificación: ${esc(p.actualizadoPor)} · ${fdt(p.actualizadoEn)}</p>`:""}
 
@@ -836,6 +909,7 @@ function ficha(sku){
   if($("#nuevoReg"))$("#nuevoReg").onclick=()=>formRegistro(p);
   if(puedeEditar()){$("#edit").onclick=()=>formulario(p);$("#dup").onclick=()=>formulario(null,p);$("#baja").onclick=()=>baja(p);}
   if($("#aRevision"))$("#aRevision").onclick=()=>mandarARevision(p);
+  if($("#pedirMedidas"))$("#pedirMedidas").onclick=()=>pedirMedidas(p);
   if($("#aprobar"))$("#aprobar").onclick=()=>aprobarFicha(p);
   if($("#devolver"))$("#devolver").onclick=()=>devolverFicha(p);
 }
@@ -869,6 +943,16 @@ async function mandarARevision(p){
       ?"Quedó esperando revisión y se avisó por correo a "+((r.para||[]).join(", ")||"quien revisa")+", con la ficha adjunta."
       :"Quedó esperando revisión, pero el correo no salió: "+(r.motivo||"revisá la configuración de correo")+". Avisale vos.",
       r.enviado?"success":"warn");
+  }catch(e){alert(e.message);}
+}
+async function pedirMedidas(p){
+  const faltan=faltanDeCalidad(p).map(([,t])=>t);
+  const nota=prompt(`Se le manda un correo a Antonella para que complete en el SKU ${p.sku}:\n${faltan.join(", ")}\n\nSi querés, agregá una nota (o dejalo vacío y Aceptar):`,"");
+  if(nota===null)return;
+  try{
+    const d=await api(`/productos/${encodeURIComponent(p.sku)}/medidas`,{method:"POST",body:JSON.stringify({nota})});
+    reemplazar(d.producto);cerrar();
+    aviso("Se le pidió por correo a "+((d.medidas&&d.medidas.para)||[]).join(", ")+" que complete las medidas y pesos del SKU "+p.sku+".","success");
   }catch(e){alert(e.message);}
 }
 async function aprobarFicha(p){

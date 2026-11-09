@@ -699,6 +699,16 @@ function KpiDashboard({ entries, specs }) {
                 <p style={{ color: V.gray, fontSize: 12 }}>Sin pendientes 🎉</p>
               ) : (
                 <div style={{ maxHeight: 220, overflowY: "auto" }}>
+                  {/* Estan TODAS, de la mas vieja a la mas nueva. Antes se
+                      cortaban en 15 y de la 16 en adelante no habia forma de
+                      llegar: el encabezado decia el total, asi que se veia
+                      "Muestras pendientes (23)" con 15 filas y las que
+                      faltaban eran lotes esperando aprobacion que no estaban
+                      en ninguna pantalla (Claudia, 22/10/2026: "no veo los
+                      controles de setiembre"). El cuadro ya tiene scroll. */}
+                  <div style={{ fontSize: 10.5, color: V.gray, marginBottom: 6 }}>
+                    De la más vieja a la más nueva · están las {allPending.length}
+                  </div>
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                     <thead>
                       <tr style={{ background: V.grayLight }}>
@@ -708,7 +718,7 @@ function KpiDashboard({ entries, specs }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {withAge.slice(0, 15).map(e => {
+                      {withAge.map(e => {
                         const ageStr = e.ageHours < 1 ? "< 1h" : e.ageHours < 24 ? `${Math.round(e.ageHours)}h` : `${Math.round(e.ageHours / 24)}d`;
                         const isOld = e.ageHours > 24;
                         return (
@@ -1651,6 +1661,17 @@ const fechaHora = (iso) => iso
 const fechaCorta = (d) => (d ? String(d).slice(0, 10).split("-").reverse().join("/") : "—");
 const valorOGuion = (x) => (x === null || x === undefined || x === "" ? "—" : x);
 
+/* La clave con la que se compara al buscar: minúscula, sin tildes, sin signos y
+   sin espacios, igual que clave_busqueda en la base. Así "pampillon" encuentra
+   a "Pampillón" y "L 25-100" encuentra "L25100".
+   El orden importa: primero se le saca la tilde a la letra y después se limpian
+   los signos. Al revés la letra acentuada se perdía entera —"Pampillón"
+   quedaba "pampilln"— y el analista no se encontraba nunca
+   (Claudia, 22/10/2026: "no veo los controles de setiembre"). */
+const claveBusqueda = (s) => String(s == null ? "" : s)
+  .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  .toLowerCase().replace(/[^a-z0-9]/g, "");
+
 function htmlRegistro({ registro, muestra: m, firmas, impreso }) {
   const spec = m.spec || {};
   const params = spec.parameters || [];
@@ -1986,12 +2007,13 @@ function SpecsManager({ specs, onSave, onDelete, canAdmin }) {
     if (brandFilter && s.brand !== brandFilter) return false;
     if (categoryFilter && s.category !== categoryFilter) return false;
     if (!search) return true;
-    const q = search.toLowerCase();
-    const commercial = (s.commercialBrands || []).join(" ").toLowerCase();
-    return s.code.toLowerCase().includes(q) ||
-      s.name.toLowerCase().includes(q) ||
-      (s.brand || "").toLowerCase().includes(q) ||
-      (s.docRef || "").toLowerCase().includes(q) ||
+    const q = claveBusqueda(search);
+    if (!q) return true;
+    const commercial = claveBusqueda((s.commercialBrands || []).join(" "));
+    return claveBusqueda(s.code).includes(q) ||
+      claveBusqueda(s.name).includes(q) ||
+      claveBusqueda(s.brand).includes(q) ||
+      claveBusqueda(s.docRef).includes(q) ||
       commercial.includes(q);
   });
 
@@ -2781,10 +2803,14 @@ function Bitacora({ entries, specs, navigate }) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
+  // La bitácora tiene todas las muestras, de todos los meses: el servidor las
+  // devuelve enteras. Lo que fallaba era la comparación, que se comía la tilde.
+  const q = claveBusqueda(search);
   const filtered = entries.filter(e => {
-    const matchSearch = e.batchCode.toLowerCase().includes(search.toLowerCase()) ||
-      e.productCode.toLowerCase().includes(search.toLowerCase()) ||
-      e.analyst.toLowerCase().includes(search.toLowerCase());
+    const matchSearch = !q ||
+      claveBusqueda(e.batchCode).includes(q) ||
+      claveBusqueda(e.productCode).includes(q) ||
+      claveBusqueda(e.analyst).includes(q);
     const matchStatus = statusFilter === "all" || e.status === statusFilter;
     return matchSearch && matchStatus;
   });
@@ -2881,11 +2907,22 @@ function Bitacora({ entries, specs, navigate }) {
         </div>
       </div>
 
+      {/* Cuántas se están viendo de cuántas hay: la bitácora trae toda la
+          historia, así que un recuento chico es el filtro, no el final de los
+          datos (Claudia, 22/10/2026). */}
+      <div style={{ fontSize: 11.5, color: V.gray }}>
+        {q
+          ? `🔎 ${filtered.length} de ${entries.length} muestra(s), buscando «${search.trim()}» en toda la bitácora`
+          : `${filtered.length} de ${entries.length} muestra(s)`}
+      </div>
+
       {filtered.length === 0 ? (
         <Card style={{ textAlign: "center", padding: 40 }}>
           <ClipboardList size={36} color={V.grayMid} style={{ margin: "0 auto 10px" }} />
           <p style={{ color: V.gray, fontSize: 14 }}>
-            {entries.length === 0 ? "Sin registros en la bitácora." : "Sin resultados para el filtro."}
+            {entries.length === 0 ? "Sin registros en la bitácora."
+              : q ? `Ninguna muestra coincide con «${search.trim()}» en toda la bitácora.`
+              : "Sin resultados para el filtro."}
           </p>
         </Card>
       ) : (

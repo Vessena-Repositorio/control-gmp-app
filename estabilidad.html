@@ -482,6 +482,13 @@ const norL=id=>{const n=NORMAS.find(n=>n.id===id);return n?n.l:id;};
 const toast=m=>{const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2400);};
 const q=s=>document.querySelector(s);
 const bind=(s,ev,fn)=>document.querySelectorAll(s).forEach(el=>el.addEventListener(ev,()=>fn(el)));
+/* La clave con la que se compara al buscar: minúscula, sin tildes, sin signos y
+   sin espacios, igual que clave_busqueda en la base. Así "jabon liquido"
+   encuentra "Jabón Líquido" y "L 25-100" encuentra "L25100". El orden importa:
+   primero se le saca la tilde a la letra y después se limpian los signos; al
+   revés la letra acentuada se perdía entera y el producto no se encontraba
+   nunca (Claudia, 22/10/2026: "no veo los controles de setiembre"). */
+const claveBusqueda=s=>String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
 function cS(s){if(s.stage===5)return 5;if(s.approvedManually)return 5;const hs=!!(s.especificacion&&s.especificacion.trim());const any=s.checkpoints.some(c=>c.fechaReal);const all=s.checkpoints.length>0&&s.checkpoints.every(c=>c.fechaReal);const hc=!!(s.conclusion&&s.conclusion.trim());if(hc&&all)return 4;if(all)return 3;if(any)return 2;if(hs)return 1;return 0;}
 function rS(s){const p=s.stage;s.stage=cS(s);if(s.stage!==p)saveStudies();}
 function xT(t,s){const z=ZONAS.find(z=>z.z===s.zonaClimatica)||{};const tl=s.tipoEstudio==='acelerada'?'acelerada':'larga duración';return t.replace(/\{\{p\}\}/g,s.producto||'').replace(/\{\{l\}\}/g,s.lote||'').replace(/\{\{c\}\}/g,catL(s.categoria)).replace(/\{\{te\}\}/g,tl).replace(/\{\{z\}\}/g,s.zonaClimatica||'').replace(/\{\{zd\}\}/g,z.d||'').replace(/\{\{vu\}\}/g,s.vidaUtilMeses||'__').replace(/\{\{cond\}\}/g,s.condAlm||'[completar]');}
@@ -723,10 +730,16 @@ function renderDashboard(){
     </div>
     <div class="panel pp">
       <h2 class="st">Próxima acción por estudio</h2>
+      <!-- Están TODOS los estudios activos. Antes la tabla cortaba en 20 sin
+           decirlo, asi que con mas de 20 estudios activos habia estudios cuyo
+           proximo checkpoint no aparecia en ninguna pantalla, justo en el
+           panel que promete una fila por estudio (Claudia, 22/10/2026: "no veo
+           los controles de setiembre"). -->
       <p class="sd">El checkpoint pendiente más cercano de cada estudio activo.</p>
-      ${pendientes.length?`<table>
+      ${pendientes.length?`<div class="muted" style="font-size:11px;margin-bottom:6px">${pendientes.length} estudio(s) activo(s) con checkpoint pendiente, del más próximo al más lejano. Están todos.</div>
+      <table>
         <thead><tr><th>Checkpoint</th><th>Producto / Lote</th><th>Programado</th><th>Estado</th></tr></thead>
-        <tbody>${pendientes.slice(0,20).map(cp=>{
+        <tbody>${pendientes.map(cp=>{
           const d=cp.fechaProgramada?dTo(cp.fechaProgramada):999;
           const st=!cp.fechaProgramada?'pendiente':d<0?'atrasado':d<=7?'proximo':'pendiente';
           return`<tr class="ck" data-go="${cp.sid}">
@@ -754,7 +767,10 @@ function renderEstudios(){
   const fl=studies.filter(s=>{
     if(s.rechazado)return false;
     if(filters.t&&s.tipoProducto!==filters.t)return false;
-    if(filters.q&&!(s.producto+' '+s.lote).toLowerCase().includes(filters.q.toLowerCase()))return false;
+    // Se compara sin tildes ni signos, y se mira también el analista: buscar
+    // "pampillon" tiene que encontrar los estudios de "Pampillón".
+    if(filters.q){const fq=claveBusqueda(filters.q);
+      if(fq&&!claveBusqueda(s.producto+' '+s.lote+' '+(s.emailAnalista||'')).includes(fq))return false;}
     // Dashboard KPI filters
     if(dashFilter==='curso')return s.stage>=1&&s.stage<=2;
     if(dashFilter==='proximos')return s.checkpoints.some(c=>!c.fechaReal&&dTo(c.fechaProgramada)>=0&&dTo(c.fechaProgramada)<=7);
@@ -765,7 +781,12 @@ function renderEstudios(){
     return true;});
   document.getElementById('mc').innerHTML=`<div class="panel pp">
     ${dashFilter?`<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:8px 12px;background:var(--tt);border:1px solid var(--teal);border-radius:8px;font-size:13px"><strong>Filtro:</strong> ${{curso:'En curso (muestreos)',proximos:'Próximos (≤7 días)',atrasados:'Atrasados',aprobados:'Aprobados',pendinf:'Completos → sin informe',pendaprob:'Informe → pend. aprobación'}[dashFilter]} (${fl.length}) <div class="spacer"></div><button class="btn sm ghost" id="clearF">✕ Limpiar</button></div>`:''}
-    <div class="toolbar"><select id="fT"><option value="">Todos</option><option value="domisanitario" ${filters.t==='domisanitario'?'selected':''}>Domisanitarios</option><option value="cosmetico" ${filters.t==='cosmetico'?'selected':''}>Cosméticos</option></select><input type="text" id="fQ" placeholder="Buscar…" value="${E(filters.q)}"><div class="spacer"></div><button class="btn" id="gN">+ Nuevo</button></div>
+    <div class="toolbar"><select id="fT"><option value="">Todos</option><option value="domisanitario" ${filters.t==='domisanitario'?'selected':''}>Domisanitarios</option><option value="cosmetico" ${filters.t==='cosmetico'?'selected':''}>Cosméticos</option></select><input type="text" id="fQ" placeholder="Buscar producto, lote o analista…" value="${E(filters.q)}"><div class="spacer"></div><button class="btn" id="gN">+ Nuevo</button></div>
+    <!-- Cuántos se ven de cuántos hay: un recuento chico es el filtro, no el
+         final de los datos (Claudia, 22/10/2026). -->
+    <div class="muted" style="font-size:11px;margin-bottom:8px">${filters.q
+      ?`🔎 ${fl.length} de ${studies.filter(s=>!s.rechazado).length} estudio(s), buscando «${E(filters.q)}»`
+      :`${fl.length} de ${studies.filter(s=>!s.rechazado).length} estudio(s)`}</div>
   ${fl.length?`<table><thead><tr><th>Producto</th><th>Lote</th><th>Analista</th><th>Etapa</th><th>Próximo</th></tr></thead><tbody>${fl.map(s=>{const p=s.checkpoints.filter(c=>cpS(c)!=='realizado').sort((a,b)=>(a.fechaProgramada||'9').localeCompare(b.fechaProgramada||'9'))[0];return`<tr class="ck" data-go="${s.id}"><td><strong>${E(s.producto)}</strong>${s.tipoLote==='desarrollo'?' <span class="tag pendiente" style="font-size:9px">DESARROLLO</span>':s.tipoLote==='lanzamiento'?' <span class="tag proximo" style="font-size:9px">LANZAMIENTO</span>':''}</td><td class="mono">${E(s.lote)}</td><td>${(()=>{const t=TEAM.find(t=>t.e===s.emailAnalista);return t?E(t.n):E(s.emailAnalista||'—');})()}</td><td><span class="bs"><span class="dot"></span>${E(SG[s.stage].l)}</span></td><td>${p?`<span class="sp">${E(p.codigo)}</span> <span class="tag ${cpS(p)}">${sL(cpS(p))}</span>`:'<span class="tag realizado">OK</span>'}</td></tr>`;}).join('')}</tbody></table>`:`<div class="empty"><div class="big">🧪</div>Sin estudios.</div>`}</div>`;
   q('#fT').onchange=e=>{filters.t=e.target.value;render();};q('#fQ').oninput=e=>{filters.q=e.target.value;render();};q('#gN').onclick=()=>{dashFilter='';activeTab='nuevo';render();};
   const cf=q('#clearF');if(cf)cf.onclick=()=>{dashFilter='';render();};
