@@ -588,7 +588,7 @@ function normalizar(r){r.promedio=r.promedio!=null?String(r.promedio):'';r.ph=r.
 // Los controles de hoy de todos los analistas (turno compartido)
 async function loadShift(){
   let d;try{d=await api('/controles')}catch(e){toast('⚠️ No se pudieron leer los controles: '+e.message,true);return}
-  allR=(d.records||[]).map(normalizar);
+  allR=(d.records||[]).filter(r=>!r.anulado).map(normalizar); /* los anulados no cuentan en el tablero ni en el turno */
   const hoy=hoyLocal();
   const deHoy=allR.filter(r=>diaDe(r.fecha)===hoy).sort((a,b)=>(parseInt(a.controlNum)||0)-(parseInt(b.controlNum)||0));
   const pend=ctrls.filter(c=>c.pendiente);
@@ -1338,7 +1338,7 @@ async function sendCtrl(c){
   }
 }
 async function reintentarPendientes(){for(const c of ctrls.filter(x=>x.pendiente&&(!x.analista||x.analista===USER)))await sendCtrl(c)}
-async function loadSheet(){let d;try{d=await api('/controles')}catch(e){toast('⚠️ Error de carga: '+e.message,true);return}allR=(d.records||[]).map(normalizar);renderDash();toast('📊 '+allR.length+' registros')}
+async function loadSheet(){let d;try{d=await api('/controles')}catch(e){toast('⚠️ Error de carga: '+e.message,true);return}allR=(d.records||[]).filter(r=>!r.anulado).map(normalizar); /* los anulados no cuentan en el tablero ni en el turno */renderDash();toast('📊 '+allR.length+' registros')}
 
 // CIERRE DE LA PLANILLA DE GOOGLE (una sola vez, administradoras)
 function abrirImp(){
@@ -1690,6 +1690,13 @@ function htmlRegistro(d,orden,imprimir){
     const pesos=(x.pesos||[]).map((p,j)=>val(x,'peso',j+1)).join(' · ');
     // El promedio se recalcula con el peso corregido: se marca con la misma nota.
     const nsProm=[];for(let j=1;j<=5;j++){const k=x._id?corrDe(x._id,'peso',j):null;if(k)nsProm.push(...k.nums)}
+    // Un control anulado no se borra: queda tachado, con el motivo y quién lo
+    // anuló, y afuera de los promedios (Claudia, 09/11/2026).
+    const an=x.anulado;
+    if(an)return '<tr style="opacity:.6"><td>'+(i+1)+'</td><td style="text-decoration:line-through">'+esc(x.hora||'')+'</td>'+
+      '<td style="text-decoration:line-through">'+esc(x.analista||'')+'</td>'+
+      '<td colspan="7"><b class="rojo">ANULADO</b> por '+esc(an.por||'')+' · '+esc(fh(an.en))+
+      ' — '+esc(an.motivo||'')+'</td></tr>';
     return '<tr><td>'+(i+1)+'</td><td>'+esc(x.hora||'')+'</td><td>'+esc(x.analista||'')+'</td>'+
       '<td>'+val(x,'lote')+'</td><td>'+pesos+'</td><td><b>'+esc(vac(x.promedio))+'</b>'+(nsProm.length?notas(nsProm):'')+'</td>'+
       '<td>'+val(x,'ph')+'</td><td>'+esc((x.checks||[]).join(', ')||(x.limpDefects||[]).join(', ')||'—')+'</td>'+
@@ -1791,7 +1798,8 @@ function pintarRevision(){
   const arg='\''+orden.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\'';
   // Corregir un valor: lo pueden las supervisoras, aprobada o no la orden
   const corregir=PERMISOS.includes('aprobar')
-    ?'<button class="ord-btn sec" onclick="formCorregirValor()">✏️ Corregir un valor</button>':'';
+    ?'<button class="ord-btn sec" onclick="formCorregirValor()">✏️ Corregir un valor</button>'
+     +'<button class="ord-btn sec" onclick="formAnularControl()">🚫 Anular un control</button>':'';
   if(d.aprobada){
     pie.innerHTML='<div class="ord-recien" style="margin:0 0 10px">✅ Aprobada por '+esc(d.aprobadaPor)+'. Ya podés imprimir el registro.</div>'+
       '<div class="ord-botones" style="margin:0"><button class="ord-btn sec" onclick="cerrarRevision()">Cerrar</button>'+
@@ -1827,6 +1835,47 @@ function cerrarRevision(){document.getElementById('revMo').classList.remove('ope
    puesto. El valor anterior queda tachado en el registro, con el motivo, el
    nombre y la hora: el dato no se borra nunca. */
 const CORR_EST='width:100%;padding:9px;border:1px solid var(--border);border-radius:var(--rs);font-size:15px;font-family:var(--f);margin-top:4px';
+
+/* ANULAR UN CONTROL CARGADO POR ERROR (migración 077)
+   Claudia, 09/11/2026: cargó un control de prueba para ver si andaba la
+   lectura de las fotos y preguntó cómo lo borraba. No se borra: un control
+   guardado es un registro. Se anula, que es otra cosa: queda tachado en la
+   pantalla y en el registro impreso, con el motivo, quién lo anuló y cuándo, y
+   sale de los promedios. Lo hace supervisión, igual que corregir un valor. */
+function formAnularControl(){
+  const d=REV_DATOS;if(!d)return;
+  const vivos=(d.controles||[]).map((x,i)=>({x,i})).filter(o=>!o.x.anulado);
+  if(!vivos.length){toast('⚠️ Todos los controles de esta orden ya están anulados',true);return}
+  const ops=vivos.map(o=>'<option value="'+esc(o.x._id)+'">Control '+(o.i+1)+' · '
+    +esc(o.x.hora||'')+' · '+esc(o.x.analista||'')+(o.x.promedio?' · '+esc(o.x.promedio)+'g':'')+'</option>').join('');
+  document.getElementById('revPie').innerHTML=
+    '<div style="font-size:15px;font-weight:700">🚫 Anular un control</div>'+
+    '<div style="font-size:13px;color:var(--text3);margin:2px 0 8px">El control no se borra: queda en el registro tachado, con tu nombre, la fecha y el motivo, y deja de contar en los promedios. Es para lo que se cargó por error: una prueba, la máquina equivocada, un control repetido.</div>'+
+    '<label style="font-size:13px;font-weight:600;color:var(--text2)">Control<select id="anuCtrl" style="'+CORR_EST+'">'+ops+'</select></label>'+
+    '<textarea id="anuMotivo" rows="2" placeholder="Por qué se anula: queda en el registro impreso" style="'+CORR_EST+';resize:vertical"></textarea>'+
+    '<div class="ord-botones" style="margin:10px 0 0"><button class="ord-btn sec" onclick="pintarRevision()">Cancelar</button>'+
+    '<button class="ord-btn pri" id="anuGuardar" onclick="guardarAnulacion()">🚫 Anular el control</button></div>';
+}
+async function guardarAnulacion(){
+  const orden=REV_ORDEN;if(!orden)return;
+  const controlId=document.getElementById('anuCtrl').value;
+  const motivo=(document.getElementById('anuMotivo').value||'').trim();
+  if(motivo.length<5){toast('⚠️ Escribí por qué se anula',true);return}
+  const sel=document.getElementById('anuCtrl');
+  if(!confirm('¿Anular el '+sel.options[sel.selectedIndex].text+'?\n\nNo se borra: queda tachado en el registro con tu nombre y el motivo. No se puede deshacer.'))return;
+  const b=document.getElementById('anuGuardar');if(b){b.disabled=true;b.textContent='⏳ Anulando…'}
+  try{
+    REV_DATOS=await api('/ordenes/'+encodeURIComponent(orden)+'/anular',
+      {method:'POST',body:JSON.stringify({controlId:Number(controlId),motivo})});
+    toast('🚫 Control anulado');
+    pintarRevision();
+    loadSheet();
+  }catch(e){
+    toast('⚠️ '+e.message,true);
+    if(b){b.disabled=false;b.textContent='🚫 Anular el control'}
+  }
+}
+
 function formCorregirValor(){
   const d=REV_DATOS;if(!d)return;
   const opsCtrl=(d.controles||[]).map((x,i)=>'<option value="'+esc(x._id)+'">Control '+(i+1)+' · '+esc(x.hora||'')+' · '+esc(x.analista||'')+'</option>').join('');

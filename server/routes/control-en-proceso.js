@@ -660,6 +660,7 @@ rutasControlEnProceso.get('/ordenes', leer, async (req, res, next) => {
              FROM proceso_controles c
              LEFT JOIN proceso_ordenes o ON o.orden = c.orden
              WHERE c.duplicado_de IS NULL
+               AND c.anulado_en IS NULL
                AND c.orden IS NOT NULL AND c.orden <> ''
                AND c.fecha >= (now() AT TIME ZONE $1)::date - $2::int
              GROUP BY c.orden, o.aprobada_por, o.aprobada_en, o.notas
@@ -963,6 +964,48 @@ rutasControlEnProceso.post('/ordenes/:orden/aprobar', aprobar, async (req, res, 
  * aprobacion: una orden ya firmada tambien puede tener un dato mal, y lo que
  * pide BPF es que la correccion quede trazada, no que no se pueda hacer.
  */
+/**
+ * POST /api/control-en-proceso/ordenes/:orden/anular  { controlId, motivo }
+ *
+ * Un control cargado por error -una prueba, la maquina equivocada- no se
+ * borra: se anula (migracion 077, Claudia 09/11/2026). Queda en el registro,
+ * tachado, con el motivo, quien lo anulo y cuando, y sale de los promedios.
+ * Lo hace supervision, igual que corregir un valor.
+ */
+rutasControlEnProceso.post('/ordenes/:orden/anular', aprobar, async (req, res, next) => {
+    const orden = texto(req.params.orden, 60);
+    const controlId = Number((req.body || {}).controlId);
+    const motivo = texto((req.body || {}).motivo, 500);
+    try {
+        if (!controlId) throw fallo(400, 'Elegí el control que se anula');
+        if (motivo.length < 5) throw fallo(400, 'Escribí por qué se anula: queda en el registro');
+        const anulado = await enTransaccion(async (c) => {
+            await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['proceso-orden:' + orden]);
+            const { rows } = await c.query(
+                'SELECT id, control_num, hora, anulado_en FROM proceso_controles WHERE id = $1 AND orden = $2',
+                [controlId, orden]
+            );
+            const f = rows[0];
+            if (!f) throw fallo(404, 'Ese control no es de esta orden');
+            if (f.anulado_en) throw fallo(409, 'Ese control ya está anulado');
+            const quien = req.usuario.nombre || req.usuario.usuario;
+            await c.query(
+                `UPDATE proceso_controles
+                    SET anulado_en = now(), anulado_por = $2, anulado_por_id = $3, anulado_motivo = $4,
+                        raw = (raw::jsonb || jsonb_build_object('anulado',
+                               jsonb_build_object('por', $2::text, 'en', now(), 'motivo', $4::text)))::json
+                  WHERE id = $1`,
+                [controlId, quien, req.usuario.id, motivo]
+            );
+            await registrar(c, req, 'control_anulado', 'control', controlId, `orden ${orden} · ${motivo}`);
+            return { controlNum: f.control_num, hora: f.hora, por: quien };
+        });
+        res.json({ ok: true, orden, anulado, ...(await armarOrden(orden)) });
+    } catch (err) {
+        responder(err, res, next);
+    }
+});
+
 rutasControlEnProceso.post('/ordenes/:orden/correcciones', aprobar, async (req, res, next) => {
     const orden = texto(req.params.orden, 60);
     try {
