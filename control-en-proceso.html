@@ -964,7 +964,11 @@ async function leerFoto(slot,file){
       imageBase64:img.replace(/^data:[^,]*,/,''),
       mimeType:(img.match(/^data:([^;]+);/)||[])[1]||'image/jpeg',
       donde:slot===0?'caja':'envase'})});
-    lectura[slot]={estado:'listo',lote:r.lote||'',vence:r.vence||'',
+    // El sticker de la caja no lleva lote -lo que parece uno, "FX15", son las
+    // unidades por funda- asi que de ahi solo se toman el vencimiento y el
+    // codigo de barras (Claudia, 09/11/2026).
+    lectura[slot]={estado:'listo',lote:slot===0?'':(r.lote||''),vence:r.vence||'',
+                   codigoBarras:r.codigoBarras||'',
                    legible:r.legible!==false,confianza:r.confianza,nota:r.nota||''};
     completarDesdeFoto();
   }catch(e){
@@ -1023,8 +1027,14 @@ function problemasFoto(){
     if(env.vence&&caja.vence&&normVto(env.vence)&&normVto(caja.vence)
        &&normVto(env.vence)!==normVto(caja.vence))
       malos.push('El envase dice vencimiento '+normVto(env.vence)+' y el sticker de la caja '+normVto(caja.vence)+': tienen que coincidir.');
-    if(env.lote&&caja.lote&&comoLote(env.lote)!==comoLote(caja.lote))
-      malos.push('El envase dice lote '+env.lote+' y el sticker de la caja '+caja.lote+': tienen que coincidir.');
+  }
+  // El codigo de barras del sticker, contra el EAN 14 del producto.
+  if(caja&&caja.estado==='listo'&&caja.legible&&caja.codigoBarras){
+    const p=eanDe(document.getElementById('cCodPT').value.trim());
+    const esperado=String((p&&p.ean14)||'').replace(/\D/g,'');
+    if(esperado&&caja.codigoBarras!==esperado)
+      malos.push('El código de barras del sticker es '+caja.codigoBarras+' y el de '
+        +((p&&p.nombre)||'este producto')+' es '+esperado+'.');
   }
   // Lo escrito contra lo impreso.
   const escLote=document.getElementById('cLote').value.trim();
@@ -1052,7 +1062,8 @@ function avisoFotos(){
     const partes=[];
     if(L.lote)partes.push('Lote <b>'+esc(L.lote)+'</b>');
     if(L.vence)partes.push('Vence <b>'+esc(L.vence)+'</b>');
-    filas.push(titulo+(partes.length?partes.join(' · '):'<span style="color:#b42318">no se ve lote ni vencimiento</span>')
+    if(L.codigoBarras)partes.push('Código de barras <b>'+esc(L.codigoBarras)+'</b>');
+    filas.push(titulo+(partes.length?partes.join(' · '):'<span style="color:#b42318">no se pudo leer nada: mirala a ojo</span>')
       +(L.nota?' <span style="color:var(--text3)">('+esc(L.nota)+')</span>':''));
   });
   if(!filas.length){el.style.display='none';el.innerHTML='';return}

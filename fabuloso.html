@@ -695,7 +695,7 @@ window.APP_CONFIG = {
   //   2. el envase contra el sticker de la caja;
   //   3. lo impreso contra el lote escrito en la pantalla.
   // Una foto que no se pudo leer nunca queda en verde.
-  const DONDE_FAB = { foto_lote: 'el envase', foto_rotulo: 'el sticker de la caja' };
+  const DONDE_FAB = { foto_lote: 'el envase', foto_rotulo: 'el rótulo de la caja' };
   state.lecturaFoto = {};
 
   function vtoEsperadoFab_() {
@@ -738,10 +738,15 @@ window.APP_CONFIG = {
       const c = await compressImage(file, 1600, 0.85);
       const r = await api('leerRotulo', {
         imageBase64: c.base64, mimeType: c.mime,
-        donde: stateKey === 'foto_rotulo' ? 'caja' : 'envase'
+        donde: stateKey === 'foto_rotulo' ? 'caja' : 'envase',
+        // El rotulo de la caja de Fabuloso lleva las tres cosas: codigo de
+        // barras, lote y vencimiento. En Control GMP el sticker no lleva lote
+        // (Claudia, 09/11/2026), por eso esto va aca y no alla.
+        conLote: stateKey === 'foto_rotulo'
       });
       state.lecturaFoto[stateKey] = {
         estado: 'listo', lote: r.lote || '', vence: r.vence || '',
+        codigoBarras: r.codigoBarras || '',
         legible: r.legible !== false, confianza: r.confianza, nota: r.nota || ''
       };
       completarDesdeFotoFab_();
@@ -791,8 +796,16 @@ window.APP_CONFIG = {
         malos.push('El envase dice vencimiento ' + normVto_(env.vence) + ' y el sticker de la caja '
           + normVto_(caja.vence) + ': tienen que coincidir.');
       if (env.lote && caja.lote && comoLote_(env.lote) !== comoLote_(caja.lote))
-        malos.push('El envase dice lote ' + env.lote + ' y el sticker de la caja ' + caja.lote
+        malos.push('El envase dice lote ' + env.lote + ' y el rótulo de la caja ' + caja.lote
           + ': tienen que coincidir.');
+    }
+    // El codigo de barras del rotulo, contra el EAN 14 del producto.
+    if (caja && caja.estado === 'listo' && caja.legible && caja.codigoBarras) {
+      const p = eanDe((state.editingMuestreo || {}).codigo_pt);
+      const esperado = String((p && p.ean14) || '').replace(/\D/g, '');
+      if (esperado && caja.codigoBarras !== esperado)
+        malos.push('El código de barras del rótulo es ' + caja.codigoBarras + ' y el de '
+          + ((p && p.nombre) || 'este producto') + ' es ' + esperado + '.');
     }
     // Lo escrito contra lo impreso.
     const escrito = String((state.editingMuestreo || {}).lote || '').trim();
@@ -809,14 +822,15 @@ window.APP_CONFIG = {
     const filas = [];
     ['foto_lote', 'foto_rotulo'].forEach((k) => {
       const L = state.lecturaFoto[k]; if (!L) return;
-      const titulo = '<b>' + (k === 'foto_lote' ? 'Envase' : 'Sticker de la caja') + '</b> ';
+      const titulo = '<b>' + (k === 'foto_lote' ? 'Envase' : 'Rótulo de la caja') + '</b> ';
       if (L.estado === 'leyendo') { filas.push(titulo + '<span class="muted">leyendo la foto…</span>'); return; }
       if (L.estado === 'error') { filas.push(titulo + '<span class="muted">no se pudo leer (' + esc(L.error) + '). Verificalo a ojo.</span>'); return; }
       if (!L.legible) { filas.push(titulo + '<span style="color:#b42318">la foto no se lee con seguridad' + (L.nota ? ': ' + esc(L.nota) : '') + '. Sacá otra, o verificalo a ojo.</span>'); return; }
       const partes = [];
       if (L.lote) partes.push('Lote <b>' + esc(L.lote) + '</b>');
       if (L.vence) partes.push('Vence <b>' + esc(L.vence) + '</b>');
-      filas.push(titulo + (partes.length ? partes.join(' · ') : '<span style="color:#b42318">no se ve lote ni vencimiento</span>')
+      if (L.codigoBarras) partes.push('Código de barras <b>' + esc(L.codigoBarras) + '</b>');
+      filas.push(titulo + (partes.length ? partes.join(' · ') : '<span style="color:#b42318">no se pudo leer nada: mirala a ojo</span>')
         + (L.nota ? ' <span class="muted">(' + esc(L.nota) + ')</span>' : ''));
     });
     if (!filas.length) { caja.innerHTML = ''; return; }
