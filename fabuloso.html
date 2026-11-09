@@ -357,6 +357,7 @@ window.APP_CONFIG = {
     listOrder: (p) => ['GET', '/ordenes/' + encodeURIComponent(p.orden_envasado)],
     approveOrder: (p) => ['POST', '/ordenes/' + encodeURIComponent(p.orden_envasado) + '/aprobar', { checklist: p.checklist, notas: p.notas }],
     uploadPhoto: (p) => ['POST', '/fotos', { filename: p.filename, mime: p.mime, dataBase64: p.dataBase64, muestreo_ref: p.muestreo_ref }],
+    leerRotulo: (p) => ['POST', '/lectura-rotulo', { imageBase64: p.imageBase64, mimeType: p.mimeType, donde: p.donde }],
     getAuditLog: () => ['GET', '/actividad'],
     importar: (p) => ['POST', '/importar', p.datos],
     listOrdenes: (p) => ['GET', '/ordenes?dias=' + (p && p.dias ? p.dias : 30)],
@@ -657,10 +658,10 @@ window.APP_CONFIG = {
       + esp.prefijo + ' y el turno (1 mañana, 2 tarde, 3 noche).';
     const mal = [];
     if (p.z !== esp.z || p.jjj !== esp.jjj)
-      mal.push('la fecha: pusiste ' + p.z + p.jjj + ' (' + fechaDeLote_(p.z, p.jjj) + ') y el muestreo es del '
+      mal.push('la fecha: dice ' + p.z + p.jjj + ' (' + fechaDeLote_(p.z, p.jjj) + ') y el muestreo es del '
         + fechaDeLote_(esp.z, esp.jjj) + ', que se escribe ' + esp.z + esp.jjj);
     if (p.letra !== esp.letra)
-      mal.push('la línea: pusiste ' + p.letra + ' y la de Fabuloso es ' + esp.letra);
+      mal.push('la línea: dice ' + p.letra + ' y la de Fabuloso es ' + esp.letra);
     if (!'123'.includes(p.turno))
       mal.push('el turno: ' + p.turno + ' no existe, son 1 mañana, 2 tarde y 3 noche');
     if (!mal.length) return '';
@@ -679,6 +680,161 @@ window.APP_CONFIG = {
       ? `<span style="color:#b42318">⚠️ ${esc(mal)}</span>`
       : `<span style="color:#05603a">✅ <b>${esc(inp.value.trim().toUpperCase())}</b> — el formato, el día y la línea coinciden.</span>`;
   };
+
+
+  // ---------- LO QUE DICE LA FOTO, no lo que se escribe ----------
+  // Claudia, 09/11/2026: lo que se equivoca es la impresion -el inkjet del
+  // envase o el sticker de la caja- y el analista transcribe bien lo que esta
+  // mal impreso. Mirando solo lo escrito, el error pasa igual.
+  //
+  // Al subir cada foto obligatoria, el servidor la lee con IA
+  // (POST /lectura-rotulo, lib/lectura-rotulos.js) y devuelve el lote y el
+  // vencimiento tal como estan impresos, SIN corregir. Con eso se comparan:
+  //   1. lo impreso contra lo que corresponde -el SOP-PR-063 para el lote y
+  //      dos años desde el envasado para el vencimiento-;
+  //   2. el envase contra el sticker de la caja;
+  //   3. lo impreso contra el lote escrito en la pantalla.
+  // Una foto que no se pudo leer nunca queda en verde.
+  const DONDE_FAB = { foto_lote: 'el envase', foto_rotulo: 'el sticker de la caja' };
+  state.lecturaFoto = {};
+
+  function vtoEsperadoFab_() {
+    const [a, m, d] = diaDeEnvasadoFab_().split('-').map(Number);
+    const f = new Date(Date.UTC(a, m - 1, d));
+    f.setUTCFullYear(f.getUTCFullYear() + 2);   // la linea de Fabuloso no hace hipoclorito
+    return String(f.getUTCMonth() + 1).padStart(2, '0') + '/' + f.getUTCFullYear();
+  }
+  // Lo impreso, llevado a mes/año. Vale 11/2028, 11-2028, 112028, 11/28 o la
+  // fecha entera 30/11/2028. null = no se entiende.
+  function normVto_(t) {
+    const s = String(t || '').trim();
+    let mm = null, aa = null, m;
+    if ((m = /^(\d{1,2})\s*[/.\-]\s*(\d{1,2})\s*[/.\-]\s*(\d{2,4})$/.exec(s))) { mm = +m[2]; aa = +m[3]; }
+    else if ((m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s))) { mm = +m[2]; aa = +m[1]; }
+    else if ((m = /^(\d{1,2})\s*[/.\-]\s*(\d{2,4})$/.exec(s))) { mm = +m[1]; aa = +m[2]; }
+    else if ((m = /^(\d{2})(\d{4})$/.exec(s))) { mm = +m[1]; aa = +m[2]; }
+    else if ((m = /^(\d{2})(\d{2})$/.exec(s))) { mm = +m[1]; aa = +m[2]; }
+    else return null;
+    if (aa < 100) aa += 2000;
+    if (!(mm >= 1 && mm <= 12) || aa < 2000 || aa > 2100) return null;
+    return String(mm).padStart(2, '0') + '/' + aa;
+  }
+  function problemaVto_(texto) {
+    const txt = String(texto || '').trim();
+    if (!txt) return '';
+    const esp = vtoEsperadoFab_(), nv = normVto_(txt);
+    if (!nv) return 'no se entiende como mes y año (tendría que ser ' + esp + ')';
+    if (nv !== esp) return 'tendría que ser ' + esp + ' (2 años desde el envasado)';
+    return '';
+  }
+  const comoLote_ = (t) => String(t || '').toUpperCase().replace(/[\s.\-_]/g, '');
+
+  async function leerFotoFab_(stateKey, file) {
+    state.lecturaFoto[stateKey] = { estado: 'leyendo' };
+    avisoFotosFab_();
+    try {
+      // Para leer se manda una copia mas grande que la que se guarda: el inkjet
+      // en 800 px y calidad baja no siempre se lee.
+      const c = await compressImage(file, 1600, 0.85);
+      const r = await api('leerRotulo', {
+        imageBase64: c.base64, mimeType: c.mime,
+        donde: stateKey === 'foto_rotulo' ? 'caja' : 'envase'
+      });
+      state.lecturaFoto[stateKey] = {
+        estado: 'listo', lote: r.lote || '', vence: r.vence || '',
+        legible: r.legible !== false, confianza: r.confianza, nota: r.nota || ''
+      };
+      completarDesdeFotoFab_();
+    } catch (e) {
+      state.lecturaFoto[stateKey] = { estado: 'error', error: e.message || 'no se pudo leer' };
+    }
+    avisoFotosFab_();
+  }
+
+  // Primero el envase, que es lo que lleva el inkjet.
+  function leidoUtilFab_() {
+    return ['foto_lote', 'foto_rotulo']
+      .map((k) => ({ clave: k, ...(state.lecturaFoto[k] || {}) }))
+      .filter((x) => x.estado === 'listo' && x.legible);
+  }
+
+  // Lote vacio + foto leida = se completa, y se dice de donde salio.
+  function completarDesdeFotoFab_() {
+    const m = state.editingMuestreo; if (!m) return;
+    const con = leidoUtilFab_().find((x) => x.lote);
+    if (!con || String(m.lote || '').trim()) return;
+    m.lote = con.lote;
+    const inp = document.getElementById('m_lote');
+    if (inp) { inp.value = con.lote; if (window.__avisoLote) window.__avisoLote(); }
+    toast('Tomé el lote de la foto — revisalo', 'ok');
+  }
+
+  function problemasFotoFab_() {
+    const malos = [];
+    leidoUtilFab_().forEach((x) => {
+      const donde = DONDE_FAB[x.clave];
+      if (x.lote) {
+        const p = problemaLote_(x.lote);
+        if (p) malos.push('Lo impreso en ' + donde + ': ' + p);
+      }
+      if (x.vence) {
+        const p = problemaVto_(x.vence);
+        if (p) malos.push('El vencimiento impreso en ' + donde + ' dice ' + x.vence + ': ' + p + '.');
+      }
+    });
+    // El envase y la caja tienen que decir lo mismo.
+    const env = state.lecturaFoto.foto_lote, caja = state.lecturaFoto.foto_rotulo;
+    const ambos = env && caja && env.estado === 'listo' && caja.estado === 'listo' && env.legible && caja.legible;
+    if (ambos) {
+      if (env.vence && caja.vence && normVto_(env.vence) && normVto_(caja.vence)
+          && normVto_(env.vence) !== normVto_(caja.vence))
+        malos.push('El envase dice vencimiento ' + normVto_(env.vence) + ' y el sticker de la caja '
+          + normVto_(caja.vence) + ': tienen que coincidir.');
+      if (env.lote && caja.lote && comoLote_(env.lote) !== comoLote_(caja.lote))
+        malos.push('El envase dice lote ' + env.lote + ' y el sticker de la caja ' + caja.lote
+          + ': tienen que coincidir.');
+    }
+    // Lo escrito contra lo impreso.
+    const escrito = String((state.editingMuestreo || {}).lote || '').trim();
+    if (escrito) leidoUtilFab_().forEach((x) => {
+      if (x.lote && comoLote_(x.lote) !== comoLote_(escrito))
+        malos.push('Escribiste lote ' + escrito + ' y en ' + DONDE_FAB[x.clave] + ' se lee ' + x.lote + '.');
+    });
+    return malos;
+  }
+
+  function avisoFotosFab_() {
+    const caja = document.getElementById('fotoBox');
+    if (!caja) return;
+    const filas = [];
+    ['foto_lote', 'foto_rotulo'].forEach((k) => {
+      const L = state.lecturaFoto[k]; if (!L) return;
+      const titulo = '<b>' + (k === 'foto_lote' ? 'Envase' : 'Sticker de la caja') + '</b> ';
+      if (L.estado === 'leyendo') { filas.push(titulo + '<span class="muted">leyendo la foto…</span>'); return; }
+      if (L.estado === 'error') { filas.push(titulo + '<span class="muted">no se pudo leer (' + esc(L.error) + '). Verificalo a ojo.</span>'); return; }
+      if (!L.legible) { filas.push(titulo + '<span style="color:#b42318">la foto no se lee con seguridad' + (L.nota ? ': ' + esc(L.nota) : '') + '. Sacá otra, o verificalo a ojo.</span>'); return; }
+      const partes = [];
+      if (L.lote) partes.push('Lote <b>' + esc(L.lote) + '</b>');
+      if (L.vence) partes.push('Vence <b>' + esc(L.vence) + '</b>');
+      filas.push(titulo + (partes.length ? partes.join(' · ') : '<span style="color:#b42318">no se ve lote ni vencimiento</span>')
+        + (L.nota ? ' <span class="muted">(' + esc(L.nota) + ')</span>' : ''));
+    });
+    if (!filas.length) { caja.innerHTML = ''; return; }
+    const malos = problemasFotoFab_();
+    // Lo que no se pudo leer no se da por bueno: ni verde ni "coincide".
+    const enDuda = ['foto_lote', 'foto_rotulo'].some((k) => {
+      const L = state.lecturaFoto[k];
+      return L && (L.estado === 'leyendo' || L.estado === 'error' || (L.estado === 'listo' && !L.legible));
+    });
+    const cuerpo = '<div style="line-height:1.8">' + filas.join('<br>') + '</div>';
+    caja.innerHTML = malos.length
+      ? '<div style="background:#fef3f2;color:#b42318;border-radius:8px;padding:8px 10px">' + cuerpo
+        + '<div style="margin-top:6px">&#9888; ' + malos.map(esc).join('<br>&#9888; ') + '</div></div>'
+      : enDuda
+      ? '<div style="background:#f6f7f9;border-radius:8px;padding:8px 10px">' + cuerpo + '</div>'
+      : '<div style="background:#ecfdf3;color:#05603a;border-radius:8px;padding:8px 10px">' + cuerpo
+        + '<div style="margin-top:4px">&#10003; Lo impreso coincide con lo que corresponde.</div></div>';
+  }
 
   // ---------- ÓRDENES (lo que hay para aprobar) ----------
   // Misma idea que Control en proceso: quien aprueba entra y ve la lista, con
@@ -1102,6 +1258,10 @@ window.APP_CONFIG = {
   // ---------- NUEVO MUESTREO ----------
   function renderNew(prefill) {
     titleEl.textContent = 'Nuevo muestreo';
+    // Lo leido de las fotos es de ESTE muestreo: cuando se arma uno nuevo -con
+    // datos de una orden o desde cero- se olvida lo de antes.
+    const empiezaOtro = (prefill && (prefill.orden_envasado || prefill.lote)) || !state.editingMuestreo;
+    if (empiezaOtro) state.lecturaFoto = {};
     // Si vienen datos de "Órdenes de hoy", arrancamos con esos datos
     if (prefill && (prefill.orden_envasado || prefill.lote)) {
       state.editingMuestreo = {
@@ -1191,6 +1351,7 @@ window.APP_CONFIG = {
           <div id="req_rotulo_wrap"></div>
           <div id="req_lote_wrap"></div>
         </div>
+        <div id="fotoBox" class="small" style="margin-top:8px"></div>
       </div>
 
       <div class="card">
@@ -1246,9 +1407,10 @@ window.APP_CONFIG = {
     // Renderizar los 2 slots de fotos obligatorias
     renderRequiredSlot_('req_rotulo_wrap', 'foto_rotulo', '📦', 'Rótulo de caja');
     renderRequiredSlot_('req_lote_wrap',   'foto_lote',   '🏷️', 'Lote del envase');
+    avisoFotosFab_();
 
     document.getElementById('m_reset').addEventListener('click', () => {
-      if (confirm('¿Descartar el muestreo actual?')) { state.editingMuestreo = null; nav('home'); }
+      if (confirm('¿Descartar el muestreo actual?')) { state.editingMuestreo = null; state.lecturaFoto = {}; nav('home'); }
     });
     document.getElementById('m_save').addEventListener('click', saveMuestreo);
     // Actualizar el estado del botón guardar
@@ -1301,6 +1463,7 @@ window.APP_CONFIG = {
     m[stateKey] = { status: 'uploading', name: f.name, size: f.size };
     renderRequiredSlot_(wrapId, stateKey, emoji, title);
     updateSaveBtn_();
+    leerFotoFab_(stateKey, f);   // el servidor lee lo impreso y se compara
     try {
       const c = await compressImage(f, CFG.PHOTO_MAX_DIM, CFG.PHOTO_QUALITY);
       // Mientras se sube, mostramos el preview ya
@@ -1511,8 +1674,16 @@ window.APP_CONFIG = {
     const loteOk = m.foto_lote  && m.foto_lote.status  === 'uploaded' && m.foto_lote.url;
     if (!rotOk)  return toast('Falta la foto del rótulo de caja (o hubo error al subirla)', 'err');
     if (!loteOk) return toast('Falta la foto del lote del envase (o hubo error al subirla)', 'err');
+    // Lo que dicen las fotos, que es el control de verdad.
+    const dudas = problemasFotoFab_();
+    ['foto_lote', 'foto_rotulo'].forEach((k) => {
+      const L = state.lecturaFoto[k];
+      if (L && (L.estado === 'error' || (L.estado === 'listo' && !L.legible)))
+        dudas.push('No se pudo leer ' + DONDE_FAB[k] + ' en la foto: verificá a ojo que el lote y el vencimiento sean los que corresponden.');
+    });
     const malLote = problemaLote_(m.lote);
-    if (malLote && !confirm(malLote + '\n\n¿Guardar igual?')) return;
+    if (malLote) dudas.push(malLote);
+    if (dudas.length && !confirm(dudas.join('\n\n') + '\n\n¿Guardar igual?')) return;
     try {
       loading(true);
       const r = await api('saveMuestreo', {
@@ -1529,6 +1700,7 @@ window.APP_CONFIG = {
       toast(`Guardado. QR=${r.QR} (${r.rango})`, 'ok');
       cargarRotulos();
       state.editingMuestreo = null;
+      state.lecturaFoto = {};
       nav('detail', { id: r.id });
     } catch(e) {
       if (/supervisión/.test(e.message)) alert(e.message);

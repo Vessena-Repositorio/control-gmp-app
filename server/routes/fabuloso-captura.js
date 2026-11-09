@@ -25,6 +25,8 @@ import { auditar } from '../lib/sesiones.js';
 import { firmaDe } from '../lib/firmas.js';
 import { ZONA } from '../lib/tareas.js';
 import { comprimirFoto } from '../lib/comprimir-foto.js';
+import { leerLoteVence } from '../lib/lectura-rotulos.js';
+import { ErrorLectura, lecturaConfigurada } from '../lib/lectura-planillas.js';
 import { frenoDe, registrarControl, avisarSupervision, rotuloDe, montarRutasRotulo } from '../lib/rotulos.js';
 
 export const rutasFabulosoCaptura = Router();
@@ -653,6 +655,36 @@ rutasFabulosoCaptura.post('/fotos', cargar, async (req, res, next) => {
         });
         res.json({ ok: true, url: `/api/fabuloso-captura/fotos/${id}`, id: String(id), name: nombre, size: bytes.length });
     } catch (err) {
+        next(err);
+    }
+});
+
+/**
+ * POST /api/fabuloso-captura/lectura-rotulo  { imageBase64, mimeType, donde }
+ *
+ * Lo mismo que en Control en proceso: lee el lote y el vencimiento IMPRESOS en
+ * la foto y los devuelve tal cual, sin corregir. Quien decide si estan bien es
+ * la pantalla, que sabe el dia del muestreo y que la linea de Fabuloso es la F.
+ * Validar lo que el analista escribe no alcanza, porque lo que suele estar mal
+ * es lo impreso y el lo copia bien (Claudia, 09/11/2026).
+ *
+ * De la foto no queda nada aca: solo quien leyo, cuanto pesaba y cuanto tardo.
+ */
+rutasFabulosoCaptura.post('/lectura-rotulo', cargar, async (req, res, next) => {
+    const cuerpo = req.body || {};
+    const kb = Math.round(String(cuerpo.imageBase64 || '').length * 0.75 / 1024);
+    const inicio = Date.now();
+    if (!lecturaConfigurada()) {
+        return res.status(503).json({ ok: false, error: 'El servidor no tiene configurada la clave de la IA (GEMINI_API_KEY en Coolify).' });
+    }
+    try {
+        const r = await leerLoteVence(cuerpo);
+        console.log(`[lectura-rotulo] fabuloso · ${req.usuario.nombre} · ${cuerpo.donde || 'envase'} · ${kb} KB · `
+            + `lote "${r.lote}" vence "${r.vence}" · ${Math.round((Date.now() - inicio) / 1000)} s`);
+        res.json({ ok: true, ...r });
+    } catch (err) {
+        console.warn(`[lectura-rotulo] fabuloso · ${req.usuario.nombre} · ${kb} KB · fallo tras ${Math.round((Date.now() - inicio) / 1000)} s: ${err.message}`);
+        if (err instanceof ErrorLectura) return res.status(err.estado || 502).json({ ok: false, error: err.message });
         next(err);
     }
 });
