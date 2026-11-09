@@ -515,6 +515,10 @@ const LIMP_DEFECTS=[
     <div style="font-size:14px;color:var(--text2);margin-bottom:10px">El primer control de cada orden manda las fotos de caja y envase a supervisión. Una supervisora da el OK o pide corregir el rótulo. <b>Plazo para el OK: hasta las 12:00, o 2 horas desde el primer control si la orden arrancó más tarde.</b> Pasado el plazo, sin OK no acepta más controles. Los sábados no se frena nada: lo del sábado se revisa el lunes, con plazo hasta las 12.</div>
     <button class="ord-btn sec" style="max-width:220px" onclick="loadRotulos()">🔄 Actualizar</button>
   </div>
+  <div class="fs">
+    <input class="fi" id="rotQ" placeholder="🔎 Buscar por N° de orden, lote, producto o analista…" oninput="buscarRotulos()"/>
+    <div id="rotAlcance" style="font-size:13px;color:var(--text3);margin-top:5px">Se muestran los de los últimos 7 días y todos los que esperan algo. Buscá para ver cualquiera, de cuando sea.</div>
+  </div>
   <div id="rotList"></div>
 </div></div>
 </div>
@@ -1954,14 +1958,33 @@ async function imprimirOrden(orden){
 }
 // RÓTULOS: segunda mirada de supervisión al primer control de cada orden (lib/rotulos.js)
 let ROTULOS=[],ROT_HORA=12,ROT_FOTOS={};
+/* La lista corta a los 7 días, que para el día a día está bien y para encontrar
+   una orden de la semana pasada no (Claudia, 09/11/2026: "no veo en rótulos la
+   1070272 ni tampoco tengo cómo buscarlo"). Buscando, el corte no existe: el
+   servidor mira orden, lote, producto y analista en toda la historia. */
+let rotBuscando=null;
+function buscarRotulos(){
+  clearTimeout(rotBuscando);
+  rotBuscando=setTimeout(()=>loadRotulos(true),300);
+}
 async function loadRotulos(silencioso){
-  let d;try{d=await api('/rotulos')}catch(e){if(!silencioso)toast('⚠️ '+e.message,true);return}
+  const q=(document.getElementById('rotQ')||{}).value||'';
+  let d;try{d=await api('/rotulos'+(q.trim()?'?q='+encodeURIComponent(q.trim()):''))}
+  catch(e){if(!silencioso)toast('⚠️ '+e.message,true);return}
   ROTULOS=d.rotulos||[];ROT_HORA=d.horaCorte||12;
-  const sup=PERMISOS.includes('aprobar');
-  const n=ROTULOS.filter(r=>sup?r.estado==='pendiente':r.estado==='correccion').length;
-  const b=document.getElementById('rotCount');if(b){b.textContent=n||'';b.style.display=n?'':'none'}
+  const al=document.getElementById('rotAlcance');
+  if(al)al.textContent=d.buscando
+    ?ROTULOS.length+' '+(ROTULOS.length===1?'orden encontrada':'órdenes encontradas')+' en toda la historia, de cuando sea.'
+    :'Se muestran los de los últimos 7 días y todos los que esperan algo. Buscá para ver cualquiera, de cuando sea.';
+  // Con una búsqueda abierta, lo que hay en pantalla es el resultado y no lo
+  // pendiente: el contador y el cartel del formulario se quedan como estaban.
+  if(!d.buscando){
+    const sup=PERMISOS.includes('aprobar');
+    const n=ROTULOS.filter(r=>sup?r.estado==='pendiente':r.estado==='correccion').length;
+    const b=document.getElementById('rotCount');if(b){b.textContent=n||'';b.style.display=n?'':'none'}
+    avisoRotulo();
+  }
   if(document.getElementById('page3').classList.contains('on'))pintarRotulos();
-  avisoRotulo();
 }
 function rotuloDeOrden(orden){const o=String(orden||'').trim();return ROTULOS.find(r=>String(r.orden)===o)||null}
 // Cartel en el formulario de carga según el estado del rótulo de la orden

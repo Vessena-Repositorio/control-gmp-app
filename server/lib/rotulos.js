@@ -464,7 +464,25 @@ export async function actuar(app, orden, accion, usuario, datos = {}) {
 }
 
 /** Las pendientes y en correccion, y las resueltas de los ultimos dias. */
-export async function listar(app, dias = 7) {
+/**
+ * Los de los ultimos dias, o -con `q`- los que coincidan en TODA la historia.
+ *
+ * La lista corta a los 7 dias, que para el dia a dia esta bien y para encontrar
+ * una orden de la semana pasada no (Claudia, 09/11/2026: "no veo en rotulos la
+ * 1070272 ni tampoco tengo como buscarlo"). Buscando, el corte no existe: se
+ * mira orden, lote, producto y analista, sin tildes ni signos, en todo lo que
+ * hay.
+ */
+export async function listar(app, dias = 7, q = '') {
+    const clave = String(q || '').toLowerCase()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+    // Buscando no hay corte por fecha ni por estado: se mira todo.
+    const filtro = clave
+        ? `AND (clave_busqueda(v.orden)    LIKE '%' || $2 || '%'
+             OR clave_busqueda(v.lote)     LIKE '%' || $2 || '%'
+             OR clave_busqueda(v.producto) LIKE '%' || $2 || '%'
+             OR clave_busqueda(v.analista) LIKE '%' || $2 || '%')`
+        : `AND (v.estado <> 'ok' OR v.actualizado_en >= now() - ($2 || ' days')::interval)`;
     const { rows } = await consultar(
         `SELECT v.*, p.ean14, p.nombre AS descripcion,
                 (SELECT json_agg(json_build_object('id', e.id, 'ts', e.ts, 'usuario', e.usuario, 'accion', e.accion,
@@ -478,9 +496,9 @@ export async function listar(app, dias = 7) {
          FROM rotulo_verificaciones v
          LEFT JOIN producto_ean p ON p.codigo = v.codigo
          WHERE v.app = $1
-           AND (v.estado <> 'ok' OR v.actualizado_en >= now() - ($2 || ' days')::interval)
+           ${filtro}
          ORDER BY (v.estado = 'ok'), v.creado_en DESC`,
-        [app, String(dias), ZONA, HORA_CORTE, MARGEN_HORAS]
+        [app, clave || String(dias), ZONA, HORA_CORTE, MARGEN_HORAS]
     );
     return rows.map((v) => ({
         orden: v.orden, estado: v.estado,
@@ -510,9 +528,14 @@ export function montarRutasRotulo(router, app, { leer, cargar: cargarP, aprobar 
         : next(err));
     const orden = (req) => texto(req.params.orden, 100);
 
-    router.get('/rotulos', leer, async (_req, res, next) => {
+    router.get('/rotulos', leer, async (req, res, next) => {
         try {
-            res.json({ ok: true, horaCorte: HORA_CORTE, margenHoras: MARGEN_HORAS, rotulos: await listar(app) });
+            // Con `q` se busca en toda la historia; sin `q`, los ultimos dias.
+            const q = texto(req.query.q, 80);
+            res.json({
+                ok: true, horaCorte: HORA_CORTE, margenHoras: MARGEN_HORAS, buscando: Boolean(q),
+                rotulos: await listar(app, 7, q),
+            });
         } catch (err) { next(err); }
     });
     router.post('/rotulos/:orden/ok', aprobar, async (req, res, next) => {
