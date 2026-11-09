@@ -781,10 +781,13 @@ const eanDe=(cod)=>EANS[String(cod||'').trim()]||null;
    liquidos, turno matutino.
    La app sabe el dia -es la fecha del control- y la maquina, asi que puede
    decir como tendria que empezar el lote y avisar antes de guardar. */
-const LINEA_DE_MAQUINA={'Alwid':'A','Bossar':'B','Bidonera':'CW','Elf':'E',
+const LINEA_DE_MAQUINA={'Alwid':'A','Bossar':'B','Cleanway':'CW','Elf':'E',
   'Hipo 2':'H','Hipo 1':'I','Alfi':'L','Alcoholes':'N','Strunk':'S'};
 // La linea de Fabuloso -limpiadores liquidos, F- se controla en su propia app.
-// Cleanway no esta en la tabla del SOP: de esa letra no se opina.
+// Bidonera queda sin letra a proposito: la tabla del SOP-PR-063 V4.0 le pone
+// CW, pero el CW es de Cleanway, que es otra linea (Claudia, 09/11/2026). De
+// la letra de Bidonera no se opina hasta que el procedimiento lo aclare; el
+// dia y el turno si se controlan igual.
 function diaDelAnio(a,m,d){
   return Math.round((Date.UTC(a,m-1,d)-Date.UTC(a,0,1))/86400000)+1;
 }
@@ -825,9 +828,10 @@ function problemaLote(){
   const txt=document.getElementById('cLote').value.trim();
   if(!txt)return '';
   const esp=loteEsperado(), p=normLote(txt);
+  // Sin letra conocida -Bidonera- se pide igual, pero no se dice cual.
+  const masLetra=esp.letra?'':' + la letra de la línea';
   if(!p)return 'No se reconoce el lote «'+txt+'». Según el SOP-PR-063 se escribe '
-    +esp.prefijo+(esp.letra?'':'<línea>')+' y el turno (1 mañana, 2 tarde, 3 noche)'
-    +(esp.letra?'':'; la letra es la de la línea de envasado')+'.';
+    +esp.prefijo+masLetra+' y el turno (1 mañana, 2 tarde, 3 noche).';
   const mal=[];
   if(p.z!==esp.z||p.jjj!==esp.jjj)
     mal.push('la fecha: pusiste '+p.z+p.jjj+' ('+fechaDeLote(p.z,p.jjj)+') y el control es del '
@@ -839,7 +843,7 @@ function problemaLote(){
     mal.push('el turno: '+p.turno+' no existe, son 1 mañana, 2 tarde y 3 noche');
   if(!mal.length)return '';
   return 'El lote «'+txt+'» no cierra en '+mal.join('; y ')+'. Tendría que ser '
-    +esp.prefijo+' y el turno.';
+    +esp.prefijo+masLetra+' y el turno.';
 }
 /* El aviso debajo del campo, mientras se escribe. */
 function avisoLote(){
