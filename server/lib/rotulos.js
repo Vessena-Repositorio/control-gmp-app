@@ -140,8 +140,10 @@ export async function rotuloDe(app, orden, c = null) {
     const { rows } = await q(
         `SELECT v.estado, v.revisado_por, v.revisado_en, v.comentario, v.reproceso,
                 v.lote, v.vence, v.analista, v.creado_en,
-                (SELECT json_agg(json_build_object('ts', e.ts, 'usuario', e.usuario, 'accion', e.accion,
-                                                   'comentario', e.comentario, 'reproceso', e.reproceso)
+                (SELECT json_agg(json_build_object('id', e.id, 'ts', e.ts, 'usuario', e.usuario, 'accion', e.accion,
+                                                   'comentario', e.comentario, 'reproceso', e.reproceso,
+                                                   'anuladoPor', e.anulado_por, 'anuladoEn', e.anulado_en,
+                                                   'anuladoMotivo', e.anulado_motivo)
                                  ORDER BY e.ts, e.id)
                  FROM rotulo_eventos e WHERE e.verificacion_id = v.id) AS eventos
          FROM rotulo_verificaciones v WHERE v.app = $1 AND v.orden = $2`,
@@ -164,7 +166,8 @@ async function cargar(id) {
     const { rows } = await consultar(
         `SELECT v.*, p.ean14, p.nombre AS descripcion,
                 (SELECT count(*) FROM rotulo_eventos e
-                  WHERE e.verificacion_id = v.id AND e.accion = 'deteccion')::int AS detecciones
+                  WHERE e.verificacion_id = v.id AND e.accion = 'deteccion'
+                    AND e.anulado_en IS NULL)::int AS detecciones
          FROM rotulo_verificaciones v
          LEFT JOIN producto_ean p ON p.codigo = v.codigo
          WHERE v.id = $1`, [id]
@@ -376,6 +379,70 @@ export async function actuar(app, orden, accion, usuario, datos = {}) {
             await evento('deteccion', { comentario: (teniaOk ? '[reabre un rótulo que ya tenía el OK] ' : '') + comentario, reproceso });
             return { id: v.id, aviso: 'deteccion' };
         }
+        // Anular una deteccion (migracion 078). El historial no se edita ni se
+        // borra: el movimiento queda, tachado, con el motivo y quien lo anulo.
+        // Lo que si se deshace es lo que esa deteccion habia dejado, porque si
+        // no la orden se queda frenada por algo que no paso.
+        if (accion === 'anulacion') {
+            const eventoId = Number(datos.eventoId);
+            const motivo = texto(datos.motivo, 500);
+            if (!eventoId) throw fallo(400, 'Elegí qué detección se anula');
+            if (motivo.length < 5) throw fallo(400, 'Escribí por qué se anula: queda en el registro');
+            const { rows: evs } = await c.query(
+                'SELECT * FROM rotulo_eventos WHERE id = $1 AND verificacion_id = $2', [eventoId, v.id]
+            );
+            const ev = evs[0];
+            if (!ev) throw fallo(404, 'Ese movimiento no es de esta orden');
+            if (ev.accion !== 'deteccion') throw fallo(400, 'Solo se anulan las detecciones de error de impresión');
+            if (ev.anulado_en) throw fallo(409, 'Esa detección ya está anulada');
+            await c.query(
+                'UPDATE rotulo_eventos SET anulado_en = now(), anulado_por = $2, anulado_motivo = $3 WHERE id = $1',
+                [eventoId, nombre, motivo]
+            );
+            // ¿Quedaba algo pendiente por otro motivo? Si despues de esta
+            // deteccion hubo otra, o supervision pidio una correccion, el
+            // estado se queda como esta: lo que falta no era esto.
+            const { rows: [{ n: posteriores }] } = await c.query(
+                `SELECT count(*)::int AS n FROM rotulo_eventos
+                  WHERE verificacion_id = $1 AND anulado_en IS NULL AND id <> $2
+                    AND accion IN ('deteccion', 'correccion') AND ts >= $3`,
+                [v.id, eventoId, ev.ts]
+            );
+            let vuelveA = null;
+            if (v.estado === 'correccion' && !posteriores) {
+                // El ultimo OK que no este anulado, si lo hubo: a eso vuelve.
+                const { rows: [ok] } = await c.query(
+                    `SELECT usuario, ts FROM rotulo_eventos
+                      WHERE verificacion_id = $1 AND accion = 'ok' AND anulado_en IS NULL AND ts < $2
+                      ORDER BY ts DESC LIMIT 1`,
+                    [v.id, ev.ts]
+                );
+                if (ok) {
+                    await c.query(
+                        `UPDATE rotulo_verificaciones
+                            SET estado = 'ok', comentario = NULL, reproceso = NULL,
+                                revisado_por = $2, revisado_en = $3, actualizado_en = now()
+                          WHERE id = $1`,
+                        [v.id, ok.usuario, ok.ts]
+                    );
+                    vuelveA = `OK de ${ok.usuario}`;
+                } else {
+                    await c.query(
+                        `UPDATE rotulo_verificaciones
+                            SET estado = 'pendiente', comentario = NULL, reproceso = NULL,
+                                revisado_por = NULL, revisado_por_id = NULL, revisado_en = NULL,
+                                actualizado_en = now()
+                          WHERE id = $1`,
+                        [v.id]
+                    );
+                    vuelveA = 'pendiente del OK';
+                }
+            }
+            await evento('anulacion', {
+                comentario: `Anulada la detección de ${ev.usuario}${vuelveA ? ` — la orden vuelve a ${vuelveA}` : ''}: ${motivo}`,
+            });
+            return { id: v.id, aviso: null };
+        }
         if (accion === 'solicitud') {
             if (v.estado === 'ok') throw fallo(409, 'El rótulo ya tiene el OK');
             if (await esFinDeSemana((s, p) => c.query(s, p))) {
@@ -400,9 +467,11 @@ export async function actuar(app, orden, accion, usuario, datos = {}) {
 export async function listar(app, dias = 7) {
     const { rows } = await consultar(
         `SELECT v.*, p.ean14, p.nombre AS descripcion,
-                (SELECT json_agg(json_build_object('ts', e.ts, 'usuario', e.usuario, 'accion', e.accion,
-                                                   'comentario', e.comentario, 'reproceso', e.reproceso)
-                                 ORDER BY e.ts)
+                (SELECT json_agg(json_build_object('id', e.id, 'ts', e.ts, 'usuario', e.usuario, 'accion', e.accion,
+                                                   'comentario', e.comentario, 'reproceso', e.reproceso,
+                                                   'anuladoPor', e.anulado_por, 'anuladoEn', e.anulado_en,
+                                                   'anuladoMotivo', e.anulado_motivo)
+                                 ORDER BY e.ts, e.id)
                  FROM rotulo_eventos e WHERE e.verificacion_id = v.id) AS eventos,
                 ${VENCIDA.replace(/creado_en/g, 'v.creado_en')} AND NOT ${FINDE} AS vencida,
                 to_char(${PLAZO.replace(/creado_en/g, 'v.creado_en')}, 'DD/MM HH24:MI') AS plazo
@@ -424,7 +493,7 @@ export async function listar(app, dias = 7) {
         comentario: v.comentario || '', reproceso: v.reproceso,
         // Cuantas veces se detecto un error de impresion en esta orden: es lo
         // que mira supervision para decidir si amerita reproceso.
-        detecciones: (v.eventos || []).filter((e) => e.accion === 'deteccion').length,
+        detecciones: (v.eventos || []).filter((e) => e.accion === 'deteccion' && !e.anuladoEn).length,
         plazo: v.plazo || '',
         frenada: v.estado !== 'ok' && Boolean(v.vencida),
         eventos: v.eventos || [],
@@ -462,6 +531,10 @@ export function montarRutasRotulo(router, app, { leer, cargar: cargarP, aprobar 
     // la que carga, no supervision, asi que va con permiso de cargar.
     router.post('/rotulos/:orden/deteccion', cargarP, async (req, res, next) => {
         try { res.json({ ok: true, rotulo: await actuar(app, orden(req), 'deteccion', req.usuario, req.body || {}) }); }
+        catch (err) { responder(err, res, next); }
+    });
+    router.post('/rotulos/:orden/anulacion', aprobar, async (req, res, next) => {
+        try { res.json({ ok: true, rotulo: await actuar(app, orden(req), 'anulacion', req.usuario, req.body || {}) }); }
         catch (err) { responder(err, res, next); }
     });
     router.post('/rotulos/:orden/solicitar', cargarP, async (req, res, next) => {

@@ -1708,7 +1708,7 @@ function htmlRegistro(d,orden,imprimir){
   /* La verificación de rótulo es parte del registro de la orden: si supervisión
      pidió corregir el rótulo, el pedido y lo que se hizo después quedan acá
      (Claudia, 09/10/2026). */
-  const ROT_TXT={primer_control:'Primer control: se mandaron las fotos del rótulo a supervisión',ok:'OK: rótulo correcto',correccion:'Pidió corregir el rótulo',corregido:'Subió las fotos del rótulo corregido',solicitud:'Pidió la aprobación del rótulo'};
+  const ROT_TXT={primer_control:'Primer control: se mandaron las fotos del rótulo a supervisión',ok:'OK: rótulo correcto',correccion:'Pidió corregir el rótulo',corregido:'Subió las fotos del rótulo corregido',solicitud:'Pidió la aprobación del rótulo',deteccion:'Detectó un error de impresión',anulacion:'Anuló una detección'};
   const r=d.rotulo;
   const secRotulo=r?('<h2>Verificación de rótulo — segundo control de supervisión</h2>'+
     '<div style="font-size:11px;margin:0 0 6px">Estado: '+(r.estado==='ok'
@@ -1717,7 +1717,12 @@ function htmlRegistro(d,orden,imprimir){
     (r.estado!=='ok'&&r.comentario?' · <b class="rojo">'+esc(r.comentario)+'</b>':'')+'</div>'+
     '<table><thead><tr><th style="width:110px">Fecha y hora</th><th style="width:150px">Quién</th><th>Qué pasó</th><th>Qué dijo</th></tr></thead><tbody>'+
     ((r.eventos||[]).length
-      ?(r.eventos||[]).map(e=>'<tr><td>'+esc(fh(e.ts))+'</td><td>'+esc(e.usuario||'')+'</td><td>'+
+      ?(r.eventos||[]).map(e=>e.anuladoEn
+        // Una detección anulada no se borra del registro: se tacha y se explica.
+        ?'<tr style="opacity:.6"><td><s>'+esc(fh(e.ts))+'</s></td><td><s>'+esc(e.usuario||'')+'</s></td>'+
+          '<td><s>'+esc(ROT_TXT[e.accion]||e.accion)+'</s> <b>— ANULADA</b></td>'+
+          '<td><s>'+esc(e.comentario||'—')+'</s><br><b>Anulada por '+esc(e.anuladoPor||'')+' · '+esc(fh(e.anuladoEn))+':</b> '+esc(e.anuladoMotivo||'')+'</td></tr>'
+        :'<tr><td>'+esc(fh(e.ts))+'</td><td>'+esc(e.usuario||'')+'</td><td>'+
         (e.accion==='correccion'?'<b class="rojo">'+esc(ROT_TXT.correccion)+'</b>':esc(ROT_TXT[e.accion]||e.accion))+
         (e.reproceso?' <b class="rojo">· requiere reproceso</b>':'')+'</td><td>'+esc(e.comentario||'—')+'</td></tr>').join('')
       :'<tr><td colspan="4">Sin movimientos registrados.</td></tr>')+'</tbody></table>'):'';
@@ -1971,7 +1976,7 @@ function avisoRotulo(){
   else{el.className='rot-aviso pend';el.innerHTML='⏳ El rótulo de esta orden espera el OK de supervisión. Plazo para el OK: <b>'+esc(r.plazo)+'</b>. Pasado ese horario no se van a poder cargar más controles sin el OK.'}
 }
 function fotoRot(u,t){return u?'<a href="'+esc(u)+'" target="_blank" class="rot-foto"><img src="'+esc(u)+'" alt=""><span>'+t+'</span></a>':'<div class="rot-foto vacia"><span>'+t+': sin foto</span></div>'}
-const ROT_ACC={primer_control:'Primer control',ok:'OK de rótulo',correccion:'Pidió corrección',corregido:'Subió fotos corregidas',solicitud:'Pidió la aprobación'};
+const ROT_ACC={primer_control:'Primer control',ok:'OK de rótulo',correccion:'Pidió corrección',corregido:'Subió fotos corregidas',solicitud:'Pidió la aprobación',deteccion:'Detectó un error de impresión',anulacion:'Anuló una detección'};
 function pintarRotulos(){
   const el=document.getElementById('rotList');const sup=PERMISOS.includes('aprobar');
   if(!ROTULOS.length){el.innerHTML='<div class="ord-vacio">No hay rótulos para revisar.</div>';return}
@@ -1986,7 +1991,14 @@ function pintarRotulos(){
     if(r.estado!=='ok'&&sup)acciones+='<button class="ord-btn pri" onclick="okRotulo('+arg+')">✅ OK, rótulo correcto</button><button class="ord-btn sec" onclick="formCorreccion('+arg+')">✏️ Pedir corrección</button>';
     if(r.estado==='correccion'&&PERMISOS.includes('cargar'))acciones+='<button class="ord-btn pri" onclick="formCorregido('+arg+')">📷 Subir rótulo corregido</button>';
     if(r.estado==='pendiente'&&!sup&&PERMISOS.includes('cargar'))acciones+='<button class="ord-btn sec" onclick="solicitarRotulo('+arg+')">📣 Solicitar aprobación</button>';
-    const hist=(r.eventos||[]).map(e=>'<div>'+esc(new Date(e.ts).toLocaleString('es-UY',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}))+' · '+esc(e.usuario||'')+' · '+esc(ROT_ACC[e.accion]||e.accion)+(e.comentario?': '+esc(e.comentario):'')+'</div>').join('');
+    const hist=(r.eventos||[]).map(e=>{
+      const cab=esc(new Date(e.ts).toLocaleString('es-UY',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}))+' · '+esc(e.usuario||'')+' · '+esc(ROT_ACC[e.accion]||e.accion)+(e.comentario?': '+esc(e.comentario):'');
+      // Una deteccion anulada no se borra: se tacha y se dice por que.
+      if(e.anuladoEn)return '<div style="opacity:.6"><span style="text-decoration:line-through">'+cab+'</span>'
+        +'<br><b>Anulada</b> por '+esc(e.anuladoPor||'')+' — '+esc(e.anuladoMotivo||'')+'</div>';
+      const puede=sup&&e.accion==='deteccion';
+      return '<div>'+cab+(puede?' <a href="#" onclick="formAnularDeteccion('+arg+','+e.id+');return false">anular</a>':'')+'</div>';
+    }).join('');
     return '<div class="ord-card '+(r.estado==='ok'?'ok':'pend')+'" id="rot-'+o+'">'+
       '<div class="ord-cab"><div><div class="ord-num">Orden '+o+'</div><div class="ord-prod">'+esc(r.producto)+'</div></div>'+
       '<div class="ord-fecha">'+esc(new Date(r.creadoEn).toLocaleString('es-UY',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}))+'</div></div>'+
@@ -2004,6 +2016,31 @@ function pintarRotulos(){
       (acciones?'<div class="ord-botones">'+acciones+'</div>':'')+
       (hist?'<details class="rot-hist"><summary>Historial</summary>'+hist+'</details>':'')+'</div>';
   }).join('');
+}
+/* ANULAR UNA DETECCION (migracion 078)
+   Claudia, 09/11/2026: hizo una deteccion de prueba sobre una orden real y
+   quedo en el registro un "requiere reproceso" que no corresponde. El
+   historial no se edita ni se borra: la deteccion queda tachada, con el
+   motivo y quien la anulo, deja de contar, y la orden vuelve al estado que
+   tenia antes -al OK que tenia, o a pendiente-. */
+function formAnularDeteccion(orden,eventoId){
+  const caja=document.getElementById('rot-form-'+orden);if(!caja)return;
+  const arg='\''+String(orden).replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\'';
+  caja.innerHTML='<div class="rot-aviso corr" style="display:block;margin-top:8px">'+
+    '<b>🚫 Anular esta detección</b><div style="font-size:13px;margin:2px 0 6px">No se borra: queda tachada en el registro con tu nombre y el motivo, y deja de contar. Si la orden había quedado esperando la corrección por esta detección, vuelve al estado que tenía antes.</div>'+
+    '<input id="anuDetMot" placeholder="Por qué se anula" style="width:100%;padding:9px;border:1px solid var(--border);border-radius:var(--rs);font-size:15px;font-family:var(--f)">'+
+    '<div class="ord-botones" style="margin-top:8px"><button class="ord-btn sec" onclick="document.getElementById(\'rot-form-'+orden+'\').innerHTML=\'\'">Cancelar</button>'+
+    '<button class="ord-btn pri" onclick="anularDeteccion('+arg+','+eventoId+')">🚫 Anular la detección</button></div></div>';
+}
+async function anularDeteccion(orden,eventoId){
+  const motivo=(document.getElementById('anuDetMot').value||'').trim();
+  if(motivo.length<5){toast('⚠️ Escribí por qué se anula',true);return}
+  try{
+    await api('/rotulos/'+encodeURIComponent(orden)+'/anulacion',
+      {method:'POST',body:JSON.stringify({eventoId:Number(eventoId),motivo})});
+    toast('🚫 Detección anulada');
+  }catch(e){toast('⚠️ '+e.message,true);return}
+  loadRotulos(true);
 }
 async function okRotulo(orden){
   if(!confirm('¿El lote y el vencimiento de la orden '+orden+' están bien?\n\nQueda registrado con tu nombre.'))return;
