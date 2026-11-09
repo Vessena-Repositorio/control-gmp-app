@@ -368,10 +368,11 @@ const LIMP_DEFECTS=[
         <label class="ord-check" style="margin-top:4px;font-size:12px;color:var(--text2)">
           <input type="checkbox" id="cSinOP" onchange="sinOP()"> La orden todavía no se emitió</label>
         <div id="cSinOPClave" style="display:none;font-size:11.5px;color:var(--text2);margin-top:2px"></div></div>
-      <div class="fd"><span class="fl">F. Vencimiento</span><input class="fi" id="cVence" placeholder="—"/></div>
+      <div class="fd"><span class="fl">F. Vencimiento</span><input class="fi" id="cVence" placeholder="MM/AAAA" oninput="avisoVto()"/></div>
       <div class="fd"><span class="fl">Cód. Granel</span><input class="fi" id="cGranel" placeholder="G000000" oninput="mostrarEan()"/></div>
       <div class="fd"><span class="fl">Cód. PT</span><input class="fi" id="cCodPT" placeholder="—" oninput="mostrarEan()"/></div>
     </div>
+    <div id="vtoAviso" class="rot-aviso" style="display:none"></div>
     <div id="eanAviso" class="rot-aviso" style="display:none"></div>
     <div id="rotAviso" class="rot-aviso" style="display:none"></div>
     <div id="specI" class="ri" style="display:none;background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:8px;margin-bottom:8px"></div>
@@ -700,7 +701,8 @@ function showForm(){document.getElementById('newBtn').style.display='none';docum
 const now=new Date();document.getElementById('cHora').value=now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
 resetForm();avisoPH();document.getElementById('cForm').scrollIntoView({behavior:'smooth'})}
 function cancelForm(){document.getElementById('cForm').style.display='none';document.getElementById('newBtn').style.display='block'}
-function resetForm(){const sop=document.getElementById('cSinOP');if(sop){sop.checked=false;document.getElementById('cOrden').disabled=false;claveSinOP();}
+function resetForm(){const va=document.getElementById('vtoAviso');if(va){va.style.display='none';va.innerHTML=''}
+  const sop=document.getElementById('cSinOP');if(sop){sop.checked=false;document.getElementById('cOrden').disabled=false;claveSinOP();}
   ['cP1','cP2','cP3','cP4','cP5','cPH','cDevD','cDevQ','cObs','cLote','cOrden','cVence','cGranel','cCodPT'].forEach(id=>{const e=document.getElementById(id);if(e){e.value='';e.className='fi'}});
 document.getElementById('cProm').textContent='—';document.getElementById('cProm').style.color='var(--text)';
 document.getElementById('cMaq').value='';document.getElementById('cPres').innerHTML='<option value="">—</option>';
@@ -765,11 +767,73 @@ async function cargarEans(){
   mostrarEan();
 }
 const eanDe=(cod)=>EANS[String(cod||'').trim()]||null;
+/* ---- Vencimiento: se calcula y se compara con lo que se escribió ----------
+   Lo impreso con inkjet en el envase y lo del sticker de la caja se equivocan
+   (Claudia, 09/11/2026: un hipoclorito salió con dos años en vez de 180 días).
+   La app sabe el día de envasado -es la fecha del control- y el producto, así
+   que puede decir cuál tendría que ser y avisar antes de guardar.
+
+   La regla: dos años desde el envasado, salvo el hipoclorito, que son 180
+   días. Se escribe mes en dos cifras y año en cuatro -11/2028- y vale hasta el
+   último día de ese mes. */
+function esHipoclorito(){
+  const p=eanDe(document.getElementById('cCodPT').value.trim());
+  const txt=[(p&&p.nombre)||'',document.getElementById('cPres').value||'',
+             document.getElementById('cGranel').value||''].join(' ');
+  return /HIPOCLOR/.test(txt.normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase());
+}
+function vtoEsperado(){
+  const base=(shift&&diaDe(shift.fecha))||hoyLocal();
+  const [a,m,d]=base.split('-').map(Number);
+  const f=new Date(Date.UTC(a,m-1,d));
+  if(esHipoclorito())f.setUTCDate(f.getUTCDate()+180);
+  else f.setUTCFullYear(f.getUTCFullYear()+2);
+  return String(f.getUTCMonth()+1).padStart(2,'0')+'/'+f.getUTCFullYear();
+}
+/* Lo escrito, llevado a mes/año. Vale como lo escriban: 11/2028, 11-2028,
+   112028, 11/28, o la fecha entera 30/11/2028. Lo que no se entiende devuelve
+   null, que es lo que la pantalla muestra como "no se reconoce". */
+function normVto(t){
+  const s=String(t||'').trim();
+  let mm=null,aa=null,m;
+  if((m=/^(\d{1,2})\s*[\/.\-]\s*(\d{1,2})\s*[\/.\-]\s*(\d{2,4})$/.exec(s))){mm=+m[2];aa=+m[3];}
+  else if((m=/^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s))){mm=+m[2];aa=+m[1];}
+  else if((m=/^(\d{1,2})\s*[\/.\-]\s*(\d{2,4})$/.exec(s))){mm=+m[1];aa=+m[2];}
+  else if((m=/^(\d{2})(\d{4})$/.exec(s))){mm=+m[1];aa=+m[2];}
+  else if((m=/^(\d{2})(\d{2})$/.exec(s))){mm=+m[1];aa=+m[2];}
+  else return null;
+  if(aa<100)aa+=2000;
+  if(!(mm>=1&&mm<=12)||aa<2000||aa>2100)return null;
+  return String(mm).padStart(2,'0')+'/'+aa;
+}
+/* El aviso debajo del campo, mientras se escribe. */
+function avisoVto(){
+  const el=document.getElementById('vtoAviso');if(!el)return;
+  const txt=document.getElementById('cVence').value.trim();
+  const esp=vtoEsperado();
+  const regla=esHipoclorito()?'180 días desde el envasado, por ser hipoclorito':'2 años desde el envasado';
+  if(!txt){el.style.display='none';el.innerHTML='';return}
+  const nv=normVto(txt);
+  let html;
+  if(!nv)
+    html='<div style="background:#fef3f2;color:#b42318;border-radius:8px;padding:8px 10px">'+
+      '⚠️ No se reconoce el vencimiento <b>'+esc(txt)+'</b>. Se escribe mes y año: <b>'+esp+'</b>.</div>';
+  else if(nv!==esp)
+    html='<div style="background:#fef3f2;color:#b42318;border-radius:8px;padding:8px 10px">'+
+      '⚠️ Para este producto, envasado hoy, el vencimiento sería <b>'+esp+'</b> ('+regla+') y vos pusiste <b>'+nv+'</b>.'+
+      '<div style="font-size:12px;margin-top:2px">Fijate en lo impreso en el envase <b>y en el sticker de la caja</b>: los dos tienen que decir '+esp+'.</div></div>';
+  else
+    html='<div style="background:#ecfdf3;color:#05603a;border-radius:8px;padding:8px 10px">'+
+      '✅ <b>'+esp+'</b> — coincide con '+regla+'. Verificá que el sticker de la caja diga lo mismo.</div>';
+  el.style.display='block';el.innerHTML=html;
+}
+
 /* Los dos codigos se escriben a mano. El 26 y 27/09 aparecieron cruzados -el
    del producto en "Cod. granel" y en "Cod. PT" el arranque del lote-, y la app
    mostro el EAN de otro producto. Ahora se avisa en el momento: el nombre del
    producto cuando el codigo existe, y en rojo cuando no. */
 function mostrarEan(){
+  avisoVto();   // el producto decide si son 2 años o 180 días
   const el=document.getElementById('eanAviso');if(!el)return;
   const cod=document.getElementById('cCodPT').value.trim();
   const gr=document.getElementById('cGranel').value.trim();
@@ -821,6 +885,13 @@ function saveCtrl(){
   // se pregunta, para que no pase de largo un PT que no existe o un granel sin G.
   const dudas=[];
   if(Object.keys(EANS).length&&!eanDe(codPT))dudas.push('El código de PT '+codPT+' no está en el ERP.');
+  // El vencimiento se calcula, no se cree: 2 años desde el envasado, o 180
+  // dias si es hipoclorito (Claudia, 09/11/2026).
+  const vtoEsp=vtoEsperado(), vtoPuesto=normVto(vence);
+  if(!vtoPuesto)
+    dudas.push('No se reconoce el vencimiento «'+vence+'». Se escribe mes y año: '+vtoEsp+'.');
+  else if(vtoPuesto!==vtoEsp)
+    dudas.push('El vencimiento tendría que ser '+vtoEsp+' ('+(esHipoclorito()?'180 días':'2 años')+' desde el envasado) y pusiste '+vtoPuesto+'. Fijate en el envase y en el sticker de la caja.');
   if(!/^G/i.test(granel))dudas.push('El código de granel '+granel+' no empieza con G.');
   if(dudas.length&&!confirm(dudas.join('\n')+'\n\nRevisá que no estén cambiados entre sí. ¿Guardar igual?'))return;
   // Como en Fabuloso: sin la foto del sticker y la de lote/vencimiento no se guarda
