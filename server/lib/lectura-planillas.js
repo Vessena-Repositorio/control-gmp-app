@@ -46,7 +46,7 @@ export function lecturaConfigurada() {
     return !!process.env.GEMINI_API_KEY;
 }
 
-function validar(p) {
+export function validar(p) {
     if (!process.env.GEMINI_API_KEY) {
         throw new ErrorLectura('El servidor no tiene configurada la clave de la IA (GEMINI_API_KEY en Coolify).', 503);
     }
@@ -64,7 +64,7 @@ function validar(p) {
 const lista = (x) => (Array.isArray(x) ? x.map((v) => String(v)) : []);
 
 /** Manda el archivo con la instruccion y devuelve el JSON que armo el modelo. */
-async function preguntar({ instruccion, pedido, p, esquema, temperatura }) {
+export async function preguntar({ instruccion, pedido, p, esquema, temperatura }) {
     const cuerpo = {
         contents: [{
             role: 'user',

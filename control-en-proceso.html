@@ -431,6 +431,7 @@ const LIMP_DEFECTS=[
         <div style="flex:1"><div class="pb" id="pB0" onclick="takeP(0)"><span style="font-size:16px">📦</span><span style="font-size:11px;color:var(--text3)">Sticker</span></div></div>
         <div style="flex:1"><div class="pb" id="pB1" onclick="takeP(1)"><span style="font-size:16px">🏷️</span><span style="font-size:11px;color:var(--text3)">Lote/Vence</span></div></div>
       </div>
+      <div id="fotoAviso" class="rot-aviso" style="display:none;margin-top:6px"></div>
       <input type="file" id="camIn" accept="image/*" capture="environment" style="display:none" onchange="gotP(event)"/>
     </div>
 
@@ -703,7 +704,8 @@ function showForm(){document.getElementById('newBtn').style.display='none';docum
 const now=new Date();document.getElementById('cHora').value=now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
 resetForm();avisoPH();document.getElementById('cForm').scrollIntoView({behavior:'smooth'})}
 function cancelForm(){document.getElementById('cForm').style.display='none';document.getElementById('newBtn').style.display='block'}
-function resetForm(){['loteAviso','vtoAviso'].forEach(id=>{const a=document.getElementById(id);if(a){a.style.display='none';a.innerHTML=''}});
+function resetForm(){['loteAviso','vtoAviso','fotoAviso'].forEach(id=>{const a=document.getElementById(id);if(a){a.style.display='none';a.innerHTML=''}});
+  lectura=[null,null];
   const sop=document.getElementById('cSinOP');if(sop){sop.checked=false;document.getElementById('cOrden').disabled=false;claveSinOP();}
   ['cP1','cP2','cP3','cP4','cP5','cPH','cDevD','cDevQ','cObs','cLote','cOrden','cVence','cGranel','cCodPT'].forEach(id=>{const e=document.getElementById(id);if(e){e.value='';e.className='fi'}});
 document.getElementById('cProm').textContent='—';document.getElementById('cProm').style.color='var(--text)';
@@ -824,8 +826,10 @@ function maquinaDeLetra(l){
   return m||'';
 }
 /* Que esta mal con el lote escrito, en palabras. '' = esta bien o esta vacio. */
-function problemaLote(){
-  const txt=document.getElementById('cLote').value.trim();
+/* Sin argumento mira el campo; con argumento, cualquier lote -el que se leyo
+   de la foto, por ejemplo-. */
+function problemaLote(texto){
+  const txt=String(texto!=null?texto:document.getElementById('cLote').value).trim();
   if(!txt)return '';
   const esp=loteEsperado(), p=normLote(txt);
   // Sin letra conocida -Bidonera- se pide igual, pero no se dice cual.
@@ -834,10 +838,10 @@ function problemaLote(){
     +esp.prefijo+masLetra+' y el turno (1 mañana, 2 tarde, 3 noche).';
   const mal=[];
   if(p.z!==esp.z||p.jjj!==esp.jjj)
-    mal.push('la fecha: pusiste '+p.z+p.jjj+' ('+fechaDeLote(p.z,p.jjj)+') y el control es del '
+    mal.push('la fecha: dice '+p.z+p.jjj+' ('+fechaDeLote(p.z,p.jjj)+') y el control es del '
       +fechaDeLote(esp.z,esp.jjj)+', que se escribe '+esp.z+esp.jjj);
   if(esp.letra&&p.letra!==esp.letra)
-    mal.push('la línea: pusiste '+p.letra+(maquinaDeLetra(p.letra)?' ('+maquinaDeLetra(p.letra)+')':'')
+    mal.push('la línea: dice '+p.letra+(maquinaDeLetra(p.letra)?' ('+maquinaDeLetra(p.letra)+')':'')
       +' y la máquina es '+document.getElementById('cMaq').value+', que lleva '+esp.letra);
   if(!'123'.includes(p.turno))
     mal.push('el turno: '+p.turno+' no existe, son 1 mañana, 2 tarde y 3 noche');
@@ -873,9 +877,13 @@ function avisoLote(){
    último día de ese mes. */
 function esHipoclorito(){
   const p=eanDe(document.getElementById('cCodPT').value.trim());
+  // La maquina tambien cuenta: "Hipo 1" y "Hipo 2" son las dos lineas de
+  // hipoclorito, y al empezar el control todavia no hay producto elegido
+  // (09/11/2026: sin esto, un hipoclorito pasaba con dos años de vencimiento).
   const txt=[(p&&p.nombre)||'',document.getElementById('cPres').value||'',
-             document.getElementById('cGranel').value||''].join(' ');
-  return /HIPOCLOR/.test(txt.normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase());
+             document.getElementById('cGranel').value||'',
+             document.getElementById('cMaq').value||''].join(' ');
+  return /HIPOCLOR|\bHIPO\b/.test(txt.normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase());
 }
 function vtoEsperado(){
   const base=(shift&&diaDe(shift.fecha))||hoyLocal();
@@ -921,6 +929,146 @@ function avisoVto(){
     html='<div style="background:#ecfdf3;color:#05603a;border-radius:8px;padding:8px 10px">'+
       '✅ <b>'+esp+'</b> — coincide con '+regla+'. Verificá que el sticker de la caja diga lo mismo.</div>';
   el.style.display='block';el.innerHTML=html;
+}
+
+/* ---- Lo que dice la FOTO, no lo que se escribe ---------------------------
+   Claudia, 09/11/2026: "necesito que verifique cuando carga la foto, no sobre
+   el texto cargado". Y tiene razon: lo que se equivoca es la impresora -o el
+   que carga el inkjet-, y el analista copia bien lo que esta mal impreso. Si
+   solo se mira lo escrito, el error pasa.
+
+   Entonces, cuando se saca cada foto, el servidor la lee con IA
+   (lib/lectura-rotulos.js) y devuelve el lote y el vencimiento tal como estan
+   impresos, sin corregir nada. Con eso se comparan tres cosas:
+     1. lo impreso contra lo que corresponde -el SOP-PR-063 y los 2 años o
+        180 dias-, que es el control de verdad;
+     2. el envase contra el sticker de la caja, que tienen que decir lo mismo;
+     3. lo impreso contra lo que se escribio en la pantalla.
+   Si los campos estan vacios, se llenan con lo leido y se avisa: asi nadie
+   transcribe y despues la validacion mira la transcripcion.
+
+   Que no pase nunca: dar por bueno lo que no se pudo leer. Una foto borrosa
+   dice "no se pudo leer, mirala a ojo", no "esta bien". */
+let lectura=[null,null];   // [0] sticker de la caja, [1] envase
+const DONDE=['el sticker de la caja','el envase'];
+
+async function leerFoto(slot,file){
+  if(slot>1)return;                       // la foto del desvio no se lee
+  lectura[slot]={estado:'leyendo'};
+  avisoFotos();
+  try{
+    // Para leer se manda una copia mas grande que la que se guarda: el inkjet
+    // en 800 px y calidad 55 no siempre se lee.
+    const img=await compP(file,1600,.85);
+    const r=await api('/lectura-rotulo',{method:'POST',body:JSON.stringify({
+      imageBase64:img.replace(/^data:[^,]*,/,''),
+      mimeType:(img.match(/^data:([^;]+);/)||[])[1]||'image/jpeg',
+      donde:slot===0?'caja':'envase'})});
+    lectura[slot]={estado:'listo',lote:r.lote||'',vence:r.vence||'',
+                   legible:r.legible!==false,confianza:r.confianza,nota:r.nota||''};
+    completarDesdeFoto();
+  }catch(e){
+    lectura[slot]={estado:'error',error:e.message||'no se pudo leer'};
+  }
+  avisoFotos();
+}
+
+/* Lo leido que sirve: primero el envase, que es lo que lleva el inkjet. */
+function leidoUtil(){
+  return [1,0].map(i=>({slot:i,...(lectura[i]||{})}))
+              .filter(x=>x.estado==='listo'&&x.legible);
+}
+
+/* Campo vacio + foto leida = se completa, y se dice de donde salio. */
+function completarDesdeFoto(){
+  const utiles=leidoUtil();
+  if(!utiles.length)return;
+  let puesto=[];
+  const cl=document.getElementById('cLote'), cv=document.getElementById('cVence');
+  const conLote=utiles.find(x=>x.lote);
+  if(cl&&!cl.value.trim()&&conLote){cl.value=conLote.lote;puesto.push('el lote');avisoLote()}
+  const conVence=utiles.find(x=>x.vence);
+  if(cv&&!cv.value.trim()&&conVence){cv.value=conVence.vence;puesto.push('el vencimiento');avisoVto()}
+  if(puesto.length)toast('🏷️ Tomé '+puesto.join(' y ')+' de la foto — revisalo');
+}
+
+/* El vencimiento de un texto cualquiera: '' si esta bien, el problema si no. */
+function problemaVto(texto){
+  const txt=String(texto||'').trim();
+  if(!txt)return '';
+  const esp=vtoEsperado(), nv=normVto(txt);
+  if(!nv)return 'no se entiende como mes y año (tendría que ser '+esp+')';
+  if(nv!==esp)return 'tendría que ser '+esp+' ('+(esHipoclorito()?'180 días':'2 años')+' desde el envasado)';
+  return '';
+}
+
+/* Todo lo que no cierra entre las fotos, lo esperado y lo escrito. */
+function problemasFoto(){
+  const malos=[];
+  const utiles=leidoUtil();
+  utiles.forEach(x=>{
+    const donde=DONDE[x.slot];
+    if(x.lote){
+      const p=problemaLote(x.lote);
+      if(p)malos.push('Lo impreso en '+donde+': '+p);
+    }
+    if(x.vence){
+      const p=problemaVto(x.vence);
+      if(p)malos.push('El vencimiento impreso en '+donde+' dice '+x.vence+': '+p+'.');
+    }
+  });
+  // El envase y la caja tienen que decir lo mismo.
+  const env=lectura[1], caja=lectura[0];
+  if(env&&caja&&env.estado==='listo'&&caja.estado==='listo'&&env.legible&&caja.legible){
+    if(env.vence&&caja.vence&&normVto(env.vence)&&normVto(caja.vence)
+       &&normVto(env.vence)!==normVto(caja.vence))
+      malos.push('El envase dice vencimiento '+normVto(env.vence)+' y el sticker de la caja '+normVto(caja.vence)+': tienen que coincidir.');
+    if(env.lote&&caja.lote&&comoLote(env.lote)!==comoLote(caja.lote))
+      malos.push('El envase dice lote '+env.lote+' y el sticker de la caja '+caja.lote+': tienen que coincidir.');
+  }
+  // Lo escrito contra lo impreso.
+  const escLote=document.getElementById('cLote').value.trim();
+  const escVence=document.getElementById('cVence').value.trim();
+  utiles.forEach(x=>{
+    if(x.lote&&escLote&&comoLote(x.lote)!==comoLote(escLote))
+      malos.push('Escribiste lote '+escLote+' y en '+DONDE[x.slot]+' se lee '+x.lote+'.');
+    if(x.vence&&escVence&&normVto(x.vence)&&normVto(escVence)&&normVto(x.vence)!==normVto(escVence))
+      malos.push('Escribiste vencimiento '+escVence+' y en '+DONDE[x.slot]+' se lee '+x.vence+'.');
+  });
+  return malos;
+}
+const comoLote=t=>String(t||'').toUpperCase().replace(/[\s.\-_]/g,'');
+
+/* El cartel debajo de las fotos: lo que dice cada una y que no cierra. */
+function avisoFotos(){
+  const el=document.getElementById('fotoAviso');if(!el)return;
+  const filas=[];
+  [1,0].forEach(i=>{
+    const L=lectura[i];if(!L)return;
+    const titulo='<b>'+(i?'🏷️ Envase':'📦 Sticker de la caja')+'</b> ';
+    if(L.estado==='leyendo'){filas.push(titulo+'<span style="color:var(--text3)">leyendo la foto…</span>');return}
+    if(L.estado==='error'){filas.push(titulo+'<span style="color:var(--text3)">no se pudo leer ('+esc(L.error)+'). Verificalo a ojo.</span>');return}
+    if(!L.legible){filas.push(titulo+'<span style="color:#b42318">la foto no se lee con seguridad'+(L.nota?': '+esc(L.nota):'')+'. Saca otra, o verificalo a ojo.</span>');return}
+    const partes=[];
+    if(L.lote)partes.push('Lote <b>'+esc(L.lote)+'</b>');
+    if(L.vence)partes.push('Vence <b>'+esc(L.vence)+'</b>');
+    filas.push(titulo+(partes.length?partes.join(' · '):'<span style="color:#b42318">no se ve lote ni vencimiento</span>')
+      +(L.nota?' <span style="color:var(--text3)">('+esc(L.nota)+')</span>':''));
+  });
+  if(!filas.length){el.style.display='none';el.innerHTML='';return}
+  const malos=problemasFoto();
+  // Una foto que no se pudo leer no se da por buena: ni verde ni "coincide".
+  const enDuda=[0,1].some(i=>{const L=lectura[i];
+    return L&&(L.estado==='leyendo'||L.estado==='error'||(L.estado==='listo'&&!L.legible))});
+  const cuerpo='<div style="line-height:1.8">'+filas.join('<br>')+'</div>';
+  el.style.display='block';
+  el.innerHTML=malos.length
+    ?'<div style="background:#fef3f2;color:#b42318;border-radius:8px;padding:8px 10px">'+cuerpo
+      +'<div style="margin-top:6px">⚠️ '+malos.map(esc).join('<br>⚠️ ')+'</div></div>'
+    :enDuda
+    ?'<div style="background:var(--s1);border:1px solid var(--border);border-radius:8px;padding:8px 10px">'+cuerpo+'</div>'
+    :'<div style="background:#ecfdf3;color:#05603a;border-radius:8px;padding:8px 10px">'+cuerpo
+      +'<div style="margin-top:4px">✅ Lo impreso coincide con lo que corresponde.</div></div>';
 }
 
 /* Los dos codigos se escriben a mano. El 26 y 27/09 aparecieron cruzados -el
@@ -991,6 +1139,12 @@ function saveCtrl(){
   // turno. Si no cierra, se avisa antes de guardar (Claudia, 09/11/2026).
   const malLote=problemaLote();
   if(malLote)dudas.push(malLote);
+  // Lo que dicen las fotos, que es el control de verdad: lo impreso contra lo
+  // que corresponde, el envase contra la caja, y lo impreso contra lo escrito.
+  problemasFoto().forEach(p=>dudas.push(p));
+  [1,0].forEach(i=>{const L=lectura[i];
+    if(L&&(L.estado==='error'||(L.estado==='listo'&&!L.legible)))
+      dudas.push('No se pudo leer '+DONDE[i]+' en la foto: verificá a ojo que el lote y el vencimiento sean los que corresponden.')});
   if(!/^G/i.test(granel))dudas.push('El código de granel '+granel+' no empieza con G.');
   if(dudas.length&&!confirm(dudas.join('\n')+'\n\nRevisá que no estén cambiados entre sí. ¿Guardar igual?'))return;
   // Como en Fabuloso: sin la foto del sticker y la de lote/vencimiento no se guarda
@@ -1174,10 +1328,13 @@ async function confirmarImp(){
 
 // PHOTOS
 function takeP(s){curSlot=s;document.getElementById('camIn').click()}
-function gotP(e){const f=e.target.files[0];if(!f)return;compP(f,800,.55).then(c=>{fotos[curSlot]=c;renP();toast('📸')});e.target.value=''}
+function gotP(e){const f=e.target.files[0];if(!f)return;const s=curSlot;
+  compP(f,800,.55).then(c=>{fotos[s]=c;renP();toast('📸')});
+  leerFoto(s,f);   // el servidor lee lo impreso y se compara con lo que corresponde
+  e.target.value=''}
 function compP(file,mx,q){return new Promise(res=>{const rd=new FileReader();rd.onload=e=>{const img=new Image();img.onload=()=>{const cv=document.createElement('canvas');let w=img.width,h=img.height;if(w>mx||h>mx){if(w>h){h=Math.round(h*mx/w);w=mx}else{w=Math.round(w*mx/h);h=mx}}cv.width=w;cv.height=h;cv.getContext('2d').drawImage(img,0,0,w,h);const wp=cv.toDataURL('image/webp',q);res(wp.startsWith('data:image/webp')?wp:cv.toDataURL('image/jpeg',q))};img.src=e.target.result};rd.readAsDataURL(file)})}
 function renP(){const lb=[['📦','Sticker'],['🏷️','Lote/Vence'],['📷','Desvío']];for(let i=0;i<3;i++){const b=document.getElementById('pB'+i);if(!b)continue;if(fotos[i])b.innerHTML=`<img src="${fotos[i]}"/><button class="rx" onclick="event.stopPropagation();rmP(${i})">✕</button>`;else b.innerHTML=`<span style="font-size:16px">${lb[i][0]}</span><span style="font-size:11px;color:var(--text3)">${lb[i][1]}</span>`}}
-function rmP(i){fotos[i]=null;renP()}
+function rmP(i){fotos[i]=null;if(i<2)lectura[i]=null;renP();avisoFotos()}
 function tgC(e){e.classList.toggle('on')}
 function limpSinDef(){
   // Uncheck all defects and clear quantities = no defects found
