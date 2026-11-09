@@ -363,7 +363,7 @@ const LIMP_DEFECTS=[
       <div class="fd"><span class="fl">Hora</span><input class="fi" id="cHora" type="time"/></div>
       <div class="fd"><span class="fl">Máquina</span><select class="fi" id="cMaq" onchange="onMaq()"><option value="">Seleccionar...</option></select></div>
       <div class="fd"><span class="fl">Presentación</span><select class="fi" id="cPres" onchange="onPres()"><option value="">—</option></select></div>
-      <div class="fd"><span class="fl">N° Lote</span><input class="fi" id="cLote" placeholder="—"/></div>
+      <div class="fd"><span class="fl">N° Lote</span><input class="fi" id="cLote" placeholder="—" oninput="avisoLote()"/></div>
       <div class="fd"><span class="fl">N° Orden</span><input class="fi" id="cOrden" placeholder="—" oninput="avisoPH()"/>
         <label class="ord-check" style="margin-top:4px;font-size:12px;color:var(--text2)">
           <input type="checkbox" id="cSinOP" onchange="sinOP()"> La orden todavía no se emitió</label>
@@ -372,6 +372,7 @@ const LIMP_DEFECTS=[
       <div class="fd"><span class="fl">Cód. Granel</span><input class="fi" id="cGranel" placeholder="G000000" oninput="mostrarEan()"/></div>
       <div class="fd"><span class="fl">Cód. PT</span><input class="fi" id="cCodPT" placeholder="—" oninput="mostrarEan()"/></div>
     </div>
+    <div id="loteAviso" class="rot-aviso" style="display:none"></div>
     <div id="vtoAviso" class="rot-aviso" style="display:none"></div>
     <div id="eanAviso" class="rot-aviso" style="display:none"></div>
     <div id="rotAviso" class="rot-aviso" style="display:none"></div>
@@ -618,7 +619,7 @@ function onMaq(){
   const m=document.getElementById('cMaq').value;
   const ps=document.getElementById('cPres');ps.innerHTML='<option value="">Seleccionar...</option>';
   curSpec=null;document.getElementById('specI').style.display='none';
-  if(!m)return;
+  if(!m){avisoLote();return}
   
   // Toggle standard vs Limpiadores controls
   const isLimp=m==='Limpiadores';
@@ -644,9 +645,10 @@ function onMaq(){
   if(maqCache[m]){const c=maqCache[m];['cLote','cOrden','cVence','cGranel','cCodPT'].forEach(id=>{if(c[id])document.getElementById(id).value=c[id]});
     if(c.pres&&!isLimp){ps.value=c.pres;onPres()}
     toast('📋 Datos autocompletados de '+m)}
-  avisoPH()
+  avisoLote();avisoPH()
 }
 function onPres(){
+  avisoVto();   // la presentación dice si es hipoclorito: 180 días
   const m=document.getElementById('cMaq').value,p=document.getElementById('cPres').value;
   curSpec=null;document.getElementById('specI').style.display='none';
   if(!m||!p)return;
@@ -701,7 +703,7 @@ function showForm(){document.getElementById('newBtn').style.display='none';docum
 const now=new Date();document.getElementById('cHora').value=now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
 resetForm();avisoPH();document.getElementById('cForm').scrollIntoView({behavior:'smooth'})}
 function cancelForm(){document.getElementById('cForm').style.display='none';document.getElementById('newBtn').style.display='block'}
-function resetForm(){const va=document.getElementById('vtoAviso');if(va){va.style.display='none';va.innerHTML=''}
+function resetForm(){['loteAviso','vtoAviso'].forEach(id=>{const a=document.getElementById(id);if(a){a.style.display='none';a.innerHTML=''}});
   const sop=document.getElementById('cSinOP');if(sop){sop.checked=false;document.getElementById('cOrden').disabled=false;claveSinOP();}
   ['cP1','cP2','cP3','cP4','cP5','cPH','cDevD','cDevQ','cObs','cLote','cOrden','cVence','cGranel','cCodPT'].forEach(id=>{const e=document.getElementById(id);if(e){e.value='';e.className='fi'}});
 document.getElementById('cProm').textContent='—';document.getElementById('cProm').style.color='var(--text)';
@@ -767,6 +769,95 @@ async function cargarEans(){
   mostrarEan();
 }
 const eanDe=(cod)=>EANS[String(cod||'').trim()]||null;
+/* ---- Lote de envasado: el formato lo fija el SOP-PR-063 V4.0 --------------
+   El lote se escribe a mano y se equivoca (Claudia, 09/11/2026: «6311Y20A1»,
+   sin la U de UY20). La forma del procedimiento es ZJJJUY20L + turno:
+     Z      ultimo digito del año
+     JJJ    dia del año -calendario juliano-: el 09/11/2026 es el 313
+     UY20   planta Vessena Uruguay, siempre igual
+     L      la linea de envasado, una o dos letras
+     turno  1 matutino, 2 vespertino, 3 nocturno
+   Ejemplo del SOP: 1123UY20F1 = 3 de mayo de 2021, linea de limpiadores
+   liquidos, turno matutino.
+   La app sabe el dia -es la fecha del control- y la maquina, asi que puede
+   decir como tendria que empezar el lote y avisar antes de guardar. */
+const LINEA_DE_MAQUINA={'Alwid':'A','Bossar':'B','Bidonera':'CW','Elf':'E',
+  'Hipo 2':'H','Hipo 1':'I','Alfi':'L','Alcoholes':'N','Strunk':'S'};
+// La linea de Fabuloso -limpiadores liquidos, F- se controla en su propia app.
+// Cleanway no esta en la tabla del SOP: de esa letra no se opina.
+function diaDelAnio(a,m,d){
+  return Math.round((Date.UTC(a,m-1,d)-Date.UTC(a,0,1))/86400000)+1;
+}
+function diaDeEnvasado(){
+  return (shift&&diaDe(shift.fecha))||hoyLocal();
+}
+/* Como tendria que empezar el lote de hoy en esta maquina. letra vacia = la
+   linea no esta en el SOP, y entonces la letra no se controla. */
+function loteEsperado(){
+  const [a,m,d]=diaDeEnvasado().split('-').map(Number);
+  const letra=LINEA_DE_MAQUINA[document.getElementById('cMaq').value]||'';
+  const z=String(a%10), jjj=String(diaDelAnio(a,m,d)).padStart(3,'0');
+  return {z,jjj,letra,prefijo:z+jjj+'UY20'+letra};
+}
+/* Lo escrito, en partes. Se perdonan espacios, guiones y minusculas.
+   null = no tiene la forma del procedimiento. */
+function normLote(t){
+  const s=String(t||'').toUpperCase().replace(/[\s.\-_]/g,'');
+  const m=/^(\d)(\d{3})UY20([A-Z]{1,2})(\d)$/.exec(s);
+  return m?{z:m[1],jjj:m[2],letra:m[3],turno:m[4],texto:s}:null;
+}
+/* Que dia dice el lote que escribieron: sirve para mostrarle al analista el
+   dia que puso, no solo los numeros. El año sale del digito, dentro de la
+   decada del control. */
+function fechaDeLote(z,jjj){
+  const ac=+diaDeEnvasado().slice(0,4);
+  let a=Math.floor(ac/10)*10+(+z);
+  if(a>ac+1)a-=10;
+  const f=new Date(Date.UTC(a,0,1));f.setUTCDate(f.getUTCDate()+(+jjj-1));
+  return String(f.getUTCDate()).padStart(2,'0')+'/'+String(f.getUTCMonth()+1).padStart(2,'0')+'/'+a;
+}
+function maquinaDeLetra(l){
+  const m=Object.keys(LINEA_DE_MAQUINA).find(k=>LINEA_DE_MAQUINA[k]===l);
+  return m||'';
+}
+/* Que esta mal con el lote escrito, en palabras. '' = esta bien o esta vacio. */
+function problemaLote(){
+  const txt=document.getElementById('cLote').value.trim();
+  if(!txt)return '';
+  const esp=loteEsperado(), p=normLote(txt);
+  if(!p)return 'No se reconoce el lote «'+txt+'». Según el SOP-PR-063 se escribe '
+    +esp.prefijo+(esp.letra?'':'<línea>')+' y el turno (1 mañana, 2 tarde, 3 noche)'
+    +(esp.letra?'':'; la letra es la de la línea de envasado')+'.';
+  const mal=[];
+  if(p.z!==esp.z||p.jjj!==esp.jjj)
+    mal.push('la fecha: pusiste '+p.z+p.jjj+' ('+fechaDeLote(p.z,p.jjj)+') y el control es del '
+      +fechaDeLote(esp.z,esp.jjj)+', que se escribe '+esp.z+esp.jjj);
+  if(esp.letra&&p.letra!==esp.letra)
+    mal.push('la línea: pusiste '+p.letra+(maquinaDeLetra(p.letra)?' ('+maquinaDeLetra(p.letra)+')':'')
+      +' y la máquina es '+document.getElementById('cMaq').value+', que lleva '+esp.letra);
+  if(!'123'.includes(p.turno))
+    mal.push('el turno: '+p.turno+' no existe, son 1 mañana, 2 tarde y 3 noche');
+  if(!mal.length)return '';
+  return 'El lote «'+txt+'» no cierra en '+mal.join('; y ')+'. Tendría que ser '
+    +esp.prefijo+' y el turno.';
+}
+/* El aviso debajo del campo, mientras se escribe. */
+function avisoLote(){
+  const el=document.getElementById('loteAviso');if(!el)return;
+  const esp=loteEsperado();
+  const campo=document.getElementById('cLote');
+  if(campo)campo.placeholder=esp.prefijo?esp.prefijo+'1':'—';
+  const txt=campo?campo.value.trim():'';
+  if(!txt){el.style.display='none';el.innerHTML='';return}
+  const mal=problemaLote();
+  el.style.display='block';
+  el.innerHTML=mal
+    ?'<div style="background:#fef3f2;color:#b42318;border-radius:8px;padding:8px 10px">'+
+      '⚠️ '+esc(mal)+'</div>'
+    :'<div style="background:#ecfdf3;color:#05603a;border-radius:8px;padding:8px 10px">'+
+      '✅ <b>'+esc(txt.toUpperCase())+'</b> — el formato, el día y la línea coinciden.</div>';
+}
+
 /* ---- Vencimiento: se calcula y se compara con lo que se escribió ----------
    Lo impreso con inkjet en el envase y lo del sticker de la caja se equivocan
    (Claudia, 09/11/2026: un hipoclorito salió con dos años en vez de 180 días).
@@ -892,6 +983,10 @@ function saveCtrl(){
     dudas.push('No se reconoce el vencimiento «'+vence+'». Se escribe mes y año: '+vtoEsp+'.');
   else if(vtoPuesto!==vtoEsp)
     dudas.push('El vencimiento tendría que ser '+vtoEsp+' ('+(esHipoclorito()?'180 días':'2 años')+' desde el envasado) y pusiste '+vtoPuesto+'. Fijate en el envase y en el sticker de la caja.');
+  // El lote tiene el formato del SOP-PR-063: dia del año, planta, linea y
+  // turno. Si no cierra, se avisa antes de guardar (Claudia, 09/11/2026).
+  const malLote=problemaLote();
+  if(malLote)dudas.push(malLote);
   if(!/^G/i.test(granel))dudas.push('El código de granel '+granel+' no empieza con G.');
   if(dudas.length&&!confirm(dudas.join('\n')+'\n\nRevisá que no estén cambiados entre sí. ¿Guardar igual?'))return;
   // Como en Fabuloso: sin la foto del sticker y la de lote/vencimiento no se guarda

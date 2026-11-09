@@ -608,6 +608,78 @@ window.APP_CONFIG = {
       : 'Este producto no lleva EAN 14 de caja.');
   };
 
+
+  // ---------- LOTE: el formato lo fija el SOP-PR-063 V4.0 ----------
+  // Igual que en Control en proceso. La forma es ZJJJUY20L + turno: digito
+  // final del año, dia del año (juliano), UY20 por la planta, la letra de la
+  // linea -F, limpiadores liquidos, que es esta- y el turno (1 mañana, 2
+  // tarde, 3 noche). Ejemplo del SOP: 1123UY20F1 = 3/5/2021, turno matutino.
+  // Se escribe a mano y se equivoca, asi que la app dice como tendria que ser
+  // y avisa antes de guardar (Claudia, 09/11/2026).
+  const LETRA_LINEA_FAB = 'F';
+  function diaDelAnio_(a, m, d) {
+    return Math.round((Date.UTC(a, m - 1, d) - Date.UTC(a, 0, 1)) / 86400000) + 1;
+  }
+  // El dia de envasado: primero lo que se ve en pantalla, porque el aviso
+  // corre antes de que el campo quede guardado en el muestreo.
+  function diaDeEnvasadoFab_() {
+    const campo = document.getElementById('m_fecha');
+    const m = state.editingMuestreo || {};
+    for (const v of [campo && campo.value, m.fecha_muestreo])
+      if (/^\d{4}-\d{2}-\d{2}$/.test(String(v || ''))) return v;
+    return today();
+  }
+  function loteEsperado_() {
+    const [a, mes, d] = diaDeEnvasadoFab_().split('-').map(Number);
+    const z = String(a % 10), jjj = String(diaDelAnio_(a, mes, d)).padStart(3, '0');
+    return { z, jjj, letra: LETRA_LINEA_FAB, prefijo: z + jjj + 'UY20' + LETRA_LINEA_FAB };
+  }
+  function normLote_(t) {
+    const s = String(t || '').toUpperCase().replace(/[\s.\-_]/g, '');
+    const m = /^(\d)(\d{3})UY20([A-Z]{1,2})(\d)$/.exec(s);
+    return m ? { z: m[1], jjj: m[2], letra: m[3], turno: m[4], texto: s } : null;
+  }
+  function fechaDeLote_(z, jjj) {
+    const ac = +diaDeEnvasadoFab_().slice(0, 4);
+    let a = Math.floor(ac / 10) * 10 + (+z);
+    if (a > ac + 1) a -= 10;
+    const f = new Date(Date.UTC(a, 0, 1)); f.setUTCDate(f.getUTCDate() + (+jjj - 1));
+    const p = n => String(n).padStart(2, '0');
+    return p(f.getUTCDate()) + '/' + p(f.getUTCMonth() + 1) + '/' + a;
+  }
+  // '' = el lote esta bien, o todavia esta vacio.
+  function problemaLote_(texto) {
+    const m = state.editingMuestreo || {};
+    const txt = String(texto != null ? texto : (m.lote || '')).trim();
+    if (!txt) return '';
+    const esp = loteEsperado_(), p = normLote_(txt);
+    if (!p) return 'No se reconoce el lote «' + txt + '». Según el SOP-PR-063 se escribe '
+      + esp.prefijo + ' y el turno (1 mañana, 2 tarde, 3 noche).';
+    const mal = [];
+    if (p.z !== esp.z || p.jjj !== esp.jjj)
+      mal.push('la fecha: pusiste ' + p.z + p.jjj + ' (' + fechaDeLote_(p.z, p.jjj) + ') y el muestreo es del '
+        + fechaDeLote_(esp.z, esp.jjj) + ', que se escribe ' + esp.z + esp.jjj);
+    if (p.letra !== esp.letra)
+      mal.push('la línea: pusiste ' + p.letra + ' y la de Fabuloso es ' + esp.letra);
+    if (!'123'.includes(p.turno))
+      mal.push('el turno: ' + p.turno + ' no existe, son 1 mañana, 2 tarde y 3 noche');
+    if (!mal.length) return '';
+    return 'El lote «' + txt + '» no cierra en ' + mal.join('; y ') + '. Tendría que ser '
+      + esp.prefijo + ' y el turno.';
+  }
+  window.__avisoLote = function () {
+    const caja = document.getElementById('loteBox');
+    const inp = document.getElementById('m_lote');
+    if (!caja || !inp) return;
+    const esp = loteEsperado_();
+    inp.placeholder = esp.prefijo + '1';
+    if (!inp.value.trim()) { caja.innerHTML = ''; return; }
+    const mal = problemaLote_(inp.value);
+    caja.innerHTML = mal
+      ? `<span style="color:#b42318">⚠️ ${esc(mal)}</span>`
+      : `<span style="color:#05603a">✅ <b>${esc(inp.value.trim().toUpperCase())}</b> — el formato, el día y la línea coinciden.</span>`;
+  };
+
   // ---------- ÓRDENES (lo que hay para aprobar) ----------
   // Misma idea que Control en proceso: quien aprueba entra y ve la lista, con
   // el estado del rótulo al lado, que es condición para aprobar la orden.
@@ -1081,9 +1153,10 @@ window.APP_CONFIG = {
           </div>
         </div>
         <div class="row">
-          <div><label>Lote</label><input id="m_lote" value="${esc(m.lote)}" placeholder="Lote" /></div>
+          <div><label>Lote</label><input id="m_lote" value="${esc(m.lote)}" placeholder="Lote" oninput="window.__avisoLote&&window.__avisoLote()" /></div>
           <div><label>Código PT</label><input id="m_pt" value="${esc(m.codigo_pt)}" placeholder="Código de producto" oninput="window.__mostrarEan&&window.__mostrarEan()" /></div>
         </div>
+        <div id="loteBox" class="muted small"></div>
         <div id="eanBox" class="muted small"></div>
         <div class="row">
           <div><label>Fecha</label><input id="m_fecha" type="date" value="${esc(m.fecha_muestreo)}" /></div>
@@ -1160,6 +1233,10 @@ window.APP_CONFIG = {
     };
     bind('m_linea','linea'); bind('m_orden','orden_envasado'); bind('m_lote','lote'); bind('m_pt','codigo_pt');
     window.__mostrarEan();
+    window.__avisoLote();
+    // La fecha decide el dia juliano del lote: si cambia, el aviso se rehace.
+    document.getElementById('m_fecha').addEventListener('input', () => window.__avisoLote());
+    document.getElementById('m_lote').addEventListener('input', () => window.__avisoLote());
     bind('m_fecha','fecha_muestreo'); bind('m_hora','hora_muestreo'); bind('m_n','n_muestras');
     bind('m_retira','unidades_retiradas'); bind('m_motivo','motivo_retiro'); bind('m_acc','acciones_correctivas');
 
@@ -1434,6 +1511,8 @@ window.APP_CONFIG = {
     const loteOk = m.foto_lote  && m.foto_lote.status  === 'uploaded' && m.foto_lote.url;
     if (!rotOk)  return toast('Falta la foto del rótulo de caja (o hubo error al subirla)', 'err');
     if (!loteOk) return toast('Falta la foto del lote del envase (o hubo error al subirla)', 'err');
+    const malLote = problemaLote_(m.lote);
+    if (malLote && !confirm(malLote + '\n\n¿Guardar igual?')) return;
     try {
       loading(true);
       const r = await api('saveMuestreo', {
