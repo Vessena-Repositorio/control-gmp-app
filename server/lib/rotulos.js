@@ -158,8 +158,13 @@ export async function rotuloDe(app, orden, c = null) {
 async function cargar(id) {
     // Con el EAN 14 y la descripcion del producto: el correo los lleva para
     // poder comparar contra la foto de la caja sin entrar a la app.
+    // Y con cuantas veces se detecto un error de impresion en esta orden:
+    // supervision mira eso para decidir si amerita reproceso (Claudia,
+    // 09/11/2026). Una sola vez puede ser un envase; varias es la impresora.
     const { rows } = await consultar(
-        `SELECT v.*, p.ean14, p.nombre AS descripcion
+        `SELECT v.*, p.ean14, p.nombre AS descripcion,
+                (SELECT count(*) FROM rotulo_eventos e
+                  WHERE e.verificacion_id = v.id AND e.accion = 'deteccion')::int AS detecciones
          FROM rotulo_verificaciones v
          LEFT JOIN producto_ean p ON p.codigo = v.codigo
          WHERE v.id = $1`, [id]
@@ -205,7 +210,8 @@ function cuerpo(v, { titulo, intro, color, conFotos, adjuntos, enlaces }) {
             ${fila('Orden', v.orden)}${fila('Lote', v.lote)}${fila('Vencimiento', v.vence)}${fila('Producto', v.producto)}
             ${fila('Descripción', v.descripcion)}${fila('EAN 14 (caja)', v.ean14)}${fila('Analista', v.analista)}
           </table>
-          ${v.comentario && v.estado === 'correccion' ? `<p style="background:#fef3f2;color:#b42318;padding:8px 10px;border-radius:6px;font-size:14px"><b>Corrección pedida:</b> ${esc(v.comentario)}${v.reproceso ? '<br><b>Requiere reproceso.</b>' : ''}</p>` : ''}
+          ${v.comentario && v.estado === 'correccion' ? `<p style="background:#fef3f2;color:#b42318;padding:8px 10px;border-radius:6px;font-size:14px"><b>Corrección pedida:</b> ${esc(v.comentario)}${v.reproceso ? '<br><b>Es el vencimiento: la app lo marcó como probable reproceso. La decisión es de ustedes.</b>' : ''}</p>` : ''}
+          ${v.detecciones ? `<p style="font-size:14px;margin:0 0 10px"><b>${v.detecciones}</b> ${v.detecciones === 1 ? 'detección' : 'detecciones'} de error de impresión en esta orden${v.detecciones > 1 ? ' — si se repite, no es el envase: es la impresora.' : ''}</p>` : ''}
           ${conFotos ? `<table><tr>${foto('caja', '📦 Caja / sticker')}${foto('envase', '🏷️ Envase: lote y vencimiento')}</tr></table>` : ''}
           <p style="margin:14px 0 0"><a href="${BASE}${conf.pagina}" style="background:#0b5cff;color:#fff;text-decoration:none;padding:10px 16px;border-radius:8px;font-weight:600;display:inline-block">Abrir ${esc(conf.nombre)} → Rótulos</a></p>
           <p style="font-size:12px;color:#667085;margin:12px 0 0">Plazo para el OK: hasta las ${HORA_CORTE}:00, o ${MARGEN_HORAS} horas desde el primer control si la orden arrancó más tarde. Pasado el plazo, sin OK no acepta más controles.</p>
@@ -234,6 +240,11 @@ export async function avisarSupervision(id, motivo) {
         nueva: [`Orden ${v.orden}: revisar rótulo`, 'Se cargó el primer control de esta orden. Revisá que el <b>lote</b> y el <b>vencimiento</b> de las fotos sean correctos y dá el OK en la app.', '#0b5cff'],
         corregida: [`Orden ${v.orden}: rótulo corregido`, 'La analista subió las fotos corregidas. Revisalas y dá el OK en la app.', '#0b5cff'],
         recordatorio: [`Orden ${v.orden}: piden el OK de rótulo`, 'La analista pide la aprobación del rótulo: sin el OK, pasado el plazo no puede cargar más controles de esta orden.', '#b54708'],
+        deteccion: [`Orden ${v.orden}: ERROR DE IMPRESIÓN en el rótulo`,
+            'La app comparó lo impreso en las fotos con lo que corresponde, encontró una diferencia y <b>la analista coincidió</b>. ' +
+            'Lo que está abajo es lo que no cierra. El cambio ya se pidió <b>en la línea</b>, y la analista sube las fotos con la enmienda ' +
+            'en unos minutos. Lo que queda de este lado: <b>ver qué pallets salieron así</b>.',
+            '#b42318'],
     };
     const [titulo, intro, color] = titulos[motivo] || titulos.nueva;
     await mandar(
@@ -336,6 +347,35 @@ export async function actuar(app, orden, accion, usuario, datos = {}) {
             await evento('corregido', { comentario: nota, fotoCaja, fotoEnvase });
             return { id: v.id, aviso: 'corregida' };
         }
+        // La analista encontro el error ella misma: la app leyo la foto, vio
+        // que lo impreso no es lo que corresponde, y ella coincidio
+        // (Claudia, 09/11/2026: "deberiamos hacer notar el error porque hay
+        // que revisar los pallets que salieron asi, y si es un error de
+        // vencimiento deberia haber un reproceso").
+        //
+        // Entra por el mismo circuito que una correccion pedida por
+        // supervision -mismo estado, mismo plazo, mismas fotos corregidas-
+        // pero el aviso va a supervision, no a la analista: ella ya lo sabe, y
+        // son ellas las que tienen que mirar los pallets que ya salieron.
+        //
+        // Un rotulo que ya tenia el OK se puede reabrir: el inkjet se puede
+        // haber salido de registro despues, y entonces el OK de la mañana no
+        // dice nada del pallet de la tarde.
+        if (accion === 'deteccion') {
+            const comentario = texto(datos.comentario, 1000);
+            if (comentario.length < 5) throw fallo(400, 'Falta el detalle de lo que está mal impreso');
+            const reproceso = datos.reproceso === true;
+            const teniaOk = v.estado === 'ok';
+            await c.query(
+                `UPDATE rotulo_verificaciones SET estado = 'correccion', comentario = $2, reproceso = $3,
+                        revisado_por = NULL, revisado_por_id = NULL, revisado_en = NULL,
+                        actualizado_en = now()
+                 WHERE id = $1`,
+                [v.id, comentario, reproceso]
+            );
+            await evento('deteccion', { comentario: (teniaOk ? '[reabre un rótulo que ya tenía el OK] ' : '') + comentario, reproceso });
+            return { id: v.id, aviso: 'deteccion' };
+        }
         if (accion === 'solicitud') {
             if (v.estado === 'ok') throw fallo(409, 'El rótulo ya tiene el OK');
             if (await esFinDeSemana((s, p) => c.query(s, p))) {
@@ -382,6 +422,9 @@ export async function listar(app, dias = 7) {
         codigo: v.codigo || '', ean14: v.ean14 || '', descripcion: v.descripcion || '',
         creadoEn: v.creado_en, revisadoPor: v.revisado_por || '', revisadoEn: v.revisado_en,
         comentario: v.comentario || '', reproceso: v.reproceso,
+        // Cuantas veces se detecto un error de impresion en esta orden: es lo
+        // que mira supervision para decidir si amerita reproceso.
+        detecciones: (v.eventos || []).filter((e) => e.accion === 'deteccion').length,
         plazo: v.plazo || '',
         frenada: v.estado !== 'ok' && Boolean(v.vencida),
         eventos: v.eventos || [],
@@ -413,6 +456,12 @@ export function montarRutasRotulo(router, app, { leer, cargar: cargarP, aprobar 
     });
     router.post('/rotulos/:orden/corregido', cargarP, async (req, res, next) => {
         try { res.json({ ok: true, rotulo: await actuar(app, orden(req), 'corregido', req.usuario, req.body || {}) }); }
+        catch (err) { responder(err, res, next); }
+    });
+    // La analista avisa el error que encontro la lectura de la foto: es ella
+    // la que carga, no supervision, asi que va con permiso de cargar.
+    router.post('/rotulos/:orden/deteccion', cargarP, async (req, res, next) => {
+        try { res.json({ ok: true, rotulo: await actuar(app, orden(req), 'deteccion', req.usuario, req.body || {}) }); }
         catch (err) { responder(err, res, next); }
     });
     router.post('/rotulos/:orden/solicitar', cargarP, async (req, res, next) => {

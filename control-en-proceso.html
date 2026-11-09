@@ -705,7 +705,7 @@ const now=new Date();document.getElementById('cHora').value=now.getHours().toStr
 resetForm();avisoPH();document.getElementById('cForm').scrollIntoView({behavior:'smooth'})}
 function cancelForm(){document.getElementById('cForm').style.display='none';document.getElementById('newBtn').style.display='block'}
 function resetForm(){['loteAviso','vtoAviso','fotoAviso'].forEach(id=>{const a=document.getElementById(id);if(a){a.style.display='none';a.innerHTML=''}});
-  lectura=[null,null];
+  lectura=[null,null];errorImpresion=null;lecturaDescartada=null;
   const sop=document.getElementById('cSinOP');if(sop){sop.checked=false;document.getElementById('cOrden').disabled=false;claveSinOP();}
   ['cP1','cP2','cP3','cP4','cP5','cPH','cDevD','cDevQ','cObs','cLote','cOrden','cVence','cGranel','cCodPT'].forEach(id=>{const e=document.getElementById(id);if(e){e.value='';e.className='fi'}});
 document.getElementById('cProm').textContent='—';document.getElementById('cProm').style.color='var(--text)';
@@ -1007,18 +1007,23 @@ function problemaVto(texto){
 }
 
 /* Todo lo que no cierra entre las fotos, lo esperado y lo escrito. */
+/* Cada problema sale con su tipo, no solo con su texto: el tipo decide si el
+   error pide reproceso -el vencimiento- y cuales son de impresion y cuales de
+   transcripcion, que no es lo mismo. */
 function problemasFoto(){
   const malos=[];
+  const impreso=(tipo,m)=>malos.push({tipo,m,impresion:true});
+  const copia=(tipo,m)=>malos.push({tipo,m,impresion:false});
   const utiles=leidoUtil();
   utiles.forEach(x=>{
     const donde=DONDE[x.slot];
     if(x.lote){
       const p=problemaLote(x.lote);
-      if(p)malos.push('Lo impreso en '+donde+': '+p);
+      if(p)impreso('lote','Lo impreso en '+donde+': '+p);
     }
     if(x.vence){
       const p=problemaVto(x.vence);
-      if(p)malos.push('El vencimiento impreso en '+donde+' dice '+x.vence+': '+p+'.');
+      if(p)impreso('vence','El vencimiento impreso en '+donde+' dice '+x.vence+': '+p+'.');
     }
   });
   // El envase y la caja tienen que decir lo mismo.
@@ -1026,27 +1031,31 @@ function problemasFoto(){
   if(env&&caja&&env.estado==='listo'&&caja.estado==='listo'&&env.legible&&caja.legible){
     if(env.vence&&caja.vence&&normVto(env.vence)&&normVto(caja.vence)
        &&normVto(env.vence)!==normVto(caja.vence))
-      malos.push('El envase dice vencimiento '+normVto(env.vence)+' y el sticker de la caja '+normVto(caja.vence)+': tienen que coincidir.');
+      impreso('vence','El envase dice vencimiento '+normVto(env.vence)+' y el sticker de la caja '+normVto(caja.vence)+': tienen que coincidir.');
   }
   // El codigo de barras del sticker, contra el EAN 14 del producto.
   if(caja&&caja.estado==='listo'&&caja.legible&&caja.codigoBarras){
     const p=eanDe(document.getElementById('cCodPT').value.trim());
     const esperado=String((p&&p.ean14)||'').replace(/\D/g,'');
     if(esperado&&caja.codigoBarras!==esperado)
-      malos.push('El código de barras del sticker es '+caja.codigoBarras+' y el de '
+      impreso('ean','El código de barras del sticker es '+caja.codigoBarras+' y el de '
         +((p&&p.nombre)||'este producto')+' es '+esperado+'.');
   }
-  // Lo escrito contra lo impreso.
+  // Lo escrito contra lo impreso: esto no es un error de impresion, es de
+  // transcripcion, y se arregla en la pantalla.
   const escLote=document.getElementById('cLote').value.trim();
   const escVence=document.getElementById('cVence').value.trim();
   utiles.forEach(x=>{
     if(x.lote&&escLote&&comoLote(x.lote)!==comoLote(escLote))
-      malos.push('Escribiste lote '+escLote+' y en '+DONDE[x.slot]+' se lee '+x.lote+'.');
+      copia('lote','Escribiste lote '+escLote+' y en '+DONDE[x.slot]+' se lee '+x.lote+'.');
     if(x.vence&&escVence&&normVto(x.vence)&&normVto(escVence)&&normVto(x.vence)!==normVto(escVence))
-      malos.push('Escribiste vencimiento '+escVence+' y en '+DONDE[x.slot]+' se lee '+x.vence+'.');
+      copia('vence','Escribiste vencimiento '+escVence+' y en '+DONDE[x.slot]+' se lee '+x.vence+'.');
   });
   return malos;
 }
+/* Los que son de impresion: los que hay que hacer notar, porque ya salieron
+   pallets asi. */
+const problemasImpresion=()=>problemasFoto().filter(p=>p.impresion);
 const comoLote=t=>String(t||'').toUpperCase().replace(/[\s.\-_]/g,'');
 
 /* El cartel debajo de las fotos: lo que dice cada una y que no cierra. */
@@ -1075,11 +1084,98 @@ function avisoFotos(){
   el.style.display='block';
   el.innerHTML=malos.length
     ?'<div style="background:#fef3f2;color:#b42318;border-radius:8px;padding:8px 10px">'+cuerpo
-      +'<div style="margin-top:6px">⚠️ '+malos.map(esc).join('<br>⚠️ ')+'</div></div>'
+      +'<div style="margin-top:6px">⚠️ '+malos.map(p=>esc(p.m)).join('<br>⚠️ ')+'</div>'
+      +botonesError()+'</div>'
     :enDuda
     ?'<div style="background:var(--s1);border:1px solid var(--border);border-radius:8px;padding:8px 10px">'+cuerpo+'</div>'
     :'<div style="background:#ecfdf3;color:#05603a;border-radius:8px;padding:8px 10px">'+cuerpo
       +'<div style="margin-top:4px">✅ Lo impreso coincide con lo que corresponde.</div></div>';
+}
+
+/* ---- Cuando el error es de impresion ------------------------------------
+   Claudia, 09/11/2026: "deberiamos hacer notar el error porque hay que revisar
+   los pallets que salieron asi, y si es un error de vencimiento deberia haber
+   un reproceso. Deberia reconocer que esta mal, el analista decir ok coincido,
+   solicitar otras fotos con la enmienda asi queda bien."
+
+   La app no decide sola: muestra lo que no cierra y pregunta. Si la analista
+   coincide, el error entra por el circuito de verificacion de rotulo que ya
+   existe -el mismo que usa supervision para pedir correcciones- asi que:
+     - la orden queda en "corrección pedida", y sin OK no acepta mas controles
+       pasado el plazo;
+     - sale el correo a Antonella, Gloria y Claudia con las fotos, porque son
+       ellas las que tienen que ver que pallets salieron asi;
+     - si lo que esta mal es el vencimiento, va marcado como reproceso;
+     - las fotos con la enmienda se suben por la pestaña Rotulos, y vuelven a
+       supervision.
+   El control en curso se guarda igual, con lo que vio la app: no se frena a la
+   analista esperando que produccion corrija el inkjet.
+
+   Si NO coincide -la lectura se equivoco, que pasa- se anota el motivo en las
+   observaciones del control y no se avisa a nadie. Queda el rastro de que la
+   app marco algo y una persona lo miro. */
+let errorImpresion=null;     // {detalle, reproceso} si coincidio
+let lecturaDescartada=null;  // {motivo} si no coincidio
+
+function botonesError(){
+  const impresion=problemasImpresion();
+  if(errorImpresion)
+    return '<div style="margin-top:8px;padding-top:8px;border-top:1px solid #fecdca">'
+      +'✍️ <b>Queda avisado al guardar el control.</b> Pedile el cambio a la línea; en unos 10 minutos sacá la foto de nuevo y subila en la pestaña Rótulos. Supervisión recibe las fotos y el detalle'
+      +(errorImpresion.reproceso?', marcado como probable <b>reproceso</b> por ser el vencimiento — lo decide supervisión':'')
+      +', para revisar qué pallets salieron así.'
+      +' <a href="#" onclick="deshacerError();return false" style="color:#b42318">Deshacer</a></div>';
+  if(lecturaDescartada)
+    return '<div style="margin-top:8px;padding-top:8px;border-top:1px solid #fecdca">'
+      +'👁️ Lo miraste y no coincidís: «'+esc(lecturaDescartada.motivo)+'». Queda en las observaciones del control.'
+      +' <a href="#" onclick="deshacerError();return false" style="color:#b42318">Deshacer</a></div>';
+  if(!impresion.length)
+    return '<div style="margin-top:6px;font-size:12.5px">Esto se arregla en la pantalla: corregí lo que escribiste.</div>';
+  return '<div style="margin-top:8px;padding-top:8px;border-top:1px solid #fecdca">'
+    +'<div style="font-size:12.5px;margin-bottom:5px">¿Está mal impreso? Si coincidís, queda registrado y supervisión revisa qué pallets salieron así. El cambio se lo pedís vos a la línea.</div>'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
+    +'<button class="btn" onclick="coincidoError()" style="background:#b42318;color:#fff;padding:9px 16px;font-size:14px">Sí, está mal impreso</button>'
+    +'<button class="btn b2" onclick="noCoincido()" style="padding:9px 16px;font-size:14px">No, la lectura está equivocada</button></div></div>';
+}
+
+function coincidoError(){
+  const impresion=problemasImpresion();
+  if(!impresion.length)return;
+  const reproceso=impresion.some(p=>p.tipo==='vence');
+  const detalle=impresion.map(p=>p.m).join(' · ');
+  if(!confirm('Se avisa a supervisión (Antonella, Gloria y Claudia) con las fotos y este detalle:\n\n'
+      +impresion.map(p=>'• '+p.m).join('\n')
+      +(reproceso?'\n\nComo lo que está mal es el vencimiento, va marcado como probable reproceso. La decisión la toma supervisión.':'')
+      +'\n\nPedile el cambio a la línea. En unos 10 minutos, con el inkjet ya corregido, sacá la foto de nuevo y subila en la pestaña Rótulos: hasta entonces la orden queda esperando la corrección.\n\nSupervisión queda avisada para revisar qué pallets salieron así.\n\n¿Confirmás?'))return;
+  errorImpresion={detalle,reproceso};
+  lecturaDescartada=null;
+  avisoFotos();
+  toast('✍️ Queda avisado al guardar el control');
+}
+
+function noCoincido(){
+  const motivo=(prompt('¿Por qué no coincidís? (queda en las observaciones del control)\n\nPor ejemplo: «la foto salió movida, a ojo el envase dice 11/2028».')||'').trim();
+  if(motivo.length<5){if(motivo)toast('⚠️ Escribí un poco más',true);return}
+  lecturaDescartada={motivo};
+  errorImpresion=null;
+  avisoFotos();
+}
+
+function deshacerError(){errorImpresion=null;lecturaDescartada=null;avisoFotos()}
+
+/* Despues de que el control entro al servidor -y por lo tanto la orden ya
+   tiene su verificacion de rotulo- se avisa el error. Si falla, no se pierde:
+   el control ya esta guardado y queda el aviso en pantalla. */
+async function avisarErrorImpresion(c){
+  if(!c.errorImpresion)return;
+  try{
+    await api('/rotulos/'+encodeURIComponent(c.orden)+'/deteccion',{method:'POST',
+      body:JSON.stringify({comentario:c.errorImpresion.detalle,reproceso:c.errorImpresion.reproceso})});
+    c.errorImpresion=null;saveLocal();
+    toast('📨 Avisado a supervisión: la orden espera la corrección');
+  }catch(e){
+    toast('⚠️ El control se guardó, pero no se pudo avisar el error: '+e.message,true);
+  }
 }
 
 /* Los dos codigos se escriben a mano. El 26 y 27/09 aparecieron cruzados -el
@@ -1137,6 +1233,12 @@ function saveCtrl(){
   const orden=ordenDe(ordenEscrita,maq,lote);
   // Dos códigos escritos a mano que se confundieron entre sí: antes de guardar
   // se pregunta, para que no pase de largo un PT que no existe o un granel sin G.
+  // Si miro el aviso de la foto y no coincidio, queda dicho en el control.
+  if(lecturaDescartada){
+    const ya=document.getElementById('cObs');
+    const nota='La app marcó una diferencia entre lo impreso y lo que corresponde; '+USER+' la revisó y no coincide: '+lecturaDescartada.motivo;
+    if(ya&&ya.value.indexOf(lecturaDescartada.motivo)<0)ya.value=(ya.value?ya.value+' — ':'')+nota;
+  }
   const dudas=[];
   if(Object.keys(EANS).length&&!eanDe(codPT))dudas.push('El código de PT '+codPT+' no está en el ERP.');
   // El vencimiento se calcula, no se cree: 2 años desde el envasado, o 180
@@ -1152,7 +1254,7 @@ function saveCtrl(){
   if(malLote)dudas.push(malLote);
   // Lo que dicen las fotos, que es el control de verdad: lo impreso contra lo
   // que corresponde, el envase contra la caja, y lo impreso contra lo escrito.
-  problemasFoto().forEach(p=>dudas.push(p));
+  if(!lecturaDescartada)problemasFoto().forEach(p=>dudas.push(p.m));
   [1,0].forEach(i=>{const L=lectura[i];
     if(L&&(L.estado==='error'||(L.estado==='listo'&&!L.legible)))
       dudas.push('No se pudo leer '+DONDE[i]+' en la foto: verificá a ojo que el lote y el vencimiento sean los que corresponden.')});
@@ -1176,7 +1278,7 @@ function saveCtrl(){
     limpMotivo=document.getElementById('cLimpMotivo')?document.getElementById('cLimpMotivo').value:'';
     limpAccion=document.getElementById('cLimpAccion')?document.getElementById('cLimpAccion').value:'';
   }
-  const c={hora:document.getElementById('cHora').value,maquina:maq,presentacion:pres,lote,orden,vence,granel,codPT,ph:isLimp?'':document.getElementById('cPH').value,pesos,promedio:prom,checks:isLimp?[]:([...document.querySelectorAll('#cChk .ci.on .ct')].map(l=>l.textContent)),hasDev,devDesc:hasDev?document.getElementById('cDevD').value:'',devQty:hasDev?document.getElementById('cDevQ').value:'',isRep:hasDev?isRep:false,fotos:fotos.filter(Boolean),fotosPos:fotos.slice(),obs:document.getElementById('cObs').value,analista:USER,isLimp,limpDefects,limpUds,limpMotivo,limpAccion,idEnvio:idEnvio(),pendiente:true};
+  const c={hora:document.getElementById('cHora').value,maquina:maq,presentacion:pres,lote,orden,vence,granel,codPT,ph:isLimp?'':document.getElementById('cPH').value,pesos,promedio:prom,checks:isLimp?[]:([...document.querySelectorAll('#cChk .ci.on .ct')].map(l=>l.textContent)),hasDev,devDesc:hasDev?document.getElementById('cDevD').value:'',devQty:hasDev?document.getElementById('cDevQ').value:'',isRep:hasDev?isRep:false,fotos:fotos.filter(Boolean),fotosPos:fotos.slice(),obs:document.getElementById('cObs').value,analista:USER,isLimp,limpDefects,limpUds,limpMotivo,limpAccion,idEnvio:idEnvio(),errorImpresion,pendiente:true};
   maqCache[maq]={pres,cLote:lote,cOrden:orden,cVence:vence,cGranel:granel,cCodPT:codPT};
   ctrls.push(c);saveLocal();
   document.getElementById('cForm').style.display='none';document.getElementById('newBtn').style.display='block';
@@ -1225,6 +1327,8 @@ async function sendCtrl(c){
     // Las fotos ya estan en el servidor: no hace falta ocupar el almacenamiento del equipo
     delete c.fotosPos;c.fotos=[];
     toast('✅ Control #'+c.controlNum+' guardado');
+    await avisarErrorImpresion(c);
+    loadRotulos(true);
   }catch(e){
     c.pendiente=true;
     if(/supervisión/.test(e.message)){alert(e.message);loadRotulos(true)}
@@ -1837,7 +1941,7 @@ function pintarRotulos(){
     return '<div class="ord-card '+(r.estado==='ok'?'ok':'pend')+'" id="rot-'+o+'">'+
       '<div class="ord-cab"><div><div class="ord-num">Orden '+o+'</div><div class="ord-prod">'+esc(r.producto)+'</div></div>'+
       '<div class="ord-fecha">'+esc(new Date(r.creadoEn).toLocaleString('es-UY',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}))+'</div></div>'+
-      '<div class="ord-det">Lote <b>'+esc(r.lote||'—')+'</b> · Vence <b>'+esc(r.vence||'—')+'</b> · 👤 '+esc(r.analista)+(r.estado!=='ok'&&r.plazo?' · ⏰ Plazo <b>'+esc(r.plazo)+'</b>':'')+'</div>'+
+      '<div class="ord-det">Lote <b>'+esc(r.lote||'—')+'</b> · Vence <b>'+esc(r.vence||'—')+'</b> · 👤 '+esc(r.analista)+(r.estado!=='ok'&&r.plazo?' · ⏰ Plazo <b>'+esc(r.plazo)+'</b>':'')+(r.detecciones?' · ⚠️ <b>'+r.detecciones+'</b> '+(r.detecciones===1?'detección':'detecciones')+' de error de impresión':'')+'</div>'+
       /* El EAN 14 y la descripción: es lo que se compara contra la foto de la
          caja. El código va a la vista porque el 26 y 27/09 se cargaron
          cruzados: si no coincide con la caja, quien da el OK lo ve acá. */

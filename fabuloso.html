@@ -357,7 +357,8 @@ window.APP_CONFIG = {
     listOrder: (p) => ['GET', '/ordenes/' + encodeURIComponent(p.orden_envasado)],
     approveOrder: (p) => ['POST', '/ordenes/' + encodeURIComponent(p.orden_envasado) + '/aprobar', { checklist: p.checklist, notas: p.notas }],
     uploadPhoto: (p) => ['POST', '/fotos', { filename: p.filename, mime: p.mime, dataBase64: p.dataBase64, muestreo_ref: p.muestreo_ref }],
-    leerRotulo: (p) => ['POST', '/lectura-rotulo', { imageBase64: p.imageBase64, mimeType: p.mimeType, donde: p.donde }],
+    leerRotulo: (p) => ['POST', '/lectura-rotulo', { imageBase64: p.imageBase64, mimeType: p.mimeType, donde: p.donde, conLote: p.conLote }],
+    rotuloDeteccion: (p) => ['POST', '/rotulos/' + encodeURIComponent(p.orden) + '/deteccion', { comentario: p.comentario, reproceso: p.reproceso }],
     getAuditLog: () => ['GET', '/actividad'],
     importar: (p) => ['POST', '/importar', p.datos],
     listOrdenes: (p) => ['GET', '/ordenes?dias=' + (p && p.dias ? p.dias : 30)],
@@ -774,17 +775,21 @@ window.APP_CONFIG = {
     toast('Tomé el lote de la foto — revisalo', 'ok');
   }
 
+  // Cada problema con su tipo: el vencimiento pide reproceso, y los de
+  // impresion no son lo mismo que los de transcripcion.
   function problemasFotoFab_() {
     const malos = [];
+    const impreso = (tipo, m) => malos.push({ tipo, m, impresion: true });
+    const copia = (tipo, m) => malos.push({ tipo, m, impresion: false });
     leidoUtilFab_().forEach((x) => {
       const donde = DONDE_FAB[x.clave];
       if (x.lote) {
         const p = problemaLote_(x.lote);
-        if (p) malos.push('Lo impreso en ' + donde + ': ' + p);
+        if (p) impreso('lote', 'Lo impreso en ' + donde + ': ' + p);
       }
       if (x.vence) {
         const p = problemaVto_(x.vence);
-        if (p) malos.push('El vencimiento impreso en ' + donde + ' dice ' + x.vence + ': ' + p + '.');
+        if (p) impreso('vence', 'El vencimiento impreso en ' + donde + ' dice ' + x.vence + ': ' + p + '.');
       }
     });
     // El envase y la caja tienen que decir lo mismo.
@@ -793,10 +798,10 @@ window.APP_CONFIG = {
     if (ambos) {
       if (env.vence && caja.vence && normVto_(env.vence) && normVto_(caja.vence)
           && normVto_(env.vence) !== normVto_(caja.vence))
-        malos.push('El envase dice vencimiento ' + normVto_(env.vence) + ' y el sticker de la caja '
+        impreso('vence', 'El envase dice vencimiento ' + normVto_(env.vence) + ' y el rótulo de la caja '
           + normVto_(caja.vence) + ': tienen que coincidir.');
       if (env.lote && caja.lote && comoLote_(env.lote) !== comoLote_(caja.lote))
-        malos.push('El envase dice lote ' + env.lote + ' y el rótulo de la caja ' + caja.lote
+        impreso('lote', 'El envase dice lote ' + env.lote + ' y el rótulo de la caja ' + caja.lote
           + ': tienen que coincidir.');
     }
     // El codigo de barras del rotulo, contra el EAN 14 del producto.
@@ -804,14 +809,14 @@ window.APP_CONFIG = {
       const p = eanDe((state.editingMuestreo || {}).codigo_pt);
       const esperado = String((p && p.ean14) || '').replace(/\D/g, '');
       if (esperado && caja.codigoBarras !== esperado)
-        malos.push('El código de barras del rótulo es ' + caja.codigoBarras + ' y el de '
+        impreso('ean', 'El código de barras del rótulo es ' + caja.codigoBarras + ' y el de '
           + ((p && p.nombre) || 'este producto') + ' es ' + esperado + '.');
     }
     // Lo escrito contra lo impreso.
     const escrito = String((state.editingMuestreo || {}).lote || '').trim();
     if (escrito) leidoUtilFab_().forEach((x) => {
       if (x.lote && comoLote_(x.lote) !== comoLote_(escrito))
-        malos.push('Escribiste lote ' + escrito + ' y en ' + DONDE_FAB[x.clave] + ' se lee ' + x.lote + '.');
+        copia('lote', 'Escribiste lote ' + escrito + ' y en ' + DONDE_FAB[x.clave] + ' se lee ' + x.lote + '.');
     });
     return malos;
   }
@@ -843,11 +848,83 @@ window.APP_CONFIG = {
     const cuerpo = '<div style="line-height:1.8">' + filas.join('<br>') + '</div>';
     caja.innerHTML = malos.length
       ? '<div style="background:#fef3f2;color:#b42318;border-radius:8px;padding:8px 10px">' + cuerpo
-        + '<div style="margin-top:6px">&#9888; ' + malos.map(esc).join('<br>&#9888; ') + '</div></div>'
+        + '<div style="margin-top:6px">&#9888; ' + malos.map((p) => esc(p.m)).join('<br>&#9888; ') + '</div>'
+        + botonesErrorFab_() + '</div>'
       : enDuda
       ? '<div style="background:#f6f7f9;border-radius:8px;padding:8px 10px">' + cuerpo + '</div>'
       : '<div style="background:#ecfdf3;color:#05603a;border-radius:8px;padding:8px 10px">' + cuerpo
         + '<div style="margin-top:4px">&#10003; Lo impreso coincide con lo que corresponde.</div></div>';
+  }
+
+
+  // ---------- Cuando el error es de impresion ----------
+  // Claudia, 09/11/2026: hay que hacer notar el error, porque hay que revisar
+  // los pallets que salieron asi, y si lo que esta mal es el vencimiento hay
+  // reproceso. La app muestra lo que no cierra y pregunta; si la analista
+  // coincide, el error entra por el circuito de verificacion de rotulo que ya
+  // existe: la orden queda en "corrección pedida", sale el correo con las
+  // fotos a supervision, y las fotos con la enmienda se suben por la pestaña
+  // Rotulos. El muestreo en curso se guarda igual.
+  const problemasImpresionFab_ = () => problemasFotoFab_().filter((p) => p.impresion);
+
+  function botonesErrorFab_() {
+    if (state.errorImpresion)
+      return '<div style="margin-top:8px;padding-top:8px;border-top:1px solid #fecdca">'
+        + 'Queda avisado al guardar el muestreo. Pedile el cambio a la línea; en unos 10 minutos sacá la foto de nuevo y subila en la pestaña Rótulos. Supervisión recibe las fotos y el detalle'
+        + (state.errorImpresion.reproceso ? ', marcado como probable <b>reproceso</b> por ser el vencimiento — lo decide supervisión' : '')
+        + ', para revisar qué pallets salieron así. '
+        + '<a href="#" onclick="window.__deshacerError();return false" style="color:#b42318">Deshacer</a></div>';
+    if (state.lecturaDescartada)
+      return '<div style="margin-top:8px;padding-top:8px;border-top:1px solid #fecdca">'
+        + 'Lo miraste y no coincidís: «' + esc(state.lecturaDescartada.motivo) + '». Queda en las acciones correctivas. '
+        + '<a href="#" onclick="window.__deshacerError();return false" style="color:#b42318">Deshacer</a></div>';
+    if (!problemasImpresionFab_().length)
+      return '<div style="margin-top:6px;font-size:12.5px">Esto se arregla en la pantalla: corregí lo que escribiste.</div>';
+    return '<div style="margin-top:8px;padding-top:8px;border-top:1px solid #fecdca">'
+      + '<div style="font-size:12.5px;margin-bottom:5px">¿Está mal impreso? Si coincidís, se avisa a supervisión para revisar los pallets que ya salieron.</div>'
+      + '<div style="display:flex;gap:6px;flex-wrap:wrap">'
+      + '<button class="danger" onclick="window.__coincidoError()">Sí, está mal impreso</button>'
+      + '<button class="secondary" onclick="window.__noCoincido()">No, la lectura está equivocada</button></div></div>';
+  }
+
+  window.__coincidoError = function () {
+    const impresion = problemasImpresionFab_();
+    if (!impresion.length) return;
+    const reproceso = impresion.some((p) => p.tipo === 'vence');
+    const detalle = impresion.map((p) => p.m).join(' · ');
+    if (!confirm('Se avisa a supervisión (Antonella, Gloria y Claudia) con las fotos y este detalle:\n\n'
+      + impresion.map((p) => '• ' + p.m).join('\n')
+      + (reproceso ? '\n\nComo lo que está mal es el vencimiento, va marcado como probable reproceso. La decisión la toma supervisión.' : '')
+      + '\n\nPedile el cambio a la línea. En unos 10 minutos, con el inkjet ya corregido, sacá la foto de nuevo y subila en la pestaña Rótulos: hasta entonces la orden queda esperando la corrección.\n\nSupervisión queda avisada para revisar qué pallets salieron así.\n\n¿Confirmás?')) return;
+    state.errorImpresion = { detalle, reproceso };
+    state.lecturaDescartada = null;
+    avisoFotosFab_();
+    toast('Queda avisado al guardar el muestreo', 'ok');
+  };
+
+  window.__noCoincido = function () {
+    const motivo = (prompt('¿Por qué no coincidís? (queda en las acciones correctivas del muestreo)\n\nPor ejemplo: «la foto salió movida, a ojo el envase dice 11/2028».') || '').trim();
+    if (motivo.length < 5) { if (motivo) toast('Escribí un poco más', 'err'); return; }
+    state.lecturaDescartada = { motivo };
+    state.errorImpresion = null;
+    avisoFotosFab_();
+  };
+
+  window.__deshacerError = function () {
+    state.errorImpresion = null; state.lecturaDescartada = null; avisoFotosFab_();
+  };
+
+  // Con el muestreo ya guardado -y por lo tanto la orden con su verificacion
+  // de rotulo- se avisa el error. Si falla, el muestreo ya quedo guardado.
+  async function avisarErrorImpresionFab_(orden, marca) {
+    if (!marca || !orden) return;
+    try {
+      await api('rotuloDeteccion', { orden, comentario: marca.detalle, reproceso: marca.reproceso });
+      toast('Avisado a supervisión: la orden espera la corrección', 'ok');
+      cargarRotulos();
+    } catch (e) {
+      toast('El muestreo se guardó, pero no se pudo avisar el error: ' + e.message, 'err');
+    }
   }
 
   // ---------- ÓRDENES (lo que hay para aprobar) ----------
@@ -1045,7 +1122,7 @@ window.APP_CONFIG = {
           <div style="display:flex;justify-content:space-between;gap:10px">
             <div><h3 style="margin:0;color:var(--text)">Orden ${esc(r.orden)}</h3><div class="muted small">${esc(r.producto)}</div></div>
             <div class="muted small">${esc(fmtDate(r.creadoEn))}</div></div>
-          <div class="small mt8">Lote <b>${esc(r.lote || '—')}</b>${r.vence ? ` · Vence <b>${esc(r.vence)}</b>` : ''} · 👤 ${esc(r.analista)}${r.estado !== 'ok' && r.plazo ? ` · ⏰ Plazo <b>${esc(r.plazo)}</b>` : ''}</div>
+          <div class="small mt8">Lote <b>${esc(r.lote || '—')}</b>${r.vence ? ` · Vence <b>${esc(r.vence)}</b>` : ''} · 👤 ${esc(r.analista)}${r.estado !== 'ok' && r.plazo ? ` · ⏰ Plazo <b>${esc(r.plazo)}</b>` : ''}${r.detecciones ? ` · ⚠️ <b>${r.detecciones}</b> ${r.detecciones === 1 ? 'detección' : 'detecciones'} de error de impresión` : ''}</div>
           ${rotuloEan_(r)}
           <div class="row mt8">${estado}${freno}</div>${corr}
           <div class="rot-fotos">${fotoRotulo_(r.fotoCaja, '📦 Caja / rótulo')}${fotoRotulo_(r.fotoEnvase, '🏷️ Envase: lote')}</div>
@@ -1275,7 +1352,7 @@ window.APP_CONFIG = {
     // Lo leido de las fotos es de ESTE muestreo: cuando se arma uno nuevo -con
     // datos de una orden o desde cero- se olvida lo de antes.
     const empiezaOtro = (prefill && (prefill.orden_envasado || prefill.lote)) || !state.editingMuestreo;
-    if (empiezaOtro) state.lecturaFoto = {};
+    if (empiezaOtro) { state.lecturaFoto = {}; state.errorImpresion = null; state.lecturaDescartada = null; }
     // Si vienen datos de "Órdenes de hoy", arrancamos con esos datos
     if (prefill && (prefill.orden_envasado || prefill.lote)) {
       state.editingMuestreo = {
@@ -1424,7 +1501,7 @@ window.APP_CONFIG = {
     avisoFotosFab_();
 
     document.getElementById('m_reset').addEventListener('click', () => {
-      if (confirm('¿Descartar el muestreo actual?')) { state.editingMuestreo = null; state.lecturaFoto = {}; nav('home'); }
+      if (confirm('¿Descartar el muestreo actual?')) { state.editingMuestreo = null; state.lecturaFoto = {}; state.errorImpresion = null; state.lecturaDescartada = null; nav('home'); }
     });
     document.getElementById('m_save').addEventListener('click', saveMuestreo);
     // Actualizar el estado del botón guardar
@@ -1689,7 +1766,7 @@ window.APP_CONFIG = {
     if (!rotOk)  return toast('Falta la foto del rótulo de caja (o hubo error al subirla)', 'err');
     if (!loteOk) return toast('Falta la foto del lote del envase (o hubo error al subirla)', 'err');
     // Lo que dicen las fotos, que es el control de verdad.
-    const dudas = problemasFotoFab_();
+    const dudas = state.lecturaDescartada ? [] : problemasFotoFab_().map((p) => p.m);
     ['foto_lote', 'foto_rotulo'].forEach((k) => {
       const L = state.lecturaFoto[k];
       if (L && (L.estado === 'error' || (L.estado === 'listo' && !L.legible)))
@@ -1697,6 +1774,12 @@ window.APP_CONFIG = {
     });
     const malLote = problemaLote_(m.lote);
     if (malLote) dudas.push(malLote);
+    if (state.lecturaDescartada) {
+      const nota = 'La app marcó una diferencia entre lo impreso y lo que corresponde; se revisó y no coincide: '
+        + state.lecturaDescartada.motivo;
+      if (String(m.acciones_correctivas || '').indexOf(state.lecturaDescartada.motivo) < 0)
+        m.acciones_correctivas = (m.acciones_correctivas ? m.acciones_correctivas + ' — ' : '') + nota;
+    }
     if (dudas.length && !confirm(dudas.join('\n\n') + '\n\n¿Guardar igual?')) return;
     try {
       loading(true);
@@ -1712,9 +1795,11 @@ window.APP_CONFIG = {
         }
       });
       toast(`Guardado. QR=${r.QR} (${r.rango})`, 'ok');
+      await avisarErrorImpresionFab_(m.orden_envasado, state.errorImpresion);
       cargarRotulos();
       state.editingMuestreo = null;
       state.lecturaFoto = {};
+      state.errorImpresion = null; state.lecturaDescartada = null;
       nav('detail', { id: r.id });
     } catch(e) {
       if (/supervisión/.test(e.message)) alert(e.message);
