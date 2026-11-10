@@ -298,7 +298,20 @@ rutasDatosLogisticos.put('/productos/:sku', cargar, async (req, res, next) => {
                 if (comparable(antes) !== comparable(valor)) cambios.push(col);
             }
             if (d.activo !== undefined && booleano(d.activo) !== p.activo) cambios.push('activo');
-            if (!cambios.length) return { sinCambios: true };
+
+            // `extra` no es una columna de la ficha: son las marcas de la
+            // pantalla -los datos puestos en "no aplica", las alertas
+            // desestimadas, las medidas confirmadas-. Hasta hoy no contaban
+            // como cambio, asi que un guardado que SOLO tocaba eso se iba por
+            // "sin cambios" y no se guardaba nada: el boton "no aplica" no
+            // hacia nada y el dato seguia figurando como pendiente (Claudia,
+            // 10/11/2026: "no se actualiza en el panel de pendientes").
+            const extraAntes = p.extra || {};
+            const igual = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+            const cambiosExtra = (d.extra && typeof d.extra === 'object')
+                ? Object.keys(d.extra).filter((k) => !igual(extraAntes[k], d.extra[k]))
+                : [];
+            if (!cambios.length && !cambiosExtra.length) return { sinCambios: true };
 
             const tocaLaFicha = cambios.some((c2) => CAMPOS_DE_LA_FICHA.has(c2));
             const vuelveARevision = tocaLaFicha && p.estado === 'aprobada';
@@ -323,8 +336,8 @@ rutasDatosLogisticos.put('/productos/:sku', cargar, async (req, res, next) => {
 
             await c.query(`UPDATE dl_productos SET ${sets.join(', ')} WHERE sku = $1`, valores);
             await registrar(c, req, 'producto_editado', sku,
-                `${cambios.join(', ')}${vuelveARevision ? ' · vuelve a revisión: la ficha ya había salido a Finanzas' : ''}`);
-            return { cambios, vuelveARevision };
+                `${[...cambios, ...cambiosExtra].join(', ')}${vuelveARevision ? ' · vuelve a revisión: la ficha ya había salido a Finanzas' : ''}`);
+            return { cambios: [...cambios, ...cambiosExtra], vuelveARevision };
         });
         const { rows } = await consultar(`${SELECT_PRODUCTO} WHERE p.sku = $1`, [sku]);
         res.json({ ok: true, ...r, producto: aPantalla(rows[0]) });
