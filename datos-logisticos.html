@@ -416,7 +416,7 @@ function vPanel(){
         <span style="font-size:12px;color:var(--txS)">Armada por ${esc(p.armadaPor||"—")} · ${fdt(p.armadaEn)}</span></div>`).join("")}
       <p class="pag-sub" style="margin:8px 0 0">${puedeAprobar()?"Abrí la ficha y aprobala: al aprobarla sale sola a Finanzas.":"Las revisan Antonella o Claudia."}</p></div>`:""}
     <div class="card"><div class="fila-tit" style="margin-bottom:8px"><h3 style="font-size:14px;font-weight:700">SKU con datos pendientes (${pend.length})</h3>
-      ${pend.length?`<input type="search" class="in" id="pq" placeholder="Filtrar por SKU, descripción o dato faltante" style="max-width:320px">`:""}</div>
+      ${pend.length?`<div style="display:flex;gap:8px;align-items:center">${puedeEditar()?`<button class="btn g" id="naVarios" title="Para datos que no corresponden a un grupo de productos">🚫 No aplica en varios</button>`:""}<input type="search" class="in" id="pq" placeholder="Filtrar por SKU, descripción o dato faltante" style="max-width:320px"></div>`:""}</div>
       ${pend.length?`<div style="max-height:420px;overflow:auto;border:1px solid var(--brdL);border-radius:6px"><table style="min-width:640px"><thead><tr><th>SKU</th><th>Descripción</th><th>Origen</th><th>Qué le falta</th></tr></thead><tbody id="pcuerpo"></tbody></table></div>
       <p class="pag-sub" style="margin:8px 0 0">Hacé clic en un SKU para abrir su ficha${puedeEditar()?" y completar los datos":""}.</p>`:`<p class="pag-sub">✓ Todos los SKU activos tienen la ficha completa.</p>`}</div>
     ${esAdmin()?`<div class="card"${PLANTILLA?"":' style="border-color:var(--wrn)"'}><h3 style="font-size:14px;font-weight:700;margin-bottom:4px">📄 Plantilla de la ficha de alta</h3>
@@ -437,6 +437,7 @@ function vPanel(){
       ||`<tr><td colspan="4" class="vacio">Ningún SKU coincide con el filtro.</td></tr>`;
     $("#pcuerpo").querySelectorAll("tr[data-s]").forEach(tr=>{tr.onclick=()=>ficha(tr.dataset.s);tr.onkeydown=e=>{if(e.key==="Enter")ficha(tr.dataset.s);};});};
   pint(); if($("#pq"))$("#pq").oninput=pint;
+  if($("#naVarios"))$("#naVarios").onclick=naVarios;
   if($("#plt"))$("#plt").onchange=async e=>{
     const f=e.target.files[0];if(!f)return;
     try{
@@ -603,6 +604,96 @@ function pintarTabla(soloPend){
   $("#vacio").hidden=l.length>0;
   const pe=l.filter(tienePend).length;
   $("#conteo").textContent=filtro.bajas?`${l.length} productos dados de baja`:`${l.length} productos`+(pe&&!soloPend?` · ${pe} con pendientes`:"");
+}
+
+
+/* ---------- "No aplica" en varios SKU a la vez ----------
+   Claudia, 10/11/2026: los IGORA pasaron a granel y no se importan mas, asi
+   que no van a tener bultos por piso ni pisos. Marcarlo producto por producto
+   en la ficha es el camino largo cuando son varios.
+
+   Esto no inventa nada nuevo: hace lo mismo que el boton "no aplica" de la
+   ficha, pero sobre los que elijas. Cada producto se guarda por separado, con
+   su propio renglon en el historial: quien lo marco y cuando. Si alguno falla,
+   se dice cual y los demas quedan hechos. */
+function naVarios(){
+  const act = productos.filter(p => p.activo !== false && tienePend(p));
+  modal(`<h2 class="pag" style="font-size:18px">Marcar “no aplica” en varios SKU</h2>
+    <p class="pag-sub">Para datos que no corresponden a un grupo de productos: un granel que no lleva caja ni pallet, por ejemplo. El dato deja de figurar como pendiente y se puede restaurar después desde la ficha.</p>
+    <label class="lbl" style="margin-top:10px">1 · ¿Cuáles?
+      <input type="search" class="in" id="naQ" placeholder="Escribí parte del SKU o de la descripción: IGORA, por ejemplo"></label>
+    <div id="naLista" style="max-height:200px;overflow:auto;border:1px solid var(--brdL);border-radius:6px;padding:8px;margin-top:6px"></div>
+    <div class="lbl" style="margin-top:12px">2 · ¿Qué datos no les corresponden?</div>
+    <div id="naCampos" style="max-height:170px;overflow:auto;border:1px solid var(--brdL);border-radius:6px;padding:8px;margin-top:6px"></div>
+    <div id="naAviso" class="ctx-help" style="margin-top:10px;display:none"></div>
+    <div class="acc" style="margin-top:14px"><button class="btn g" data-x>Cancelar</button>
+      <button class="btn" id="naOk">Marcar “no aplica”</button></div>`);
+
+  const elegidos = new Set();
+  const pintarLista = () => {
+    const q = ($("#naQ").value || "").trim().toLowerCase();
+    const hay = q ? act.filter(p => (p.sku + " " + (p.desc || "")).toLowerCase().includes(q)) : [];
+    // Al filtrar, lo que aparece queda elegido: es lo que se quiere en el 99%
+    // de los casos y se puede destildar.
+    hay.forEach(p => elegidos.add(p.sku));
+    [...elegidos].forEach(s => { if (!hay.some(p => p.sku === s)) elegidos.delete(s); });
+    $("#naLista").innerHTML = !q
+      ? `<p class="pag-sub" style="margin:0">Escribí arriba para encontrarlos. Solo se listan los SKU activos que tienen datos pendientes.</p>`
+      : hay.length
+        ? hay.map(p => `<label class="usr-row" style="padding:5px 0;cursor:pointer"><span><input type="checkbox" data-na-sku="${esc(p.sku)}" checked> <b>${esc(p.sku)}</b> · ${esc(p.desc || "")}</span><span style="font-size:12px;color:var(--txS)">le faltan ${faltantes(p).length}</span></label>`).join("")
+        : `<p class="pag-sub" style="margin:0">Ninguno de los SKU con datos pendientes coincide con «${esc(q)}».</p>`;
+    $("#naLista").querySelectorAll("[data-na-sku]").forEach(c => c.onchange = () => {
+      c.checked ? elegidos.add(c.dataset.naSku) : elegidos.delete(c.dataset.naSku);
+      pintarCampos();
+    });
+    pintarCampos();
+  };
+  const pintarCampos = () => {
+    // Los datos que le faltan a alguno de los elegidos, sin repetir.
+    const campos = new Map();
+    productos.filter(p => elegidos.has(p.sku)).forEach(p =>
+      faltantesK(p).filter(([k]) => !(p.noAplica || []).includes(k)).forEach(([k, t]) => {
+        campos.set(k, { t, n: (campos.get(k)?.n || 0) + 1 });
+      }));
+    $("#naCampos").innerHTML = !elegidos.size
+      ? `<p class="pag-sub" style="margin:0">Elegí primero los SKU.</p>`
+      : campos.size
+        ? [...campos].map(([k, v]) => `<label class="usr-row" style="padding:5px 0;cursor:pointer"><span><input type="checkbox" data-na-k="${esc(k)}"> ${esc(v.t)}</span><span style="font-size:12px;color:var(--txS)">le falta a ${v.n}</span></label>`).join("")
+        : `<p class="pag-sub" style="margin:0">A los elegidos no les falta ningún dato.</p>`;
+  };
+  $("#naQ").oninput = pintarLista;
+  pintarLista();
+
+  $("#naOk").onclick = async () => {
+    const skus = [...elegidos];
+    const claves = [...$("#naCampos").querySelectorAll("[data-na-k]:checked")].map(c => c.dataset.naK);
+    const av = $("#naAviso");
+    if (!skus.length || !claves.length) {
+      av.style.display = "block"; av.className = "ctx-help warn";
+      av.textContent = "Elegí al menos un SKU y un dato."; return;
+    }
+    const nombres = claves.map(k => NOMBRE_CAMPO(k)).join(", ");
+    if (!confirm(`¿Marcar “no aplica” en ${nombres} para ${skus.length} SKU?\n\n${skus.slice(0, 12).join(", ")}${skus.length > 12 ? ` y ${skus.length - 12} más` : ""}\n\nDejan de figurar como pendientes. Se puede restaurar después, ficha por ficha.`)) return;
+    const b = $("#naOk"); b.disabled = true; b.textContent = "Marcando…";
+    let hechos = 0; const fallaron = [];
+    for (const sku of skus) {
+      const p = productos.find(x => x.sku === sku);
+      if (!p) continue;
+      const nuevo = [...new Set([...(p.noAplica || []), ...claves])];
+      if (nuevo.length === (p.noAplica || []).length) { hechos++; continue; }
+      // Se manda el cambio directo y no por guardar(), que cierra el modal.
+      try {
+        const d = await api("/productos/" + encodeURIComponent(sku),
+          { method: "PUT", body: JSON.stringify({ extra: { noAplica: nuevo } }) });
+        reemplazar(d.producto); hechos++;
+      }
+      catch (e) { fallaron.push(sku + ": " + e.message); }
+    }
+    cerrar();
+    aviso(fallaron.length
+      ? `Se marcaron ${hechos} de ${skus.length}. No se pudo con: ${fallaron.join(" · ")}`
+      : `Listo: “no aplica” en ${nombres} para ${hechos} SKU.`, fallaron.length ? "warn" : "success");
+  };
 }
 
 /* ---------- Modal ---------- */
