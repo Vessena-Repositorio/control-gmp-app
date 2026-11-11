@@ -26,6 +26,7 @@ import { supervisoresDe } from '../lib/destinatarios.js';
 import { descargar, aFecha, aTexto, aEnteroSeguro } from '../lib/origen.js';
 import { guardarControl, sincronizarEnvases } from '../sync/sync-envases.js';
 import { firmaDe, nombreComparable } from '../lib/firmas.js';
+import { comprimirFoto } from '../lib/comprimir-foto.js';
 
 export const rutasEnvasesCaptura = Router();
 
@@ -222,6 +223,13 @@ rutasEnvasesCaptura.post('/accion/:accion', cargar, async (req, res, next) => {
                         id: Number(d.id), tipo: d.tipoControl, fecha: d.fecha, hora: d.hora,
                         operador: d.operador || '', turno: d.turno || '', mediciones: medicionesComoHoja(d.mediciones),
                         observaciones: d.observaciones || '', timestamp: d.timestamp, analista: d.analista || '',
+                        // Las fotos del desvío, si las hay (migración 079). Van
+                        // como URL de /fotos/:id, que es lo que devuelve la
+                        // subida; cualquier otra cosa se descarta.
+                        fotos: (Array.isArray(d.fotos) ? d.fotos : [])
+                            .map((u) => aTexto(u))
+                            .filter((u) => /^\/api\/envases-captura\/fotos\/\d+$/.test(u))
+                            .slice(0, 6),
                     };
                     const r = await guardarControl(c, raw, { origen: 'orden', ordenId, envase: rows[0].envase, pos: null, producto });
                     if (!r.control) throw fallo(400, 'El control no trae fecha y hora de registro');
@@ -318,6 +326,61 @@ rutasEnvasesCaptura.get('/estado', leer, async (_req, res, next) => {
     try {
         const corte = await planillaCerrada();
         res.json({ ok: true, planillaCerrada: Boolean(corte), cerradaEn: corte?.cerrado_en || null });
+    } catch (err) { next(err); }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Fotos de los controles (migracion 079)
+
+   Claudia, 11/11/2026: en los controles cada dos horas de una orden, cuando la
+   analista ve algo -una rebaba, una deformacion, un envase sucio- lo escribe en
+   Observaciones y nada mas. La foto vale mas que el texto y despues no se puede
+   reconstruir. Mismo camino que en Fabuloso y Control en proceso: la imagen va
+   comprimida a la base y el control guarda su URL.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const TIPOS_FOTO = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const MAX_FOTO = 5 * 1024 * 1024;
+
+/** POST /api/envases-captura/fotos  { dataBase64, mime, nombre, referencia } */
+rutasEnvasesCaptura.post('/fotos', cargar, async (req, res, next) => {
+    const { dataBase64, mime, nombre, referencia } = req.body || {};
+    const tipo = aTexto(mime).slice(0, 60) || 'image/jpeg';
+    if (!dataBase64) return res.status(400).json({ error: 'Falta la imagen' });
+    if (!TIPOS_FOTO.has(tipo)) return res.status(415).json({ error: 'Solo se aceptan fotos JPG, PNG o WEBP' });
+
+    let recibida;
+    try { recibida = Buffer.from(String(dataBase64).replace(/^data:[^,]*,/, ''), 'base64'); } catch { recibida = null; }
+    if (!recibida || !recibida.length) return res.status(400).json({ error: 'La imagen no es válida' });
+    if (recibida.length > MAX_FOTO) return res.status(413).json({ error: 'La foto supera los 5 MB' });
+
+    try {
+        const { bytes, tipo: tipoFinal } = await comprimirFoto(recibida, tipo);
+        const limpio = (aTexto(nombre).slice(0, 200) || `envases_${Date.now()}`).replace(/\.\w+$/, '');
+        const id = await enTransaccion(async (c) => {
+            const { rows } = await c.query(
+                `INSERT INTO envases_fotos (nombre, tipo, tamano, contenido, referencia, subida_por)
+                 VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+                [`${limpio}.${tipoFinal.split('/')[1]}`, tipoFinal, bytes.length, bytes,
+                    aTexto(referencia).slice(0, 200), quien(req)]
+            );
+            await registrar(c, req, 'foto_subida', 'envases', rows[0].id, `${bytes.length} bytes`);
+            return rows[0].id;
+        });
+        res.json({ success: true, id: String(id), url: `/api/envases-captura/fotos/${id}` });
+    } catch (err) { next(err); }
+});
+
+/** GET /api/envases-captura/fotos/:id */
+rutasEnvasesCaptura.get('/fotos/:id', leer, async (req, res, next) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Foto no válida' });
+    try {
+        const { rows } = await consultar('SELECT tipo, contenido FROM envases_fotos WHERE id = $1', [id]);
+        if (!rows.length) return res.status(404).json({ error: 'No existe esa foto' });
+        res.set('Content-Type', rows[0].tipo);
+        res.set('Cache-Control', 'private, max-age=86400');
+        res.send(rows[0].contenido);
     } catch (err) { next(err); }
 });
 
