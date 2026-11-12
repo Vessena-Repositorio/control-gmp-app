@@ -972,6 +972,7 @@ async function leerFoto(slot,file){
     // unidades por funda- asi que de ahi solo se toman el vencimiento y el
     // codigo de barras (Claudia, 09/11/2026).
     lectura[slot]={estado:'listo',lote:slot===0?'':(r.lote||''),vence:r.vence||'',
+                   hora:r.hora||'',otros:r.otros||'',
                    codigoBarras:r.codigoBarras||'',
                    legible:r.legible!==false,confianza:r.confianza,nota:r.nota||''};
     completarDesdeFoto();
@@ -1043,7 +1044,7 @@ function problemasFoto(){
     const esperado=String((p&&p.ean14)||'').replace(/\D/g,'');
     if(esperado&&caja.codigoBarras!==esperado)
       impreso('ean','El código de barras del sticker es '+caja.codigoBarras+' y el de '
-        +((p&&p.nombre)||'este producto')+' es '+esperado+'.');
+        +((p&&p.nombre)||'este producto')+' es '+esperado+'.'+pistaEan(caja.codigoBarras,esperado));
   }
   // Lo escrito contra lo impreso: esto no es un error de impresion, es de
   // transcripcion, y se arregla en la pantalla.
@@ -1056,6 +1057,18 @@ function problemasFoto(){
       copia('vence','Escribiste vencimiento '+escVence+' y en '+DONDE[x.slot]+' se lee '+x.vence+'.');
   });
   return malos;
+}
+/* Un código de barras que difiere en un solo dígito, con la misma cantidad de
+   cifras, casi siempre es la lectura y no el sticker: el 12/11/2026 salió
+   ...965341 contra ...905341 y era un 0 leído como 6. Decirlo evita que se
+   trate como "sticker de otro producto" algo que no lo es. */
+function pistaEan(leido,esperado){
+  if(leido.length!==esperado.length)return '';
+  let dif=0,donde=-1;
+  for(let i=0;i<leido.length;i++)if(leido[i]!==esperado[i]){dif++;donde=i}
+  if(dif!==1)return '';
+  return ' Difieren en un solo dígito (el '+(donde+1)+'º: '+leido[donde]+' contra '+esperado[donde]
+    +'), así que puede ser la lectura y no el sticker: mirá el número abajo de las barras.';
 }
 /* Los que son de impresion: los que hay que hacer notar, porque ya salieron
    pallets asi. */
@@ -1076,6 +1089,10 @@ function avisoFotos(){
     if(L.lote)partes.push('Lote <b>'+esc(L.lote)+'</b>');
     if(L.vence)partes.push('Vence <b>'+esc(L.vence)+'</b>');
     if(L.codigoBarras)partes.push('Código de barras <b>'+esc(L.codigoBarras)+'</b>');
+    // La hora que el inkjet imprime despues del vencimiento: se muestra, no se
+    // controla (Claudia, 12/11/2026).
+    if(L.hora)partes.push('Hora <b>'+esc(L.hora)+'</b>');
+    if(L.otros)partes.push('también dice <b>'+esc(L.otros)+'</b>');
     filas.push(titulo+(partes.length?partes.join(' · '):'<span style="color:#b42318">no se pudo leer nada: mirala a ojo</span>')
       +(L.nota?' <span style="color:var(--text3)">('+esc(L.nota)+')</span>':''));
   });

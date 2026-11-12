@@ -19,7 +19,10 @@
  *
  * Las fotos NO llevan todas lo mismo, y confundirlas da avisos falsos
  * (Claudia, 09/11/2026, despues de la primera prueba real):
- *   - el ENVASE lleva el lote y el vencimiento, impresos con inkjet;
+ *   - el ENVASE lleva el lote y el vencimiento, impresos con inkjet, y despues
+ *     del vencimiento la hora de envasado con segundos ("VTO:11/2028
+ *     06:19:23"). Esa hora vuelve aparte: metida adentro del vencimiento, el
+ *     control decia que no se entendia (Claudia, 12/11/2026);
  *   - el STICKER de la caja en CONTROL GMP lleva el codigo de barras y el
  *     vencimiento, y NO lleva lote: lo que parece uno -"FX15"- son las
  *     unidades por funda;
@@ -59,8 +62,12 @@ const INSTRUCCION_ENVASE = COMUN +
     'y letras de entre 8 y 12 caracteres. Copia solo el codigo, sin la palabra LOTE. Si el inkjet ' +
     'dejo espacios en el medio, copialos: la separacion puede ser parte del error.\n' +
     '- El vencimiento suele venir despues de VENCE, VTO, VENCIMIENTO, V o CONSUMIR ANTES DE. ' +
-    'Normalmente es mes y año (por ejemplo 11/2028), pero puede venir con dia. Copialo tal cual, ' +
-    'con las barras o guiones que tenga, y con todos los digitos que veas aunque parezcan de mas.\n' +
+    'Es mes y año: 11/2028. Copialo tal cual, con las barras o guiones que tenga.\n' +
+    '- IMPORTANTE: despues del vencimiento el inkjet suele imprimir la HORA en que se envaso, ' +
+    'con segundos, asi: "VTO:11/2028 06:19:23". Esa hora NO es parte del vencimiento. Ponela ' +
+    'aparte, en "hora", y dejá en "vence" solo el mes y el año. Si no hay hora, "hora" va vacio.\n' +
+    '- Si queda algun otro numero o texto impreso que no sea el lote, el vencimiento ni la hora, ' +
+    'ponelo en "otros" tal como se ve. No lo metas adentro de los otros campos.\n' +
     '- Si tambien se ve una fecha de elaboracion o envasado, ponela en "elaboracion".\n' +
     '- codigoBarras va vacio: el envase no lo lleva.';
 
@@ -93,6 +100,11 @@ const ESQUEMA = {
     properties: {
         lote: { type: 'string' },
         vence: { type: 'string' },
+        // La hora que el inkjet imprime despues del vencimiento. Va aparte
+        // para que no se la lea como parte del vencimiento (Claudia,
+        // 12/11/2026: "VTO:11/2028 06:19:23").
+        hora: { type: 'string' },
+        otros: { type: 'string' },
         codigoBarras: { type: 'string' },
         elaboracion: { type: 'string' },
         legible: { type: 'boolean' },
@@ -136,6 +148,8 @@ export async function leerLoteVence(p) {
         // camino.
         lote: (esCaja && !conLote) ? '' : limpio(r.lote, 40),
         vence: limpio(r.vence, 40),
+        hora: esCaja ? '' : limpio(r.hora, 20),
+        otros: limpio(r.otros, 100),
         codigoBarras: esCaja ? limpio(r.codigoBarras, 20).replace(/\D/g, '') : '',
         elaboracion: limpio(r.elaboracion, 40),
         legible: r.legible !== false,

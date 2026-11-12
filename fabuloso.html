@@ -729,6 +729,17 @@ window.APP_CONFIG = {
     return '';
   }
   const comoLote_ = (t) => String(t || '').toUpperCase().replace(/[\s.\-_]/g, '');
+  /* Un codigo de barras que difiere en un solo digito, con la misma cantidad
+     de cifras, casi siempre es la lectura y no el rotulo: el 12/11/2026 salio
+     ...965341 contra ...905341 y era un 0 leido como 6. */
+  function pistaEan_(leido, esperado) {
+    if (leido.length !== esperado.length) return '';
+    let dif = 0, donde = -1;
+    for (let i = 0; i < leido.length; i++) if (leido[i] !== esperado[i]) { dif++; donde = i; }
+    if (dif !== 1) return '';
+    return ' Difieren en un solo dígito (el ' + (donde + 1) + 'º: ' + leido[donde] + ' contra '
+      + esperado[donde] + '), así que puede ser la lectura y no el rótulo: mirá el número abajo de las barras.';
+  }
 
   async function leerFotoFab_(stateKey, file) {
     state.lecturaFoto[stateKey] = { estado: 'leyendo' };
@@ -747,6 +758,7 @@ window.APP_CONFIG = {
       });
       state.lecturaFoto[stateKey] = {
         estado: 'listo', lote: r.lote || '', vence: r.vence || '',
+        hora: r.hora || '', otros: r.otros || '',
         codigoBarras: r.codigoBarras || '',
         legible: r.legible !== false, confianza: r.confianza, nota: r.nota || ''
       };
@@ -810,7 +822,8 @@ window.APP_CONFIG = {
       const esperado = String((p && p.ean14) || '').replace(/\D/g, '');
       if (esperado && caja.codigoBarras !== esperado)
         impreso('ean', 'El código de barras del rótulo es ' + caja.codigoBarras + ' y el de '
-          + ((p && p.nombre) || 'este producto') + ' es ' + esperado + '.');
+          + ((p && p.nombre) || 'este producto') + ' es ' + esperado + '.'
+          + pistaEan_(caja.codigoBarras, esperado));
     }
     // Lo escrito contra lo impreso.
     const escrito = String((state.editingMuestreo || {}).lote || '').trim();
@@ -835,6 +848,10 @@ window.APP_CONFIG = {
       if (L.lote) partes.push('Lote <b>' + esc(L.lote) + '</b>');
       if (L.vence) partes.push('Vence <b>' + esc(L.vence) + '</b>');
       if (L.codigoBarras) partes.push('Código de barras <b>' + esc(L.codigoBarras) + '</b>');
+      // La hora que el inkjet imprime despues del vencimiento: se muestra, no
+      // se controla (Claudia, 12/11/2026).
+      if (L.hora) partes.push('Hora <b>' + esc(L.hora) + '</b>');
+      if (L.otros) partes.push('también dice <b>' + esc(L.otros) + '</b>');
       filas.push(titulo + (partes.length ? partes.join(' · ') : '<span style="color:#b42318">no se pudo leer nada: mirala a ojo</span>')
         + (L.nota ? ' <span class="muted">(' + esc(L.nota) + ')</span>' : ''));
     });
