@@ -990,6 +990,82 @@ function Evidencia({capa,canEdit,canAdmin,avisar,onCambio}){
     </div>);
 }
 
+/* Lo que se fue haciendo mientras la acción avanza, con la fecha de cada cosa.
+   Las dos casillas de verificación son de cierre: se llenan una vez, al final.
+   Esto es el registro de que la CAPA se gestionó, que es lo que mira una
+   auditoría. Solo se agrega: una anotación vieja no se corrige, se anota otra
+   abajo; borrar queda para quien administra y va al audit trail. */
+function Seguimiento({capa,canEdit,canAdmin,avisar,onCambio}){
+  const[lista,sLista]=useState(capa.seguimientos||[]);
+  const[cuando,sCuando]=useState(tdy());
+  const[texto,sTexto]=useState("");
+  const[ocupado,sOcupado]=useState(false);
+
+  useEffect(()=>{sLista(capa.seguimientos||[]);sTexto("");sCuando(tdy());},[capa.id]);
+
+  const agregar=async()=>{
+    if(!texto.trim()){avisar("Escribí qué se hizo","error");return;}
+    sOcupado(true);
+    try{
+      const{seguimiento}=await api(`/capa/${encodeURIComponent(capa.id)}/seguimientos`,
+        {method:"POST",body:JSON.stringify({fecha:cuando,texto:texto.trim()})});
+      const l=[seguimiento,...lista];
+      sLista(l);onCambio&&onCambio(l);
+      sTexto("");
+      avisar("Seguimiento anotado");
+    }catch(e){avisar("No se pudo anotar: "+e.message,"error");}
+    finally{sOcupado(false);}
+  };
+
+  const borrar=async(s)=>{
+    if(!confirm("¿Eliminar esta anotación? Queda asentado en el audit trail."))return;
+    try{
+      await api("/seguimientos/"+s.id,{method:"DELETE"});
+      const l=lista.filter(x=>x.id!==s.id);
+      sLista(l);onCambio&&onCambio(l);
+      avisar("Anotación eliminada");
+    }catch(e){avisar("No se pudo eliminar: "+e.message,"error");}
+  };
+
+  if(!capa.id)return(
+    <div style={{...sC,background:"#FAFBFC"}}>
+      <h3 style={{fontSize:12,fontWeight:700,color:K.txS,margin:"0 0 6px"}}>🗒 Seguimiento</h3>
+      <div style={{fontSize:12,color:K.txM}}>Guardá la acción para poder anotar el seguimiento.</div>
+    </div>);
+
+  return(
+    <div style={{...sC,background:K.grnL,borderColor:K.grn+"20"}}>
+      <h3 style={{fontSize:12,fontWeight:700,color:K.grn,margin:"0 0 8px"}}>
+        🗒 Seguimiento {lista.length>0&&<span style={{color:K.txS,fontWeight:600}}>({lista.length})</span>}
+      </h3>
+
+      {lista.length===0&&<div style={{fontSize:12,color:K.txM,marginBottom:8}}>
+        Sin anotaciones todavía. Dejá constancia de cada avance, con la fecha en que pasó.
+      </div>}
+
+      {lista.map(s=><div key={s.id} style={{display:"flex",gap:9,padding:"8px 10px",background:"#fff",border:`1px solid ${K.brdL}`,borderRadius:7,marginBottom:5}}>
+        <span style={{fontSize:11.5,fontWeight:700,color:K.grn,whiteSpace:"nowrap",flexShrink:0,paddingTop:1}}>{fd(s.fecha)}</span>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:12.5,lineHeight:1.45,whiteSpace:"pre-wrap"}}>{s.texto}</div>
+          <div style={{fontSize:10.5,color:K.txM,marginTop:2}}>{s.usuario||"—"}{s.creadoEn&&fd(s.creadoEn)!==fd(s.fecha)?` · anotado el ${fd(s.creadoEn)}`:""}</div>
+        </div>
+        {canAdmin&&<button style={{...sB("sm"),color:K.red,padding:"2px 7px",alignSelf:"flex-start"}} onClick={()=>borrar(s)} title="Eliminar anotación">✕</button>}
+      </div>)}
+
+      {canEdit&&<div style={{marginTop:8}}>
+        <div style={{display:"flex",gap:8,alignItems:"flex-start"}}>
+          <input type="date" style={{...sI,width:150,flexShrink:0}} value={cuando} onChange={e=>sCuando(e.target.value)}/>
+          <textarea style={{...sI,minHeight:40,resize:"vertical"}} placeholder="Qué se hizo"
+                    value={texto} onChange={e=>sTexto(e.target.value)}/>
+        </div>
+        <button style={{...sB("g"),color:K.grn,borderColor:K.grn+"40",marginTop:6}}
+                onClick={agregar} disabled={ocupado||!texto.trim()}>
+          {ocupado?"Anotando…":"＋ Anotar seguimiento"}
+        </button>
+      </div>}
+    </div>);
+}
+
 function CAPAList({data,canEdit}){
   const{capas,ncs,devs,guardarCapa,borrarCapa,avisar,canAdmin,busq,sBusq}=data;
   const[sh,sSh]=useState(false);const[ed,sEd]=useState(null);
@@ -1100,6 +1176,9 @@ function CAPAList({data,canEdit}){
         <h3 style={{fontSize:12,fontWeight:700,color:"#7C3AED",margin:"0 0 8px"}}>🔍 Responsable de seguimiento</h3>
         <G2><Fd l="Nombre"><input style={sI} value={fm.followupResp||""} onChange={e=>sFm(p=>({...p,followupResp:e.target.value}))}/></Fd><Fd l="Email"><input type="email" style={sI} value={fm.followupEmail||""} onChange={e=>sFm(p=>({...p,followupEmail:e.target.value}))}/></Fd></G2>
       </div>
+      <Seguimiento capa={ed||fm} canEdit={canEdit} canAdmin={canAdmin} avisar={avisar}
+                   onCambio={l=>{sEd(p=>p&&{...p,seguimientos:l});sFm(p=>({...p,seguimientos:l}));}}/>
+
       <Fd l="Verificación de implementación"><textarea style={{...sI,minHeight:40,resize:"vertical"}} value={fm.verification||""} onChange={e=>sFm(p=>({...p,verification:e.target.value}))}/></Fd>
       <Fd l="Verificación de eficacia"><textarea style={{...sI,minHeight:40,resize:"vertical"}} value={fm.effectiveness||""} onChange={e=>sFm(p=>({...p,effectiveness:e.target.value}))}/></Fd>
 

@@ -48,7 +48,34 @@ const COLUMNAS_DEV = new Set([
 const COLUMNAS_CAPA = new Set([
     'id', 'code', 'ncId', 'devId', 'type', 'description', 'responsible',
     'responsibleEmail', 'dueDate', 'status',
+    // Viven en sus propias tablas y se devuelven aparte: sin esto el cliente
+    // los manda de vuelta en el cuerpo y quedaban copiados dentro de `datos`.
+    'adjuntos', 'seguimientos', 'actualizadoEn', 'actualizadoPor',
 ]);
+
+/**
+ * Las dos listas que cuelgan de una accion y viven en sus propias tablas. Se
+ * arman igual en la consulta del listado y al devolver una accion recien
+ * guardada: sin esto, la respuesta del guardado venia sin ellas y la pantalla
+ * mostraba la accion con cero adjuntos y cero seguimientos hasta recargar.
+ *
+ * `ref` no es dato de nadie: vale 'c.id' o '$1', segun donde se use.
+ */
+const adjuntosDe = (ref) => `coalesce(
+    (SELECT json_agg(json_build_object(
+                'id', a.id, 'nombre', a.nombre, 'tipo', a.tipo,
+                'tamano', a.tamano, 'subidoPor', a.subido_por,
+                'subidoEn', a.subido_en)
+             ORDER BY a.subido_en DESC)
+     FROM ncd_adjuntos a WHERE a.capa_id = ${ref}), '[]'::json)`;
+
+const seguimientosDe = (ref) => `coalesce(
+    (SELECT json_agg(json_build_object(
+                'id', s.id, 'fecha', to_char(s.fecha, 'YYYY-MM-DD'),
+                'texto', s.texto, 'usuario', s.usuario,
+                'creadoEn', s.creado_en)
+             ORDER BY s.fecha DESC, s.id DESC)
+     FROM ncd_seguimientos s WHERE s.capa_id = ${ref}), '[]'::json)`;
 
 /** Deja solo lo que no tiene columna propia. */
 function soloDatos(obj, columnas) {
@@ -99,6 +126,8 @@ const filaACapa = (f) => ({
     // Metadatos de la evidencia, sin el contenido: la lista tiene que poder
     // mostrar "2 adjuntos" sin arrastrar los bytes de las fotos.
     adjuntos: f.adjuntos || [],
+    // Las anotaciones de seguimiento, de la mas nueva a la mas vieja.
+    seguimientos: f.seguimientos || [],
     actualizadoEn: f.actualizado_en, actualizadoPor: f.actualizado_por,
 });
 
@@ -241,15 +270,9 @@ rutasNcDesvios.get('/datos', leer, async (req, res, next) => {
             ),
             consultar(
                 `SELECT c.*,
-                        coalesce(
-                            (SELECT json_agg(json_build_object(
-                                        'id', a.id, 'nombre', a.nombre, 'tipo', a.tipo,
-                                        'tamano', a.tamano, 'subidoPor', a.subido_por,
-                                        'subidoEn', a.subido_en)
-                                     ORDER BY a.subido_en DESC)
-                             FROM ncd_adjuntos a WHERE a.capa_id = c.id),
-                            '[]'::json) AS adjuntos
-                        , count(*) OVER ()::int AS total_filtrado
+                        ${adjuntosDe('c.id')} AS adjuntos,
+                        ${seguimientosDe('c.id')} AS seguimientos,
+                        count(*) OVER ()::int AS total_filtrado
                  FROM ncd_capa c
                  LEFT JOIN ncd_nc      n ON n.id = c.nc_id
                  LEFT JOIN ncd_desvios d ON d.id = c.dev_id
@@ -566,6 +589,15 @@ rutasNcDesvios.post('/capa', escribir, async (req, res, next) => {
                 ]
             );
 
+            // La accion vuelve con su evidencia y su seguimiento, que el
+            // INSERT no devuelve: si no, al guardar la ficha quedaba sin ellos.
+            const { rows: colgados } = await c.query(
+                `SELECT ${adjuntosDe('$1')} AS adjuntos, ${seguimientosDe('$1')} AS seguimientos`,
+                [id]
+            );
+            rows[0].adjuntos = colgados[0].adjuntos;
+            rows[0].seguimientos = colgados[0].seguimientos;
+
             if (esNuevo) {
                 await registrar(c, usuario, 'CREAR', 'CAPA', code);
             } else if (previo.estado !== rows[0].estado) {
@@ -728,6 +760,83 @@ rutasNcDesvios.delete('/adjuntos/:id', administrar, async (req, res, next) => {
             if (rows[0]) {
                 await registrar(c, usuario, 'ELIMINAR ADJUNTO', 'CAPA',
                     `${rows[0].code}: ${rows[0].nombre}`);
+            }
+            return rows[0];
+        });
+        if (!borrado) return res.status(404).json({ ok: false, error: 'no existe' });
+        res.json({ ok: true });
+    } catch (err) {
+        next(err);
+    }
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Seguimiento de la accion
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * POST /api/nc-desvios/capa/:id/seguimientos   { fecha, texto }
+ *
+ * Una anotacion de lo que se hizo, con la fecha en que se hizo. Solo se
+ * inserta: una anotacion vieja no se edita, se agrega otra abajo.
+ */
+rutasNcDesvios.post('/capa/:id/seguimientos', escribir, async (req, res, next) => {
+    const texto = String(req.body?.texto || '').trim();
+    const dia = fecha(req.body?.fecha);
+
+    if (!texto) return res.status(400).json({ ok: false, error: 'la anotacion no puede estar vacia' });
+    if (!dia) return res.status(400).json({ ok: false, error: 'falta la fecha de la anotacion' });
+
+    try {
+        const usuario = req.usuario.nombre;
+        const guardado = await enTransaccion(async (c) => {
+            const { rows: capa } = await c.query(
+                'SELECT code FROM ncd_capa WHERE id = $1', [req.params.id]
+            );
+            if (!capa[0]) {
+                const e = new Error('la accion no existe');
+                e.status = 404;
+                throw e;
+            }
+            const { rows } = await c.query(
+                `INSERT INTO ncd_seguimientos (capa_id, fecha, texto, usuario, usuario_id)
+                 VALUES ($1,$2,$3,$4,$5)
+                 RETURNING id, to_char(fecha, 'YYYY-MM-DD') AS fecha, texto, usuario, creado_en`,
+                [req.params.id, dia, texto.slice(0, 4000), usuario, req.usuario.id]
+            );
+            await registrar(c, usuario, 'SEGUIMIENTO', 'CAPA',
+                `${capa[0].code}: ${texto.slice(0, 80)}`);
+            return rows[0];
+        });
+        res.json({
+            ok: true,
+            seguimiento: {
+                id: guardado.id, fecha: guardado.fecha, texto: guardado.texto,
+                usuario: guardado.usuario, creadoEn: guardado.creado_en,
+            },
+        });
+    } catch (err) {
+        if (err.status === 404) return res.status(404).json({ ok: false, error: err.message });
+        next(err);
+    }
+});
+
+rutasNcDesvios.delete('/seguimientos/:id', administrar, async (req, res, next) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ ok: false, error: 'id invalido' });
+
+    try {
+        const usuario = req.usuario.nombre;
+        const borrado = await enTransaccion(async (c) => {
+            const { rows } = await c.query(
+                `DELETE FROM ncd_seguimientos s USING ncd_capa c
+                 WHERE s.id = $1 AND c.id = s.capa_id
+                 RETURNING s.texto, c.code`,
+                [id]
+            );
+            if (rows[0]) {
+                await registrar(c, usuario, 'ELIMINAR SEGUIMIENTO', 'CAPA',
+                    `${rows[0].code}: ${String(rows[0].texto).slice(0, 80)}`);
             }
             return rows[0];
         });
