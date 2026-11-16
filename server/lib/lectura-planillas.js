@@ -331,8 +331,19 @@ export async function leerEstandares(p) {
         '- conservacion: condiciones de conservación (ej: "2-8 °C", "ambiente, oscuro").\n' +
         '- ubicacion: dónde se guarda (ej: "Heladera LCC", "Estante 3").\n' +
         '- recepcion, vencimiento, reanalisis: fechas en formato ISO yyyy-mm-dd.\n' +
+        '- fuera_de_stock: fecha en que el estándar salió de stock, si está escrita. ISO yyyy-mm-dd. ' +
+        'Vacío si todavía está en el estante.\n' +
         '- observaciones: cualquier nota relevante de la fila.\n' +
         '- confianza: 0.0 a 1.0, tu certeza sobre la lectura de esa fila.\n\n' +
+        'COLUMNAS DE REG-C (Listado de Stock), en este orden exacto:\n' +
+        '  1 Nombre del Producto, 2 Observaciones, 3 Cantidad recibida, 4 Lote del proveedor/Cliente, ' +
+        '5 Lote interno, 6 Fecha de ingreso a stock, 7 Fecha de vencimiento, 8 Ubicación, ' +
+        '9 Fecha de fuera de Stock.\n' +
+        '  "Fecha de ingreso a stock" es recepcion; "Fecha de fuera de Stock" es fuera_de_stock.\n' +
+        '  La columna 2 es Observaciones y va pegada al nombre: no la confundas con el nombre.\n' +
+        '  La columna 4 es el lote DEL PROVEEDOR, no el nombre del proveedor.\n' +
+        '  REG-C no tiene columna de proveedor, de código, de pureza ni de conservación: van vacíos, ' +
+        'salvo que estén escritos al margen o en una nota.\n\n' +
         'REGLAS:\n' +
         '- Hoy es ' + hoy + '. Las fechas escritas como dd/mm/aa se convierten a yyyy-mm-dd, con año 2000+.\n' +
         '- Si un año manuscrito es ambiguo, elegí el más razonable: la recepción no puede estar en el futuro.\n' +
@@ -353,7 +364,8 @@ export async function leerEstandares(p) {
                         proveedor: { type: 'string' }, cantidad: { type: 'string' }, pureza: { type: 'string' },
                         conservacion: { type: 'string' }, ubicacion: { type: 'string' },
                         recepcion: { type: 'string' }, vencimiento: { type: 'string' },
-                        reanalisis: { type: 'string' }, observaciones: { type: 'string' },
+                        reanalisis: { type: 'string' }, fuera_de_stock: { type: 'string' },
+                        observaciones: { type: 'string' },
                         confianza: { type: 'number' },
                     },
                     required: ['nombre'],
@@ -373,7 +385,7 @@ export async function leerEstandares(p) {
         proveedor: t(e.proveedor), cantidad: t(e.cantidad), pureza: t(e.pureza),
         conservacion: t(e.conservacion), ubicacion: t(e.ubicacion),
         recepcion: dia(e.recepcion), vencimiento: dia(e.vencimiento), reanalisis: dia(e.reanalisis),
-        observaciones: t(e.observaciones),
+        fuera_de_stock: dia(e.fuera_de_stock), observaciones: t(e.observaciones),
         confianza: typeof e.confianza === 'number' ? e.confianza : 0.7,
     })).filter((e) => e.nombre.length >= 2);
     return { estandares, count: estandares.length };

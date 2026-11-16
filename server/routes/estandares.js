@@ -633,19 +633,25 @@ rutasEstandares.post('/desde-papel', cargar, async (req, res, next) => {
                             'De la bitácora en papel', quien(req), req.usuario.id]
                     );
                 }
+                // REG-C trae la columna "Fecha de fuera de Stock". Con fecha, el
+                // estandar ya salio del estante: entra como fuera_de_stock y no
+                // como vigente, que es lo que lo haria figurar vencido.
+                const fuera = fechaOpcional(f?.fuera_de_stock_en);
                 const { rows } = await c.query(
                     `INSERT INTO est_estandares
                         (codigo, nombre, tipo, proveedor, lote_proveedor, lote_interno, cantidad, pureza,
                          conservacion, ubicacion, recepcion, vencimiento, reanalisis, envases,
-                         observaciones, creado_por, creado_por_id, actualizado_por, origen)
-                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$16,'papel')
+                         observaciones, creado_por, creado_por_id, actualizado_por, origen,
+                         fuera_de_stock_en, estado)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$16,'papel',$18,$19)
                      RETURNING id, codigo`,
                     [codigo, nombre, tipo, texto(f?.proveedor, 200) || null, texto(f?.lote_proveedor, 100) || null,
                         loteNum, texto(f?.cantidad, 60) || null, texto(f?.pureza, 60) || null,
                         texto(f?.conservacion, 200) || null, texto(f?.ubicacion, 120) || null,
                         recepcion, vencimiento, fechaOpcional(f?.reanalisis),
                         Math.min(Math.max(Number(f?.envases) || 1, 1), 99),
-                        texto(f?.observaciones, 1000) || null, quien(req), req.usuario.id]
+                        texto(f?.observaciones, 1000) || null, quien(req), req.usuario.id,
+                        fuera, fuera ? 'fuera_de_stock' : 'vigente']
                 );
                 await registrar(c, req, 'alta', 'estandar', rows[0].id,
                     'Alta desde la bitácora en papel', null, rows[0]);
