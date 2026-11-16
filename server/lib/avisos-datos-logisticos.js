@@ -268,7 +268,7 @@ export async function avisarMedidas(sku, { pidio, nota } = {}) {
  *
  * Devuelve lo que paso, que la ruta guarda en la bitacora.
  */
-export async function avisarFinanzas(sku, { cambios = [], actualizacion = false } = {}) {
+export async function avisarFinanzas(sku, { cambios = [], actualizacion = false, altaPrevia = false } = {}) {
     const p = await productoDe(sku);
     if (!p) return { enviado: false, motivo: 'el producto no existe' };
     const para = await supervisoresDe('datos-logisticos', 'finanzas');
@@ -279,9 +279,14 @@ export async function avisarFinanzas(sku, { cambios = [], actualizacion = false 
     const titulo = actualizacion
         ? `Actualización del producto ${p.sku}`
         : `Alta de producto ${p.sku}`;
-    const intro = actualizacion
-        ? `Cambiaron datos del SKU <b>${esc(p.sku)}</b>, que ya te habíamos mandado. Abajo va lo que cambió y la ficha corregida adjunta.`
-        : 'Se aprobó la ficha de este producto para darlo de alta en iDempiere. La ficha va adjunta.';
+    // El producto cuyo alta ya estaba hecha nunca salio de aca, asi que no se
+    // le puede decir "ya te lo habiamos mandado": el alta la cargo ella.
+    const intro = altaPrevia
+        ? `Cambiaron datos del SKU <b>${esc(p.sku)}</b>, que ya estaba dado de alta en iDempiere. ` +
+          'Abajo va lo que cambió, para corregirlo, y la ficha con los datos de hoy adjunta.'
+        : actualizacion
+            ? `Cambiaron datos del SKU <b>${esc(p.sku)}</b>, que ya te habíamos mandado. Abajo va lo que cambió y la ficha corregida adjunta.`
+            : 'Se aprobó la ficha de este producto para darlo de alta en iDempiere. La ficha va adjunta.';
     const lista = cambios.length
         ? `<div style="background:#fef0c7;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:14px">
              <b>Lo que cambió</b><ul style="margin:6px 0 0;padding-left:18px">${cambios

@@ -190,6 +190,8 @@ function aPantalla(p) {
         msp: p.msp, mspNum: p.msp_numero || '', mspVence: p.msp_vence || null,
         estado: p.estado, armadaPor: p.armada_por || '', armadaEn: p.armada_en,
         aprobadaPor: p.aprobada_por || '', aprobadaEn: p.aprobada_en, rechazo: p.rechazo || '',
+        altaPreviaEn: p.alta_previa_en || null, altaPreviaPor: p.alta_previa_por || '',
+        altaPreviaNota: p.alta_previa_nota || '',
         fichaVersion: p.ficha_version,
         enviadaFinanzasEn: p.enviada_finanzas_en, enviadaVentasEn: p.enviada_ventas_en,
         extra: p.extra || {},
@@ -421,7 +423,11 @@ rutasDatosLogisticos.post('/productos/:sku/aprobar', aprobar, async (req, res, n
 
             const ahora = camposFicha(p);
             const cambios = cambiosDeFicha(p.extra?.fichaEnviada, ahora);
-            const actualizacion = Boolean(p.enviada_finanzas_en);
+            // El alta que ya estaba hecha cuenta como enviada: lo que Marianela
+            // recibe es una correccion de lo que ya cargo en iDempiere, no un
+            // alta nueva.
+            const altaPrevia = Boolean(p.alta_previa_en);
+            const actualizacion = Boolean(p.enviada_finanzas_en) || altaPrevia;
             await c.query(
                 `UPDATE dl_productos
                     SET estado = 'aprobada', aprobada_por = $2, aprobada_por_id = $3, aprobada_en = now(),
@@ -432,8 +438,10 @@ rutasDatosLogisticos.post('/productos/:sku/aprobar', aprobar, async (req, res, n
                 [sku, req.usuario.nombre || req.usuario.usuario, req.usuario.id, JSON.stringify(ahora)]
             );
             await registrar(c, req, 'ficha_aprobada', sku,
-                actualizacion ? `actualización · ${cambios.length} dato(s) cambiados` : 'primera vez');
-            return { cambios, actualizacion };
+                actualizacion
+                    ? `actualización · ${cambios.length} dato(s) cambiados${altaPrevia ? ' · el alta ya estaba hecha' : ''}`
+                    : 'primera vez');
+            return { cambios, actualizacion, altaPrevia };
         });
 
         // Fuera de la transaccion: el correo no tiene que poder voltear la aprobacion.
@@ -441,6 +449,51 @@ rutasDatosLogisticos.post('/productos/:sku/aprobar', aprobar, async (req, res, n
         const ventas = await avisarVentas(sku);
         const { rows } = await consultar(`${SELECT_PRODUCTO} WHERE p.sku = $1`, [sku]);
         res.json({ ok: true, finanzas, ventas, falta: await loQueFalta(sku), producto: aPantalla(rows[0]) });
+    } catch (err) { responder(err, res, next); }
+});
+
+/**
+ * POST /api/datos-logisticos/productos/:sku/alta-previa  { nota }
+ *
+ * El alta de este producto ya estaba hecha fuera de la app: ya esta cargado en
+ * iDempiere. La ficha queda cerrada -los datos logisticos valen y el aviso a
+ * Ventas puede salir- y a Finanzas no se le manda nada, porque pedirle un alta
+ * que ya existe solo genera confusion (Claudia, 16/11/2026).
+ *
+ * No pide la ficha en Excel: justamente eso es lo que trababa estos productos.
+ * Igual se puede bajar o subir despues, como respaldo de lo que se cargo.
+ */
+rutasDatosLogisticos.post('/productos/:sku/alta-previa', aprobar, async (req, res, next) => {
+    const sku = texto(req.params.sku, 60);
+    const nota = texto(req.body?.nota, 1000);
+    const quien = req.usuario.nombre || req.usuario.usuario;
+    try {
+        await enTransaccion(async (c) => {
+            const { rows } = await c.query('SELECT * FROM dl_productos WHERE sku = $1 FOR UPDATE', [sku]);
+            const p = rows[0];
+            if (!p) throw fallo(404, 'No hay ningún producto con ese código');
+            if (p.alta_previa_en) {
+                throw fallo(409, `Ya figura con el alta hecha: lo marcó ${p.alta_previa_por || 'alguien'}`);
+            }
+            if (p.estado === 'aprobada') {
+                throw fallo(409, `Esa ficha ya la aprobó ${p.aprobada_por}: el alta salió desde acá`);
+            }
+            await c.query(
+                `UPDATE dl_productos
+                    SET estado = 'aprobada', aprobada_por = $2, aprobada_por_id = $3, aprobada_en = now(),
+                        rechazo = NULL,
+                        alta_previa_en = now(), alta_previa_por = $2, alta_previa_nota = $4,
+                        extra = extra || jsonb_build_object('fichaEnviada', $5::jsonb),
+                        actualizado_en = now(), actualizado_por = $2
+                  WHERE sku = $1`,
+                [sku, quien, req.usuario.id, nota || null, JSON.stringify(camposFicha(p))]
+            );
+            await registrar(c, req, 'alta_previa', sku, nota || 'el alta ya estaba hecha');
+        });
+        // A Finanzas no va nada: el alta ya existe. A Ventas si, si ya estan los papeles.
+        const ventas = await avisarVentas(sku);
+        const { rows } = await consultar(`${SELECT_PRODUCTO} WHERE p.sku = $1`, [sku]);
+        res.json({ ok: true, ventas, falta: await loQueFalta(sku), producto: aPantalla(rows[0]) });
     } catch (err) { responder(err, res, next); }
 });
 

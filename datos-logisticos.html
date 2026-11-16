@@ -171,7 +171,12 @@ const tienePend=p=>faltantes(p).length>0||!!p.nota;
 const ESTADOS={borrador:{t:"Borrador",c:"var(--txS)",b:"var(--brdL)"},
   pendiente:{t:"Esperando revisión",c:"var(--wrn)",b:"var(--wrnL)"},
   aprobada:{t:"Aprobada",c:"var(--grn)",b:"var(--grnL)"}};
-const sello=p=>{const e=ESTADOS[p.estado]||ESTADOS.borrador;return `<span class="bg" style="background:${e.b};color:${e.c}">${e.t}</span>`;};
+/* El producto que ya estaba dado de alta en iDempiere queda aprobado sin haber
+   salido a Finanzas: el sello lo dice, para que nadie piense que se mandó un
+   alta que nunca se mandó (Claudia, 16/11/2026). */
+const ESTADO_ALTA_PREVIA={t:"Alta ya hecha",c:"var(--grn)",b:"var(--grnL)"};
+const altaYaHecha=p=>!!p.altaPreviaEn&&!p.enviadaFinanzasEn;
+const sello=p=>{const e=altaYaHecha(p)?ESTADO_ALTA_PREVIA:(ESTADOS[p.estado]||ESTADOS.borrador);return `<span class="bg" style="background:${e.b};color:${e.c}">${e.t}</span>`;};
 
 /* ---------- Servidor ---------- */
 async function api(ruta,opciones){
@@ -237,7 +242,8 @@ async function guardar(o,accion,ant){
     cuerpo.sku=o.sku;
     const d=await api("/productos",{method:"POST",body:JSON.stringify(cuerpo)});
     reemplazar(d.producto);cerrar();refrescar();
-    aviso(`SKU ${o.sku} creado. Cuando esté completo, mandalo a revisar.`,"success");
+    aviso(`SKU ${o.sku} creado. Cuando esté completo, mandalo a revisar.`
+      +(puedeAprobar()?" Si el alta ya estaba hecha, marcalo con “El alta ya estaba hecha” en su ficha.":""),"success");
     return;
   }
   const previo=ant||productos.find(x=>x.sku===o.sku)||{};
@@ -545,6 +551,7 @@ function vGuia(){
     ["🧭","Para qué sirve","Guarda los datos logísticos de cada producto terminado —medidas, pesos, pallet, códigos de barras y habilitación MSP— y arma con ellos la ficha de alta que Finanzas carga en iDempiere."],
     ["👤","Quién entra","Con el usuario del portal. Calidad carga y aprueba; logística y ventas ven y exportan. No hay usuarios ni contraseñas aparte."],
     ["🔁","El circuito de la ficha","1) Gloria completa los datos y la manda a revisar, y a quien revisa le llega un correo con la ficha adjunta. 2) Antonella —o Claudia— la aprueba. 3) Al aprobarla sale sola a Finanzas (Marianela) con la ficha en Excel adjunta. Si después cambia un dato de la ficha, vuelve a quedar pendiente y al aprobarse le llega como actualización, diciendo qué cambió."],
+    ["📦","El producto que ya está dado de alta","Si el alta se hizo antes, fuera de la app, en la ficha del producto está el botón “El alta ya estaba hecha”: la ficha queda cerrada sin generar ni mandarle nada a Finanzas, y queda anotado quién lo marcó y de dónde salió el alta. Los datos logísticos valen igual y el aviso a Ventas sale cuando estén el certificado y la ficha de seguridad. Si después cambiás un dato de la ficha, vuelve a revisión y ahí sí Finanzas se entera, como actualización."],
     ["🩺","Registros sanitarios","En la ficha del producto se carga la habilitación MSP: número, vencimiento y el documento. Una renovación es un registro nuevo y el anterior queda. "+DIAS_MSP+" días antes del vencimiento le llega un aviso a Claudia."],
     ["📎","Certificado y ficha de seguridad","Se suben desde la ficha del producto. Cuando están los dos y la ficha está aprobada, sale solo el aviso a Ventas y Logística con los tres adjuntos."],
     ["⚠","Datos pendientes","La app marca lo que falta para que la ficha esté completa. Si un dato no corresponde a ese producto, se marca como “no aplica” y deja de figurar."],
@@ -921,7 +928,9 @@ function ficha(sku){
 
     ${p.estado==="borrador"&&p.rechazo?`<div class="ctx-help warn">✍ Devuelta para corregir: ${esc(p.rechazo)}</div>`:""}
     ${p.estado==="pendiente"?`<div class="ctx-help warn">⏳ Esperando que la revisen Antonella o Claudia, a quienes ya les llegó el correo con la ficha. La armó ${esc(p.armadaPor||"—")} el ${fdt(p.armadaEn)}.</div>`:""}
-    ${p.estado==="aprobada"?`<div class="ctx-help success">✓ Ficha aprobada por ${esc(p.aprobadaPor||"—")} el ${fdt(p.aprobadaEn)}${p.enviadaFinanzasEn?` · enviada a Finanzas el ${fdt(p.enviadaFinanzasEn)}`:""}.</div>`:""}
+    ${p.estado==="aprobada"?(altaYaHecha(p)
+      ?`<div class="ctx-help success">✓ El alta de este producto ya estaba hecha: lo marcó ${esc(p.altaPreviaPor||"—")} el ${fdt(p.altaPreviaEn)}. A Finanzas no se le mandó nada.${p.altaPreviaNota?`<div style="margin-top:4px">📝 ${esc(p.altaPreviaNota)}</div>`:""}</div>`
+      :`<div class="ctx-help success">✓ Ficha aprobada por ${esc(p.aprobadaPor||"—")} el ${fdt(p.aprobadaEn)}${p.enviadaFinanzasEn?` · enviada a Finanzas el ${fdt(p.enviadaFinanzasEn)}`:""}.${p.altaPreviaEn?` El alta ya estaba hecha (${esc(p.altaPreviaPor||"")}, ${fdt(p.altaPreviaEn)}), así que a Finanzas le llegó como actualización.`:""}</div>`):""}
     ${p.enviadaVentasEn?`<div class="ctx-help success">📣 Aviso a Ventas y Logística enviado el ${fdt(p.enviadaVentasEn)}.</div>`:
       falta.length?`<div class="ctx-help">Para avisarle a Ventas falta: ${esc(falta.join(", "))}.</div>`:""}
 
@@ -953,13 +962,17 @@ function ficha(sku){
       return `<div style="border:1px solid var(--brdL);border-radius:8px;padding:10px;margin-bottom:8px">
         <div style="font-size:12px;font-weight:700;color:var(--txS);text-transform:uppercase;letter-spacing:.04em">${TIPO_DOC[t]}</div>
         ${d?`<div style="margin-top:4px"><a href="${API}/documentos/${d.id}" target="_blank" rel="noopener">📎 ${esc(d.nombre)}</a>
-          <div style="font-size:11.5px;color:var(--txS)">${t==="ficha"?"Es la que se mandó a Finanzas · ":""}${esc(d.subidoPor||"")} · ${fdt(d.subidoEn)}</div></div>`
+          <div style="font-size:11.5px;color:var(--txS)">${t==="ficha"?(p.enviadaFinanzasEn?"Es la que se mandó a Finanzas · ":"Es la planilla del alta · "):""}${esc(d.subidoPor||"")} · ${fdt(d.subidoEn)}</div></div>`
           // La ficha no se sube: la arma la app sola al mandarla a revisar o al
-          // aprobarla. Decir "no se subió" hacía pensar que faltaba algo.
+          // aprobarla. Decir "no se subió" hacía pensar que faltaba algo. La
+          // excepción es el producto cuyo alta se hizo afuera: ahí la planilla
+          // del alta la tiene Finanzas, y se puede subir esa.
           :`<div class="pag-sub" style="margin-top:4px">${t==="ficha"
-            ?"La arma la app cuando mandás la ficha a revisar o cuando se aprueba. Mientras tanto podés bajarla con el botón de abajo."
+            ?(altaYaHecha(p)
+              ?"El alta de este producto se hizo afuera. Si tenés la planilla con la que se dio de alta, subila acá: va adjunta en el aviso a Ventas."
+              :"La arma la app cuando mandás la ficha a revisar o cuando se aprueba. Mientras tanto podés bajarla con el botón de abajo.")
             :"Todavía no se subió."}</div>`}
-        ${puedeEditar()&&t!=="ficha"?`<label class="btn g sm" style="margin-top:6px;cursor:pointer">📤 ${d?"Reemplazar":"Subir"}<input type="file" data-subir="${t}" hidden accept=".pdf,.doc,.docx,.xls,.xlsx"></label>`:""}</div>`;}).join("")}</div>
+        ${puedeEditar()&&(t!=="ficha"||altaYaHecha(p))?`<label class="btn g sm" style="margin-top:6px;cursor:pointer">📤 ${d?"Reemplazar":"Subir"}<input type="file" data-subir="${t}" hidden accept=".pdf,.doc,.docx,.xls,.xlsx"></label>`:""}</div>`;}).join("")}</div>
 
     ${(()=>{const al=alertasK(p);return al.length?`<div class="ctx-help warn" style="display:block">⚠ Revisá:${al.map(x=>`<div style="margin-top:4px">${esc(x.t)}${puedeEditar()?` <button class="btn sm" data-des="${x.k}" style="margin-left:6px">Desestimar</button>`:""}</div>`).join("")}</div>`:"";})()}
     ${f.length?`<div class="ctx-help warn" style="margin-top:14px;display:block">⚠ Datos pendientes: ${puedeEditar()?faltantesK(p).filter(([k])=>!(p.noAplica||[]).includes(k)).map(([k,t])=>`<span class="bg" style="background:var(--srf);color:var(--wrn);margin:2px">${esc(t)} <button class="btn sm" data-na="${k}" title="Marcar que este dato no corresponde a este producto">no aplica</button></span>`).join(" "):f.join(", ")}</div>`:""}
@@ -980,6 +993,7 @@ function ficha(sku){
       ${puedeEditar()&&p.estado!=="pendiente"?`<button class="btn" id="aRevision" style="background:var(--wrn)">✍ ${p.estado==="aprobada"?"Volver a mandar a revisión":"Mandar a revisar"}</button>`:""}
       ${puedeAprobar()&&p.estado==="pendiente"?`<button class="btn g" id="devolver">↩ Devolver para corregir</button>
         <button class="btn" id="aprobar" style="background:var(--grn)">✓ Aprobar y enviar a Finanzas</button>`:""}
+      ${puedeAprobar()&&p.estado!=="aprobada"?`<button class="btn g" id="altaHecha" title="El producto ya está dado de alta en iDempiere: la ficha queda cerrada y a Finanzas no se le manda nada">📦 El alta ya estaba hecha</button>`:""}
     </div>`);
 
   $("#impr").onclick=()=>imprimirFicha(p);
@@ -1002,6 +1016,7 @@ function ficha(sku){
   if($("#aRevision"))$("#aRevision").onclick=()=>mandarARevision(p);
   if($("#pedirMedidas"))$("#pedirMedidas").onclick=()=>pedirMedidas(p);
   if($("#aprobar"))$("#aprobar").onclick=()=>aprobarFicha(p);
+  if($("#altaHecha"))$("#altaHecha").onclick=()=>marcarAltaPrevia(p);
   if($("#devolver"))$("#devolver").onclick=()=>devolverFicha(p);
 }
 
@@ -1056,6 +1071,26 @@ async function aprobarFicha(p){
     aviso(f.enviado?"Ficha aprobada y enviada a Finanzas."
       :"Ficha aprobada, pero el correo a Finanzas no salió: "+(f.motivo||"revisá la configuración de correo."),f.enviado?"success":"warn");
     if(d.ventas&&d.ventas.enviado)aviso("También salió el aviso a Ventas y Logística.","success");
+  }catch(e){alert(e.message);}
+}
+/* El producto que ya está dado de alta en iDempiere. La ficha queda cerrada
+   -los datos logísticos valen y el aviso a Ventas puede salir- y a Finanzas no
+   se le manda nada: pedirle un alta que ya cargó solo confunde (Claudia,
+   16/11/2026: "ya tiene el alta de producto y cuando ingreso me quiere generar
+   el alta"). No hace falta generar la ficha en Excel, que era lo que trababa
+   estos productos. */
+async function marcarAltaPrevia(p){
+  const nota=prompt(`El SKU ${p.sku} ya está dado de alta en iDempiere.\n\n`
+    +`La ficha queda cerrada y a Finanzas NO se le manda nada. Si más adelante cambiás un dato de la ficha, `
+    +`vuelve a revisión y recién ahí se le avisa, como actualización.\n\n`
+    +`¿De dónde salió el alta? (quién la cargó, cuándo, o lo que quieras aclarar. Podés dejarlo vacío.)`,"");
+  if(nota===null)return;
+  try{
+    const d=await api(`/productos/${encodeURIComponent(p.sku)}/alta-previa`,{method:"POST",body:JSON.stringify({nota})});
+    reemplazar(d.producto);cerrar();
+    aviso(`SKU ${p.sku}: queda con el alta ya hecha. No se le mandó nada a Finanzas.`,"success");
+    if(d.ventas&&d.ventas.enviado)aviso("También salió el aviso a Ventas y Logística.","success");
+    else if(d.falta&&d.falta.length)aviso("Para avisarle a Ventas falta: "+d.falta.join(", ")+".");
   }catch(e){alert(e.message);}
 }
 async function devolverFicha(p){
