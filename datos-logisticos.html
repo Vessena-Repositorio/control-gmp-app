@@ -551,6 +551,7 @@ function vGuia(){
     ["🧭","Para qué sirve","Guarda los datos logísticos de cada producto terminado —medidas, pesos, pallet, códigos de barras y habilitación MSP— y arma con ellos la ficha de alta que Finanzas carga en iDempiere."],
     ["👤","Quién entra","Con el usuario del portal. Calidad carga y aprueba; logística y ventas ven y exportan. No hay usuarios ni contraseñas aparte."],
     ["🔁","El circuito de la ficha","1) Gloria completa los datos y la manda a revisar, y a quien revisa le llega un correo con la ficha adjunta. 2) Antonella —o Claudia— la aprueba. 3) Al aprobarla sale sola a Finanzas (Marianela) con la ficha en Excel adjunta. Si después cambia un dato de la ficha, vuelve a quedar pendiente y al aprobarse le llega como actualización, diciendo qué cambió."],
+    ["📥","Cargar un producto desde su alta","Si el alta ya está hecha en Excel (la carpeta “13- ALTAS DE PRODUCTOS”), en el formulario del producto hay un botón para subirla: la app lee la planilla y completa sola el código, la descripción, la clasificación, los códigos de barras, el paletizado y las medidas —que en la planilla van en milímetros y acá quedan en centímetros—. Nada se guarda hasta que lo revises, y te dice qué completó y qué no trae el alta. Sobre un producto que ya tiene datos completa solo lo que está vacío y avisa si la planilla dice otra cosa."],
     ["📦","El producto que ya está dado de alta","Si el alta se hizo antes, fuera de la app, en la ficha del producto está el botón “El alta ya estaba hecha”: la ficha queda cerrada sin generar ni mandarle nada a Finanzas, y queda anotado quién lo marcó y de dónde salió el alta. Los datos logísticos valen igual y el aviso a Ventas sale cuando estén el certificado y la ficha de seguridad. Si después cambiás un dato de la ficha, vuelve a revisión y ahí sí Finanzas se entera, como actualización."],
     ["🩺","Registros sanitarios","En la ficha del producto se carga la habilitación MSP: número, vencimiento y el documento. Una renovación es un registro nuevo y el anterior queda. "+DIAS_MSP+" días antes del vencimiento le llega un aviso a Claudia."],
     ["📎","Certificado y ficha de seguridad","Se suben desde la ficha del producto. Cuando están los dos y la ficha está aprobada, sale solo el aviso a Ventas y Logística con los tres adjuntos."],
@@ -746,6 +747,10 @@ function formulario(p,base){
   const LIMPIAR=["sku","ean","dun","estadoAlta","altaFecha","altaPor","modificado","modificadoPor","packsLM","packsV3","msp","mspNum","mspVence"];
   const copia=base?(()=>{const c={...base};LIMPIAR.forEach(k=>delete c[k]);c.activo=true;c.copiaDe=base.sku;return c;})():null;
   const nuevo=!p;p=p||copia||{grupo:"Nacionales",vida:24,activo:true,acostada:false,cm:true,tipoEmpaque:"Caja",tempCerrado:"Temperatura Ambiente",tempAbierto:"Temperatura Ambiente"};
+  /* Leer un alta ya hecha sobre un SKU que se está editando -o sobre una copia
+     de otro- no puede pisar lo que ya hay: completa lo que falta y avisa de lo
+     que no coincide. Un SKU nuevo y en blanco se completa entero. */
+  const soloVacios=!nuevo||!!copia;
   const campo=c=>{const v=p[c.k];
     if(c.op)return `<label class="fd ${c.cls||""}"><span>${c.t}</span><select class="in" name="${c.k}">${c.op.map(o=>`<option${o===v?" selected":""}>${o}</option>`).join("")}</select></label>`;
     if(c.chk)return `<label class="chk ${c.cls||""}" style="margin:22px 0 10px"><input type="checkbox" name="${c.k}"${v?" checked":""}> ${c.t}</label>`;
@@ -765,6 +770,9 @@ function formulario(p,base){
   });
   modal(`<div class="md-cab"><h1 class="pag">${nuevo?(copia?"Nuevo SKU (copia de "+esc(copia.copiaDe)+")":"Nuevo SKU"):"Editar SKU "+esc(p.sku)}</h1><button class="btn sm" data-x>✕ Cerrar</button></div>
     ${copia?`<div class="ctx-help success">⧉ Se copiaron los datos del SKU ${esc(copia.copiaDe)}. Completá el SKU nuevo, el EAN13 y el DUN14, y revisá la descripción y lo que cambie.</div>`:""}
+    <div class="ctx-help" style="display:block">📥 <b>Si el alta de este producto ya está hecha</b>, subí el Excel del alta (el de la carpeta “13- ALTAS DE PRODUCTOS”) y completo los campos con lo que diga${soloVacios?", solo los que estén vacíos":""}. No se guarda nada hasta que lo revises.
+      <div style="margin-top:6px"><label class="btn g sm" style="cursor:pointer">📄 Leer un alta (Excel)<input type="file" id="leerAlta" hidden accept=".xlsx"></label></div>
+      <div id="leidoAlta" style="margin-top:6px;font-size:12.5px"></div></div>
     <div class="ctx-help">💡 Los cálculos (bultos por pallet, alto y peso del pallet) se actualizan mientras completás. Si el bulto va acostado, marcá la opción y el alto del pallet se calcula con el ancho.</div>
     <form id="fm" novalidate><div class="grilla">${CAMPOS_FORM.map(campo).join("")}</div><div class="calc" id="calc"></div><div id="alertas"></div><ul class="errores" id="err"></ul>
     <div class="acc"><button type="button" class="btn g" data-x>Cancelar</button><button type="submit" class="btn">${nuevo?"Crear SKU":"Guardar cambios"}</button></div></form>`);
@@ -819,6 +827,54 @@ function formulario(p,base){
   const actAl=()=>{const a=alertas(leer());$("#alertas").innerHTML=a.length?`<div class="ctx-help warn">⚠ <span>Revisá: ${a.map(esc).join(" ")}</span></div>`:"";};
   f.addEventListener("input",actAl);
   f.oninput=act;act();actAl();
+  /* ---------- Completar desde un alta ya hecha ---------- */
+  const etiqCampo=k=>(CAMPOS.find(c=>c.k===k)||{t:k}).t;
+  /** Pone un campo como si lo hubieran escrito, para que corran los cálculos y los controles. */
+  const ponerCampo=(k,v)=>{
+    const el=f.elements[k];if(!el)return null;
+    const esNum=!!(CAMPOS.find(c=>c.k===k)||{}).n;
+    const valor=esNum?String(v).replace(".",","):String(v);
+    const habia=String(el.value||"").trim();
+    if(habia===valor)return null;
+    if(soloVacios&&habia)return "habia";
+    // Lo que diga el alta vale aunque no esté en la lista: se agrega como opción.
+    if(el.tagName==="SELECT"&&![...el.options].some(o=>o.value===valor))el.add(new Option(valor,valor));
+    el.value=valor;
+    el.dispatchEvent(new Event("input",{bubbles:true}));
+    if(el.tagName==="SELECT")el.dispatchEvent(new Event("change",{bubbles:true}));
+    return "puesto";
+  };
+  const inAlta=$("#leerAlta");
+  if(inAlta)inAlta.onchange=async ev=>{
+    const arch=ev.target.files[0],caja=$("#leidoAlta");
+    if(!arch)return;
+    caja.innerHTML="Leyendo el Excel…";
+    try{
+      const d=await leerAltaXlsx(arch);
+      const puestos=[],pisados=[];
+      const anotar=(k,r)=>{if(r==="puesto")puestos.push(etiqCampo(k));else if(r==="habia")pisados.push(etiqCampo(k));};
+      CAMPOS.forEach(c=>{
+        if(c.k==="unPal")return;                       // depende de los otros tres: va al final
+        if(!nuevo&&c.k==="sku")return;                 // editando, el SKU no se toca
+        if(d[c.k]===undefined)return;
+        anotar(c.k,ponerCampo(c.k,d[c.k]));
+      });
+      // Unidades por pallet: si no es bultos por piso × pisos × unidades, vale lo que diga el alta.
+      if(d.unPal!==undefined){
+        const o=leer();
+        if(!(o.unx&&o.porPiso&&o.estiba&&o.unx*o.porPiso*o.estiba===d.unPal))anotar("unPal",ponerCampo("unPal",d.unPal));
+      }
+      act();actAl();
+      const falta=faltantesK(leer()).map(([,t])=>t);
+      caja.innerHTML=`<b>Leído: ${esc(arch.name)}</b>`
+        +(puestos.length?`<div style="margin-top:4px;color:var(--grn)">✓ Completé ${puestos.length} dato(s): ${esc(puestos.join(", "))}.</div>`
+          :`<div style="margin-top:4px">No había nada nuevo para completar.</div>`)
+        +(pisados.length?`<div style="margin-top:4px;color:var(--wrn)">⚠ El alta dice otra cosa en ${esc(pisados.join(", "))}: lo dejé como estaba. Si vale lo del alta, cambialo a mano.</div>`:"")
+        +(falta.length?`<div style="margin-top:4px">El alta no trae: ${esc(falta.join(", "))}. Se guarda igual y se completa después.</div>`:"")
+        +`<div style="margin-top:4px;color:var(--txS)">Revisá lo que entró y guardá. Si el alta ya estaba hecha, después marcalo en la ficha del producto.</div>`;
+    }catch(e){caja.innerHTML=`<span style="color:var(--red)">No se pudo leer: ${esc(e.message)}</span>`;}
+    ev.target.value="";                                 // que se pueda volver a elegir el mismo archivo
+  };
   f.onsubmit=async e=>{e.preventDefault();const o=leer(),err=[];f.querySelectorAll(".in").forEach(i=>i.removeAttribute("aria-invalid"));const mk=k=>f.elements[k]?.setAttribute("aria-invalid","true");
     if(!o.sku||!/^[A-Za-z0-9._-]+$/.test(o.sku)){err.push("El SKU es obligatorio y solo admite letras, números, punto, guion y guion bajo.");mk("sku");}
     else if(nuevo&&productos.some(x=>x.sku===o.sku)){err.push(`El SKU ${o.sku} ya existe.`);mk("sku");}
@@ -1420,6 +1476,102 @@ async function bajarFichaAlta(p){
 async function generarYSubirFicha(p){
   if(!HAY_ALMACEN)throw new Error("Falta configurar en el servidor dónde se guardan los documentos (DOC_DIR): sin eso no se puede mandar la ficha.");
   await subir(p.sku,"ficha",nombreFicha(p),await libroFicha(p));
+}
+
+/* ---------- Leer un alta ya hecha ----------
+   Al revés de la ficha: la plantilla es la misma, así que las celdas que la app
+   escribe son las que acá se leen. Es para el producto que se dio de alta antes
+   de la app (la carpeta "13- ALTAS DE PRODUCTOS"): se sube ese Excel y la
+   pantalla completa los campos para revisar, en vez de tipear veinte datos a
+   mano (Claudia, 17/11/2026). Lo que lee no se guarda solo: se revisa y se
+   guarda como cualquier alta. */
+const desXml=s=>String(s).replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"')
+  .replace(/&apos;/g,"'").replace(/&#10;/g,"\n").replace(/&#13;/g,"").replace(/&amp;/g,"&");
+/** El texto de un <si> o de un <is>, juntando sus pedazos y sin la guía fonética. */
+function textoXml(trozo){
+  let t="";const limpio=String(trozo).replace(/<rPh[\s\S]*?<\/rPh>/g,"");
+  const re=/<t[^>]*>([\s\S]*?)<\/t>/g;let m;
+  while((m=re.exec(limpio)))t+=desXml(m[1]);
+  return t;
+}
+function cadenasDe(xml){
+  const l=[];const re=/<si>([\s\S]*?)<\/si>/g;let m;
+  while((m=re.exec(xml)))l.push(textoXml(m[1]));
+  return l;
+}
+/** Las celdas con valor de una hoja: { A1: valor }. Las fórmulas dan su último resultado. */
+function celdasDe(xml,sst){
+  const out={};const re=/<c r="([A-Z]+\d+)"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g;let m;
+  while((m=re.exec(xml))){
+    const ref=m[1],attr=m[2]||"",cuerpo=m[3];
+    if(!cuerpo)continue;                                  // celda vacía (solo formato)
+    const t=/t="([^"]+)"/.exec(attr),tipo=t?t[1]:"n";
+    let v=null;
+    if(tipo==="inlineStr")v=textoXml(cuerpo);
+    else{
+      const g=/<v>([\s\S]*?)<\/v>/.exec(cuerpo);          // en una fórmula, el valor guardado
+      if(!g)continue;
+      v=tipo==="s"?(sst[Number(g[1])]??""):desXml(g[1]);
+    }
+    if(v!==null&&String(v).trim()!=="")out[ref]=String(v).trim();
+  }
+  return out;
+}
+/** El archivo de una hoja dentro del zip, por su nombre. */
+function hojaDelLibro(libro,rels,nombre){
+  const id=new RegExp('<sheet[^>]*name="'+nombre+'"[^>]*r:id="([^"]+)"').exec(libro);
+  if(!id)return null;
+  const t=new RegExp('Id="'+id[1]+'"[^>]*Target="([^"]+)"').exec(rels);
+  return t?"xl/"+t[1].replace(/^\/?xl\//,""):null;
+}
+
+/* Las celdas que se leen son las mismas que escribe CELDAS_ALTA / CELDAS_SKU.
+   Si Finanzas cambia la plantilla de lugar, los dos lados se tocan juntos. */
+async function leerAltaXlsx(archivo){
+  if(!window.JSZip)throw new Error("Para leer el Excel hace falta conexión a internet (se usa la librería de zip). Probá de nuevo con conexión.");
+  let zip;
+  try{zip=await JSZip.loadAsync(await archivo.arrayBuffer());}
+  catch(e){throw new Error("No se pudo abrir el archivo: ¿es un Excel .xlsx?");}
+  const fLibro=zip.file("xl/workbook.xml"),fRels=zip.file("xl/_rels/workbook.xml.rels");
+  if(!fLibro||!fRels)throw new Error("Ese archivo no es un Excel .xlsx (o está dañado).");
+  const libro=await fLibro.async("string"),rels=await fRels.async("string");
+  const fSst=zip.file("xl/sharedStrings.xml");
+  const sst=fSst?cadenasDe(await fSst.async("string")):[];
+  const hoja=async nombre=>{
+    const arch=hojaDelLibro(libro,rels,nombre);
+    if(!arch||!zip.file(arch))return null;
+    return celdasDe(await zip.file(arch).async("string"),sst);
+  };
+  const a=await hoja("ALTA PRODUCTO");
+  if(!a)throw new Error('Ese Excel no tiene la hoja "ALTA PRODUCTO": no es el formulario de alta de producto.');
+  const s=await hoja("FICHA SKU")||{};
+  return altaAProducto(a,s);
+}
+
+/** Lo leído, con los nombres y las unidades de la pantalla. */
+function altaAProducto(a,s){
+  // Una celda que apunta a otra vacía queda en 0, no vacía: en esta planilla
+  // ningún dato vale 0, así que el 0 es "no está".
+  const txt=v=>{const t=String(v??"").trim();return t==="0"?"":t;};
+  const num=v=>{const t=txt(v);if(!t)return null;const n=Number(t.replace(",","."));return Number.isFinite(n)&&n!==0?n:null;};
+  const cm=v=>{const n=num(v);return n===null?null:Math.round(n)/10;};      // la planilla va en mm
+  const o={sku:txt(a.B5),desc:txt(a.B6),nota:txt(a.B7),
+    tipoProducto:txt(a.B9),categoriaImpuesto:txt(a.B10),impuestoCV:txt(a.B11),
+    categoriaProducto:txt(a.B12),marca:txt(a.E12),linea:txt(a.B13),sublinea:txt(a.E13),
+    familia:txt(a.B14),subfamilia:txt(a.E14),
+    umBase:txt(a.B19),umDestino:txt(a.B27),unx:num(a.B20),pesoPT:num(a.B21),
+    ean:txt(a.B33),dun:txt(a.B34),
+    estiba:num(s.B16),porPiso:num(s.B17),
+    cL:cm(s.B36),cA:cm(s.C36),cH:cm(s.D36),uL:cm(s.B37),uA:cm(s.C37),uH:cm(s.D37),
+    unPal:num(a.E20)};
+  // El volumen va en litros; si es menos de un litro se lee más natural en ml.
+  const vol=num(a.E21);
+  if(vol!==null){if(vol<1){o.contenido=Math.round(vol*1000);o.contenidoUM="ml";}else{o.contenido=vol;o.contenidoUM="l";}}
+  // El vencimiento de la planilla son días; la app lleva la vida útil en meses.
+  const dias=num(a.B35);
+  if(dias!==null)o.vida=Math.round(dias*12/365);
+  Object.keys(o).forEach(k=>{if(o[k]===null||o[k]==="")delete o[k];});
+  return o;
 }
 
 /* ---------- Inicio ---------- */
