@@ -304,20 +304,46 @@ export async function leerSesiones(p) {
 /**
  * Bitacora de estandares en papel (SOP-LCC-071) -> filas para revisar.
  *
- * Sirve para las dos formas que conviven en el laboratorio: la tabla con una
- * fila por lote y las hojas sueltas con un estandar cada una. Nada se guarda
- * desde aca: la pantalla muestra lo leido para corregirlo antes del alta,
- * porque es letra manuscrita y el dato es GMP.
+ * Sirve para las tres formas que conviven en el laboratorio: la tabla con una
+ * fila por lote (REG-C), las hojas sueltas con un estandar cada una, y el
+ * expediente completo de un estandar -REG-B, REG-A, el certificado de analisis
+ * impreso, las hojas de calculo y los informes del laboratorio externo, todo
+ * junto en un PDF de varias paginas-. Nada se guarda desde aca: la pantalla
+ * muestra lo leido para corregirlo antes del alta, porque es letra manuscrita
+ * y el dato es GMP.
+ *
+ * Calibrado el 18/11/2026 contra un expediente real (Base Concentrada Fabuloso,
+ * lote ISOTANQUE 240125-8, 9 paginas). De ahi salieron las tres reglas que mas
+ * cambian el resultado: las nueve hojas son UN estandar y no nueve; lo impreso
+ * le gana a lo manuscrito cuando discrepan -el REG-B decia "Bete Concentrade
+ * Febolobo" y el certificado impreso de la hoja siguiente, "Base Concentrada
+ * Fabuloso"-; y en el REG-A el estandar se identifica en dos casillas sin
+ * titulo, a la derecha de las condiciones de almacenamiento.
  */
 export async function leerEstandares(p) {
     validar(p);
     const hoy = new Date().toISOString().slice(0, 10);
 
     const instruccion =
-        'Eres un asistente que lee la bitácora de estándares de referencia de Vessena S.A. (planta farmacéutica en Uruguay), ' +
-        'procedimiento SOP-LCC-071. El archivo puede ser: (a) una tabla con una fila por estándar o por lote interno, ' +
-        '(b) hojas sueltas con un estándar cada una (formularios REG-A / REG-C / rótulos), o (c) una mezcla de las dos.\n\n' +
+        'Eres un asistente que lee los registros de estándares de referencia de Vessena S.A. (planta farmacéutica ' +
+        'en Uruguay), procedimiento SOP-LCC-071. El archivo puede ser:\n' +
+        '  (a) el listado de stock REG-C: una tabla con una fila por estándar o por lote interno;\n' +
+        '  (b) el expediente de UN estándar: varias hojas seguidas del mismo material (REG-B certificado, ' +
+        'REG-A registro, el certificado de análisis impreso, hojas de cálculo, informes de laboratorio);\n' +
+        '  (c) hojas sueltas, una por estándar (REG-A, REG-B, rótulos);\n' +
+        '  (d) una mezcla de las anteriores.\n\n' +
         'TU TAREA: devolver UNA fila por estándar, con lo que puedas leer. No inventes datos: lo que no esté, va vacío.\n\n' +
+        'UN ESTÁNDAR PUEDE OCUPAR VARIAS HOJAS:\n' +
+        '- Las hojas del mismo material y el mismo lote son UN solo estándar, aunque sean ocho o nueve páginas. ' +
+        'No devuelvas una fila por hoja.\n' +
+        '- Agrupá por código/SKU y por lote: si dos hojas comparten el código o el lote, son el mismo estándar.\n' +
+        '- Estas hojas NO dan de alta un estándar por sí solas, solo completan al que ya identificaste: el ' +
+        'certificado de análisis impreso, las hojas de cálculo (REG-SOP-LCC-100-A, REG-SOP-LCC-144-A, ' +
+        'REG-SOP-AC-029-C y parecidas), los cromatogramas de HPLC, los informes de laboratorios externos ' +
+        '(por ejemplo Beltrán Zunino) y los rótulos.\n' +
+        '- Si una hoja impresa a máquina y una manuscrita dicen distinto, mandá la impresa: el nombre, el código ' +
+        'y el lote se leen mucho mejor ahí. Pasó de verdad: el REG-B manuscrito decía "Bete Concentrade Febolobo" ' +
+        'y el certificado impreso de la hoja siguiente decía "Base Concentrada Fabuloso".\n\n' +
         'CAMPOS:\n' +
         '- nombre: el material o sustancia, tal como está escrito (ej: "Cetil alcohol", "Cafeína USP").\n' +
         '- codigo: código del estándar si figura. Si no hay, vacío.\n' +
@@ -334,7 +360,30 @@ export async function leerEstandares(p) {
         '- fuera_de_stock: fecha en que el estándar salió de stock, si está escrita. ISO yyyy-mm-dd. ' +
         'Vacío si todavía está en el estante.\n' +
         '- observaciones: cualquier nota relevante de la fila.\n' +
-        '- confianza: 0.0 a 1.0, tu certeza sobre la lectura de esa fila.\n\n' +
+        '- hojas: en qué páginas del archivo está este estándar (ej: "1-9" o "3, 5").\n' +
+        '- confianza: 0.0 a 1.0, tu certeza sobre la lectura de esa fila.\n' +
+        '- certificado: los datos del REG-B, si la hoja está. Vacío si no hay certificado.\n' +
+        '- inspecciones: las filas de seguimiento del REG-A, si la hoja está.\n\n' +
+        'REG-B "Certificado de Estándar" (REG-SOP-LCC-071-B), manuscrito:\n' +
+        '  Código -> codigo. Puede ser un SKU como "M080093Col": copialo tal cual, no lo conviertas en número.\n' +
+        '  Nombre Estándar -> nombre.  Lote -> lote_proveedor (suele ser un isotanque o contenedor).\n' +
+        '  Fecha de análisis -> certificado.analisis.\n' +
+        '  Sustancia de referencia, Código de sustancia de referencia, Potencia/Pureza, Vencimiento de sustancia ' +
+        'de referencia -> certificado.ref_sustancia, ref_codigo, ref_pureza, ref_vencimiento.\n' +
+        '  Técnica analítica empleada -> certificado.tecnica (suelen ser varios SOP separados por barra).\n' +
+        '  La tabla "Aspectos ensayados | Especificación | Resultado" -> certificado.ensayos, una entrada por fila ' +
+        'escrita. Copiá los tres textos como están, incluidos los "< 10 ufc/g" y los "Ausencia/0,1 g".\n' +
+        '  Fecha de reanálisis -> certificado.reanalisis.  Fecha de Vencimiento -> certificado.vencimiento, y ese ' +
+        'mismo dato es el vencimiento del estándar.\n' +
+        '  Analista y Coordinador Control de Calidad -> certificado.analista y certificado.coordinador, solo si hay ' +
+        'un nombre escrito. Una firma ilegible no es un nombre: dejalo vacío.\n\n' +
+        'REG-A "Registro de Estándar de Referencia" (REG-SOP-LCC-071-A), manuscrito:\n' +
+        '  La primera fila dice "Condiciones de almacenamiento" -> conservacion (ej: "T. amb").\n' +
+        '  A la derecha de esa fila hay dos casillas sin título: ahí escriben el nombre abreviado del estándar y su ' +
+        'lote. De ahí sale a qué estándar pertenece la hoja; el REG-A no tiene otro campo que lo identifique.\n' +
+        '  La tabla "Inspecciones de Seguimiento" tiene una inspección por fila -> inspecciones: fecha, ' +
+        '¿OK? ("Sí" -> conforme true, "No" -> conforme false), Observación, y la firma.\n' +
+        '  Las filas en blanco no son inspecciones. Una raya en Observación quiere decir "sin observaciones": va vacía.\n\n' +
         'COLUMNAS DE REG-C (Listado de Stock), en este orden exacto:\n' +
         '  1 Nombre del Producto, 2 Observaciones, 3 Cantidad recibida, 4 Lote del proveedor/Cliente, ' +
         '5 Lote interno, 6 Fecha de ingreso a stock, 7 Fecha de vencimiento, 8 Ubicación, ' +
@@ -346,10 +395,15 @@ export async function leerEstandares(p) {
         'salvo que estén escritos al margen o en una nota.\n\n' +
         'REGLAS:\n' +
         '- Hoy es ' + hoy + '. Las fechas escritas como dd/mm/aa se convierten a yyyy-mm-dd, con año 2000+.\n' +
+        '- Las fechas manuscritas en casillas separadas son día, mes y año de dos cifras: "18 06 24" es 2024-06-18.\n' +
         '- Si un año manuscrito es ambiguo, elegí el más razonable: la recepción no puede estar en el futuro.\n' +
+        '- recepcion es la fecha de ingreso a stock. El REG-B no la trae: si no está escrita en ningún lado, dejala ' +
+        'vacía en vez de inventarla.\n' +
+        '- tipo: lo que se llama "Base", "Base concentrada" o "Base CC" es granel. Lo comprado con certificado ' +
+        'USP/EP/WHO/JP es certificado. Un producto terminado es pt. Si no es evidente, dejalo vacío.\n' +
         '- Ignorá filas tachadas o totalmente vacías, y las que solo tengan una firma.\n' +
         '- Si una fila está tachada pero se lee "baja", "vencido" o "obsoleto", incluila igual y ponelo en observaciones.\n' +
-        '- Si el archivo no es una bitácora de estándares, devolvé estandares: [].';
+        '- Si el archivo no es un registro de estándares, devolvé estandares: [].';
 
     const esquema = {
         type: 'object',
@@ -365,8 +419,41 @@ export async function leerEstandares(p) {
                         conservacion: { type: 'string' }, ubicacion: { type: 'string' },
                         recepcion: { type: 'string' }, vencimiento: { type: 'string' },
                         reanalisis: { type: 'string' }, fuera_de_stock: { type: 'string' },
-                        observaciones: { type: 'string' },
+                        observaciones: { type: 'string' }, hojas: { type: 'string' },
                         confianza: { type: 'number' },
+                        certificado: {
+                            type: 'object',
+                            properties: {
+                                analisis: { type: 'string' }, ref_sustancia: { type: 'string' },
+                                ref_codigo: { type: 'string' }, ref_pureza: { type: 'string' },
+                                ref_vencimiento: { type: 'string' }, tecnica: { type: 'string' },
+                                reanalisis: { type: 'string' }, vencimiento: { type: 'string' },
+                                analista: { type: 'string' }, coordinador: { type: 'string' },
+                                ensayos: {
+                                    type: 'array',
+                                    items: {
+                                        type: 'object',
+                                        properties: {
+                                            aspecto: { type: 'string' },
+                                            especificacion: { type: 'string' },
+                                            resultado: { type: 'string' },
+                                        },
+                                        required: ['aspecto'],
+                                    },
+                                },
+                            },
+                        },
+                        inspecciones: {
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    fecha: { type: 'string' }, conforme: { type: 'boolean' },
+                                    observacion: { type: 'string' }, analista: { type: 'string' },
+                                },
+                                required: ['fecha'],
+                            },
+                        },
                     },
                     required: ['nombre'],
                 },
@@ -378,6 +465,29 @@ export async function leerEstandares(p) {
     const r = await preguntar({ instruccion, pedido: 'Extraé los estándares de este archivo:', p, esquema, temperatura: 0.05 });
     const t = (v) => String(v ?? '').trim();
     const dia = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(t(v)) ? t(v) : '');
+
+    // El certificado solo vale si trae alguna fecha o algun ensayo: un objeto
+    // vacio en pantalla seria una hoja REG-B que nadie llego a escribir.
+    const certificadoDe = (c) => {
+        if (!c || typeof c !== 'object') return null;
+        const ensayos = (Array.isArray(c.ensayos) ? c.ensayos : [])
+            .map((x) => ({ aspecto: t(x?.aspecto), especificacion: t(x?.especificacion), resultado: t(x?.resultado) }))
+            .filter((x) => x.aspecto);
+        const cert = {
+            analisis: dia(c.analisis), ref_sustancia: t(c.ref_sustancia), ref_codigo: t(c.ref_codigo),
+            ref_pureza: t(c.ref_pureza), ref_vencimiento: dia(c.ref_vencimiento), tecnica: t(c.tecnica),
+            reanalisis: dia(c.reanalisis), vencimiento: dia(c.vencimiento),
+            analista: t(c.analista), coordinador: t(c.coordinador), ensayos,
+        };
+        return (cert.analisis || cert.vencimiento || ensayos.length) ? cert : null;
+    };
+    const inspeccionesDe = (v) => (Array.isArray(v) ? v : [])
+        .map((i) => ({
+            fecha: dia(i?.fecha), conforme: i?.conforme !== false,
+            observacion: t(i?.observacion), analista: t(i?.analista),
+        }))
+        .filter((i) => i.fecha);
+
     const estandares = (r.estandares || []).map((e) => ({
         nombre: t(e.nombre), codigo: t(e.codigo).toUpperCase(),
         tipo: ['mp', 'granel', 'pt', 'certificado'].includes(t(e.tipo).toLowerCase()) ? t(e.tipo).toLowerCase() : '',
@@ -386,6 +496,9 @@ export async function leerEstandares(p) {
         conservacion: t(e.conservacion), ubicacion: t(e.ubicacion),
         recepcion: dia(e.recepcion), vencimiento: dia(e.vencimiento), reanalisis: dia(e.reanalisis),
         fuera_de_stock: dia(e.fuera_de_stock), observaciones: t(e.observaciones),
+        hojas: t(e.hojas),
+        certificado: certificadoDe(e.certificado),
+        inspecciones: inspeccionesDe(e.inspecciones),
         confianza: typeof e.confianza === 'number' ? e.confianza : 0.7,
     })).filter((e) => e.nombre.length >= 2);
     return { estandares, count: estandares.length };

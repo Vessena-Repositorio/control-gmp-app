@@ -600,6 +600,11 @@ rutasEstandares.post('/leer', cargar, async (req, res, next) => {
  * A diferencia del alta normal, aca SI se acepta un vencimiento pasado: lo que
  * esta en el estante con fecha vencida tiene que poder registrarse para poder
  * darlo de baja como corresponde.
+ *
+ * Cada fila puede traer ademas su certificado REG-B y sus inspecciones REG-A,
+ * que es como viene el expediente en papel de un estandar. Entran con el mismo
+ * origen 'papel' y sin firma electronica: el certificado impreso dice de donde
+ * salio en vez de aparentar una firma que nunca existio.
  */
 rutasEstandares.post('/desde-papel', cargar, async (req, res, next) => {
     const filas = Array.isArray(req.body?.filas) ? req.body.filas.slice(0, 300) : [];
@@ -607,7 +612,8 @@ rutasEstandares.post('/desde-papel', cargar, async (req, res, next) => {
         if (!filas.length) throw fallo(400, 'No hay filas para dar de alta');
         const resultado = await enTransaccion(async (c) => {
             await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', ['estandares-lote']);
-            const creados = []; const salteados = [];
+            const creados = []; const salteados = []; const avisos = [];
+            let certificados = 0; let inspecciones = 0;
             for (const f of filas) {
                 const nombre = texto(f?.nombre, 200);
                 const recepcion = fechaOpcional(f?.recepcion);
@@ -656,8 +662,52 @@ rutasEstandares.post('/desde-papel', cargar, async (req, res, next) => {
                 await registrar(c, req, 'alta', 'estandar', rows[0].id,
                     'Alta desde la bitácora en papel', null, rows[0]);
                 creados.push(rows[0].codigo);
+
+                // REG-B. Sin fecha de analisis o de vencimiento no hay
+                // certificado valido: se saltea y se avisa, en vez de guardar
+                // medio certificado que despues nadie sabe si vale.
+                const cert = f?.certificado;
+                const ensayos = (Array.isArray(cert?.ensayos) ? cert.ensayos : [])
+                    .map((t) => ({ aspecto: texto(t?.aspecto, 200), especificacion: texto(t?.especificacion, 200),
+                        resultado: texto(t?.resultado, 200) }))
+                    .filter((t) => t.aspecto);
+                if (cert && ensayos.length) {
+                    const analisis = fechaOpcional(cert.analisis);
+                    const vencCert = fechaOpcional(cert.vencimiento) || vencimiento;
+                    if (!analisis) {
+                        avisos.push(`${nombre}: el certificado no tiene fecha de análisis, así que el estándar quedó sin él`);
+                    } else {
+                        const { rows: filaCert } = await c.query(
+                            `INSERT INTO est_certificados
+                                (estandar_id, analisis, ref_sustancia, ref_codigo, ref_pureza, ref_vencimiento,
+                                 tecnica, reanalisis, vencimiento, ensayos, analista, coordinador, origen)
+                             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'papel') RETURNING *`,
+                            [rows[0].id, analisis, texto(cert.ref_sustancia, 200) || null,
+                                texto(cert.ref_codigo, 100) || null, texto(cert.ref_pureza, 60) || null,
+                                fechaOpcional(cert.ref_vencimiento), texto(cert.tecnica, 200) || null,
+                                fechaOpcional(cert.reanalisis), vencCert, JSON.stringify(ensayos),
+                                texto(cert.analista, 120) || null, texto(cert.coordinador, 120) || null]
+                        );
+                        await registrar(c, req, 'certificado', 'estandar', rows[0].id,
+                            `Certificado REG-B del papel, ${ensayos.length} ensayo(s)`, null, filaCert[0]);
+                        certificados++;
+                    }
+                }
+
+                // REG-A.
+                for (const i of (Array.isArray(f?.inspecciones) ? f.inspecciones.slice(0, 100) : [])) {
+                    const fecha = fechaOpcional(i?.fecha);
+                    if (!fecha) continue;
+                    await c.query(
+                        `INSERT INTO est_inspecciones (estandar_id, fecha, conforme, observacion, analista, origen)
+                         VALUES ($1,$2,$3,$4,$5,'papel')`,
+                        [rows[0].id, fecha, i?.conforme !== false, texto(i?.observacion, 1000) || null,
+                            texto(i?.analista, 120) || null]
+                    );
+                    inspecciones++;
+                }
             }
-            return { creados, salteados };
+            return { creados, salteados, avisos, certificados, inspecciones };
         });
         res.json({ ok: true, ...resultado });
     } catch (err) { responder(err, res, next); }

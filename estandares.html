@@ -258,9 +258,10 @@ function cerrarDetalle(){S.abierto=null;document.getElementById('detalle').inner
 function formPapel(){
   S.abierto=null;
   document.getElementById('detalle').innerHTML='<div class="card"><h3>Leer la bitácora en papel</h3>'+
-    '<div class="muted" style="margin-bottom:10px">Subí el escaneado (PDF o foto) del listado de stock REG-C, de la tabla de lotes REG-E '+
-    'o de las hojas de cada estándar. '+
-    'Se leen y se muestran acá para que los corrijas: <b>nada se guarda hasta que lo confirmes</b>. La letra manuscrita se lee con errores, así que revisá fila por fila.</div>'+
+    '<div class="muted" style="margin-bottom:10px">Subí el escaneado (PDF o foto) del listado de stock REG-C, de la tabla de lotes REG-E, '+
+    'de las hojas de cada estándar, o del expediente entero de uno: REG-B, REG-A, el certificado de análisis impreso y lo que lo acompañe, '+
+    'todo en el mismo PDF. Las hojas del mismo material y lote se juntan en un solo estándar.<br>'+
+    'Se lee y se muestra acá para que lo corrijas: <b>nada se guarda hasta que lo confirmes</b>. La letra manuscrita se lee con errores, así que revisá fila por fila.</div>'+
     '<div class="fila"><input type="file" id="papel" accept=".pdf,.jpg,.jpeg,.png,.webp">'+
     '<button class="b pri" id="bLeer" onclick="leerPapel()">Leer</button>'+
     '<button class="b" onclick="cerrarDetalle()">Cancelar</button></div>'+
@@ -277,9 +278,14 @@ async function leerPapel(){
   try{
     const d=await api('/leer',{method:'POST',body:JSON.stringify({dataBase64:await leerArchivo(f),mime:f.type||'application/pdf'})});
     if(!d.count){res.innerHTML='<div class="aviso warn">No se reconoció ningún estándar en el archivo. Probá con un escaneo más nítido o subí una hoja por vez.</div>';return}
+    const conCert=d.estandares.filter(e=>e.certificado).length;
+    const conInsp=d.estandares.reduce((n,e)=>n+((e.inspecciones||[]).length),0);
+    const hojas=(conCert||conInsp)?' Debajo de cada renglón está lo que traen las otras hojas: '+
+      (conCert?'<b>'+conCert+'</b> certificado(s) REG-B':'')+(conCert&&conInsp?' y ':'')+
+      (conInsp?'<b>'+conInsp+'</b> inspección(es) REG-A':'')+'. Revisalos igual que el renglón, o destildalos para cargar solo el estándar.':'';
     res.innerHTML='<div class="aviso info">Se leyeron <b>'+d.count+'</b> estándares. Revisá y corregí; destildá los que no quieras dar de alta. '+
       'Los que no tengan nombre, recepción y vencimiento no se van a cargar. '+
-      'El código vacío se arma con el lote interno (EST-1187). Con fecha de fuera de stock, el estándar entra ya dado de baja.</div>'+
+      'El código vacío se arma con el lote interno (EST-1187). Con fecha de fuera de stock, el estándar entra ya dado de baja.'+hojas+'</div>'+
       '<div class="fila" style="margin:0 0 10px"><label class="lb" style="margin:0">Toda la hoja es de tipo</label>'+
       '<select id="pTipoTodas" onchange="tipoTodas(this.value)" style="min-width:150px"><option value="">— elegir —</option>'+
       Object.entries(TIPOS).map(([k,v])=>'<option value="'+k+'">'+v+'</option>').join('')+'</select>'+
@@ -298,14 +304,64 @@ function filaPapel(e,i){
   const c=Number(e.confianza||0);
   const chip=c>=0.85?'<span class="chip ok">clara</span>':(c>=0.6?'<span class="chip warn">revisar</span>':'<span class="chip crit">dudosa</span>');
   const tx=(k,v,t)=>'<td><input class="p-'+k+'" type="'+(t||'text')+'" value="'+esc(v||'')+'" style="min-width:110px"></td>';
+  // El REG-B no tiene fecha de ingreso a stock y el alta la exige. Se propone
+  // la fecha de análisis -que es cuando el estándar queda disponible- y se
+  // avisa en la columna Lectura, para que se vea que la propuso la app.
+  const prop=!e.recepcion&&e.certificado&&e.certificado.analisis;
+  const recep=e.recepcion||(prop?e.certificado.analisis:'');
+  const hojas=e.hojas?'<span class="chip">hojas '+esc(e.hojas)+'</span> ':'';
+  const propChip=prop?' <span class="chip warn">recepción = fecha de análisis</span>':'';
   return '<tr data-i="'+i+'"><td><input type="checkbox" class="p-ok" checked style="width:auto"></td>'+
     tx('nombre',e.nombre)+
     '<td><select class="p-tipo" style="min-width:120px">'+Object.entries(TIPOS).map(([k,v])=>'<option value="'+k+'"'+(e.tipo===k?' selected':'')+'>'+v+'</option>').join('')+'</select></td>'+
     tx('observaciones',e.observaciones)+tx('cantidad',e.cantidad)+tx('lote_proveedor',e.lote_proveedor)+tx('lote_interno',e.lote_interno)+
-    tx('recepcion',e.recepcion,'date')+tx('vencimiento',e.vencimiento,'date')+tx('fuera_de_stock_en',e.fuera_de_stock,'date')+
+    tx('recepcion',recep,'date')+tx('vencimiento',e.vencimiento,'date')+tx('fuera_de_stock_en',e.fuera_de_stock,'date')+
     tx('ubicacion',e.ubicacion)+tx('codigo',e.codigo)+tx('pureza',e.pureza)+tx('conservacion',e.conservacion)+
     tx('proveedor',e.proveedor)+tx('reanalisis',e.reanalisis,'date')+
-    '<td>'+chip+'</td></tr>';
+    '<td>'+hojas+chip+propChip+'</td></tr>'+hojasPapel(e,i);
+}
+/** Lo que viene además del renglón de stock: el certificado REG-B y las inspecciones REG-A. */
+function hojasPapel(e,i){
+  const cert=e.certificado,insp=e.inspecciones||[];
+  if(!cert&&!insp.length)return '';
+  const inp=(cls,v,t,w)=>'<input class="'+cls+'" type="'+(t||'text')+'" value="'+esc(v||'')+'" style="min-width:'+(w||'120px')+'">';
+  const campo=(et,cls,v,t,w)=>'<div style="display:flex;flex-direction:column;gap:2px"><span class="muted" style="font-size:11px">'+et+'</span>'+inp(cls,v,t,w)+'</div>';
+  let h='<tr class="p-ext" data-i="'+i+'"><td></td><td colspan="16" style="background:var(--bg)">';
+  if(cert){
+    h+='<div style="padding:8px 0 10px">'+
+      '<label class="lb" style="display:inline-flex;align-items:center;gap:6px;margin:0">'+
+      '<input type="checkbox" class="c-ok" checked style="width:auto"> Dar de alta también el <b>certificado REG-B</b></label>'+
+      '<div class="fila" style="flex-wrap:wrap;gap:10px;margin:8px 0 0">'+
+        campo('Fecha de análisis *','c-analisis',cert.analisis,'date')+
+        campo('Vencimiento','c-vencimiento',cert.vencimiento,'date')+
+        campo('Reanálisis','c-reanalisis',cert.reanalisis,'date')+
+        campo('Técnica analítica','c-tecnica',cert.tecnica,'text','260px')+
+        campo('Sustancia de referencia','c-ref_sustancia',cert.ref_sustancia)+
+        campo('Código de la sustancia','c-ref_codigo',cert.ref_codigo)+
+        campo('Potencia / pureza','c-ref_pureza',cert.ref_pureza)+
+        campo('Vence la sustancia','c-ref_vencimiento',cert.ref_vencimiento,'date')+
+        campo('Analista','c-analista',cert.analista)+
+        campo('Coordinadora C.C.','c-coordinador',cert.coordinador)+
+      '</div>'+
+      '<table style="margin-top:8px"><thead><tr><th>Aspecto ensayado</th><th>Especificación</th><th>Resultado</th></tr></thead><tbody>'+
+      (cert.ensayos||[]).map(t=>'<tr class="c-ens"><td>'+inp('e-a',t.aspecto,'text','160px')+'</td><td>'+
+        inp('e-e',t.especificacion,'text','200px')+'</td><td>'+inp('e-r',t.resultado,'text','160px')+'</td></tr>').join('')+
+      '</tbody></table>'+
+      '<div class="muted" style="margin-top:6px">Sin fecha de análisis o sin ningún ensayo el certificado no se guarda, pero el estándar sí. '+
+      'Queda sin firma electrónica y el certificado impreso lo dice.</div></div>';
+  }
+  if(insp.length){
+    h+='<div style="padding:8px 0 10px;border-top:1px solid var(--border)">'+
+      '<label class="lb" style="display:inline-flex;align-items:center;gap:6px;margin:0">'+
+      '<input type="checkbox" class="i-ok" checked style="width:auto"> Dar de alta las <b>'+insp.length+'</b> inspección(es) del <b>REG-A</b></label>'+
+      '<table style="margin-top:8px"><thead><tr><th>Fecha</th><th>¿Conforme?</th><th>Observación</th></tr></thead><tbody>'+
+      insp.map(x=>'<tr class="i-row"><td>'+inp('i-fecha',x.fecha,'date')+'</td>'+
+        '<td><select class="i-conforme"><option value="si"'+(x.conforme===false?'':' selected')+'>Sí</option>'+
+        '<option value="no"'+(x.conforme===false?' selected':'')+'>No</option></select></td>'+
+        '<td>'+inp('i-obs',x.observacion,'text','240px')+'</td></tr>').join('')+
+      '</tbody></table></div>';
+  }
+  return h+'</td></tr>';
 }
 /** El tipo de toda la bitácora de una vez: la lectura no lo distingue. */
 function tipoTodas(v){
@@ -313,13 +369,36 @@ function tipoTodas(v){
   document.querySelectorAll('#tPapel tbody .p-tipo').forEach(s=>{s.value=v});
 }
 async function altaPapel(btn){
-  const filas=[...document.querySelectorAll('#tPapel tbody tr')].filter(tr=>tr.querySelector('.p-ok').checked).map(tr=>{
+  const filas=[...document.querySelectorAll('#tPapel>tbody>tr:not(.p-ext)')].filter(tr=>tr.querySelector('.p-ok').checked).map(tr=>{
     const v=k=>{const el=tr.querySelector('.p-'+k);return el?el.value.trim():''};
-    return {nombre:v('nombre'),tipo:v('tipo'),codigo:v('codigo'),lote_interno:v('lote_interno'),
+    const f={nombre:v('nombre'),tipo:v('tipo'),codigo:v('codigo'),lote_interno:v('lote_interno'),
       lote_proveedor:v('lote_proveedor'),proveedor:v('proveedor'),cantidad:v('cantidad'),
       pureza:v('pureza'),conservacion:v('conservacion'),recepcion:v('recepcion'),vencimiento:v('vencimiento'),
       reanalisis:v('reanalisis'),fuera_de_stock_en:v('fuera_de_stock_en'),ubicacion:v('ubicacion'),
       observaciones:v('observaciones')};
+    const ext=document.querySelector('#tPapel>tbody>tr.p-ext[data-i="'+tr.dataset.i+'"]');
+    if(ext){
+      const c=k=>{const el=ext.querySelector('.c-'+k);return el?el.value.trim():''};
+      const cOk=ext.querySelector('.c-ok');
+      if(cOk&&cOk.checked){
+        f.certificado={analisis:c('analisis'),vencimiento:c('vencimiento'),reanalisis:c('reanalisis'),
+          tecnica:c('tecnica'),ref_sustancia:c('ref_sustancia'),ref_codigo:c('ref_codigo'),
+          ref_pureza:c('ref_pureza'),ref_vencimiento:c('ref_vencimiento'),
+          analista:c('analista'),coordinador:c('coordinador'),
+          ensayos:[...ext.querySelectorAll('tr.c-ens')].map(r=>({
+            aspecto:r.querySelector('.e-a').value.trim(),
+            especificacion:r.querySelector('.e-e').value.trim(),
+            resultado:r.querySelector('.e-r').value.trim()})).filter(x=>x.aspecto)};
+      }
+      const iOk=ext.querySelector('.i-ok');
+      if(iOk&&iOk.checked){
+        f.inspecciones=[...ext.querySelectorAll('tr.i-row')].map(r=>({
+          fecha:r.querySelector('.i-fecha').value,
+          conforme:r.querySelector('.i-conforme').value==='si',
+          observacion:r.querySelector('.i-obs').value.trim()})).filter(x=>x.fecha);
+      }
+    }
+    return f;
   });
   if(!filas.length){toast('⚠️ No marcaste ninguna fila',true);return}
   btn.disabled=true;btn.textContent='Dando de alta…';
@@ -327,8 +406,11 @@ async function altaPapel(btn){
     const d=await api('/desde-papel',{method:'POST',body:JSON.stringify({filas})});
     const salteados=d.salteados.length?'<div class="aviso warn" style="margin-top:8px">No se cargaron '+d.salteados.length+': '+
       d.salteados.map(s=>esc(s.nombre)+' ('+esc(s.motivo)+')').join(' · ')+'</div>':'';
+    const avisos=(d.avisos&&d.avisos.length)?'<div class="aviso warn" style="margin-top:8px">'+d.avisos.map(esc).join(' · ')+'</div>':'';
+    const extra=[d.certificados?'<b>'+d.certificados+'</b> certificado(s) REG-B':'',
+      d.inspecciones?'<b>'+d.inspecciones+'</b> inspección(es) REG-A':''].filter(Boolean).join(' y ');
     document.getElementById('papelRes').innerHTML='<div class="aviso ok">Se dieron de alta <b>'+d.creados.length+'</b> estándares: '+
-      d.creados.map(esc).join(', ')+'</div>'+salteados;
+      d.creados.map(esc).join(', ')+(extra?', con '+extra:'')+'</div>'+avisos+salteados;
     await cargar();
   }catch(e){toast('⚠️ '+e.message,true);btn.disabled=false;btn.textContent='Dar de alta las marcadas'}
 }
