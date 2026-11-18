@@ -590,7 +590,8 @@ function vProductos(soloPend){
       ${soloPend?"":`<label class="chk"><input type="checkbox" id="fp"${filtro.pend?" checked":""}> Solo con pendientes</label>`}
       ${!soloPend?`<label class="chk"><input type="checkbox" id="fb"${filtro.bajas?" checked":""}> Ver solo dados de baja</label>`:""}
       <span class="conteo" id="conteo"></span></div>
-    <div class="tabla"><table><thead><tr id="cab"></tr></thead><tbody id="cuerpo"></tbody></table><div class="vacio" id="vacio" hidden>Ningún producto coincide con la búsqueda. Probá con otro texto o quitá los filtros.</div></div>`;
+    <div class="tabla"><table><thead><tr id="cab"></tr></thead><tbody id="cuerpo"></tbody></table><div class="vacio" id="vacio" hidden>Ningún producto coincide con la búsqueda. Probá con otro texto o quitá los filtros.</div></div>
+    <div class="ctx-help" id="ocultos" hidden style="margin-top:8px"></div>`;
   const pint=()=>pintarTabla(soloPend);
   $("#q").oninput=e=>{filtro.texto=e.target.value;pint();};
   $("#cat").onchange=e=>{filtro.cat=e.target.value;pint();};
@@ -611,7 +612,21 @@ function pintarTabla(soloPend){
   $("#cuerpo").querySelectorAll("tr").forEach(tr=>{tr.onclick=()=>ficha(tr.dataset.s);tr.onkeydown=e=>{if(e.key==="Enter")ficha(tr.dataset.s);};});
   $("#vacio").hidden=l.length>0;
   const pe=l.filter(tienePend).length;
+  // Los dados de baja no se listan, pero si coinciden con lo que estás
+  // buscando hay que decirlo: si no, el SKU "no está" y el alta igual lo
+  // rechaza por repetido (Claudia, 18/11/2026).
+  const q=filtro.texto.trim().toLowerCase();
+  const ocultos=(filtro.bajas||soloPend||!q)?[]:productos.filter(p=>p.activo===false&&
+    [p.sku,p.desc,p.ean,p.dun].some(x=>x&&String(x).toLowerCase().includes(q)));
   $("#conteo").textContent=filtro.bajas?`${l.length} productos dados de baja`:`${l.length} productos`+(pe&&!soloPend?` · ${pe} con pendientes`:"");
+  const av=$("#ocultos");
+  if(av){
+    av.hidden=!ocultos.length;
+    if(ocultos.length)av.innerHTML=`Además hay ${ocultos.length} SKU dado(s) de baja que coinciden con «${esc(filtro.texto.trim())}»: `+
+      ocultos.slice(0,8).map(p=>`<a href="#" data-b="${esc(p.sku)}"><b>${esc(p.sku)}</b></a>`).join(", ")+
+      (ocultos.length>8?` y ${ocultos.length-8} más`:"")+`. No se listan arriba porque están dados de baja.`;
+    av.querySelectorAll("a[data-b]").forEach(a=>{a.onclick=e=>{e.preventDefault();ficha(a.dataset.b);};});
+  }
 }
 
 
@@ -875,15 +890,24 @@ function formulario(p,base){
     }catch(e){caja.innerHTML=`<span style="color:var(--red)">No se pudo leer: ${esc(e.message)}</span>`;}
     ev.target.value="";                                 // que se pueda volver a elegir el mismo archivo
   };
-  f.onsubmit=async e=>{e.preventDefault();const o=leer(),err=[];f.querySelectorAll(".in").forEach(i=>i.removeAttribute("aria-invalid"));const mk=k=>f.elements[k]?.setAttribute("aria-invalid","true");
+  f.onsubmit=async e=>{e.preventDefault();const o=leer(),err=[];let existente=null;f.querySelectorAll(".in").forEach(i=>i.removeAttribute("aria-invalid"));const mk=k=>f.elements[k]?.setAttribute("aria-invalid","true");
     if(!o.sku||!/^[A-Za-z0-9._-]+$/.test(o.sku)){err.push("El SKU es obligatorio y solo admite letras, números, punto, guion y guion bajo.");mk("sku");}
-    else if(nuevo&&productos.some(x=>x.sku===o.sku)){err.push(`El SKU ${o.sku} ya existe.`);mk("sku");}
+    else if(nuevo){const ya=productos.find(x=>x.sku===o.sku);if(ya){
+      // "Ya existe" a secas mandaba a buscarlo a la lista, donde los dados de
+      // baja no se ven: decia la verdad y parecia mentira (Claudia, 18/11/2026).
+      err.push(ya.activo===false
+        ?`El SKU ${o.sku} ya existe, dado de baja: ${ya.desc||"sin descripción"}. En la lista no se ve salvo que marques «Ver solo dados de baja». Si volvió a fabricarse, abrilo y reactivalo, así no se pierde lo que ya tenía cargado.`
+        :`El SKU ${o.sku} ya existe: ${ya.desc||"sin descripción"}. Si no lo encontrás en la lista, limpiá el buscador y los filtros de origen, categoría y «solo con pendientes».`);
+      mk("sku");existente=ya;}}
     if(!o.desc){err.push("La descripción es obligatoria.");mk("desc");}
     CAMPOS.filter(c=>c.n).forEach(c=>{if(o[c.k]!==null&&(Number.isNaN(o[c.k])||o[c.k]<0)){err.push(`${c.t}: tiene que ser un número positivo.`);mk(c.k);}});
     {const eE=o.ean?errorCodigo(o.ean,[13],"EAN13"):null;if(eE&&(nuevo||o.ean!==p.ean)){err.push(eE);mk("ean");}}
     {const eD=o.dun?errorCodigo(o.dun,[14],"DUN14"):null;if(eD&&(nuevo||o.dun!==p.dun)){err.push(eD);mk("dun");}}
     if(o.dun&&(nuevo||o.dun!==p.dun)){const x=productos.find(q=>q.dun===o.dun&&q.sku!==o.sku&&q.activo!==false);if(x){err.push(`El DUN14 ya está cargado en el SKU ${x.sku}.`);mk("dun");}}
-    if(err.length){$("#err").innerHTML=err.map(x=>`<li>${esc(x)}</li>`).join("");return;}
+    if(err.length){$("#err").innerHTML=err.map(x=>`<li>${esc(x)}</li>`).join("")
+      +(existente?`<li><button type="button" class="btn" id="irSku">Abrir el SKU ${esc(existente.sku)}</button></li>`:"");
+      if(existente)$("#irSku").onclick=()=>ficha(existente.sku);
+      return;}
     const cambioPallet=nuevo||["unx","porPiso","estiba","unPal"].some(k=>o[k]!==p[k]);
     if(cambioPallet&&o.unx&&o.porPiso&&o.estiba&&o.unPal&&o.unx*o.porPiso*o.estiba!==o.unPal&&!confirm(`Unidades por bulto × bultos por piso × pisos da ${o.unx*o.porPiso*o.estiba}, pero las unidades por pallet son ${o.unPal}. ¿Guardar igual?`))return;
     const CAMPOS_ALERTA=["unx","porPiso","estiba","unPal","cL","cA","cH","acostada","pesoPT","pesoCaja","contenido","contenidoUM","sep","filmU"];
