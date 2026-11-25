@@ -139,11 +139,25 @@ export async function preguntar({ instruccion, pedido, p, esquema, temperatura }
         motivo = motivo.replace(/\s+/g, ' ').trim();
 
         if (res.status === 429) {
+            // El 429 por dia y el 429 por minuto se arreglan al reves: el de
+            // minuto cede esperando o subiendo menos paginas de una vez, y el
+            // de dia NO -partir el archivo gasta mas pedidos, no menos-.
+            const porDia = /per day|perDay|daily|por d[ií]a/i.test(motivo);
+            // El punto final de la frase entra en la cuenta si se lo deja: se
+            // corta en el ultimo digito o letra, y despues se sacan los
+            // decimales de los segundos ("11h45m11.006255956s" -> "11h45m11s").
+            const cuando = motivo.match(/retry in ([\dhms.]*[\dhms])/i);
+            const espera = cuando ? ` La cuota se repone en ${cuando[1].replace(/\.\d+(s?)$/, '$1')}.` : '';
             throw new ErrorLectura(
-                'La clave de Google llegó a su límite de uso (HTTP 429) y siguió igual después de varios intentos. ' +
-                'Los límites de Gemini se cuentan por minuto y por día: si el PDF tiene muchas páginas, probá subirlo ' +
-                'partido en dos; si acabás de importar varios archivos, esperá unos minutos. ' +
-                (motivo ? `Lo que contestó Google: ${motivo}` : ''), 429);
+                porDia
+                    ? 'Se acabó la cuota del día de la clave de Google (HTTP 429). No es el archivo ni la app, y ' +
+                      'partir el PDF no ayuda: cada pedazo gasta un pedido más. Hay que esperar a que se reponga la ' +
+                      'cuota o habilitar facturación en la cuenta de Google, que sube el límite.' + espera +
+                      (motivo ? ` Lo que contestó Google: ${motivo}` : '')
+                    : 'La clave de Google llegó a su límite de uso (HTTP 429) y siguió igual después de varios ' +
+                      'intentos. Ese límite se cuenta por minuto: esperá un rato, y si el PDF tiene muchas páginas ' +
+                      'probá subirlo partido en dos.' + espera +
+                      (motivo ? ` Lo que contestó Google: ${motivo}` : ''), 429);
         }
         if (TRANSITORIOS.has(res.status)) {
             throw new ErrorLectura(
