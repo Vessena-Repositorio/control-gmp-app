@@ -29,6 +29,12 @@ const ESPERA_MS = Number(process.env.GEMINI_ESPERA_MS) || 240000;
 const RESPALDO = process.env.GEMINI_MODELO_RESPALDO || '';
 const TRANSITORIOS = new Set([429, 500, 502, 503, 504]);
 const ESPERAS_REINTENTO = [5000, 15000, 30000];
+// El 429 no es lo mismo que una saturacion pasajera: es el limite de la clave,
+// y los limites de Gemini se cuentan por minuto. Reintentar a los 5 y 15
+// segundos vuelve a chocar contra la misma ventana, asi que para el 429 se
+// espera a que el minuto pase (Claudia, 25/11/2026: "la IA de Google esta
+// saturada" al importar un PDF de capacitaciones).
+const ESPERAS_CUOTA = [20000, 45000, 65000];
 
 // Gemini acepta hasta ~20 MB por pedido con el archivo adentro. En base64 eso
 // son unos 14 MB de archivo, dejando lugar para el texto de la instruccion.
@@ -95,7 +101,8 @@ export async function preguntar({ instruccion, pedido, p, esquema, temperatura }
     let res, texto, ultimoMotivo = '';
     for (let i = 0; i < plan.length; i++) {
         if (i > 0) {
-            const espera = ESPERAS_REINTENTO[Math.min(i - 1, ESPERAS_REINTENTO.length - 1)];
+            const tabla = res && res.status === 429 ? ESPERAS_CUOTA : ESPERAS_REINTENTO;
+            const espera = tabla[Math.min(i - 1, tabla.length - 1)];
             // Sin tiempo para esperar y todavia leer el archivo, no se intenta.
             if (Date.now() + espera + 20000 > limite) break;
             console.warn(`[lectura] ${plan[i - 1]} saturado (${ultimoMotivo}); reintento ${i} con ${plan[i]} en ${espera / 1000}s`);
@@ -122,15 +129,28 @@ export async function preguntar({ instruccion, pedido, p, esquema, temperatura }
     }
 
     if (!res.ok) {
-        if (TRANSITORIOS.has(res.status)) {
-            throw new ErrorLectura(
-                'La IA de Google está saturada en este momento y no respondió después de varios intentos. ' +
-                'No es un problema del archivo ni de la app: probá de nuevo en unos minutos.', 503);
-        }
         // Google explica el motivo en el cuerpo: clave invalida, cuota, modelo
         // inexistente. Se toma el mensaje y no el cuerpo entero, que es largo.
-        let motivo = texto.slice(0, 300);
+        // Antes el motivo se tiraba cuando el estado era transitorio y la
+        // pantalla decia siempre "esta saturada": con un 429 por cuota eso
+        // mandaba a esperar unos minutos algo que no se iba a arreglar solo.
+        let motivo = String(texto || '').slice(0, 300);
         try { motivo = JSON.parse(texto).error?.message || motivo; } catch { /* queda el texto crudo */ }
+        motivo = motivo.replace(/\s+/g, ' ').trim();
+
+        if (res.status === 429) {
+            throw new ErrorLectura(
+                'La clave de Google llegó a su límite de uso (HTTP 429) y siguió igual después de varios intentos. ' +
+                'Los límites de Gemini se cuentan por minuto y por día: si el PDF tiene muchas páginas, probá subirlo ' +
+                'partido en dos; si acabás de importar varios archivos, esperá unos minutos. ' +
+                (motivo ? `Lo que contestó Google: ${motivo}` : ''), 429);
+        }
+        if (TRANSITORIOS.has(res.status)) {
+            throw new ErrorLectura(
+                `La IA de Google no respondió después de varios intentos (HTTP ${res.status}). ` +
+                'No es un problema del archivo ni de la app: probá de nuevo en unos minutos. ' +
+                (motivo ? `Lo que contestó Google: ${motivo}` : ''), 503);
+        }
         throw new ErrorLectura(`La IA de Google rechazó el pedido (HTTP ${res.status}): ${motivo}`, 502);
     }
 
