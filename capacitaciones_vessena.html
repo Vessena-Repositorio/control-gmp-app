@@ -555,6 +555,9 @@ summary.leg-y:hover{background:var(--g50)!important}
     <div style="display:flex;gap:6px;flex-wrap:wrap">
       <button class="btn btn-s" onclick="document.getElementById('xlsx-admin').click()" data-role="admin">📊 Importar planilla Administración</button>
       <button class="btn btn-o" id="btn-altas" data-role="admin">📅 Cargar fechas de ingreso</button>
+      <button class="btn btn-o" id="btn-nuevo-ext" data-role="admin,editor" title="Dar de alta a alguien que se capacita pero no es personal de Vessena">👤 + Externo</button>
+      <select id="rep-ext-anio" title="Año del reporte de externos" style="font-size:12px;padding:6px 8px;border:1px solid var(--g200);border-radius:6px"><option value="">Todos los años</option></select>
+      <button class="btn btn-o" id="btn-rep-ext" title="Listado de externos por empresa con las capacitaciones que hicieron">🖨️ Reporte de externos</button>
       <button class="btn btn-o" id="btn-exp-pers">📥 Exportar</button>
     </div>
   </div>
@@ -736,6 +739,30 @@ summary.leg-y:hover{background:var(--g50)!important}
     </div>
   </div>
 </div>
+<!-- MODAL alta de persona externa -->
+<div class="modal-bg" id="ext-modal">
+  <div class="modal" style="max-width:520px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <div style="font-size:16px;font-weight:800;color:var(--navy)">👤 Persona externa</div>
+      <button class="btn-i" onclick="document.getElementById('ext-modal').classList.remove('show')" style="font-size:20px">✕</button>
+    </div>
+    <div style="font-size:12px;color:var(--g600);margin-bottom:14px;background:var(--g50);padding:10px 12px;border-radius:var(--r);border:1px solid var(--g200)">
+      Para quien se capacita en planta pero no es personal de Vessena: transportistas, contratistas, visitas.
+      Queda con tipo <b>EXTERNO</b>, se puede elegir como asistente y tiene su ficha con el historial,
+      pero <b>no entra en los indicadores de cobertura</b> del personal propio.
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="fg"><label>Nombre y apellido *</label><input id="ext-nom" placeholder="Nombre..." autocomplete="off"></div>
+      <div class="fg"><label>Empresa *</label><input id="ext-emp" list="dl-empresas" placeholder="Empresa..." autocomplete="off"><datalist id="dl-empresas"></datalist></div>
+    </div>
+    <div id="ext-msg" style="font-size:12px;margin-top:10px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+      <button class="btn btn-o" onclick="document.getElementById('ext-modal').classList.remove('show')">Cancelar</button>
+      <button class="btn btn-s" id="ext-guardar">Agregar</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL clave -->
 <div class="modal-bg" id="import-modal">
   <div class="modal" style="max-width:900px;max-height:90vh;display:flex;flex-direction:column">
@@ -4044,6 +4071,7 @@ function persStats(){
   });
 }
 V.pers=function(){
+  if(typeof anosReporteExternos==='function')anosReporteExternos();
   const q=claveBusqueda($('prsrch').value);
   const secFlt=$('pers-sec-flt').value;
   const tipoFlt=$('pers-tipo-flt').value;
@@ -4396,7 +4424,7 @@ V.pers=function(){
       +'<div style="display:flex;align-items:center;gap:10px">'
       +'<div class="p-av" style="background:'+(ok?'#dbeafe':'#f3f4f6')+';color:'+(ok?'#1e40af':'#9ca3af')+'">'+p.n.charAt(0)+'</div>'
       +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+h(p.n)+(isAct?'':' <span style="font-size:9px;color:var(--red);font-weight:700">INACTIVO</span>')+'</div>'
-      +'<div style="font-size:10px;color:var(--g500)">'+h(p.s)+(p.tipo==='MANPOWER'?' <span style="font-size:8px;background:#fef3c7;color:#92400e;padding:1px 4px;border-radius:3px;font-weight:700">MP</span>':'')+(p.tags&&p.tags.length?' '+p.tags.map(t=>'<span style="font-size:7px;background:#e0e7ff;color:#3730a3;padding:1px 3px;border-radius:2px">'+t+'</span>').join(' '):'')+(faltaMods&&faltaMods.get(p.n)&&faltaMods.get(p.n).length?' <span style="font-size:8px;background:#fee2e2;color:#991b1b;padding:1px 5px;border-radius:3px;font-weight:700">falta '+faltaMods.get(p.n).map(m=>ETIQUETA_MODULO[m]||m).join(' + ')+'</span>':'')+'</div></div>'
+      +'<div style="font-size:10px;color:var(--g500)">'+h(p.s)+(p.tipo==='MANPOWER'?' <span style="font-size:8px;background:#fef3c7;color:#92400e;padding:1px 4px;border-radius:3px;font-weight:700">MP</span>':'')+(p.tipo==='EXTERNO'?' <span style="font-size:8px;background:#e0f2fe;color:#075985;padding:1px 4px;border-radius:3px;font-weight:700">EXTERNO</span>'+(p.empresa?' <span style="font-size:9px;color:#075985;font-weight:600">'+h(p.empresa)+'</span>':''):'')+(p.tags&&p.tags.length?' '+p.tags.map(t=>'<span style="font-size:7px;background:#e0e7ff;color:#3730a3;padding:1px 3px;border-radius:2px">'+t+'</span>').join(' '):'')+(faltaMods&&faltaMods.get(p.n)&&faltaMods.get(p.n).length?' <span style="font-size:8px;background:#fee2e2;color:#991b1b;padding:1px 5px;border-radius:3px;font-weight:700">falta '+faltaMods.get(p.n).map(m=>ETIQUETA_MODULO[m]||m).join(' + ')+'</span>':'')+'</div></div>'
       +'<div style="text-align:right;display:flex;align-items:center;gap:8px">'
       +'<div title="Capacitaciones"><div style="font-size:15px;font-weight:800;color:'+(ok?'var(--navy)':'var(--g300)')+'">'+x.sesCount+'</div><div style="font-size:9px;color:var(--g400)">'+x.hrs.toFixed(1)+'h</div></div>'
       +'<button class="btn-i" title="'+toggleTitle+'" onclick="event.stopPropagation();toggleActivo('+idx+')">'+toggleLbl+'</button>'
@@ -5385,17 +5413,166 @@ $('btn-altas').addEventListener('click',abrirCargaAltas);
    Separador punto y coma y marca BOM: así Excel en español abre el archivo con
    las columnas separadas y con los acentos bien, sin pasar por el asistente de
    importación. */
+/* ══════════ PERSONAS EXTERNAS ══════════
+   Gente que se capacita en planta y no es de Vessena: transportistas,
+   contratistas, visitas. Hasta ahora solo se las podia escribir como
+   asistentes y quedaban "sin match": sin ficha, sin historial y con el nombre
+   como texto libre, asi que la misma persona escrita de dos maneras eran dos
+   (Claudia, 25/11/2026: "tengo gente que se capacita que es externa, como
+   solucionamos que quede bien registrado").
+
+   Entran al padron con tipo EXTERNO e inactivas, que es como ya habian
+   entrado las 98 de la importacion del historico: asi se eligen como
+   asistentes y tienen ficha, pero no cuentan en la cobertura del personal
+   propio, que mide a los de planta. */
+const esExterno = (p) => (p.tipo || '') === 'EXTERNO';
+const empresaDe = (p) => String(p.empresa || '').trim();
+const fmtFecha = (f) => {
+  const t = String(f || '').slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(t) ? t.slice(8, 10) + '/' + t.slice(5, 7) + '/' + t.slice(0, 4) : t;
+};
+const empresasConocidas = () =>
+  [...new Set(PE.filter(esExterno).map(empresaDe).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+
+function abrirAltaExterno(){
+  $('ext-nom').value=''; $('ext-emp').value=''; $('ext-msg').innerHTML='';
+  $('dl-empresas').innerHTML=empresasConocidas().map(e=>'<option value="'+h(e)+'">').join('');
+  $('ext-modal').classList.add('show');
+  setTimeout(()=>$('ext-nom').focus(),50);
+}
+
+function guardarExterno(){
+  const msg=$('ext-msg');
+  const nom=$('ext-nom').value.trim().toUpperCase().replace(/\s+/g,' ');
+  const emp=$('ext-emp').value.trim().toUpperCase().replace(/\s+/g,' ');
+  if(nom.length<3){msg.innerHTML='<span style="color:#b91c1c">Falta el nombre.</span>';return}
+  if(!emp){msg.innerHTML='<span style="color:#b91c1c">Falta la empresa.</span>';return}
+  // Dos personas con el mismo nombre en el padron rompen todo lo que cruza por
+  // nombre, que es casi todo: mejor avisar y que lo distinga quien carga.
+  const ya=PE.find(p=>normTxt(p.n)===normTxt(nom));
+  if(ya){
+    msg.innerHTML='<span style="color:#b91c1c">Ya hay alguien con ese nombre en Personal ('+
+      h(ya.s||'sin sector')+(esExterno(ya)?' · externo de '+h(empresaDe(ya)||'sin empresa'):'')+
+      '). Si es la misma persona, usala tal cual al registrar la capacitación.</span>';
+    return;
+  }
+  PE.push({n:nom, s:'EXTERNO', a:false, tipo:'EXTERNO', empresa:emp,
+    fechaAlta:new Date().toISOString().slice(0,10)});
+  sv();
+  logAudit('PERSONAL','Alta de externo: '+nom+' ('+emp+')');
+  // El autocompletado de nombres se arma una sola vez al abrir la app: sin
+  // esto habria que recargar la pagina para poder elegir al que se acaba de
+  // cargar, que es justo para lo que se lo carga.
+  $('dlp').innerHTML=PE.map(p=>'<option value="'+h(p.n)+'">').join('');
+  $('ext-modal').classList.remove('show');
+  // Los externos quedan inactivos, asi que no se ven en el listado "Activos",
+  // que es el que esta puesto por defecto: se cambia el filtro para que quien
+  // lo acaba de cargar lo vea.
+  $('pers-tipo-flt').value='EXTERNO';
+  const btnTodos=[...document.querySelectorAll('.btn-flt-pers')].find(b=>b.dataset.flt==='todos');
+  if(btnTodos)btnTodos.click(); else V.pers();   // el click ya repinta
+  alert('✓ '+nom+' quedó cargado como externo de '+emp+'.\n\nYa lo podés elegir como asistente de una capacitación.');
+}
+
+/* Reporte de externos: por empresa, con lo que hizo cada uno. Incluye a los
+   que no tienen ninguna capacitacion en el periodo, que para una auditoria es
+   justamente lo que hay que ver. */
+function reporteExternos(){
+  const ext=PE.filter(esExterno);
+  if(!ext.length){alert('Todavía no hay personas externas cargadas.\n\nAgregalas con el botón "+ Externo".');return}
+  const anio=($('rep-ext-anio')&&$('rep-ext-anio').value)||'';
+  const regsDe=(p)=>R.filter(r=>normTxt(r.nom)===normTxt(p.n)&&(!anio||String(r.fecha||'').slice(0,4)===anio))
+    .sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));
+
+  const porEmpresa=new Map();
+  ext.forEach(p=>{
+    const e=empresaDe(p)||'(sin empresa)';
+    if(!porEmpresa.has(e))porEmpresa.set(e,[]);
+    porEmpresa.get(e).push(p);
+  });
+  const empresas=[...porEmpresa.keys()].sort((a,b)=>a.localeCompare(b,'es'));
+
+  let personas=0, caps=0, horas=0, cuerpo='';
+  empresas.forEach(e=>{
+    const gente=porEmpresa.get(e).sort((a,b)=>a.n.localeCompare(b.n,'es'));
+    let filas='', capsE=0, horasE=0;
+    gente.forEach(p=>{
+      const rs=regsDe(p);
+      personas++;
+      if(!rs.length){
+        filas+='<tr><td>'+h(p.n)+'</td><td colspan="4" class="vacio">sin capacitaciones'+(anio?' en '+anio:'')+'</td></tr>';
+        return;
+      }
+      rs.forEach((r,i)=>{
+        capsE++; caps++;
+        const hr=Number(r.hrs)||0; horasE+=hr; horas+=hr;
+        filas+='<tr><td>'+(i===0?h(p.n):'')+'</td><td class="c">'+fmtFecha(r.fecha)+'</td><td>'+
+          h(r.tema||r.desc||'')+'</td><td class="c">'+h(r.cod||'')+'</td><td class="n">'+
+          (hr?hr.toFixed(2).replace('.',','):'')+'</td></tr>';
+      });
+    });
+    cuerpo+='<h2>'+h(e)+' <small>'+gente.length+' persona(s) · '+capsE+' capacitación(es) · '+
+      horasE.toFixed(2).replace('.',',')+' h</small></h2>'+
+      '<table><thead><tr><th>Persona</th><th>Fecha</th><th>Capacitación</th><th>Código</th><th>Horas</th></tr></thead><tbody>'+
+      filas+'</tbody></table>';
+  });
+
+  const hoyTxt=fmtFecha(new Date().toISOString().slice(0,10));
+  const quien=(typeof currentUser!=='undefined'&&currentUser&&currentUser.nombre)?currentUser.nombre:'—';
+  const w=window.open('','_blank');
+  if(!w){alert('El navegador bloqueó la ventana del reporte. Permití las ventanas emergentes para este sitio.');return}
+  w.document.write('<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">'+
+    '<title>Capacitación de personal externo</title><style>'+
+    'body{font-family:Arial,Helvetica,sans-serif;color:#1b1e25;margin:26px;font-size:12px}'+
+    'h1{font-size:17px;margin:0 0 2px}h2{font-size:13px;margin:18px 0 6px;border-bottom:2px solid #1f5fb0;padding-bottom:3px}'+
+    'h2 small{font-weight:400;color:#6b7382;font-size:11px}'+
+    '.sub{color:#6b7382;margin-bottom:14px}'+
+    'table{width:100%;border-collapse:collapse;margin-bottom:6px}'+
+    'th,td{border:1px solid #d7dbe3;padding:4px 6px;text-align:left;vertical-align:top}'+
+    'th{background:#eef2f8;font-size:11px}.c{text-align:center;white-space:nowrap}.n{text-align:right}'+
+    '.vacio{color:#9aa1ad;font-style:italic}'+
+    '.tot{margin-top:16px;background:#f4f6fa;border:1px solid #d7dbe3;padding:8px 10px;font-weight:700}'+
+    '.firma{margin-top:40px;display:flex;gap:60px}.firma div{flex:1;border-top:1px solid #1b1e25;padding-top:4px;font-size:11px}'+
+    '@media print{body{margin:12mm}h2{page-break-after:avoid}table{page-break-inside:auto}tr{page-break-inside:avoid}}'+
+    '</style></head><body>'+
+    '<h1>Capacitación de personal externo</h1>'+
+    '<div class="sub">Vessena S.A. · '+(anio?'Año '+anio:'Todos los años')+' · emitido por '+h(quien)+' el '+hoyTxt+'</div>'+
+    cuerpo+
+    '<div class="tot">'+empresas.length+' empresa(s) · '+personas+' persona(s) · '+caps+
+    ' capacitación(es) · '+horas.toFixed(2).replace('.',',')+' horas</div>'+
+    '<div class="firma"><div>Responsable de capacitación</div><div>Dirección Técnica</div></div>'+
+    '</body></html>');
+  w.document.close();
+  setTimeout(()=>w.print(),400);
+}
+
+/* El selector de año del reporte se arma con los años que hay registrados. */
+function anosReporteExternos(){
+  const sel=$('rep-ext-anio'); if(!sel)return;
+  const previo=sel.value;
+  const anos=[...new Set(R.map(r=>String(r.fecha||'').slice(0,4)).filter(a=>/^\d{4}$/.test(a)))]
+    .sort().reverse();
+  sel.innerHTML='<option value="">Todos los años</option>'+anos.map(a=>'<option value="'+a+'">'+a+'</option>').join('');
+  if(previo&&anos.includes(previo))sel.value=previo;
+}
+
+$('btn-nuevo-ext').addEventListener('click',abrirAltaExterno);
+$('ext-guardar').addEventListener('click',guardarExterno);
+$('ext-nom').addEventListener('keydown',e=>{if(e.key==='Enter')$('ext-emp').focus()});
+$('ext-emp').addEventListener('keydown',e=>{if(e.key==='Enter')guardarExterno()});
+$('btn-rep-ext').addEventListener('click',reporteExternos);
+
 $('btn-exp-pers').addEventListener('click',function(){
   const datos=window._persFiltrado;
   const lista=datos?datos.personas:PE.map(p=>({p,sesiones:0,horas:0,falta:''}));
   if(!lista.length){alert('No hay personas en la lista para exportar.');return}
   const hayFalta=lista.some(x=>x.falta);
   const esc=(v)=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
-  let csv='﻿'+['NOMBRE','SECTOR','TIPO','ESTADO','FECHA DE ALTA','CAPACITACIONES','HORAS']
+  let csv='﻿'+['NOMBRE','SECTOR','TIPO','EMPRESA','ESTADO','FECHA DE ALTA','CAPACITACIONES','HORAS']
     .concat(hayFalta?['LE FALTA']:[]).join(';')+'\n';
   lista.forEach(x=>{
     const p=x.p;
-    csv+=[esc(p.n),esc(p.s),esc(p.tipo||'VESSENA'),esc(p.a!==false?'ACTIVO':'INACTIVO'),
+    csv+=[esc(p.n),esc(p.s),esc(p.tipo||'VESSENA'),esc(p.empresa||''),esc(p.a!==false?'ACTIVO':'INACTIVO'),
       esc(p.fechaAlta||''),esc(x.sesiones||0),esc((x.horas||0).toFixed(1))]
       .concat(hayFalta?[esc(x.falta)]:[]).join(';')+'\n';
   });
