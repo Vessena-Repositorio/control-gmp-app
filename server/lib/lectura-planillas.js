@@ -41,6 +41,32 @@ const ESPERAS_CUOTA = [20000, 45000, 65000];
 const MAX_BASE64 = 19 * 1024 * 1024;
 const TIPOS = /^(image\/(jpeg|png|webp|heic|heif)|application\/pdf)$/;
 
+/* Hasta cuando no vale la pena volver a preguntarle a Google, en ms epoch.
+   Lo pone el 429 por cuota diaria con el plazo que da el propio Google. Vive
+   en memoria del proceso: si el servidor se reinicia se vuelve a intentar una
+   vez, que es lo correcto -capaz la cuota ya se repuso-. */
+let cuotaHasta = 0;
+
+/** "19h8m22.735s" -> milisegundos. Lo que no se entiende no frena nada. */
+export function msDePlazo(txt) {
+    const m = String(txt || '').match(/^(?:(\d+)h)?(?:(\d+)m)?(?:([\d.]+)s)?$/i);
+    if (!m || !(m[1] || m[2] || m[3])) return 0;
+    const ms = (Number(m[1] || 0) * 3600 + Number(m[2] || 0) * 60 + Number(m[3] || 0)) * 1000;
+    // Un plazo absurdo dejaria la lectura apagada por dias: 24 horas es el
+    // maximo que puede durar una cuota diaria.
+    return Math.min(Math.round(ms), 24 * 3600 * 1000);
+}
+
+/** La hora del dia en que vuelve, que es mas util que "en 19h8m". */
+function horaDeVuelta(ts) {
+    const d = new Date(ts);
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    const hoy = new Date();
+    const mismoDia = d.toDateString() === hoy.toDateString();
+    return (mismoDia ? 'las ' : 'mañana a las ') + `${hh}:${mm}`;
+}
+
 export class ErrorLectura extends Error {
     constructor(mensaje, estado) {
         super(mensaje);
@@ -95,6 +121,18 @@ export async function preguntar({ instruccion, pedido, p, esquema, temperatura }
     // Si la saturacion se vuelve frecuente, GEMINI_MODELO_RESPALDO en Coolify
     // agrega un segundo modelo para los ultimos intentos. No tiene valor por
     // defecto: un nombre de modelo inventado fallaria siempre.
+    // Cuando Google dice que se acabo la cuota del dia, dice tambien cuando
+    // vuelve. Guardarlo evita que cada foto que alguien suba hasta manana se
+    // coma tres intentos y mas de un minuto de espera para terminar en el
+    // mismo error: el 26/11/2026 la lectura de rotulos quedo asi toda la
+    // tarde. Mientras dure, se contesta en el acto y con la hora.
+    if (cuotaHasta > Date.now()) {
+        throw new ErrorLectura(
+            'Se acabó la cuota del día de la clave de Google, así que la lectura con IA no está ' +
+            `disponible hasta ${horaDeVuelta(cuotaHasta)}. Hasta entonces hay que cargar los datos a mano. ` +
+            'Para que no vuelva a pasar hay que habilitar facturación en la cuenta de Google, que sube el límite.', 429);
+    }
+
     const limite = Date.now() + ESPERA_MS;
     const plan = [MODELO, MODELO, MODELO, ...(RESPALDO ? [RESPALDO, RESPALDO] : [])];
 
@@ -147,7 +185,14 @@ export async function preguntar({ instruccion, pedido, p, esquema, temperatura }
             // corta en el ultimo digito o letra, y despues se sacan los
             // decimales de los segundos ("11h45m11.006255956s" -> "11h45m11s").
             const cuando = motivo.match(/retry in ([\dhms.]*[\dhms])/i);
-            const espera = cuando ? ` La cuota se repone en ${cuando[1].replace(/\.\d+(s?)$/, '$1')}.` : '';
+            const ms = cuando ? msDePlazo(cuando[1]) : 0;
+            // Con la cuota del dia agotada no se vuelve a preguntar hasta que
+            // Google diga que se repuso: los pedidos de mientras terminan todos
+            // en este mismo error, pero despues de un minuto de reintentos.
+            if (porDia && ms) cuotaHasta = Date.now() + ms;
+            const espera = ms
+                ? ` Vuelve a andar ${horaDeVuelta(Date.now() + ms)}.`
+                : (cuando ? ` La cuota se repone en ${cuando[1].replace(/\.\d+(s?)$/, '$1')}.` : '');
             throw new ErrorLectura(
                 porDia
                     ? 'Se acabó la cuota del día de la clave de Google (HTTP 429). No es el archivo ni la app, y ' +
