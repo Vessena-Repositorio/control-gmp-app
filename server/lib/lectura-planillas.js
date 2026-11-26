@@ -41,11 +41,17 @@ const ESPERAS_CUOTA = [20000, 45000, 65000];
 const MAX_BASE64 = 19 * 1024 * 1024;
 const TIPOS = /^(image\/(jpeg|png|webp|heic|heif)|application\/pdf)$/;
 
-/* Hasta cuando no vale la pena volver a preguntarle a Google, en ms epoch.
-   Lo pone el 429 por cuota diaria con el plazo que da el propio Google. Vive
-   en memoria del proceso: si el servidor se reinicia se vuelve a intentar una
-   vez, que es lo correcto -capaz la cuota ya se repuso-. */
-let cuotaHasta = 0;
+/* Hasta cuando no vale la pena volver a preguntarle a Google, por modelo y en
+   ms epoch. Lo pone el 429 por cuota diaria con el plazo que da el propio
+   Google. Vive en memoria del proceso: si el servidor se reinicia se vuelve a
+   intentar una vez, que es lo correcto -capaz la cuota ya se repuso-.
+
+   Es POR MODELO y no uno solo para todo, porque la cuota diaria del plan
+   gratuito tambien es por modelo: si se agota la del principal, el de respaldo
+   (GEMINI_MODELO_RESPALDO) todavia tiene la suya y hay que usarlo. Con un solo
+   candado, poner un respaldo no habria servido de nada. */
+const cuotaPorModelo = new Map();
+const modeloLibre = (m) => (cuotaPorModelo.get(m) || 0) <= Date.now();
 
 /** "19h8m22.735s" -> milisegundos. Lo que no se entiende no frena nada. */
 export function msDePlazo(txt) {
@@ -55,6 +61,25 @@ export function msDePlazo(txt) {
     // Un plazo absurdo dejaria la lectura apagada por dias: 24 horas es el
     // maximo que puede durar una cuota diaria.
     return Math.min(Math.round(ms), 24 * 3600 * 1000);
+}
+
+/* Lo que dice un 429: si es la cuota del dia o la del minuto, y cuanto falta.
+   El 429 se mira en dos lugares -dentro del bucle, para saltear el modelo sin
+   cuota, y al final, para el mensaje-, asi que se lee una sola vez y aca. */
+export function cuotaDe(cuerpo) {
+    let motivo = String(cuerpo || '').slice(0, 300);
+    try { motivo = JSON.parse(cuerpo).error?.message || motivo; } catch { /* queda el texto crudo */ }
+    motivo = motivo.replace(/\s+/g, ' ').trim();
+    // El punto final de la frase entra en la cuenta si se lo deja: se corta en
+    // el ultimo digito o letra, y despues se sacan los decimales de los
+    // segundos ("11h45m11.006255956s" -> "11h45m11s").
+    const m = motivo.match(/retry in ([\dhms.]*[\dhms])/i);
+    return {
+        motivo,
+        porDia: /per day|perDay|daily|por d[ií]a/i.test(motivo),
+        ms: m ? msDePlazo(m[1]) : 0,
+        texto: m ? m[1].replace(/\.\d+(s?)$/, '$1') : '',
+    };
 }
 
 /** La hora del dia en que vuelve, que es mas util que "en 19h8m". */
@@ -121,26 +146,30 @@ export async function preguntar({ instruccion, pedido, p, esquema, temperatura }
     // Si la saturacion se vuelve frecuente, GEMINI_MODELO_RESPALDO en Coolify
     // agrega un segundo modelo para los ultimos intentos. No tiene valor por
     // defecto: un nombre de modelo inventado fallaria siempre.
-    // Cuando Google dice que se acabo la cuota del dia, dice tambien cuando
-    // vuelve. Guardarlo evita que cada foto que alguien suba hasta manana se
-    // coma tres intentos y mas de un minuto de espera para terminar en el
-    // mismo error: el 26/11/2026 la lectura de rotulos quedo asi toda la
-    // tarde. Mientras dure, se contesta en el acto y con la hora.
-    if (cuotaHasta > Date.now()) {
+    // Cuando Google dice que se acabo la cuota del dia de un modelo, dice
+    // tambien cuando vuelve. Guardarlo evita que cada foto que alguien suba
+    // hasta manana se coma tres intentos y mas de un minuto de espera para
+    // terminar en el mismo error: el 26/11/2026 la lectura de rotulos quedo
+    // asi toda la tarde. El modelo sin cuota se saltea; si no queda ninguno,
+    // se contesta en el acto y con la hora en que vuelve.
+    const limite = Date.now() + ESPERA_MS;
+    const plan = [MODELO, MODELO, MODELO, ...(RESPALDO ? [RESPALDO, RESPALDO] : [])]
+        .filter(modeloLibre);
+    if (!plan.length) {
+        const vuelve = Math.min(...[MODELO, RESPALDO].filter(Boolean).map((m) => cuotaPorModelo.get(m) || Infinity));
         throw new ErrorLectura(
             'Se acabó la cuota del día de la clave de Google, así que la lectura con IA no está ' +
-            `disponible hasta ${horaDeVuelta(cuotaHasta)}. Hasta entonces hay que cargar los datos a mano. ` +
+            `disponible hasta ${horaDeVuelta(vuelve)}. Hasta entonces hay que cargar los datos a mano. ` +
             'Para que no vuelva a pasar hay que habilitar facturación en la cuenta de Google, que sube el límite.', 429);
     }
-
-    const limite = Date.now() + ESPERA_MS;
-    const plan = [MODELO, MODELO, MODELO, ...(RESPALDO ? [RESPALDO, RESPALDO] : [])];
 
     let res, texto, ultimoMotivo = '';
     for (let i = 0; i < plan.length; i++) {
         if (i > 0) {
+            // Cambiar de modelo no necesita espera: el limite que acaba de
+            // chocar es del otro, y el que viene tiene su propia cuota.
             const tabla = res && res.status === 429 ? ESPERAS_CUOTA : ESPERAS_REINTENTO;
-            const espera = tabla[Math.min(i - 1, tabla.length - 1)];
+            const espera = plan[i] === plan[i - 1] ? tabla[Math.min(i - 1, tabla.length - 1)] : 0;
             // Sin tiempo para esperar y todavia leer el archivo, no se intenta.
             if (Date.now() + espera + 20000 > limite) break;
             console.warn(`[lectura] ${plan[i - 1]} saturado (${ultimoMotivo}); reintento ${i} con ${plan[i]} en ${espera / 1000}s`);
@@ -164,6 +193,17 @@ export async function preguntar({ instruccion, pedido, p, esquema, temperatura }
         }
         if (res.ok || !TRANSITORIOS.has(res.status)) break;
         ultimoMotivo = `HTTP ${res.status}`;
+        // Si a ESTE modelo se le acabo la cuota del dia, insistir con el mismo
+        // es tiempo perdido: se lo anota y se salta directo al siguiente
+        // modelo distinto del plan, que tiene su propia cuota.
+        if (res.status === 429) {
+            const c = cuotaDe(texto);
+            if (c.porDia && c.ms) {
+                cuotaPorModelo.set(plan[i], Date.now() + c.ms);
+                console.warn(`[lectura] ${plan[i]} sin cuota diaria; vuelve ${horaDeVuelta(Date.now() + c.ms)}`);
+                while (i + 1 < plan.length && plan[i + 1] === plan[i]) i++;
+            }
+        }
     }
 
     if (!res.ok) {
@@ -172,27 +212,16 @@ export async function preguntar({ instruccion, pedido, p, esquema, temperatura }
         // Antes el motivo se tiraba cuando el estado era transitorio y la
         // pantalla decia siempre "esta saturada": con un 429 por cuota eso
         // mandaba a esperar unos minutos algo que no se iba a arreglar solo.
-        let motivo = String(texto || '').slice(0, 300);
-        try { motivo = JSON.parse(texto).error?.message || motivo; } catch { /* queda el texto crudo */ }
-        motivo = motivo.replace(/\s+/g, ' ').trim();
+        const motivo = cuotaDe(texto).motivo;
 
         if (res.status === 429) {
             // El 429 por dia y el 429 por minuto se arreglan al reves: el de
             // minuto cede esperando o subiendo menos paginas de una vez, y el
             // de dia NO -partir el archivo gasta mas pedidos, no menos-.
-            const porDia = /per day|perDay|daily|por d[ií]a/i.test(motivo);
-            // El punto final de la frase entra en la cuenta si se lo deja: se
-            // corta en el ultimo digito o letra, y despues se sacan los
-            // decimales de los segundos ("11h45m11.006255956s" -> "11h45m11s").
-            const cuando = motivo.match(/retry in ([\dhms.]*[\dhms])/i);
-            const ms = cuando ? msDePlazo(cuando[1]) : 0;
-            // Con la cuota del dia agotada no se vuelve a preguntar hasta que
-            // Google diga que se repuso: los pedidos de mientras terminan todos
-            // en este mismo error, pero despues de un minuto de reintentos.
-            if (porDia && ms) cuotaHasta = Date.now() + ms;
+            const { porDia, ms, texto: cuando } = cuotaDe(texto);
             const espera = ms
                 ? ` Vuelve a andar ${horaDeVuelta(Date.now() + ms)}.`
-                : (cuando ? ` La cuota se repone en ${cuando[1].replace(/\.\d+(s?)$/, '$1')}.` : '');
+                : (cuando ? ` La cuota se repone en ${cuando}.` : '');
             throw new ErrorLectura(
                 porDia
                     ? 'Se acabó la cuota del día de la clave de Google (HTTP 429). No es el archivo ni la app, y ' +
