@@ -1359,6 +1359,24 @@ async function sendCtrl(c){
   }
 }
 async function reintentarPendientes(){for(const c of ctrls.filter(x=>x.pendiente&&(!x.analista||x.analista===USER)))await sendCtrl(c)}
+
+/* Un control que no se pudo enviar queda esperando a que alguien vea el aviso
+   rojo y lo toque. El 26/11/2026 habia tres de la mañana todavia sin guardar
+   al final del dia: el servidor se habia reiniciado unos segundos y nadie se
+   entero. Ahora se reintenta solo cuando vuelve la conexion, cuando se vuelve
+   a la pestaña y cada dos minutos. Reintentar no duplica: el servidor
+   reconoce el id_envio y devuelve el control que ya habia guardado. */
+let _reintentando=false;
+async function reintentarSolo(){
+  if(_reintentando||!navigator.onLine)return;
+  if(!ctrls.some(c=>c.pendiente&&(!c.analista||c.analista===USER)))return;
+  _reintentando=true;
+  try{await reintentarPendientes()}catch(e){/* el proximo intento ya viene */}
+  finally{_reintentando=false}
+}
+window.addEventListener('online',reintentarSolo);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)reintentarSolo()});
+setInterval(reintentarSolo,120000);
 async function loadSheet(){let d;try{d=await api('/controles')}catch(e){toast('⚠️ Error de carga: '+e.message,true);return}allR=(d.records||[]).filter(r=>!r.anulado).map(normalizar); /* los anulados no cuentan en el tablero ni en el turno */renderDash();toast('📊 '+allR.length+' registros')}
 
 // CIERRE DE LA PLANILLA DE GOOGLE (una sola vez, administradoras)
