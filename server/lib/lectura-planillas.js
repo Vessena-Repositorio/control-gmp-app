@@ -103,6 +103,23 @@ export function lecturaConfigurada() {
     return !!process.env.GEMINI_API_KEY;
 }
 
+/* Para GET /api/salud: que modelos quedaron configurados y cuales estan sin
+   cuota ahora mismo. Sin esto, cargar GEMINI_MODELO_RESPALDO en Coolify era a
+   ciegas -un nombre mal escrito recien se notaba el dia que hacia falta- y la
+   cuota agotada solo se veia cuando alguien intentaba leer algo. No sale la
+   clave: solo nombres de modelo, que son publicos. */
+export function estadoLectura() {
+    const sinCuota = [...cuotaPorModelo.entries()]
+        .filter(([, hasta]) => hasta > Date.now())
+        .map(([modelo, hasta]) => ({ modelo, vuelve: new Date(hasta).toISOString() }));
+    return {
+        configurada: !!process.env.GEMINI_API_KEY,
+        modelo: MODELO,
+        respaldo: RESPALDO || null,
+        ...(sinCuota.length ? { sinCuota } : {}),
+    };
+}
+
 export function validar(p) {
     if (!process.env.GEMINI_API_KEY) {
         throw new ErrorLectura('El servidor no tiene configurada la clave de la IA (GEMINI_API_KEY en Coolify).', 503);

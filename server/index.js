@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { pool, hayBase, consultar } from './db.js';
 import { migrar } from './migrate.js';
+import { estadoLectura } from './lib/lectura-planillas.js';
 import { rutasEnvases } from './routes/envases.js';
 import { rutasProceso } from './routes/proceso.js';
 import { rutasSao001 } from './routes/sao001.js';
@@ -134,7 +135,8 @@ app.get('/api/salud', async (_req, res) => {
         await pool.query('SELECT 1');
         // 'fotos' dice si sharp esta disponible: sin el, las fotos se guardarian
         // sin comprimir y la base creceria al doble sin que nadie se entere.
-        res.json({ estado: 'ok', base: 'conectada', fotos: hayCompresion() ? 'comprimidas' : 'sin comprimir', migraciones: MIGRACIONES, ...HUELLA });
+        res.json({ estado: 'ok', base: 'conectada', fotos: hayCompresion() ? 'comprimidas' : 'sin comprimir',
+            migraciones: MIGRACIONES, lectura: estadoLectura(), ...HUELLA });
     } catch (err) {
         res.status(503).json({
             estado: 'sitio ok, api degradada',
